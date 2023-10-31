@@ -38,6 +38,7 @@ import (
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/challengegen"
+	"github.com/offchainlabs/nitro/solgen/go/espressosysgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
@@ -149,45 +150,51 @@ func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderRe
 	return ospEntryAddr, challengeManagerAddr, nil
 }
 
-func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts) (*rollupgen.RollupCreator, common.Address, common.Address, common.Address, error) {
+func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts) (*rollupgen.RollupCreator, common.Address, common.Address, common.Address, common.Address, error) {
 	bridgeCreator, err := deployBridgeCreator(ctx, l1Reader, auth)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, err
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, err
 	}
 
 	ospEntryAddr, challengeManagerAddr, err := deployChallengeFactory(ctx, l1Reader, auth)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, err
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, err
 	}
 
 	rollupAdminLogic, tx, _, err := rollupgen.DeployRollupAdminLogic(auth, l1Reader.Client())
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup admin logic deploy error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup admin logic deploy error: %w", err)
 	}
 
 	rollupUserLogic, tx, _, err := rollupgen.DeployRollupUserLogic(auth, l1Reader.Client())
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup user logic deploy error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup user logic deploy error: %w", err)
 	}
 
 	rollupCreatorAddress, tx, rollupCreator, err := rollupgen.DeployRollupCreator(auth, l1Reader.Client())
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup creator deploy error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup creator deploy error: %w", err)
 	}
 
 	validatorUtils, tx, _, err := rollupgen.DeployValidatorUtils(auth, l1Reader.Client())
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator utils deploy error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator utils deploy error: %w", err)
 	}
 
 	validatorWalletCreator, tx, _, err := rollupgen.DeployValidatorWalletCreator(auth, l1Reader.Client())
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator wallet creator deploy error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator wallet creator deploy error: %w", err)
+	}
+
+	hotshot, tx, _, err := espressosysgen.DeployHotShot(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup set template error: %w", err)
 	}
 
 	tx, err = rollupCreator.SetTemplates(
@@ -202,10 +209,10 @@ func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReade
 	)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup set template error: %w", err)
+		return nil, common.Address{}, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup set template error: %w", err)
 	}
 
-	return rollupCreator, rollupCreatorAddress, validatorUtils, validatorWalletCreator, nil
+	return rollupCreator, rollupCreatorAddress, validatorUtils, validatorWalletCreator, hotshot, nil
 }
 
 func GenerateRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address) rollupgen.Config {
@@ -240,7 +247,7 @@ func DeployOnL1(ctx context.Context, parentChainReader *headerreader.HeaderReade
 		return nil, errors.New("no machine specified")
 	}
 
-	rollupCreator, _, validatorUtils, validatorWalletCreator, err := deployRollupCreator(ctx, parentChainReader, deployAuth)
+	rollupCreator, _, validatorUtils, validatorWalletCreator, hotshot, err := deployRollupCreator(ctx, parentChainReader, deployAuth)
 	if err != nil {
 		return nil, fmt.Errorf("error deploying rollup creator: %w", err)
 	}
@@ -276,6 +283,7 @@ func DeployOnL1(ctx context.Context, parentChainReader *headerreader.HeaderReade
 		Rollup:                 info.RollupAddress,
 		ValidatorUtils:         validatorUtils,
 		ValidatorWalletCreator: validatorWalletCreator,
+		HotShot:                hotshot,
 	}, nil
 }
 
