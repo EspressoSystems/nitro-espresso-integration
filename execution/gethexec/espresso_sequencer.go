@@ -5,21 +5,16 @@ package gethexec
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/binary"
 	"time"
 
 	"github.com/offchainlabs/nitro/arbos/espresso"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 
 	"github.com/ethereum/go-ethereum/arbitrum_types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/offchainlabs/nitro/arbos"
-	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 )
@@ -66,19 +61,8 @@ func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerCo
 	}, nil
 }
 
-func (s *EspressoSequencer) makeSequencingHooks() *arbos.SequencingHooks {
-	return &arbos.SequencingHooks{
-		PreTxFilter:             s.preTxFilter,
-		PostTxFilter:            s.postTxFilter,
-		DiscardInvalidTxsEarly:  false,
-		TxErrors:                []error{},
-		ConditionalOptionsForTx: nil,
-	}
-}
-
 func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) {
 	nextSeqBlockNum := s.hotShotState.nextSeqBlockNum
-	log.Info("Attempting to sequence Espresso block", "block_num", nextSeqBlockNum)
 	header, err := s.hotShotState.client.FetchHeader(ctx, nextSeqBlockNum)
 	if err != nil {
 		log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
@@ -90,15 +74,10 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		return false
 
 	}
-	var txes types.Transactions
-	for _, tx := range arbTxns.Transactions {
-		var out types.Transaction
-		if err := json.Unmarshal(tx, &out); err != nil {
-			log.Error("Failed to serialize")
-			return false
-		}
-		txes = append(txes, &out)
 
+	if len(arbTxns.Transactions) == 0 {
+		s.hotShotState.advance()
+		return true
 	}
 
 	arbHeader := &arbostypes.L1IncomingMessageHeader{
@@ -114,8 +93,8 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		},
 	}
 
-	hooks := s.makeSequencingHooks()
-	_, err = s.execEngine.SequenceTransactions(arbHeader, txes, hooks)
+	msg := messageFromEspresso(arbHeader, arbTxns)
+	_, err = s.execEngine.SequenceTransactionsEspresso(msg)
 	if err != nil {
 		log.Error("Sequencing error for block number", "block_num", nextSeqBlockNum, "err", err)
 		return false
@@ -160,11 +139,37 @@ func (s *EspressoSequencer) Initialize(ctx context.Context) error {
 	return nil
 }
 
-// ArbOS expects some preTxFilter, postTxFilter
-func (s *EspressoSequencer) preTxFilter(_ *params.ChainConfig, _ *types.Header, _ *state.StateDB, _ *arbosState.ArbosState, _ *types.Transaction, _ *arbitrum_types.ConditionalOptions, _ common.Address, _ *arbos.L1Info) error {
-	return nil
-}
+// messageFromEspresso serializes raw data from the espresso block into an arbitrum message,
+// including malformed and invalid transactions.
+// This allows validators to rebuild a block and check the espresso commitment.
+//
+// Note that the raw data is actually in JSON format, which can result in a larger size than necessary.
+// Storing it in L1 call data would lead to some waste. However, for the sake of this Proof of Concept,
+// this is deemed acceptable. Addtionally, after we finish the integration, there is no need to store
+// message in L1.
+//
+// Refer to `execution/gethexec/executionengine.go messageFromTxes`
+func messageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txesInBlock espresso.TransactionsInBlock) arbostypes.L1IncomingMessage {
+	var l2Message []byte
 
-func (s *EspressoSequencer) postTxFilter(_ *types.Header, _ *arbosState.ArbosState, _ *types.Transaction, _ common.Address, _ uint64, _ *core.ExecutionResult) error {
-	return nil
+	txes := txesInBlock.Transactions
+	if len(txes) == 1 {
+		l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
+		l2Message = append(l2Message, txes[0]...)
+	} else {
+		l2Message = append(l2Message, arbos.L2MessageKind_Batch)
+		sizeBuf := make([]byte, 8)
+		for _, tx := range txes {
+			binary.BigEndian.PutUint64(sizeBuf, uint64(len(tx)+1))
+			l2Message = append(l2Message, sizeBuf...)
+			l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
+			l2Message = append(l2Message, tx...)
+		}
+
+	}
+
+	return arbostypes.L1IncomingMessage{
+		Header: header,
+		L2msg:  l2Message,
+	}
 }

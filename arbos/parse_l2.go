@@ -2,6 +2,7 @@ package arbos
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -96,6 +97,7 @@ const (
 	L2MessageKind_Heartbeat          = 6 // deprecated
 	L2MessageKind_SignedCompressedTx = 7
 	// 8 is reserved for BLS signed batch
+	L2MessageKind_EspressoTx = 10
 )
 
 // Warning: this does not validate the day of the week or if DST is being observed
@@ -151,10 +153,12 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			}
 			nestedSegments, err := parseL2Message(bytes.NewReader(nextMsg), poster, timestamp, nextRequestId, chainId, depth+1)
 			if err != nil {
-				return nil, err
+				log.Warn("Failed to parse L2Message in a batch")
 			}
-			segments = append(segments, nestedSegments...)
-			index.Add(index, big.NewInt(1))
+			if nestedSegments != nil && nestedSegments.Len() > 0 {
+				segments = append(segments, nestedSegments...)
+				index.Add(index, big.NewInt(1))
+			}
 		}
 	case L2MessageKind_SignedTx:
 		newTx := new(types.Transaction)
@@ -168,6 +172,21 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 		}
 		if newTx.Type() >= types.ArbitrumDepositTxType {
 			// Should be unreachable due to UnmarshalBinary not accepting Arbitrum internal txs
+			return nil, types.ErrTxTypeNotSupported
+		}
+		return types.Transactions{newTx}, nil
+	case L2MessageKind_EspressoTx:
+		newTx := new(types.Transaction)
+		// Safe to read in its entirety, as all input readers are limited
+		readBytes, err := io.ReadAll(rd)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(readBytes, &newTx); err != nil {
+			return nil, err
+		}
+		if newTx.Type() >= types.ArbitrumDepositTxType {
+			// Should be unreachable due to not accepting Arbitrum internal txs
 			return nil, types.ErrTxTypeNotSupported
 		}
 		return types.Transactions{newTx}, nil

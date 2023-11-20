@@ -276,6 +276,62 @@ func (s *ExecutionEngine) SequenceTransactions(header *arbostypes.L1IncomingMess
 	})
 }
 
+func (s *ExecutionEngine) SequenceTransactionsEspresso(msg arbostypes.L1IncomingMessage) (*types.Block, error) {
+	return s.sequencerWrapper(func() (*types.Block, error) {
+		lastBlockHeader, err := s.getCurrentHeader()
+		if err != nil {
+			return nil, err
+		}
+
+		statedb, err := s.bc.StateAt(lastBlockHeader.Root)
+		if err != nil {
+			return nil, err
+		}
+
+		delayedMessagesRead := lastBlockHeader.Nonce.Uint64()
+
+		startTime := time.Now()
+		block, receipts, err := arbos.ProduceBlock(
+			&msg,
+			delayedMessagesRead,
+			lastBlockHeader,
+			statedb,
+			s.bc,
+			s.bc.Config(),
+			func(batchNum uint64) ([]byte, error) { return nil, errors.New("invalid tx") },
+		)
+		if err != nil {
+			return nil, err
+		}
+		blockCalcTime := time.Since(startTime)
+
+		pos, err := s.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64() + 1)
+		if err != nil {
+			return nil, err
+		}
+
+		msgWithMeta := arbostypes.MessageWithMetadata{
+			Message:             &msg,
+			DelayedMessagesRead: delayedMessagesRead,
+		}
+
+		err = s.streamer.WriteMessageFromSequencer(pos, msgWithMeta)
+		if err != nil {
+			return nil, err
+		}
+
+		// Only write the block after we've written the messages, so if the node dies in the middle of this,
+		// it will naturally recover on startup by regenerating the missing block.
+		err = s.appendBlock(block, statedb, receipts, blockCalcTime)
+		if err != nil {
+			return nil, err
+		}
+
+		return block, nil
+
+	})
+}
+
 func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks) (*types.Block, error) {
 	lastBlockHeader, err := s.getCurrentHeader()
 	if err != nil {
