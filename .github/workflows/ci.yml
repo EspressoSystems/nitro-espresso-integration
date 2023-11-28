@@ -130,7 +130,7 @@ jobs:
         run: make build -j
 
       - name: test-go-deps
-        run: make test-go-deps -j
+        run: make --debug test-go-deps
 
       - name: Build all lint dependencies
         run: make -j build-node-deps
