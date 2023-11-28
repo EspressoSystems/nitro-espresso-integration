@@ -127,7 +127,10 @@ jobs:
         run: ./scripts/build-brotli.sh -w -d
 
       - name: Build
-        run: make build test-go-deps -j
+        run: make build -j
+
+      - name: test-go-deps
+        run: make test-go-deps -j
 
       - name: Build all lint dependencies
         run: make -j build-node-deps
