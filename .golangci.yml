@@ -5,7 +5,7 @@ run:
     - go-ethereum
     - fastcache
 
-  timeout: 20m
+  timeout: 10m
 
 issues:
   exclude-rules:
