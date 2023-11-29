@@ -5,7 +5,6 @@ package gethexec
 
 import (
 	"context"
-	"encoding/binary"
 	"time"
 
 	"github.com/offchainlabs/nitro/arbos/espresso"
@@ -14,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 )
@@ -93,8 +91,7 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		},
 	}
 
-	msg := messageFromEspresso(arbHeader, arbTxns)
-	_, err = s.execEngine.SequenceTransactionsEspresso(msg)
+	_, err = s.execEngine.SequenceTransactionsEspresso(arbHeader, arbTxns.Transactions)
 	if err != nil {
 		log.Error("Sequencing error for block number", "block_num", nextSeqBlockNum, "err", err)
 		return false
@@ -137,39 +134,4 @@ func (s *EspressoSequencer) CheckHealth(ctx context.Context) error {
 
 func (s *EspressoSequencer) Initialize(ctx context.Context) error {
 	return nil
-}
-
-// messageFromEspresso serializes raw data from the espresso block into an arbitrum message,
-// including malformed and invalid transactions.
-// This allows validators to rebuild a block and check the espresso commitment.
-//
-// Note that the raw data is actually in JSON format, which can result in a larger size than necessary.
-// Storing it in L1 call data would lead to some waste. However, for the sake of this Proof of Concept,
-// this is deemed acceptable. Addtionally, after we finish the integration, there is no need to store
-// message in L1.
-//
-// Refer to `execution/gethexec/executionengine.go messageFromTxes`
-func messageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txesInBlock espresso.TransactionsInBlock) arbostypes.L1IncomingMessage {
-	var l2Message []byte
-
-	txes := txesInBlock.Transactions
-	if len(txes) == 1 {
-		l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
-		l2Message = append(l2Message, txes[0]...)
-	} else {
-		l2Message = append(l2Message, arbos.L2MessageKind_Batch)
-		sizeBuf := make([]byte, 8)
-		for _, tx := range txes {
-			binary.BigEndian.PutUint64(sizeBuf, uint64(len(tx)+1))
-			l2Message = append(l2Message, sizeBuf...)
-			l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
-			l2Message = append(l2Message, tx...)
-		}
-
-	}
-
-	return arbostypes.L1IncomingMessage{
-		Header: header,
-		L2msg:  l2Message,
-	}
 }

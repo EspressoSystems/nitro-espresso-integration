@@ -3,6 +3,7 @@ package gethexec
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbos/espresso"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/execution"
@@ -152,6 +154,40 @@ func (s *ExecutionEngine) NextDelayedMessageNumber() (uint64, error) {
 	return currentHeader.Nonce.Uint64(), nil
 }
 
+// messageFromEspresso serializes raw data from the espresso block into an arbitrum message,
+// including malformed and invalid transactions.
+// This allows validators to rebuild a block and check the espresso commitment.
+//
+// Note that the raw data is actually in JSON format, which can result in a larger size than necessary.
+// Storing it in L1 call data would lead to some waste. However, for the sake of this Proof of Concept,
+// this is deemed acceptable. Addtionally, after we finish the integration, there is no need to store
+// message in L1.
+//
+// Refer to `execution/gethexec/executionengine.go messageFromTxes`
+func messageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espresso.Bytes) arbostypes.L1IncomingMessage {
+	var l2Message []byte
+
+	if len(txes) == 1 {
+		l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
+		l2Message = append(l2Message, txes[0]...)
+	} else {
+		l2Message = append(l2Message, arbos.L2MessageKind_Batch)
+		sizeBuf := make([]byte, 8)
+		for _, tx := range txes {
+			binary.BigEndian.PutUint64(sizeBuf, uint64(len(tx)+1))
+			l2Message = append(l2Message, sizeBuf...)
+			l2Message = append(l2Message, arbos.L2MessageKind_EspressoTx)
+			l2Message = append(l2Message, tx...)
+		}
+
+	}
+
+	return arbostypes.L1IncomingMessage{
+		Header: header,
+		L2msg:  l2Message,
+	}
+}
+
 func messageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, txErrors []error) (*arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 	if len(txes) == 1 && txErrors[0] == nil {
@@ -275,8 +311,24 @@ func (s *ExecutionEngine) SequenceTransactions(header *arbostypes.L1IncomingMess
 	})
 }
 
-func (s *ExecutionEngine) SequenceTransactionsEspresso(msg arbostypes.L1IncomingMessage) (*types.Block, error) {
+func (s *ExecutionEngine) SequenceTransactionsEspresso(header *arbostypes.L1IncomingMessageHeader, rawTxes []espresso.Bytes) (*types.Block, error) {
 	return s.sequencerWrapper(func() (*types.Block, error) {
+
+		// Create the message. This message includes all the raw transactions from
+		// Espresso Sequencer.
+		msg := messageFromEspresso(header, rawTxes)
+
+		// Deserialize the transactions and ignore the malformed transactions
+		txes := types.Transactions{}
+		for _, tx := range rawTxes {
+			var out types.Transaction
+			if err := json.Unmarshal(tx, &out); err != nil {
+				log.Warn("Malformed tx is found")
+				continue
+			}
+			txes = append(txes, &out)
+		}
+
 		lastBlockHeader, err := s.getCurrentHeader()
 		if err != nil {
 			return nil, err
@@ -290,14 +342,16 @@ func (s *ExecutionEngine) SequenceTransactionsEspresso(msg arbostypes.L1Incoming
 		delayedMessagesRead := lastBlockHeader.Nonce.Uint64()
 
 		startTime := time.Now()
-		block, receipts, err := arbos.ProduceBlock(
-			&msg,
+		// Produce a block even if no valid transaction is found
+		block, receipts, err := arbos.ProduceBlockAdvanced(
+			header,
+			txes,
 			delayedMessagesRead,
 			lastBlockHeader,
 			statedb,
 			s.bc,
 			s.bc.Config(),
-			func(batchNum uint64) ([]byte, error) { return nil, errors.New("invalid tx") },
+			arbos.NoopSequencingHooks(),
 		)
 		if err != nil {
 			return nil, err
