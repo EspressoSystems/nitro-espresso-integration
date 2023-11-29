@@ -15,11 +15,20 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbos/espresso"
 	"github.com/offchainlabs/nitro/arbos/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 )
 
 type InfallibleBatchFetcher func(batchNum uint64, batchHash common.Hash) []byte
+
+func ParseEspressoTransactions(msg *arbostypes.L1IncomingMessage) ([]espresso.Bytes, error) {
+	if msg.Header.Kind != arbostypes.L1MessageType_L2Message {
+		return nil, errors.New("Parsing espresso transactions failed. Invalid L1Message type")
+	}
+	l2Msg := msg.L2msg
+	return parseEspressoTx(bytes.NewReader(l2Msg))
+}
 
 func ParseL2Transactions(msg *arbostypes.L1IncomingMessage, chainId *big.Int, batchFetcher InfallibleBatchFetcher) (types.Transactions, error) {
 	if len(msg.L2msg) > arbostypes.MaxL2MessageSize {
@@ -201,6 +210,39 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 	default:
 		// ignore invalid message kind
 		return nil, fmt.Errorf("unkown L2 message kind %v", l2KindBuf[0])
+	}
+}
+
+func parseEspressoTx(rd io.Reader) ([]espresso.Bytes, error) {
+	var l2KindBuf [1]byte
+	if _, err := rd.Read(l2KindBuf[:]); err != nil {
+		return nil, err
+	}
+
+	switch l2KindBuf[0] {
+	case L2MessageKind_EspressoTx:
+		readBytes, err := io.ReadAll(rd)
+		if err != nil {
+			return nil, err
+		}
+		return []espresso.Bytes{readBytes}, nil
+	case L2MessageKind_Batch:
+		txs := make([]espresso.Bytes, 0)
+		for {
+			nextMsg, err := util.BytestringFromReader(rd, arbostypes.MaxL2MessageSize)
+			if err != nil {
+				// an error here means there are no further messages in the batch
+				// nolint:nilerr
+				return txs, nil
+			}
+			next, err := parseEspressoTx(bytes.NewReader(nextMsg))
+			if err != nil {
+				return nil, err
+			}
+			txs = append(txs, next...)
+		}
+	default:
+		return nil, errors.New("Unexpected l2 message kind")
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/arbos/espresso"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/execution"
@@ -498,17 +497,11 @@ func (s *ExecutionEngine) createBlockFromNextMessage(msg *arbostypes.MessageWith
 	}
 	statedb.StartPrefetcher("TransactionStreamer")
 	defer statedb.StopPrefetcher()
-	jst := msg.Message.Header.BlockJustification
-	var hotShotCommitment espresso.Commitment
-	if jst != nil {
-		hotShotCommitment = jst.Header.Commit()
-	}
 
 	block, receipts, err := arbos.ProduceBlock(
 		msg.Message,
 		msg.DelayedMessagesRead,
 		currentHeader,
-		&hotShotCommitment,
 		statedb,
 		s.bc,
 		s.bc.Config(),
