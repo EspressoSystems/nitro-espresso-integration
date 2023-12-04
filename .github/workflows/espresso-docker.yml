@@ -31,22 +31,22 @@ jobs:
           - platform: "linux/arm64"
             runs-on: "ARM64"
 
-    runs-on: [ ${{ matrix.runs-on }} ]
+      runs-on: [ "${{ matrix.runs-on }}" ]
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+      steps:
+        - name: Checkout
+          uses: actions/checkout@v4
+          with:
+            submodules: recursive
 
-      - uses: ./actions/docker-image
-        with:
-          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
-          target: nitro-node
-          platforms: ${{ matrix.platform }}
+        - uses: ./actions/docker-image
+          with:
+            images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
+            target: nitro-node
+            platforms: ${{ matrix.platform }}
 
-      - uses: ./actions/docker-image
-        with:
-          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
-          target: nitro-node-dev
-          platforms: ${{ matrix.platform }}
+        - uses: ./actions/docker-image
+          with:
+            images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
+            target: nitro-node-dev
+            platforms: ${{ matrix.platform }}
