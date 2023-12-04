@@ -25,9 +25,26 @@ runs:
       uses: docker/build-push-action@v4
       with:
         target: ${{ inputs.target }}
-        push: ${{ github.event_name != 'pull_request'  }}
+        # push: ${{ github.event_name != 'pull_request'  }}
+        push: true
         tags: ${{ steps.metadata.outputs.tags  }}
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        # TODO: Running out of space on runner due to cache?
+        # cache-from: type=gha
+        # cache-to: type=gha,mode=max
+        outputs: type=image,name=${{ inputs.images }},push-by-digest=true,name-canonical=true,push=true
+
+    - name: Export digest
+      run: |
+        mkdir -p /tmp/digests
+        digest="${{ steps.build.outputs.digest }}"
+        touch "/tmp/digests/${digest#sha256:}"
+
+    - name: Upload digest
+      uses: actions/upload-artifact@v3
+      with:
+        name: digests
+        path: /tmp/digests/*
+        if-no-files-found: error
+        retention-days: 1
