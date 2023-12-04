@@ -1,0 +1,63 @@
+# This is a simpler version of the upstream `docker.yml`.
+#
+# The differences are:
+# - Does not cache docker layers.
+# - Does not export the wavm module root as artifact.
+#
+name: Espresso Docker build CI
+run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - master
+      - develop
+      - integration
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Docker BuildKit (buildx)
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        # TODO: uncomment before merge
+        # if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate nitro docker metadata
+        uses: docker/metadata-action@v5
+        id: nitro
+        with:
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro
+
+      - name: Build and push nitro docker
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          # push: ${{ github.event_name != 'pull_request' }}
+          push: true # TODO: remove before merge
+          tags: ${{ steps.nitro.outputs.tags }}
+          labels: ${{ steps.nitro.outputs.labels }}
+
