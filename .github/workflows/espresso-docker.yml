@@ -1,7 +1,7 @@
 # This is a simpler version of the upstream `docker.yml`.
 #
 # The differences are:
-# - Does not cache docker layers.
+# - Uses GHA docker cache.
 # - Does not export the wavm module root as artifact.
 #
 name: Espresso Docker build CI
@@ -44,20 +44,40 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate nitro docker metadata
+      - name: Generate nitro-node docker metadata
         uses: docker/metadata-action@v5
-        id: nitro
+        id: nitro-node
         with:
-          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
 
       - name: Build and push nitro docker
         uses: docker/build-push-action@v5
         with:
-          context: ./
-          file: ./Dockerfile
+          context: .
+          target: nitro-node
           platforms: linux/amd64,linux/arm64
           # push: ${{ github.event_name != 'pull_request' }}
           push: true # TODO: remove before merge
-          tags: ${{ steps.nitro.outputs.tags }}
-          labels: ${{ steps.nitro.outputs.labels }}
+          tags: ${{ steps.nitro-node.outputs.tags }}
+          labels: ${{ steps.nitro-node.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
+      - name: Generate nitro-node-dev docker metadata
+        uses: docker/metadata-action@v5
+        id: nitro-node-dev
+        with:
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
+
+      - name: Build and push nitro-node-dev docker
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: nitro-node-dev
+          platforms: linux/amd64,linux/arm64
+          # push: ${{ github.event_name != 'pull_request' }}
+          push: true # TODO: remove before merge
+          tags: ${{ steps.nitro-node-dev.outputs.tags }}
+          labels: ${{ steps.nitro-node-dev.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
