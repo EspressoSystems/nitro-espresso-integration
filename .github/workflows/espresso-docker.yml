@@ -39,13 +39,13 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: ./actions/docker-image
+      - uses: ./.github/actions/docker-image
         with:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: ${{ matrix.platform }}
 
-      - uses: ./actions/docker-image
+      - uses: ./.github/actions/docker-image
         with:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
           target: nitro-node-dev
