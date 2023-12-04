@@ -36,6 +36,7 @@ runs:
         outputs: type=image,name=${{ inputs.images }},push-by-digest=true,name-canonical=true,push=true
 
     - name: Export digest
+      shell: bash
       run: |
         mkdir -p /tmp/digests
         digest="${{ steps.build.outputs.digest }}"
