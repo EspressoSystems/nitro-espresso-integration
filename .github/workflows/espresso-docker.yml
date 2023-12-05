@@ -64,9 +64,11 @@ jobs:
           target: nitro-node-dev
           platforms: ${{ matrix.platform }}
 
+  # Merge the AMD64 and ARM64 images into the final (multiplatform) image.
+  #
   # For documentation refer to
   # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
-  merge_docker_images:
+  merge_into_multiplatform_images:
     needs:
       - docker_build
     strategy:
@@ -91,13 +93,11 @@ jobs:
           username: ${{ github.repository_owner  }}
           password: ${{ secrets.GITHUB_TOKEN  }}
 
-      # Merge nitro-node images
-
       - name: Download digests
         uses: actions/download-artifact@v3
         with:
           name: "${{ matrix.target }}-digests"
-          path: /tmp/digests
+          path: "${{ runner.temp }}/digests"
 
       - name: Docker meta
         id: meta
@@ -106,7 +106,7 @@ jobs:
           images: ${{ matrix.image }}
 
       - name: Create manifest list and push
-        working-directory: /tmp/digests
+        working-directory: "${{ runner.temp }}/digests"
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ matrix.image }}@sha256:%s ' *)
