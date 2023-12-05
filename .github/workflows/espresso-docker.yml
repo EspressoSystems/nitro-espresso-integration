@@ -20,10 +20,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
-env:
-  NITRO_IMAGE: "ghcr.io/espressosystems/nitro-espresso-integration/nitro-node"
-  NITRO_DEV_IMAGE: "ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev"
-
 jobs:
   docker_build:
     strategy:
@@ -57,7 +53,7 @@ jobs:
       - name: Build nitro-node image
         uses: ./.github/actions/docker-image
         with:
-          images: ${{ env.NITRO_IMAGE }}
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: ${{ matrix.platform }}
 
@@ -75,12 +71,12 @@ jobs:
       - docker_build
     strategy:
       matrix:
-        target: [ "nitro-node", "nitro-node-dev" ]
+        target: [ nitro-node, nitro-node-dev ]
         include:
-          - target: "nitro-node"
-            image: "{{ env.NITRO_IMAGE }}"
-          - target: "nitro-node-dev"
-            image: "${{ env.NITRO_DEV_IMAGE }}"
+          - target: nitro-node
+            image: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
+          - target: nitro-node-dev
+            image: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
 
     runs-on: ubuntu-latest
     steps:
