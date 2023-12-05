@@ -34,6 +34,10 @@ jobs:
     runs-on: [ self-hosted, "${{ matrix.runs-on }}" ]
 
     steps:
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
