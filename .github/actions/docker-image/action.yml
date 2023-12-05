@@ -27,7 +27,7 @@ runs:
         target: ${{ inputs.target }}
         # push: ${{ github.event_name != 'pull_request'  }}
         push: true
-        tags: ${{ steps.metadata.outputs.tags  }}
+        # tags: ${{ steps.metadata.outputs.tags  }}
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
         # TODO: Running out of space on runner due to cache?
