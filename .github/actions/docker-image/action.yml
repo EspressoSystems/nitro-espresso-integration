@@ -21,6 +21,7 @@ runs:
       with:
         images: ${{ inputs.images }}
 
+    # This step does not use `tags`. With tags (e.g. :main) push by digest fails.
     - name: Build and push docker
       uses: docker/build-push-action@v5
       id: build
@@ -28,7 +29,6 @@ runs:
         target: ${{ inputs.target }}
         # push: ${{ github.event_name != 'pull_request'  }}
         push: true
-        # tags: ${{ steps.metadata.outputs.tags  }}
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
         # TODO: Running out of space on runner due to cache?
@@ -46,7 +46,7 @@ runs:
     - name: Upload digest
       uses: actions/upload-artifact@v3
       with:
-        name: digests
+        name: "${{ inputs.target }}-digests"
         path: /tmp/digests/*
         if-no-files-found: error
         retention-days: 1

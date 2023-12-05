@@ -22,6 +22,7 @@ concurrency:
 
 env:
   NITRO_IMAGE: "ghcr.io/espressosystems/nitro-espresso-integration/nitro-node"
+  NITRO_DEV_IMAGE: "ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev"
 
 jobs:
   docker_build:
@@ -60,46 +61,59 @@ jobs:
           target: nitro-node
           platforms: ${{ matrix.platform }}
 
-      # - name: Build nitro-node-dev image
-      #   uses: ./.github/actions/docker-image
-      #   with:
-      #     images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
-      #     target: nitro-node-dev
-      #     platforms: ${{ matrix.platform }}
+      - name: Build nitro-node-dev image
+        uses: ./.github/actions/docker-image
+        with:
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
+          target: nitro-node-dev
+          platforms: ${{ matrix.platform }}
 
+  # For documentation refer to
+  # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
   merge_docker_images:
-      runs-on: ubuntu-latest
-      needs:
-        - docker_build
-      steps:
-        - name: Download digests
-          uses: actions/download-artifact@v3
-          with:
-            name: digests
-            path: /tmp/digests
+    needs:
+      - docker_build
+    strategy:
+      matrix:
+        target: [ "nitro-node", "nitro-node-dev" ]
+        include:
+          - target: "nitro-node"
+            image: "{{ env.NITRO_IMAGE }}"
+          - target: "nitro-node-dev"
+            image: "${{ env.NITRO_DEV_IMAGE }}"
 
-        - name: Set up Docker Buildx
-          uses: docker/setup-buildx-action@v3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-        - name: Docker meta
-          id: meta
-          uses: docker/metadata-action@v5
-          with:
-            images: ${{ env.NITRO_IMAGE }}
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v2
+        # if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner  }}
+          password: ${{ secrets.GITHUB_TOKEN  }}
 
-        - name: Login to Github Container Repo
-          uses: docker/login-action@v2
-          # if: github.event_name != 'pull_request'
-          with:
-            registry: ghcr.io
-            username: ${{ github.repository_owner  }}
-            password: ${{ secrets.GITHUB_TOKEN  }}
+      # Merge nitro-node images
 
-        - name: Create manifest list and push
-          working-directory: /tmp/digests
-          run: |
-            docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-              $(printf '${{ env.NITRO_IMAGE }}@sha256:%s ' *)
-        - name: Inspect image
-          run: |
-            docker buildx imagetools inspect ${{ env.NITRO_IMAGE }}:${{ steps.meta.outputs.version }}
+      - name: Download digests
+        uses: actions/download-artifact@v3
+        with:
+          name: "${{ matrix.target }}-digests"
+          path: /tmp/digests
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ matrix.image }}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ matrix.image }}@sha256:%s ' *)
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ matrix.image }}:${{ steps.meta.outputs.version }}
