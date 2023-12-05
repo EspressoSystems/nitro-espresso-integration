@@ -34,6 +34,10 @@ jobs:
     runs-on: [ self-hosted, "${{ matrix.runs-on }}" ]
 
     steps:
+      - name: Fix submodule permissions check #Can be removed later
+        run: |
+          sudo chown -R runner:runner .
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
