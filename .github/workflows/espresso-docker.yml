@@ -53,13 +53,15 @@ jobs:
           username: ${{ github.repository_owner  }}
           password: ${{ secrets.GITHUB_TOKEN  }}
 
-      - uses: ./.github/actions/docker-image
+      - name: Build nitro-node image
+        uses: ./.github/actions/docker-image
         with:
           images: ${{ env.NITRO_IMAGE }}
           target: nitro-node
           platforms: ${{ matrix.platform }}
 
-      # - uses: ./.github/actions/docker-image
+      # - name: Build nitro-node-dev image
+      #   uses: ./.github/actions/docker-image
       #   with:
       #     images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
       #     target: nitro-node-dev

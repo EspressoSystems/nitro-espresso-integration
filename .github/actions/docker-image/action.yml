@@ -23,6 +23,7 @@ runs:
 
     - name: Build and push docker
       uses: docker/build-push-action@v5
+      id: build
       with:
         target: ${{ inputs.target }}
         # push: ${{ github.event_name != 'pull_request'  }}
