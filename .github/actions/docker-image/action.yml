@@ -42,7 +42,7 @@ runs:
     - name: Export digest
       shell: bash
       run: |
-        digest_dir="${{ runner.temp }}/digests"
+        digest_dir="${{ runner.temp }}/${{ inputs.target }}-digests"
         mkdir -p "${digest_dir}"
         digest="${{ steps.build.outputs.digest }}"
         touch "${digest_dir}/${digest#sha256:}"
@@ -51,6 +51,6 @@ runs:
       uses: actions/upload-artifact@v3
       with:
         name: "${{ inputs.target }}-digests"
-        path: "${{ runner.temp }}/digests/*"
+        path: "${{ runner.temp }}/${{ inputs.target }}-digests/*"
         if-no-files-found: error
         retention-days: 1
