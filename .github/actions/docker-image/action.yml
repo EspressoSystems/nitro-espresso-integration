@@ -16,13 +16,13 @@ runs:
   steps:
 
     - name: Generate docker metadata
-      uses: docker/metadata-action@v4
+      uses: docker/metadata-action@v5
       id: metadata
       with:
         images: ${{ inputs.images }}
 
     - name: Build and push docker
-      uses: docker/build-push-action@v4
+      uses: docker/build-push-action@v5
       with:
         target: ${{ inputs.target }}
         # push: ${{ github.event_name != 'pull_request'  }}
