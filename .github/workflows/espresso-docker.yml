@@ -44,10 +44,10 @@ jobs:
       # TODO Can be removed later
       - name: Fix submodule permissions check
         run: |
-          sudo chown -R runner:runner .
+          sudo chown -v -R runner:runner .
           ls -lah
           # Remove potentially leftover files from last run
-          rm -rfv ./target
+          sudo rm -rfv ./target
 
       - name: Fix submodule permissions check
         run: |
