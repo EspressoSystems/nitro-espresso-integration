@@ -46,7 +46,8 @@ jobs:
         run: |
           sudo chown -R runner:runner .
           ls -lah
-          git status
+          # Remove potentially leftover files from last run
+          rm -rfv ./*
 
       - name: Fix submodule permissions check
         run: |
