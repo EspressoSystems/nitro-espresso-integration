@@ -1,8 +1,15 @@
-# This is a simpler version of the upstream `docker.yml`.
+# Build the nitro-node and nitro-node-dev images on ARM64 and AMD64 hosts.
 #
-# The differences are:
-# - Uses GHA docker cache.
-# - Does not export the wavm module root as artifact.
+# The reason for building the ARM image natively instead of with QEMU is that
+# the QEMU build always failed after around 40 minutes. I'm currently not sure
+# why it failed. I did also run into insufficient space issuse on public runners
+# so it's possible this was always the culprit.
+#
+# After building, the images are merged together to make a multiplatform image.
+#
+# The latest wavm machine is also copied and exported as an artifact. In nitro
+# this seems to be later used as machine for the non-dev nitro-node build.
+# For more details on that see the Dockerfile and ./scripts/download.sh
 name: Espresso Docker build CI
 run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
 
@@ -34,10 +41,6 @@ jobs:
     runs-on: [ self-hosted, "${{ matrix.runs-on }}" ]
 
     steps:
-      - name: Fix submodule permissions check #Can be removed later
-        run: |
-          sudo chown -R runner:runner .
-
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
@@ -71,6 +74,23 @@ jobs:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
           target: nitro-node-dev
           platforms: ${{ matrix.platform }}
+
+      - name: Extract WAVM machine from container and print its root
+        id: module-root
+        run: |
+          container=$(docker create --rm ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev:pr-19)
+          mkdir -p target/machines/latest
+          docker cp $container:/home/user/target/machines/latest target/machines/latest
+          module_root="$(cat "target/machines/latest/module-root.txt")"
+          echo "name=module-root=$module_root" >> $GITHUB_STATE
+          echo -e "\x1b[1;34mWAVM module root:\x1b[0m $module_root"
+
+      - name: Upload WAVM machine as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wavm-machine-${{ steps.module-root.outputs.module-root }}
+          path: target/machines/latest/*
+          if-no-files-found: error
 
   # Merge the AMD64 and ARM64 images into the final (multiplatform) image.
   #
