@@ -90,7 +90,7 @@ jobs:
           digest="${{ steps.nitro-node-dev.outputs.digest }}"
           container=$(docker create --rm ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev@$digest)
           mkdir -p target/machines/latest
-          sudo docker cp $container:/home/user/target/machines/latest target/machines/latest
+          sudo docker cp $container:/home/user/target/machines/latest/. target/machines/latest
           sudo chown -R runner:runner target
           ls -lah target/machines/latest
           module_root="$(cat "target/machines/latest/module-root.txt")"
