@@ -10,6 +10,9 @@ inputs:
   platforms:
     required: true
     type: string
+outputs:
+  digest:
+    value: "${{ steps.build.outputs.digest }}"
 
 runs:
   using: composite
