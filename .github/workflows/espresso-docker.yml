@@ -47,7 +47,7 @@ jobs:
           sudo chown -R runner:runner .
           ls -lah
           # Remove potentially leftover files from last run
-          rm -rfv ./*
+          rm -rfv ./target
 
       - name: Fix submodule permissions check
         run: |
@@ -91,7 +91,7 @@ jobs:
           container=$(docker create --rm ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev@$digest)
           mkdir -p target/machines/latest
           sudo docker cp $container:/home/user/target/machines/latest target/machines/latest
-          sudo chown -R runner:runner .
+          sudo chown -R runner:runner target
           ls -lah target/machines/latest
           module_root="$(cat "target/machines/latest/module-root.txt")"
           echo "name=module-root=$module_root" >> $GITHUB_STATE
