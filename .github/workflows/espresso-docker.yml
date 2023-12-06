@@ -83,9 +83,10 @@ jobs:
       - name: Extract WAVM machine from container and print its root
         id: module-root
         run: |
-          container=$(docker create --rm ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev:pr-19)
+          container=$(docker create --pull never --rm ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev)
           mkdir -p target/machines/latest
-          docker cp $container:/home/user/target/machines/latest target/machines/latest
+          sudo docker cp $container:/home/user/target/machines/latest target/machines/latest
+          sudo chown -R runner:runner .
           module_root="$(cat "target/machines/latest/module-root.txt")"
           echo "name=module-root=$module_root" >> $GITHUB_STATE
           echo -e "\x1b[1;34mWAVM module root:\x1b[0m $module_root"
