@@ -34,9 +34,8 @@ runs:
         push: true
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
-        # TODO: Running out of space on runner due to cache?
-        # cache-from: type=gha
-        # cache-to: type=gha,mode=max
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
         outputs: type=image,name=${{ inputs.images }},push-by-digest=true,name-canonical=true,push=true
 
     - name: Export digest
