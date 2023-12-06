@@ -45,6 +45,8 @@ jobs:
       - name: Fix submodule permissions check
         run: |
           sudo chown -R runner:runner .
+          ls -lah
+          git status
 
       - name: Fix submodule permissions check
         run: |
