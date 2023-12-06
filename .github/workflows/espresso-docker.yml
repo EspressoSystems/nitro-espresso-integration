@@ -44,9 +44,9 @@ jobs:
       # TODO Can be removed later
       - name: Fix submodule permissions check
         run: |
-          sudo chown -v -R runner:runner .
-          ls -lah
-          # Remove potentially leftover files from last run
+          sudo chown -R runner:runner .
+          # Remove potentially leftover files from last run, it's unclear why
+          # this only works with `sudo` despite the chown command above.
           sudo rm -rfv ./target
 
       - name: Fix submodule permissions check
@@ -94,7 +94,7 @@ jobs:
           sudo chown -R runner:runner target
           ls -lah target/machines/latest
           module_root="$(cat "target/machines/latest/module-root.txt")"
-          echo "name=module-root=$module_root" >> $GITHUB_STATE
+          echo "module-root=$module_root" >> $GITHUB_OUTPUT
           echo -e "\x1b[1;34mWAVM module root:\x1b[0m $module_root"
 
       - name: Upload WAVM machine as artifact
