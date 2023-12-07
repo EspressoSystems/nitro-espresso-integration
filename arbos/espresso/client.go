@@ -62,7 +62,7 @@ type RawTransaction struct {
 }
 
 func (c *Client) SubmitTransaction(ctx context.Context, tx *types.Transaction) error {
-	var txnBytes, err = json.Marshal(tx)
+	var txnBytes, err = tx.MarshalBinary()
 	if err != nil {
 		return err
 	}
