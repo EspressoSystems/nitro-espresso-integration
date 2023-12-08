@@ -58,7 +58,7 @@ func (c *Client) FetchHeader(ctx context.Context, blockHeight uint64) (Header, e
 
 type RawTransaction struct {
 	Vm      int    `json:"vm"`
-	Payload []int8 `json:"payload"`
+	Payload []uint `json:"payload"`
 }
 
 func (c *Client) SubmitTransaction(ctx context.Context, tx *types.Transaction) error {
@@ -68,9 +68,9 @@ func (c *Client) SubmitTransaction(ctx context.Context, tx *types.Transaction) e
 	}
 	//	json.RawMessage is a []byte array, which is marshalled as a base64-encoded string.
 	//	Our sequencer API expects a JSON array.
-	payload := make([]int8, len(txnBytes))
+	payload := make([]uint, len(txnBytes))
 	for i := range payload {
-		payload[i] = int8(txnBytes[i])
+		payload[i] = uint(txnBytes[i])
 	}
 	txn := RawTransaction{
 		Vm:      int(c.namespace),
@@ -80,7 +80,7 @@ func (c *Client) SubmitTransaction(ctx context.Context, tx *types.Transaction) e
 	if err != nil {
 		return err
 	}
-	fmt.Println(c.baseUrl)
+
 	request, err := http.NewRequest("POST", c.baseUrl+"submit/submit", bytes.NewBuffer(marshalled))
 	if err != nil {
 		return err

@@ -123,7 +123,7 @@ func (s *EspressoSequencer) Start(ctxIn context.Context) error {
 // Required methods for the TransactionPublisher interface
 func (s *EspressoSequencer) PublishTransaction(parentCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
 	if err := s.hotShotState.client.SubmitTransaction(parentCtx, tx); err != nil {
-		log.Error("Failed to submit transaction", err)
+		log.Error("Failed to submit transaction", "error", err, "tx", tx)
 		return err
 	}
 	return nil
