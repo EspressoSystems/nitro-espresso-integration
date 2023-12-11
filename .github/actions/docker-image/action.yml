@@ -38,7 +38,6 @@ runs:
       with:
         file: ${{ inputs.file }}
         target: ${{ inputs.target }}
-        push: ${{ github.event_name != 'pull_request'  }}
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
         cache-from: type=gha
@@ -46,7 +45,6 @@ runs:
         outputs: type=image,name=${{ inputs.images }},push-by-digest=true,name-canonical=true,push=true
 
     - name: Export digest
-      if: github.event_name != 'pull_request'
       shell: bash
       run: |
         digest_dir="${{ runner.temp }}/${{ inputs.target }}-digests"
@@ -55,7 +53,6 @@ runs:
         touch "${digest_dir}/${digest#sha256:}"
 
     - name: Upload digest
-      if: github.event_name != 'pull_request'
       uses: actions/upload-artifact@v3
       with:
         name: "${{ inputs.target }}-digests"
