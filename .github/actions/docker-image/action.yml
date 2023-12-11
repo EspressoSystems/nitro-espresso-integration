@@ -10,6 +10,10 @@ inputs:
   platforms:
     required: true
     type: string
+  file:
+    required: true
+    type: string
+
 outputs:
   digest:
     value: "${{ steps.build.outputs.digest }}"
@@ -32,6 +36,7 @@ runs:
       uses: docker/build-push-action@v5
       id: build
       with:
+        file: ${{ inputs.file }}
         target: ${{ inputs.target }}
         # push: ${{ github.event_name != 'pull_request'  }}
         push: true

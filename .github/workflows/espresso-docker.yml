@@ -22,6 +22,9 @@ on:
       - master
       - develop
       - integration
+  tags:
+    # YYYYMMDD
+    - "20[0-9][0-9][0-1][0-9][0-3][0-9]*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -72,6 +75,7 @@ jobs:
       - name: Build nitro-node image
         uses: ./.github/actions/docker-image
         with:
+          file: Dockerfile.espresso
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: ${{ matrix.platform }}
@@ -80,6 +84,7 @@ jobs:
         uses: ./.github/actions/docker-image
         id: nitro-node-dev
         with:
+          file: Dockerfile.espresso
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
           target: nitro-node-dev
           platforms: ${{ matrix.platform }}
@@ -88,7 +93,7 @@ jobs:
       # the binary only for AMD64.
 
       - name: Extract WAVM machine from container and print its root
-        if: ${{ matrix.platform }} == "linux/amd64"
+        if: matrix.platform == "linux/amd64"
         # && github.event_name != 'pull_request'
         id: module-root
         run: |
@@ -104,7 +109,8 @@ jobs:
 
       - name: Upload WAVM machine as artifact
         uses: actions/upload-artifact@v3
-        if: ${{ matrix.platform }} == "linux/amd64" && github.event_name != 'pull_request'
+        if: matrix.platform == "linux/amd64"
+        # && github.event_name != 'pull_request'
         with:
           name: wavm-machine-${{ steps.module-root.outputs.module-root }}
           path: target/machines/latest/*
