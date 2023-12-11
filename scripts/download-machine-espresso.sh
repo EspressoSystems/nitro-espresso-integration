@@ -3,7 +3,13 @@
 #
 # The url_base has been changed to point to the espresso integration repo such
 # that it downloads the replay wasm binary for the integration instead.
-set -e
+#
+# For this to work there needs to be a tagged github release that exported the
+# wasm machine. Then, run
+#
+# ./download-machine-espresso.sh GIT_RELEASE_TAG WASM_MACHINE_ROOT
+# ./download-machine-espresso.sh 20231211        0xb2ec17fe4ae788f2c81cd1d28242dfa47696598ea0f18cd78f64c7e2e8b75434
+set -euxo pipefail
 
 mkdir "$2"
 ln -sfT "$2" latest
