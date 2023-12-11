@@ -88,7 +88,8 @@ jobs:
       # the binary only for AMD64.
 
       - name: Extract WAVM machine from container and print its root
-        if: ${{ matrix.platform }} == "linux/amd64" # && github.event_name != 'pull_request'
+        if: ${{ matrix.platform }} == "linux/amd64"
+        # && github.event_name != 'pull_request'
         id: module-root
         run: |
           # Unfortunately, `docker cp` seems to always result in a "permission denied"
