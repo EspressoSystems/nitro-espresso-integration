@@ -44,6 +44,14 @@ jobs:
     runs-on: [ self-hosted, "${{ matrix.runs-on }}" ]
 
     steps:
+      # TODO We should be able to remove this but currently it's needed to avoid
+      # permission errors during checkout.
+      - name: Fix submodule permissions check
+        run: |
+          sudo chown -R runner:runner .
+          # Remove potentially leftover files from last run, it's unclear why
+          # this only works with `sudo` despite the chown command above.
+          sudo rm -rfv ./target
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
