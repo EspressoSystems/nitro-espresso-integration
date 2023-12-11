@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euxo pipefail
+set -e
 
 mkdir "$2"
 ln -sfT "$2" latest
