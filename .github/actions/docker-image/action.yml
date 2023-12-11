@@ -33,7 +33,8 @@ runs:
       id: build
       with:
         target: ${{ inputs.target }}
-        push: ${{ github.event_name != 'pull_request'  }}
+        # push: ${{ github.event_name != 'pull_request'  }}
+        push: true
         labels: ${{ steps.metadata.outputs.labels  }}
         platforms: ${{ inputs.platforms }}
         cache-from: type=gha
