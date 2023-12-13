@@ -19,9 +19,12 @@ func TestEspressoParsing(t *testing.T) {
 	}
 	expectJst := &arbostypes.EspressoBlockJustification{
 		Header: espressoTypes.Header{
-			TransactionsRoot: espressoTypes.NmtRoot{Root: []byte{7, 8, 9}},
-			L1Head:           1,
-			Timestamp:        2,
+			TransactionsRoot:  espressoTypes.NmtRoot{Root: []byte{7, 8, 9}},
+			L1Head:            1,
+			Timestamp:         2,
+			Height:            3,
+			L1Finalized:       &espressoTypes.L1BlockInfo{},
+			PayloadCommitment: espressoTypes.Bytes{1, 2, 3},
 		},
 		Proof: []byte{9},
 	}
