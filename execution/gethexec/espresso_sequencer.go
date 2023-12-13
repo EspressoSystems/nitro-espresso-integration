@@ -125,15 +125,9 @@ func (s *EspressoSequencer) PublishTransaction(parentCtx context.Context, tx *ty
 	if err != nil {
 		return err
 	}
-	//	json.RawMessage is a []byte array, which is marshalled as a base64-encoded string.
-	//	Our sequencer API expects a JSON array.
-	payload := make([]uint8, len(txnBytes))
-	for i := range payload {
-		payload[i] = uint8(txnBytes[i])
-	}
 	txn := espressoTypes.Transaction{
 		Vm:      s.namespace,
-		Payload: payload,
+		Payload: txnBytes,
 	}
 	if err := s.hotShotState.client.SubmitTransaction(parentCtx, txn); err != nil {
 		log.Error("Failed to submit transaction", err)
