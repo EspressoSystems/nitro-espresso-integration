@@ -84,9 +84,9 @@ func createMockHotShot(ctx context.Context, t *testing.T, l2Info *BlockchainTest
 			header := espressoTypes.Header{
 				// Since we don't realize the validation of espresso yet,
 				// mock a simple nmt root here
-				// See: arbos/espresso/nmt.go
+				Height:           block,
 				TransactionsRoot: espressoTypes.NmtRoot{Root: []byte{}},
-				L1Head:           block,
+				L1Head:           0, // Currently not used
 				Timestamp:        uint64(time.Now().Unix()),
 			}
 			return httpmock.NewJsonResponse(200, header)
