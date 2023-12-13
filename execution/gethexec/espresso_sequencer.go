@@ -65,7 +65,7 @@ func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerCo
 
 func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) {
 	nextSeqBlockNum := s.hotShotState.nextSeqBlockNum
-	header, err := s.hotShotState.client.FetchHeader(ctx, nextSeqBlockNum)
+	header, err := s.hotShotState.client.FetchHeaderByHeight(ctx, nextSeqBlockNum)
 	if err != nil {
 		log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
 		return false
