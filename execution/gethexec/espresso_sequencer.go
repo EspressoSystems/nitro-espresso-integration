@@ -131,9 +131,6 @@ func (s *EspressoSequencer) PublishTransaction(parentCtx context.Context, tx *ty
 	for i := range payload {
 		payload[i] = uint8(txnBytes[i])
 	}
-	if err != nil {
-		return err
-	}
 	txn := espressoTypes.Transaction{
 		Vm:      s.namespace,
 		Payload: payload,
