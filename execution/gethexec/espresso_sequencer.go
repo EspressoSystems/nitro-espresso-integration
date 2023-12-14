@@ -6,6 +6,7 @@ package gethexec
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -86,9 +87,12 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		L1BaseFee:   nil,
 	}
 
+	log.Info("timestamp!!!!!!!")
+	log.Info(fmt.Sprintf("%d", header.Timestamp))
 	jst := &arbostypes.EspressoBlockJustification{
-		Header: header,
-		Proof:  arbTxns.Proof,
+		Header:              header,
+		Proof:               arbTxns.Proof,
+		EspressoBlockNumber: nextSeqBlockNum,
 	}
 
 	_, err = s.execEngine.SequenceTransactionsEspresso(arbHeader, arbTxns.Transactions, jst)
