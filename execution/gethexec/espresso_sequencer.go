@@ -34,7 +34,7 @@ func NewHotShotState(log log.Logger, url string) *HotShotState {
 		client: *espressoClient.NewClient(log, url),
 		// TODO: Load this from the inbox reader so that new sequencers don't read redundant blocks
 		// https://github.com/EspressoSystems/espresso-sequencer/issues/734
-		nextSeqBlockNum: 0,
+		nextSeqBlockNum: 1,
 	}
 }
 

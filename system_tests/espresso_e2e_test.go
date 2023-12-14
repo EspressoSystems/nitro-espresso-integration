@@ -107,8 +107,8 @@ func TestEspressoE2E(t *testing.T) {
 	// _, cleanup := createValidatorAndPosterNode(ctx, t, false)
 	// defer cleanup()
 
-	// cleanEspresso := runEspresso(t, ctx)
-	// defer cleanEspresso()
+	cleanEspresso := runEspresso(t, ctx)
+	defer cleanEspresso()
 
 	// wait for the commitment task
 	// err = waitFor(t, ctx, func() bool {
