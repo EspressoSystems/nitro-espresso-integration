@@ -348,7 +348,6 @@ func (s *ExecutionEngine) SequenceTransactionsEspresso(
 			DelayedMessagesRead: delayedMessagesRead,
 		}
 
-		log.Info(fmt.Sprintf("timestamp????: %d", msgWithMeta.Message.Header.Timestamp))
 		err = s.streamer.WriteMessageFromSequencer(pos, msgWithMeta)
 		if err != nil {
 			return nil, err

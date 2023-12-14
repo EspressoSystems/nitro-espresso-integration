@@ -606,8 +606,6 @@ func (s *TransactionStreamer) countDuplicateMessages(
 			break
 		}
 		key := dbKey(messagePrefix, uint64(pos))
-		log.Info("key:")
-		log.Info(string(pos))
 		hasMessage, err := s.db.Has(key)
 		if err != nil {
 			return 0, false, nil, err
@@ -625,22 +623,6 @@ func (s *TransactionStreamer) countDuplicateMessages(
 			return 0, false, nil, err
 		}
 		if !bytes.Equal(haveMessage, wantMessage) {
-			var a arbostypes.MessageWithMetadata
-			err = rlp.DecodeBytes(wantMessage, &a)
-			if err != nil {
-				log.Info("??rlp decode want message failed")
-				log.Info(err.Error())
-			}
-			var b arbostypes.MessageWithMetadata
-			err = rlp.DecodeBytes(haveMessage, &b)
-			if err != nil {
-				log.Info("??rlp decode have message failed")
-				log.Info(err.Error())
-			}
-			log.Info("want message")
-			log.Info(prettyPrint(a))
-			log.Info("have message")
-			log.Info(prettyPrint(b))
 			// Current message does not exactly match message in database
 			var dbMessageParsed arbostypes.MessageWithMetadata
 
@@ -864,7 +846,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(pos arbutil.MessageIndex
 		}
 	}
 
-	log.Info(fmt.Sprintf("write message from sequencer: %d", msgWithMeta.Message.Header.Timestamp))
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadata{msgWithMeta}, nil); err != nil {
 		return err
 	}
@@ -900,7 +881,6 @@ func (s *TransactionStreamer) PopulateFeedBacklog() error {
 
 func (s *TransactionStreamer) writeMessage(pos arbutil.MessageIndex, msg arbostypes.MessageWithMetadata, batch ethdb.Batch) error {
 	key := dbKey(messagePrefix, uint64(pos))
-	log.Info(fmt.Sprintf("writing data timestamp: %d", msg.Message.Header.Timestamp))
 	msgBytes, err := rlp.EncodeToBytes(msg)
 	if err != nil {
 		return err

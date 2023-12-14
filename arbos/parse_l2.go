@@ -488,8 +488,6 @@ func MessageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espr
 		l2Message = append(l2Message, tx...)
 	}
 
-	log.Info("????????????????")
-	log.Info(string(header.Timestamp))
 	return arbostypes.L1IncomingMessage{
 		Header: header,
 		L2msg:  l2Message,
