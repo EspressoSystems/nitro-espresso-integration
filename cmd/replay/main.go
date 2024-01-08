@@ -248,8 +248,8 @@ func main() {
 		// TODO test: https://github.com/EspressoSystems/espresso-sequencer/issues/772
 		isL2Message := message.Message.Header.Kind == arbostypes.L1MessageType_L2Message
 		commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(inboxPos, posInInbox))
-		// When the commitment is not empty, the currently validating message comes from Espresso
-		if isL2Message && commitment != [32]byte{} {
+		validatingAgainstEspresso := commitment != [32]byte{}
+		if isL2Message && validatingAgainstEspresso {
 			txs, jst, err := arbos.ParseEspressoMsg(message.Message)
 			if err != nil {
 				panic(err)
