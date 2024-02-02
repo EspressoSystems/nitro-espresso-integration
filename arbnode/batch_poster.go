@@ -46,6 +46,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/das/eigenda"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util"
@@ -109,6 +110,7 @@ type BatchPoster struct {
 	gasRefunderAddr    common.Address
 	building           *buildingBatch
 	dapWriter          daprovider.Writer
+	eigenDAWriter      eigenda.EigenDAWriter
 	dataPoster         *dataposter.DataPoster
 	redisLock          *redislock.Simple
 	messagesPerBatch   *arbmath.MovingAverage[uint64]
@@ -147,8 +149,9 @@ type BatchPosterDangerousConfig struct {
 }
 
 type BatchPosterConfig struct {
-	Enable                             bool `koanf:"enable"`
-	DisableDapFallbackStoreDataOnChain bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
+	Enable                                 bool `koanf:"enable"`
+	DisableDapFallbackStoreDataOnChain     bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
+	DisableEigenDAFallbackStoreDataOnChain bool `koanf:"disable-eigenda-fallback-store-data-on-chain" reload:"hot"`
 	// Max batch size.
 	MaxSize int `koanf:"max-size" reload:"hot"`
 	// Maximum 4844 blob enabled batch size.
@@ -308,6 +311,7 @@ type BatchPosterOpts struct {
 	DeployInfo    *chaininfo.RollupAddresses
 	TransactOpts  *bind.TransactOpts
 	DAPWriter     daprovider.Writer
+	EigenDAWriter eigenda.EigenDAWriter
 	ParentChainID *big.Int
 }
 
@@ -371,6 +375,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		gasRefunderAddr:    opts.Config().gasRefunder,
 		bridgeAddr:         opts.DeployInfo.Bridge,
 		dapWriter:          opts.DAPWriter,
+		eigenDAWriter:      opts.EigenDAWriter,
 		redisLock:          redisLock,
 		hotshotClient:      hotShotClient,
 		lightClientReader:  lightClientReader,
@@ -1413,6 +1418,25 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// to post a batch even if sequencerReportedSubMessageCount is not equal
 		// to the provided prevMessageCount
 		prevMessageCount = 0
+	}
+
+	if b.dapWriter == nil && b.eigenDAWriter != nil {
+		log.Info("Start to write data to eigenda: ", "data", hex.EncodeToString(sequencerMsg))
+		daRef, err := b.eigenDAWriter.Store(ctx, sequencerMsg)
+		if err != nil {
+			if config.DisableEigenDAFallbackStoreDataOnChain {
+				log.Warn("Falling back to storing data on chain", "err", err)
+				return false, errors.New("unable to post batch to EigenDA and fallback storing data on chain is disabled")
+			}
+		}
+
+		pointer, err := b.eigenDAWriter.Serialize(daRef)
+		if err != nil {
+			log.Warn("DaRef serialization failed", "err", err)
+			return false, errors.New("DaRef serialization failed")
+		}
+		log.Info("EigenDA transaction receipt(data pointer): ", "hash", hex.EncodeToString(daRef.BatchHeaderHash), "index", daRef.BlobIndex)
+		sequencerMsg = pointer
 	}
 
 	data, kzgBlobs, err := b.encodeAddBatch(new(big.Int).SetUint64(batchPosition.NextSeqNum), prevMessageCount, b.building.msgCount, sequencerMsg, b.building.segments.delayedMsg, b.building.use4844)

@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/offchainlabs/nitro/das/eigenda"
 	"github.com/offchainlabs/nitro/staker/txbuilder"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -50,6 +51,7 @@ type L1Validator struct {
 	wallet         ValidatorWalletInterface
 	callOpts       bind.CallOpts
 
+	das                eigenda.EigenDAReader
 	inboxTracker       InboxTrackerInterface
 	txStreamer         TransactionStreamerInterface
 	blockValidator     *BlockValidator
@@ -61,6 +63,7 @@ func NewL1Validator(
 	wallet ValidatorWalletInterface,
 	validatorUtilsAddress common.Address,
 	callOpts bind.CallOpts,
+	das eigenda.EigenDAReader,
 	inboxTracker InboxTrackerInterface,
 	txStreamer TransactionStreamerInterface,
 	blockValidator *BlockValidator,

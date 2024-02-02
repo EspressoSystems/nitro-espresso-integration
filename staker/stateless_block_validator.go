@@ -12,6 +12,7 @@ import (
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/das/eigenda"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/rpcclient"
 
@@ -39,11 +40,12 @@ type StatelessBlockValidator struct {
 
 	recorder execution.ExecutionRecorder
 
-	inboxReader  InboxReaderInterface
-	inboxTracker InboxTrackerInterface
-	streamer     TransactionStreamerInterface
-	db           ethdb.Database
-	dapReaders   []daprovider.Reader
+	inboxReader    InboxReaderInterface
+	inboxTracker   InboxTrackerInterface
+	streamer       TransactionStreamerInterface
+	db             ethdb.Database
+	dapReaders     []daprovider.Reader
+	eigenDAService eigenda.EigenDAReader
 
 	lightClientReader lightclient.LightClientReaderInterface
 
@@ -225,6 +227,7 @@ func NewStatelessBlockValidator(
 	recorder execution.ExecutionRecorder,
 	arbdb ethdb.Database,
 	dapReaders []daprovider.Reader,
+	eigenDAService eigenda.EigenDAReader,
 	config func() *BlockValidatorConfig,
 	stack *node.Node,
 ) (*StatelessBlockValidator, error) {
@@ -263,6 +266,7 @@ func NewStatelessBlockValidator(
 		streamer:          streamer,
 		db:                arbdb,
 		dapReaders:        dapReaders,
+		eigenDAService:    eigenDAService,
 		execSpawners:      executionSpawners,
 	}, nil
 }
@@ -324,6 +328,17 @@ func (v *StatelessBlockValidator) ValidationEntryRecord(ctx context.Context, e *
 		if !foundDA {
 			if daprovider.IsDASMessageHeaderByte(batch.Data[40]) {
 				log.Error("No DAS Reader configured, but sequencer message found with DAS header")
+			}
+		}
+
+		if eigenda.IsEigenDAMessageHeaderByte(batch.Data[40]) {
+			if v.eigenDAService == nil {
+				log.Warn("EigenDA not configured, but sequencer message found with EigenDA header")
+			} else {
+				_, err := eigenda.RecoverPayloadFromEigenDABatch(ctx, batch.Data[41:], v.eigenDAService, e.Preimages)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/arbstate/daprovider"
+	"github.com/offchainlabs/nitro/das/eigenda"
 	"github.com/offchainlabs/nitro/zeroheavy"
 )
 
@@ -49,7 +51,7 @@ const MaxDecompressedLen int = 1024 * 1024 * 16 // 16 MiB
 const maxZeroheavyDecompressedLen = 101*MaxDecompressedLen/100 + 64
 const MaxSegmentsPerSequencerMessage = 100 * 1024
 
-func parseSequencerMessage(ctx context.Context, batchNum uint64, batchBlockHash common.Hash, data []byte, dapReaders []daprovider.Reader, keysetValidationMode daprovider.KeysetValidationMode) (*sequencerMessage, error) {
+func parseSequencerMessage(ctx context.Context, batchNum uint64, batchBlockHash common.Hash, data []byte, dapReaders []daprovider.Reader, eigenDAReader eigenda.EigenDAReader, keysetValidationMode daprovider.KeysetValidationMode) (*sequencerMessage, error) {
 	if len(data) < 40 {
 		return nil, errors.New("sequencer message missing L1 header")
 	}
@@ -62,6 +64,7 @@ func parseSequencerMessage(ctx context.Context, batchNum uint64, batchBlockHash 
 		segments:             [][]byte{},
 	}
 	payload := data[40:]
+	log.Info("Inbox parse sequencer message: ", "payload", hex.EncodeToString(payload))
 
 	// Stage 0: Check if our node is out of date and we don't understand this batch type
 	// If the parent chain sequencer inbox smart contract authenticated this batch,
@@ -107,6 +110,22 @@ func parseSequencerMessage(ctx context.Context, batchNum uint64, batchBlockHash 
 				log.Error("No DAS Reader configured, but sequencer message found with DAS header")
 			} else if daprovider.IsBlobHashesHeaderByte(payload[0]) {
 				return nil, daprovider.ErrNoBlobReader
+			}
+		}
+	}
+
+	// detect eigenda message from byte
+	if len(payload) > 0 && eigenda.IsEigenDAMessageHeaderByte(payload[0]) {
+		if eigenDAReader == nil {
+			log.Error("No EigenDA Reader configured, but sequencer message found with EigenDA header")
+		} else {
+			var err error
+			payload, err = eigenda.RecoverPayloadFromEigenDABatch(ctx, payload[1:], eigenDAReader, nil)
+			if err != nil {
+				return nil, err
+			}
+			if payload == nil {
+				return parsedMsg, nil
 			}
 		}
 	}
@@ -165,6 +184,7 @@ type inboxMultiplexer struct {
 	backend                   InboxBackend
 	delayedMessagesRead       uint64
 	dapReaders                []daprovider.Reader
+	eigenDAReader             eigenda.EigenDAReader
 	cachedSequencerMessage    *sequencerMessage
 	cachedSequencerMessageNum uint64
 	cachedSegmentNum          uint64
@@ -174,12 +194,12 @@ type inboxMultiplexer struct {
 	keysetValidationMode      daprovider.KeysetValidationMode
 }
 
-func NewInboxMultiplexer(backend InboxBackend, delayedMessagesRead uint64, dapReaders []daprovider.Reader, keysetValidationMode daprovider.KeysetValidationMode) arbostypes.InboxMultiplexer {
+func NewInboxMultiplexer(backend InboxBackend, delayedMessagesRead uint64, dapReaders []daprovider.Reader, eigenDAReader eigenda.EigenDAReader, keysetValidationMode daprovider.KeysetValidationMode) arbostypes.InboxMultiplexer {
 	return &inboxMultiplexer{
-		backend:              backend,
-		delayedMessagesRead:  delayedMessagesRead,
-		dapReaders:           dapReaders,
-		keysetValidationMode: keysetValidationMode,
+		backend:             backend,
+		delayedMessagesRead: delayedMessagesRead,
+		dapReaders:          dapReaders,
+		eigenDAReader:       eigenDAReader,
 	}
 }
 
@@ -200,7 +220,7 @@ func (r *inboxMultiplexer) Pop(ctx context.Context) (*arbostypes.MessageWithMeta
 		}
 		r.cachedSequencerMessageNum = r.backend.GetSequencerInboxPosition()
 		var err error
-		r.cachedSequencerMessage, err = parseSequencerMessage(ctx, r.cachedSequencerMessageNum, batchBlockHash, bytes, r.dapReaders, r.keysetValidationMode)
+		r.cachedSequencerMessage, err = parseSequencerMessage(ctx, r.cachedSequencerMessageNum, batchBlockHash, bytes, r.dapReaders, r.eigenDAReader, r.keysetValidationMode)
 		if err != nil {
 			return nil, err
 		}
