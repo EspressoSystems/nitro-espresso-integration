@@ -7,7 +7,7 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 )
 
-func VerifyNamespace(namespace uint64, proof espressoTypes.Bytes, block_comm espressoTypes.NmtRoot, txs []espressoTypes.Bytes, srs espressoTypes.Bytes) error {
-	verifyNamespace(namespace, proof, block_comm, txs, srs)
+func VerifyNamespace(namespace uint64, proof espressoTypes.NmtProof, block_comm espressoTypes.TaggedBase64, ns_table espressoTypes.NsTable, txs []espressoTypes.Bytes) error {
+	verifyNamespace(namespace, proof, block_comm, ns_table, txs)
 	return nil
 }

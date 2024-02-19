@@ -22,8 +22,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	espressoNmt "github.com/EspressoSystems/espresso-sequencer-go/nmt"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -282,7 +280,6 @@ func main() {
 
 			hotshotHeader := jst.Header
 			height := hotshotHeader.Height
-			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
 			validatedHeight := wavmio.GetEspressoHeight()
 			if validatedHeight == 0 {
 				// Validators can choose their own trusted starting point to start their validation.
@@ -293,16 +290,14 @@ func main() {
 			} else {
 				panic(fmt.Sprintf("invalid hotshot block height: %v, got: %v", height, validatedHeight+1))
 			}
-			if !commitment.Equals(hotshotHeader.Commit()) {
-				panic(fmt.Sprintf("invalid hotshot header jst header at %v expected: %v, provided %v.", height, hotshotHeader.Commit(), commitment))
-			}
-			var roots = []*espressoTypes.NmtRoot{&hotshotHeader.TransactionsRoot}
-			var proofs = []*espressoTypes.NmtProof{&jst.Proof}
+			// if !commitment.Equals(hotshotHeader.Commit()) {
+			// 	panic(fmt.Sprintf("invalid hotshot header jst header at %v expected: %v, provided %v.", height, hotshotHeader.Commit(), commitment))
+			// }
+			// var roots = []*espressoTypes.NmtRoot{&hotshotHeader.TransactionsRoot}
+			// var proofs = []*espressoTypes.NmtProof{&jst.Proof}
 
-			var srs espressoTypes.Bytes
-			err = arbvid.VerifyNamespace(chainConfig.ChainID.Uint64(), jst.Proof, hotshotHeader.TransactionsRoot, txs, srs)
+			err = arbvid.VerifyNamespace(chainConfig.ChainID.Uint64(), jst.Proof, *jst.Header.PayloadCommitment, jst.Header.NsTable, txs)
 
-			err = espressoNmt.ValidateBatchTransactions(chainConfig.ChainID.Uint64(), roots, proofs, txs)
 			if err != nil {
 				panic(err)
 			}

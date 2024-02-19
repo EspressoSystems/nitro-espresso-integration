@@ -55,7 +55,7 @@ func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerCo
 	return &EspressoSequencer{
 		execEngine:   execEngine,
 		config:       configFetcher,
-		hotShotState: NewHotShotState(log.New(), config.HotShotUrl, config.StartHotShotBlock),
+		hotShotState: NewHotShotState(log.New(), "http://localhost:8083", config.StartHotShotBlock),
 		namespace:    config.EspressoNamespace,
 	}, nil
 }
@@ -76,7 +76,7 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
 		return false
 	}
-	arbTxns, err := s.hotShotState.client.FetchTransactionsInBlock(ctx, &header, s.namespace)
+	arbTxns, err := s.hotShotState.client.FetchTransactionsInBlock(ctx, header.Height, s.namespace)
 	if err != nil {
 		log.Error("Error fetching transactions", "err", err)
 		return false
@@ -96,6 +96,8 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		Header: header,
 		Proof:  arbTxns.Proof,
 	}
+
+	log.Info("jst", jst)
 
 	_, err = s.execEngine.SequenceTransactionsEspresso(arbHeader, arbTxns.Transactions, jst)
 	if err != nil {

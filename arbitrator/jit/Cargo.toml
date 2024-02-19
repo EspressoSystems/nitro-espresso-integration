@@ -13,13 +13,14 @@ parking_lot = "0.12.1"
 rand = { version = "0.8.4", default-features = false }
 rand_pcg = { version = "0.3.1", default-features = false }
 thiserror = "1.0.33"
+derive_more = "0.99.17"
 hex = "0.4.3"
 structopt = "0.3.26"
 sha3 = "0.9.1"
 libc = "0.2.132"
 ouroboros = "0.16.0"
 
-sha2 = "0.9.9"
+sha2 = { version = "0.10.1" }
 jf-primitives = { git = "https://github.com/EspressoSystems/jellyfish", features = [
     "test-srs",
 ] }
@@ -34,6 +35,13 @@ ark-bls12-381 = "0.4.0"
 ark-std = { version = "0.4.0", default-features = false }
 rand_chacha = { version = "0.3.1", default-features = false }
 ark-serialize = { version = "0.4", features = ["derive"] }
+trait-set = "0.3.0"
+num-traits = "0.2.17"
+
+serde = { version = "1.0.195", features = ["derive"] }
+# sequencer = { path = "../../../espresso-sequencer/sequencer" }
+bincode = "1.3.3"
+derivative = "2.2"
 
 [features]
 llvm = ["dep:wasmer-compiler-llvm"]

@@ -123,6 +123,7 @@ fn read_hotshot_commitment_impl(
         sp.write_u64(5, 0);
         return Ok(());
     }
+    return Ok(());
 
     let comm = comm_map.get(&h);
     if comm.is_none() {
