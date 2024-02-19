@@ -5,6 +5,8 @@ package gethexec
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -47,6 +49,11 @@ type EspressoSequencer struct {
 	namespace    uint64
 }
 
+func removeWhitespace(s string) string {
+	// Split the string on whitespace then concatenate the segments
+	return strings.Join(strings.Fields(s), "")
+}
+
 func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher) (*EspressoSequencer, error) {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
@@ -55,7 +62,7 @@ func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerCo
 	return &EspressoSequencer{
 		execEngine:   execEngine,
 		config:       configFetcher,
-		hotShotState: NewHotShotState(log.New(), "http://localhost:8083", config.StartHotShotBlock),
+		hotShotState: NewHotShotState(log.New(), config.HotShotUrl, config.StartHotShotBlock),
 		namespace:    config.EspressoNamespace,
 	}, nil
 }
@@ -63,7 +70,8 @@ func NewEspressoSequencer(execEngine *ExecutionEngine, configFetcher SequencerCo
 func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) {
 	if s.hotShotState.nextSeqBlockNum == 0 {
 		latestBlock, err := s.hotShotState.client.FetchLatestBlockHeight(ctx)
-		if err != nil || latestBlock == 0 {
+		//if err != nil || latestBlock == 0 {
+		if err != nil {
 			log.Warn("Unable to fetch the latest hotshot block")
 			return false
 		}
@@ -71,17 +79,51 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		s.hotShotState.nextSeqBlockNum = latestBlock
 	}
 	nextSeqBlockNum := s.hotShotState.nextSeqBlockNum
-	header, err := s.hotShotState.client.FetchHeaderByHeight(ctx, nextSeqBlockNum)
-	if err != nil {
-		log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
-		return false
-	}
-	arbTxns, err := s.hotShotState.client.FetchTransactionsInBlock(ctx, header.Height, s.namespace)
-	if err != nil {
-		log.Error("Error fetching transactions", "err", err)
-		return false
+	var err error
+	// header, err := s.hotShotState.client.FetchHeaderByHeight(ctx, nextSeqBlockNum)
+	// if err != nil {
+	// 	log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
+	// 	return false
+	// }
+	data := []byte(removeWhitespace(`{
+		"height": 42,
+		"timestamp": 789,
+		"l1_head": 124,
+		"l1_finalized": {
+			"number": 123,
+			"timestamp": "0x456",
+			"hash": "0x0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+		},
+		"ns_table": {
+			"raw_payload":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+		},
+		"payload_commitment": "HASH~1yS-KEtL3oDZDBJdsW51Pd7zywIiHesBZsTbpOzrxOfu",
+		"block_merkle_tree_root": "MERKLE_COMM~yB4_Aqa35_PoskgTpcCR1oVLh6BUdLHIs7erHKWi-usUAAAAAAAAAAEAAAAAAAAAJg",
+		"fee_merkle_tree_root": "MERKLE_COMM~VJ9z239aP9GZDrHp3VxwPd_0l28Hc5KEAB1pFeCIxhYgAAAAAAAAAAIAAAAAAAAAdA"
+	}`))
 
+	// Check encoding.
+	// Check decoding
+	var header espressoTypes.Header
+	if err := json.Unmarshal(data, &header); err != nil {
+		log.Error(("failed to decode"))
+		return false
 	}
+
+	// arbTxns, err := s.hotShotState.client.FetchTransactionsInBlock(ctx, header.Height, s.namespace)
+	jsonString := `{"NonExistence":{"ns_id":0}}`
+	var rawJson json.RawMessage = json.RawMessage(jsonString)
+	transactions := make([]espressoTypes.Bytes, 0)
+
+	var arbTxns = espressoClient.TransactionsInBlock{
+		Transactions: transactions,
+		Proof:        rawJson,
+	}
+	// if err != nil {
+	// 	log.Error("Error fetching transactions", "err", err)
+	// 	return false
+
+	// }
 
 	arbHeader := &arbostypes.L1IncomingMessageHeader{
 		Kind:        arbostypes.L1MessageType_L2Message,
@@ -97,7 +139,7 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 		Proof:  arbTxns.Proof,
 	}
 
-	log.Info("jst", jst)
+	log.Info("here is the jst", "jst", string(jst.Proof))
 
 	_, err = s.execEngine.SequenceTransactionsEspresso(arbHeader, arbTxns.Transactions, jst)
 	if err != nil {

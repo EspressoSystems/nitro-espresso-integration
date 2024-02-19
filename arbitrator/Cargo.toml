@@ -1,9 +1,5 @@
 [workspace]
-members = [
-        "arbutil",
-        "prover",
-        "jit",
-]
+members = ["arbutil", "prover", "jit"]
 
 [profile.release]
 debug = true

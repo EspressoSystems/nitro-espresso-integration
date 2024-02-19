@@ -1338,9 +1338,11 @@ dependencies = [
  "rand_chacha",
  "rand_pcg",
  "serde",
+ "serde_json",
  "sha2 0.10.8",
  "sha3 0.9.1",
  "structopt",
+ "tagged-base64",
  "thiserror",
  "trait-set",
  "wasmer",
@@ -2333,7 +2335,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64"
 version = "0.3.4"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "ark-serialize",
  "ark-std",
@@ -2348,7 +2350,7 @@ dependencies = [
 [[package]]
 name = "tagged-base64-macros"
 version = "0.3.3"
-source = "git+https://github.com/EspressoSystems/tagged-base64.git?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
+source = "git+https://github.com/EspressoSystems/tagged-base64?tag=0.3.4#93be6f0f5c0ec8458f13dede3d2b68dcce12a608"
 dependencies = [
  "quote",
  "syn 1.0.109",
