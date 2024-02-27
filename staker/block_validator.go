@@ -501,8 +501,10 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
 	var comm espressoTypes.Commitment
-	if v.config().Espresso && msg.Message.Header.Kind == arbostypes.L1MessageType_L2Message {
-		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
+	_, jst, msgKind, err := arbos.ParseEspressoMsg(msg.Message)
+	// If the message is not an espresso message (i.e. delayed inbox message), skip the commitment check.
+	var checkCommitment = msgKind == 10
+	if v.config().Espresso && msg.Message.Header.Kind == arbostypes.L1MessageType_L2Message && checkCommitment {
 		if err != nil {
 			return false, err
 		}

@@ -250,7 +250,7 @@ func main() {
 		commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(inboxPos, posInInbox))
 		validatingAgainstEspresso := commitment != [32]byte{}
 		if isL2Message && validatingAgainstEspresso {
-			txs, jst, err := arbos.ParseEspressoMsg(message.Message)
+			txs, jst, _, err := arbos.ParseEspressoMsg(message.Message)
 			if err != nil {
 				panic(err)
 			}
