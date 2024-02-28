@@ -22,9 +22,9 @@ import (
 
 type InfallibleBatchFetcher func(batchNum uint64, batchHash common.Hash) []byte
 
-func ParseEspressoMsg(msg *arbostypes.L1IncomingMessage) ([]espressoTypes.Bytes, *arbostypes.EspressoBlockJustification, error) {
+func ParseEspressoMsg(msg *arbostypes.L1IncomingMessage) ([]espressoTypes.Bytes, *arbostypes.EspressoBlockJustification, byte, error) {
 	if msg.Header.Kind != arbostypes.L1MessageType_L2Message {
-		return nil, nil, errors.New("Parsing espresso transactions failed. Invalid L1Message type")
+		return nil, nil, L2MessageKind_EspressoTx, errors.New("Parsing espresso transactions failed. Invalid L1Message type")
 	}
 	l2Msg := msg.L2msg
 	return parseEspressoMsg(bytes.NewReader(l2Msg))
@@ -218,10 +218,10 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 	}
 }
 
-func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.EspressoBlockJustification, error) {
+func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.EspressoBlockJustification, byte, error) {
 	var l2KindBuf [1]byte
 	if _, err := rd.Read(l2KindBuf[:]); err != nil {
-		return nil, nil, err
+		return nil, nil, L2MessageKind_EspressoTx, err
 	}
 
 	switch l2KindBuf[0] {
@@ -233,12 +233,12 @@ func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.Espresso
 			if err != nil {
 				// an error here means there are no further messages in the batch
 				// nolint:nilerr
-				return txs, jst, nil
+				return txs, jst, L2MessageKind_EspressoTx, nil
 			}
 			if jst == nil {
 				j := new(arbostypes.EspressoBlockJustification)
 				if err := rlp.DecodeBytes(nextMsg, &j); err != nil {
-					return nil, nil, err
+					return nil, nil, L2MessageKind_EspressoTx, err
 				}
 				jst = j
 				continue
@@ -246,7 +246,7 @@ func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.Espresso
 			txs = append(txs, nextMsg)
 		}
 	default:
-		return nil, nil, fmt.Errorf("unexpected l2 message kind %v", l2KindBuf[0])
+		return nil, nil, l2KindBuf[0], fmt.Errorf("unexpected l2 message kind %v", l2KindBuf[0])
 	}
 }
 

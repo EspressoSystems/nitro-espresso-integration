@@ -386,7 +386,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 	// Note: this code path is not used in the staker validation pipeline, return to this
 	// when we look into fraud proofs
 	if v.config.Espresso && msg.Message.Header.Kind == arbostypes.L1MessageType_L2Message {
-		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
+		_, jst, _, err := arbos.ParseEspressoMsg(msg.Message)
 		if err != nil {
 			return nil, err
 		}

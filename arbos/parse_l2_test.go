@@ -31,7 +31,7 @@ func TestEspressoParsing(t *testing.T) {
 	msg, err := MessageFromEspresso(expectHeader, expectTxes, expectJst)
 	Require(t, err)
 
-	actualTxes, actualJst, err := ParseEspressoMsg(&msg)
+	actualTxes, actualJst, _, err := ParseEspressoMsg(&msg)
 	Require(t, err)
 
 	if !reflect.DeepEqual(actualTxes, expectTxes) {
