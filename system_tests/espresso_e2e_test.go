@@ -7,7 +7,9 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbutil"
 )
 
@@ -46,7 +48,7 @@ func runEspresso(t *testing.T, ctx context.Context) func() {
 	return shutdown
 }
 
-func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*TestClient, func()) {
+func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	builder.l1StackConfig.HTTPPort = 8545
 	builder.l1StackConfig.WSPort = 8546
@@ -62,6 +64,7 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*TestClient
 	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", validationPort)
 	builder.nodeConfig.BlockValidator.HotShotAddress = "0x217788c286797d56cd59af5e493f3699c39cbbe8"
 	builder.nodeConfig.BlockValidator.Espresso = true
+	builder.nodeConfig.DelayedSequencer.Enable = false
 	cleanup := builder.Build(t)
 
 	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
@@ -71,7 +74,7 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*TestClient
 	}
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
 
-	return builder.L2, cleanup
+	return builder, cleanup
 }
 
 func TestEspressoE2E(t *testing.T) {
@@ -81,8 +84,9 @@ func TestEspressoE2E(t *testing.T) {
 	cleanValNode := createValidationNode(ctx, t)
 	defer cleanValNode()
 
-	node, cleanup := createL1ValidatorPosterNode(ctx, t)
+	builder, cleanup := createL1ValidatorPosterNode(ctx, t)
 	defer cleanup()
+	node := builder.L2
 
 	err := waitFor(t, ctx, func() bool {
 		if e := exec.Command(
@@ -101,7 +105,7 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
-	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, "http://127.0.0.1:50000")
+	l2Node, l2Info, cleanL2Node := createL2NodeWithBuilder(ctx, t, "http://127.0.0.1:50000", builder)
 	defer cleanL2Node()
 
 	cleanEspresso := runEspresso(t, ctx)
@@ -140,15 +144,37 @@ func TestEspressoE2E(t *testing.T) {
 	}
 
 	// Check if the tx is executed correctly
-	transfer_amount := big.NewInt(1e16)
-	tx := l2Info.PrepareTx("Faucet", newAccount, 3e7, transfer_amount, nil)
+	transferAmount := big.NewInt(1e16)
+	tx := l2Info.PrepareTx("Faucet", newAccount, 3e7, transferAmount, nil)
 	err = l2Node.Client.SendTransaction(ctx, tx)
 	Require(t, err)
 
 	err = waitFor(t, ctx, func() bool {
 		balance := l2Node.GetBalance(t, addr)
 		log.Info("waiting for balance", "addr", addr, "balance", balance)
-		return balance.Cmp(transfer_amount) >= 0
+		return balance.Cmp(transferAmount) >= 0
+	})
+	Require(t, err)
+
+	// Make sure it is a totally new account
+	newAccount2 := "User11"
+	l2Info.GenerateAccount(newAccount2)
+	addr2 := l2Info.GetAddress(newAccount2)
+	balance2 := l2Node.GetBalance(t, addr2)
+	if balance2.Cmp(big.NewInt(0)) > 0 {
+		Fatal(t, "empty account")
+	}
+
+	// Check if the tx is executed correctly
+	delayedTx := l2Info.PrepareTx("Owner", newAccount2, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+	})
+
+	err = waitFor(t, ctx, func() bool {
+		balance := l2Node.GetBalance(t, addr2)
+		log.Info("waiting for balance", "addr", addr2, "balance", balance)
+		return balance.Cmp(transferAmount) >= 0
 	})
 	Require(t, err)
 
@@ -163,4 +189,23 @@ func TestEspressoE2E(t *testing.T) {
 		return validatedCnt >= msgCnt
 	})
 	Require(t, err)
+}
+
+func createL2NodeWithBuilder(ctx context.Context, t *testing.T, hotshot_url string, builder *NodeBuilder) (*TestClient, info, func()) {
+	nodeConfig := arbnode.ConfigDefaultL1Test()
+	nodeConfig.DelayedSequencer.Enable = true
+	nodeConfig.DelayedSequencer.FinalizeDistance = 2
+	nodeConfig.Sequencer = true
+	nodeConfig.Espresso = true
+	builder.takeOwnership = false
+	builder.execConfig.Sequencer.Enable = true
+	builder.execConfig.Sequencer.Espresso = true
+	builder.execConfig.Sequencer.EspressoNamespace = 100
+	builder.execConfig.Sequencer.HotShotUrl = hotshot_url
+
+	builder.nodeConfig.Feed.Output.Enable = true
+	builder.nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
+
+	client, cleanup := builder.Build2ndNode(t, &SecondNodeParams{nodeConfig: nodeConfig})
+	return client, builder.L2Info, cleanup
 }
