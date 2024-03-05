@@ -376,7 +376,7 @@ func TestEspressoE2E(t *testing.T) {
 	}
 
 	// Check if the tx is executed correctly
-	transfetAmount := big.NewInt(1e16)
+	transferAmount := big.NewInt(1e16)
 	tx := l2Info.PrepareTx("Faucet", newAccount, 3e7, transfetAmount, nil)
 	err = l2Node.Client.SendTransaction(ctx, tx)
 	Require(t, err)
