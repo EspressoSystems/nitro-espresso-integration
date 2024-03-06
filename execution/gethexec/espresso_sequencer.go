@@ -14,13 +14,12 @@ import (
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 )
 
-var (
-	retryTime = time.Second * 1
-)
+var retryTime = time.Second * 1
 
 type HotShotState struct {
 	client          espressoClient.Client
@@ -106,7 +105,6 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 	s.hotShotState.advance()
 
 	return true
-
 }
 
 func (s *EspressoSequencer) Start(ctxIn context.Context) error {
@@ -126,8 +124,12 @@ func (s *EspressoSequencer) Start(ctxIn context.Context) error {
 }
 
 // Required methods for the TransactionPublisher interface
-func (s *EspressoSequencer) PublishTransaction(parentCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	var txnBytes, err = tx.MarshalBinary()
+func (s *EspressoSequencer) PublishTransaction(
+	parentCtx context.Context,
+	tx *types.Transaction,
+	options *arbitrum_types.ConditionalOptions,
+) error {
+	txnBytes, err := tx.MarshalBinary()
 	if err != nil {
 		return err
 	}

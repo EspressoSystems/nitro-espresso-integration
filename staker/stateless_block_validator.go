@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/rpcclient"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -23,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
 )
@@ -112,10 +114,20 @@ func GlobalStatePositionsAtCount(
 		}
 	}
 	if msgCountInBatch < count {
-		return GlobalStatePosition{}, GlobalStatePosition{}, fmt.Errorf("batch %d has msgCount %d, failed getting for %d", batch, msgCountInBatch-1, count)
+		return GlobalStatePosition{}, GlobalStatePosition{}, fmt.Errorf(
+			"batch %d has msgCount %d, failed getting for %d",
+			batch,
+			msgCountInBatch-1,
+			count,
+		)
 	}
 	if firstInBatch >= count {
-		return GlobalStatePosition{}, GlobalStatePosition{}, fmt.Errorf("batch %d starts from %d, failed getting for %d", batch, firstInBatch, count)
+		return GlobalStatePosition{}, GlobalStatePosition{}, fmt.Errorf(
+			"batch %d starts from %d, failed getting for %d",
+			batch,
+			firstInBatch,
+			count,
+		)
 	}
 	posInBatch := uint64(count - firstInBatch - 1)
 	startPos := GlobalStatePosition{batch, posInBatch}
@@ -368,7 +380,9 @@ func buildGlobalState(res execution.MessageResult, pos GlobalStatePosition) vali
 }
 
 // return the globalState position before and after processing message at the specified count
-func (v *StatelessBlockValidator) GlobalStatePositionsAtCount(count arbutil.MessageIndex) (GlobalStatePosition, GlobalStatePosition, error) {
+func (v *StatelessBlockValidator) GlobalStatePositionsAtCount(
+	count arbutil.MessageIndex,
+) (GlobalStatePosition, GlobalStatePosition, error) {
 	if count == 0 {
 		return GlobalStatePosition{}, GlobalStatePosition{}, errors.New("no initial state for count==0")
 	}
@@ -386,7 +400,10 @@ func (v *StatelessBlockValidator) GlobalStatePositionsAtCount(count arbutil.Mess
 	return GlobalStatePositionsAtCount(v.inboxTracker, count, batch)
 }
 
-func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context, pos arbutil.MessageIndex) (*validationEntry, error) {
+func (v *StatelessBlockValidator) CreateReadyValidationEntry(
+	ctx context.Context,
+	pos arbutil.MessageIndex,
+) (*validationEntry, error) {
 	msg, err := v.streamer.GetMessage(pos)
 	if err != nil {
 		return nil, err

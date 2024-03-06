@@ -6,6 +6,8 @@ replace github.com/VictoriaMetrics/fastcache => ./fastcache
 
 replace github.com/ethereum/go-ethereum => ./go-ethereum
 
+replace github.com/EspressoSystems/espresso-sequencer-go => ../espresso-sequencer-go
+
 require (
 	github.com/EspressoSystems/espresso-sequencer-go v0.0.9
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
