@@ -44,7 +44,7 @@ var EmitReedeemScheduledEvent func(*vm.EVM, uint64, uint64, [32]byte, [32]byte, 
 var EmitTicketCreatedEvent func(*vm.EVM, [32]byte) error
 var gasUsedSinceStartupCounter = metrics.NewRegisteredCounter("arb/gas_used", nil)
 
-const NOT_EXPECTED_BUILDER_ERROR string = "This tx should not be executed by current builder"
+const NOT_EXPECTED_BUILDER_ERROR string = "This transaction is part of a block not built by the desired builder"
 
 // A helper struct that implements String() by marshalling to JSON.
 // This is useful for logging because it's lazy, so if the log level is too high to print the transaction,
