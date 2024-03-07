@@ -32,9 +32,11 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
+	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -79,6 +81,7 @@ type BatchPoster struct {
 	streamer          *TransactionStreamer
 	config            BatchPosterConfigFetcher
 	seqInbox          *bridgegen.SequencerInbox
+	espressoClient    *espressoClient.Client
 	bridge            *bridgegen.Bridge
 	syncMonitor       *SyncMonitor
 	seqInboxABI       *abi.ABI
@@ -142,6 +145,7 @@ type BatchPosterConfig struct {
 	L1BlockBound       string                      `koanf:"l1-block-bound"                           reload:"hot"`
 	L1BlockBoundBypass time.Duration               `koanf:"l1-block-bound-bypass"                    reload:"hot"`
 	UseAccessLists     bool                        `koanf:"use-access-lists"                         reload:"hot"`
+	HotShotUrl         string
 
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
@@ -337,24 +341,30 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		simpleRedisLockConfig.Key = batchPosterSimpleRedisLockKey
 		return &simpleRedisLockConfig
 	}
+	mockLightClientReader, err := NewLightClientReader()
+	if err != nil {
+		return nil, err
+	}
 	redisLock, err := redislock.NewSimple(redisClient, redisLockConfigFetcher, func() bool { return opts.SyncMonitor.Synced() })
 	if err != nil {
 		return nil, err
 	}
 	b := &BatchPoster{
-		l1Reader:        opts.L1Reader,
-		inbox:           opts.Inbox,
-		streamer:        opts.Streamer,
-		syncMonitor:     opts.SyncMonitor,
-		config:          opts.Config,
-		bridge:          bridge,
-		seqInbox:        seqInbox,
-		seqInboxABI:     seqInboxABI,
-		seqInboxAddr:    opts.DeployInfo.SequencerInbox,
-		gasRefunderAddr: opts.Config().gasRefunder,
-		bridgeAddr:      opts.DeployInfo.Bridge,
-		daWriter:        opts.DAWriter,
-		redisLock:       redisLock,
+		l1Reader:          opts.L1Reader,
+		inbox:             opts.Inbox,
+		streamer:          opts.Streamer,
+		syncMonitor:       opts.SyncMonitor,
+		config:            opts.Config,
+		bridge:            bridge,
+		seqInbox:          seqInbox,
+		lightClientReader: mockLightClientReader,
+		seqInboxABI:       seqInboxABI,
+		espressoClient:    espressoClient.NewClient(log.New(), opts.Config().HotShotUrl),
+		seqInboxAddr:      opts.DeployInfo.SequencerInbox,
+		gasRefunderAddr:   opts.Config().gasRefunder,
+		bridgeAddr:        opts.DeployInfo.Bridge,
+		daWriter:          opts.DAWriter,
+		redisLock:         redisLock,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -486,6 +496,29 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 func (b *BatchPoster) addEspressoBlockMerkleProof(
 	msg *arbostypes.MessageWithMetadata,
 ) (*arbostypes.MessageWithMetadata, error) {
+	if msg.Message.Header.Kind == arbostypes.L1MessageType_L2Message &&
+		msg.Message.L2msg[0] == arbos.L2MessageKind_EspressoTx {
+		txs, jst, err := arbos.ParseEspressoMsg(msg.Message)
+		if err != nil {
+			return nil, err
+		}
+		validatedL1Height, err := b.lightClientReader.WaitForHotShotHeight(jst.Header.Height)
+		if err != nil {
+			return nil, err
+
+		}
+		proof, err := b.espressoClient.FetchBlockMerkleProof(validatedL1Height, jst.Header.Height)
+		if err != nil {
+			return nil, err
+		}
+		jst.BlockMerkleProof = &proof
+		newMsg, err := arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
+		if err != nil {
+			return nil, err
+
+		}
+		msg.Message = &newMsg
+	}
 	return msg, nil
 }
 
@@ -1214,6 +1247,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 		msg, err = b.addEspressoBlockMerkleProof(msg)
+		if err != nil {
+			return false, fmt.Errorf("error adding message to batch: %w", err)
+		}
 		success, err := b.building.segments.AddMessage(msg)
 		// Add justification here, wait for batcher
 		if err != nil {
