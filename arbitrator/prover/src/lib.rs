@@ -199,6 +199,26 @@ pub unsafe extern "C" fn arbitrator_add_hotshot_commitment(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn arbitrator_add_hotshot_block_merkle_root(
+    mach: *mut Machine,
+    height: u64,
+    data: CByteArray,
+) -> c_int {
+    let mach = &mut *mach;
+    let slice = std::slice::from_raw_parts(data.ptr, data.len);
+    if slice.len() != 32 {
+        return 3;
+    }
+    let data: Result<[u8; 32], _> = slice.try_into();
+    if let Ok(root) = data {
+        mach.add_hotshot_block_merkle_root(height, root);
+        0
+    } else {
+        1
+    }
+}
+
 /// Like arbitrator_step, but stops early if it hits a host io operation.
 /// Returns a c string error (freeable with libc's free) on error, or nullptr on success.
 #[no_mangle]

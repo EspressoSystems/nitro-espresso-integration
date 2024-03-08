@@ -125,6 +125,11 @@ func (v *ArbitratorSpawner) loadEntryToMachine(ctx context.Context, entry *valid
 		log.Error("error while setting hotshot commitment: %w", err)
 		return fmt.Errorf("error while setting hotshot commitment: %w", err)
 	}
+	err = mach.AddHotShotBlockMerkleRoot(entry.HotShotHeight, entry.HotShotBlockMerkleRoot[:])
+	if err != nil {
+		log.Error("error while setting hotshot commitment: %w", err)
+		return fmt.Errorf("error while setting hotshot commitment: %w", err)
+	}
 	return nil
 }
 

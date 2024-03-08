@@ -108,6 +108,7 @@ pub fn create(opts: &Opts, env: WasmEnv) -> (Instance, FunctionEnv<WasmEnv>, Sto
             "github.com/offchainlabs/nitro/wavmio.setGlobalStateU64" => func!(wavmio::set_global_state_u64),
             "github.com/offchainlabs/nitro/wavmio.readInboxMessage" => func!(wavmio::read_inbox_message),
             "github.com/offchainlabs/nitro/wavmio.readHotShotCommitment" => func!(wavmio::read_hotshot_commitment),
+            "github.com/offchainlabs/nitro/wavmio.readHotShotBlockMerkleRoot" => func!(wavmio::read_hotshot_block_merkle_root),
             "github.com/offchainlabs/nitro/wavmio.readDelayedInboxMessage" => func!(wavmio::read_delayed_inbox_message),
             "github.com/offchainlabs/nitro/arbvid.verifyNamespace" => func!(arbvid::verify_namespace),
             "github.com/offchainlabs/nitro/wavmio.resolvePreImage" => {
@@ -187,6 +188,7 @@ impl From<RuntimeError> for Escape {
 pub type WasmEnvMut<'a> = FunctionEnvMut<'a, WasmEnv>;
 pub type Inbox = BTreeMap<u64, Vec<u8>>;
 pub type HotShotCommitmentMap = BTreeMap<u64, [u8; 32]>;
+pub type HotShotBlockMerkleRootMap = BTreeMap<u64, [u8; 32]>;
 pub type Preimages = BTreeMap<PreimageType, BTreeMap<[u8; 32], Vec<u8>>>;
 
 #[derive(Default)]
@@ -207,6 +209,8 @@ pub struct WasmEnv {
     pub sequencer_messages: Inbox,
     /// Mapping from batch positions to hotshot commitments
     pub hotshot_comm_map: HotShotCommitmentMap,
+    /// Mapping from batch positions to hotshot block merkle roots
+    pub hotshot_block_merkle_root_map: HotShotBlockMerkleRootMap,
     /// The delayed inbox's messages
     pub delayed_messages: Inbox,
     /// The purpose and connections of this process

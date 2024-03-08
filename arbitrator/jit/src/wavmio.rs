@@ -3,7 +3,10 @@
 
 use crate::{
     gostack::GoStack,
-    machine::{Escape, HotShotCommitmentMap, Inbox, MaybeEscape, WasmEnv, WasmEnvMut},
+    machine::{
+        Escape, HotShotBlockMerkleRootMap, HotShotCommitmentMap, Inbox, MaybeEscape, WasmEnv,
+        WasmEnvMut,
+    },
     socket,
 };
 
@@ -93,6 +96,14 @@ pub fn read_hotshot_commitment(mut env: WasmEnvMut, sp: u32) -> MaybeEscape {
     read_hotshot_commitment_impl(&sp, hotshot_comms, "wavmio.readHotShotCommitment")
 }
 
+pub fn read_hotshot_block_merkle_root(mut env: WasmEnvMut, sp: u32) -> MaybeEscape {
+    let (sp, env) = GoStack::new(sp, &mut env);
+    ready_hostio(env)?;
+    let block_merkle_comms = &env.hotshot_block_merkle_root_map;
+
+    read_hotshot_block_merkle_root_impl(&sp, block_merkle_comms, "wavmio.readBlockMerkleRoot")
+}
+
 pub fn read_inbox_message(mut env: WasmEnvMut, sp: u32) -> MaybeEscape {
     let (sp, env) = GoStack::new(sp, &mut env);
     ready_hostio(env)?;
@@ -107,6 +118,38 @@ pub fn read_delayed_inbox_message(mut env: WasmEnvMut, sp: u32) -> MaybeEscape {
 
     let inbox = &env.delayed_messages;
     inbox_message_impl(&sp, inbox, "wavmio.readDelayedInboxMessage")
+}
+
+// Reads a block merkle root
+fn read_hotshot_block_merkle_root_impl(
+    sp: &GoStack,
+    comm_map: &HotShotBlockMerkleRootMap,
+    commitment: &str,
+) -> MaybeEscape {
+    let h = sp.read_u64(0);
+    let out_ptr = sp.read_u64(1);
+    let out_len = sp.read_u64(2);
+    if out_len != 32 {
+        eprintln!("Go trying to read commitment bytes with out len {out_len} in {commitment}");
+        sp.write_u64(5, 0);
+        return Ok(());
+    }
+
+    let comm = comm_map.get(&h);
+    if comm.is_none() {
+        return Escape::hostio(format!(
+            "jit machine failed to read the hotshot commitment at {}",
+            h
+        ));
+    }
+    let comm = comm.unwrap();
+
+    if out_ptr + 32 > sp.memory_size() {
+        let text = format!("memory bounds exceeded in {}", commitment);
+        return Escape::hostio(&text);
+    }
+    sp.write_slice(out_ptr, comm);
+    Ok(())
 }
 
 // Reads a hotshot commitment

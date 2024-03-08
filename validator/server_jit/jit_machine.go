@@ -153,6 +153,9 @@ func (machine *JitMachine) prove(
 	if err := writeExact(entry.HotShotCommitment[:]); err != nil {
 		return state, err
 	}
+	if err := writeExact(entry.HotShotBlockMerkleRoot[:]); err != nil {
+		return state, err
+	}
 
 	const successByte = 0x0
 	const failureByte = 0x1

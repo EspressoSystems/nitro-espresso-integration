@@ -13,6 +13,7 @@ import (
 
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 
+	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/rpcclient"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -44,7 +45,8 @@ type StatelessBlockValidator struct {
 	daService    arbstate.DataAvailabilityReader
 	blobReader   arbstate.BlobReader
 
-	hotShotReader HotShotReaderInterface
+	hotShotReader     HotShotReaderInterface
+	lightClientReader LightClientReaderInterface
 
 	moduleMutex           sync.Mutex
 	currentWasmModuleRoot common.Hash
@@ -88,6 +90,10 @@ type InboxReaderInterface interface {
 
 type HotShotReaderInterface interface {
 	L1HotShotCommitmentFromHeight(blockHeight uint64) (*espressoTypes.Commitment, error)
+}
+
+type LightClientReaderInterface interface {
+	FetchMerkleRootAtL1Block(blockHeight uint64) (espressoTypes.BlockMerkleRoot, error)
 }
 
 type GlobalStatePosition struct {
@@ -191,9 +197,10 @@ type validationEntry struct {
 	// Has batch when created - others could be added on record
 	BatchInfo []validator.BatchInfo
 	// Valid since Ready
-	Preimages         map[arbutil.PreimageType]map[common.Hash][]byte
-	DelayedMsg        []byte
-	HotShotCommitment espressoTypes.Commitment
+	Preimages              map[arbutil.PreimageType]map[common.Hash][]byte
+	DelayedMsg             []byte
+	HotShotCommitment      espressoTypes.Commitment
+	HotShotBlockMerkleRoot espressoTypes.BlockMerkleRoot
 }
 
 func (e *validationEntry) ToInput() (*validator.ValidationInput, error) {
@@ -201,15 +208,16 @@ func (e *validationEntry) ToInput() (*validator.ValidationInput, error) {
 		return nil, errors.New("cannot create input from non-ready entry")
 	}
 	return &validator.ValidationInput{
-		Id:                uint64(e.Pos),
-		HasDelayedMsg:     e.HasDelayedMsg,
-		DelayedMsgNr:      e.DelayedMsgNr,
-		Preimages:         e.Preimages,
-		BatchInfo:         e.BatchInfo,
-		DelayedMsg:        e.DelayedMsg,
-		HotShotHeight:     e.End.HotShotHeight,
-		HotShotCommitment: e.HotShotCommitment,
-		StartState:        e.Start,
+		Id:                     uint64(e.Pos),
+		HasDelayedMsg:          e.HasDelayedMsg,
+		DelayedMsgNr:           e.DelayedMsgNr,
+		Preimages:              e.Preimages,
+		BatchInfo:              e.BatchInfo,
+		DelayedMsg:             e.DelayedMsg,
+		HotShotHeight:          e.End.HotShotHeight,
+		HotShotCommitment:      e.HotShotCommitment,
+		HotShotBlockMerkleRoot: e.HotShotBlockMerkleRoot,
+		StartState:             e.Start,
 	}, nil
 }
 
@@ -222,6 +230,7 @@ func newValidationEntry(
 	batchBlockHash common.Hash,
 	prevDelayed uint64,
 	hotShotCommitment *espressoTypes.Commitment,
+	blockMerkleRoot *espressoTypes.BlockMerkleRoot,
 ) (*validationEntry, error) {
 	batchInfo := validator.BatchInfo{
 		Number:    start.Batch,
@@ -237,15 +246,16 @@ func newValidationEntry(
 		return nil, fmt.Errorf("illegal validation entry delayedMessage %d, previous %d", msg.DelayedMessagesRead, prevDelayed)
 	}
 	return &validationEntry{
-		Stage:             ReadyForRecord,
-		Pos:               pos,
-		Start:             start,
-		End:               end,
-		HasDelayedMsg:     hasDelayed,
-		DelayedMsgNr:      delayedNum,
-		msg:               msg,
-		HotShotCommitment: *hotShotCommitment,
-		BatchInfo:         []validator.BatchInfo{batchInfo},
+		Stage:                  ReadyForRecord,
+		Pos:                    pos,
+		Start:                  start,
+		End:                    end,
+		HasDelayedMsg:          hasDelayed,
+		DelayedMsgNr:           delayedNum,
+		msg:                    msg,
+		HotShotCommitment:      *hotShotCommitment,
+		HotShotBlockMerkleRoot: *blockMerkleRoot,
+		BatchInfo:              []validator.BatchInfo{batchInfo},
 	}, nil
 }
 
@@ -253,6 +263,7 @@ func NewStatelessBlockValidator(
 	inboxReader InboxReaderInterface,
 	inbox InboxTrackerInterface,
 	hotShotReader HotShotReaderInterface,
+	lightClientReader LightClientReaderInterface,
 	streamer TransactionStreamerInterface,
 	recorder execution.ExecutionRecorder,
 	arbdb ethdb.Database,
@@ -274,6 +285,7 @@ func NewStatelessBlockValidator(
 		recorder:           recorder,
 		validationSpawners: []validator.ValidationSpawner{valClient},
 		hotShotReader:      hotShotReader,
+		lightClientReader:  lightClientReader,
 		inboxReader:        inboxReader,
 		inboxTracker:       inbox,
 		streamer:           streamer,
@@ -435,6 +447,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(
 		return nil, err
 	}
 	var comm espressoTypes.Commitment
+	var blockMerkleRoot espressoTypes.BlockMerkleRoot
 	if v.config.Espresso {
 		height := end.HotShotHeight
 		fetchedCommitment, err := v.hotShotReader.L1HotShotCommitmentFromHeight(height)
@@ -445,8 +458,16 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(
 			return nil, fmt.Errorf("commitment not ready yet")
 		}
 		comm = *fetchedCommitment
+		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
+		if jst != nil && jst.BlockMerkleProof != nil {
+			root, err := v.lightClientReader.FetchMerkleRootAtL1Block(jst.BlockMerkleProof.L1Height)
+			if err != nil {
+				blockMerkleRoot = root
+			}
+		}
+
 	}
-	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, &comm)
+	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, &comm, &blockMerkleRoot)
 	if err != nil {
 		return nil, err
 	}

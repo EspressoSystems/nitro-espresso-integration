@@ -12,5 +12,6 @@ func getGlobalStateU64(idx uint64) uint64
 func setGlobalStateU64(idx uint64, val uint64)
 func readInboxMessage(msgNum uint64, offset uint32, output []byte) uint32
 func readHotShotCommitment(pos uint64, output []byte)
+func readHotShotBlockMerkleRoot(pos uint64, output []byte)
 func readDelayedInboxMessage(seqNum uint64, offset uint32, output []byte) uint32
 func resolveTypedPreimage(ty uint8, hash []byte, offset uint32, output []byte) uint32

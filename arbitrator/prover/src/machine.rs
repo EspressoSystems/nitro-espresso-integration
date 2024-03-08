@@ -717,6 +717,7 @@ pub struct Machine {
     stdio_output: Vec<u8>,
     inbox_contents: HashMap<(InboxIdentifier, u64), Vec<u8>>,
     hotshot_commitments: HashMap<u64, [u8; 32]>,
+    hotshot_block_merkle_roots: HashMap<u64, [u8; 32]>,
     first_too_far: u64, // Not part of machine hash
     preimage_resolver: PreimageResolverWrapper,
     initial_hash: Bytes32,
@@ -1165,6 +1166,7 @@ impl Machine {
             initial_hash: Bytes32::default(),
             context: 0,
             hotshot_commitments: Default::default(),
+            hotshot_block_merkle_roots: Default::default(),
         };
         mach.initial_hash = mach.hash();
         Ok(mach)
@@ -1214,6 +1216,7 @@ impl Machine {
             initial_hash: Bytes32::default(),
             context: 0,
             hotshot_commitments: Default::default(),
+            hotshot_block_merkle_roots: Default::default(),
         };
         mach.initial_hash = mach.hash();
         Ok(mach)
@@ -1928,6 +1931,20 @@ impl Machine {
                         error!()
                     }
                 }
+                Opcode::ReadHotShotBlockMerkleRoot => {
+                    let height = self.value_stack.pop().unwrap().assume_u64();
+                    let ptr = self.value_stack.pop().unwrap().assume_u32();
+                    if let Some(commitment) = self.hotshot_commitments.get(&height) {
+                        if ptr as u64 + 32 > module.memory.size() {
+                            error!();
+                        } else {
+                            let success = module.memory.store_slice_aligned(ptr.into(), commitment);
+                            assert!(success, "Failed to write to previously read memory");
+                        }
+                    } else {
+                        error!()
+                    }
+                }
                 Opcode::ReadInboxMessage => {
                     let offset = self.value_stack.pop().unwrap().assume_u32();
                     let ptr = self.value_stack.pop().unwrap().assume_u32();
@@ -2415,6 +2432,10 @@ impl Machine {
 
     pub fn add_hotshot_commitment(&mut self, height: u64, commitment: [u8; 32]) {
         self.hotshot_commitments.insert(height, commitment);
+    }
+
+    pub fn add_hotshot_block_merkle_root(&mut self, height: u64, root: [u8; 32]) {
+        self.hotshot_block_merkle_roots.insert(height, root);
     }
 
     pub fn get_module_names(&self, module: usize) -> Option<&NameCustomSection> {

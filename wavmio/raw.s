@@ -30,6 +30,10 @@ TEXT ·readHotShotCommitment(SB), NOSPLIT, $0
   CallImport
   RET
 
+TEXT ·readHotShotBlockMerkleRoot(SB), NOSPLIT, $0
+  CallImport
+  RET
+
 TEXT ·readDelayedInboxMessage(SB), NOSPLIT, $0
   CallImport
   RET

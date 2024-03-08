@@ -33,16 +33,17 @@ func (i *arrayFlags) Set(value string) error {
 }
 
 var (
-	seqMsg             []byte
-	seqMsgPos          uint64
-	posWithinMsg       uint64
-	delayedMsgs        [][]byte
-	delayedMsgFirstPos uint64
-	lastBlockHash      common.Hash
-	hotShotCommitment  [32]byte
-	preimages          map[common.Hash][]byte
-	seqAdvanced        uint64
-	espressoHeight     uint64
+	seqMsg                 []byte
+	seqMsgPos              uint64
+	posWithinMsg           uint64
+	delayedMsgs            [][]byte
+	delayedMsgFirstPos     uint64
+	lastBlockHash          common.Hash
+	hotShotCommitment      [32]byte
+	hotShotBlockMerkleRoot [32]byte
+	preimages              map[common.Hash][]byte
+	seqAdvanced            uint64
+	espressoHeight         uint64
 )
 
 func parsePreimageBytes(path string) {
@@ -121,7 +122,10 @@ func GetLastBlockHash() (hash common.Hash) {
 
 func ReadHotShotCommitment(h uint64) [32]byte {
 	return hotShotCommitment
+}
 
+func ReadHotShotBlockMerkleRoot(h uint64) [32]byte {
+	return hotShotBlockMerkleRoot
 }
 
 func GetEspressoHeight() uint64 {

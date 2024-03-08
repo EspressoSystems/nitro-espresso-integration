@@ -157,6 +157,8 @@ pub enum Opcode {
     ReadInboxMessage,
     /// Reads the HotShot commitment on the stack at an offset
     ReadHotShotCommitment,
+    /// Reads the HotShot block merkle root on the stack at an offset
+    ReadHotShotBlockMerkleRoot,
     /// Stop exexcuting the machine and move to the finished status
     HaltAndSetFinished,
 }
@@ -270,6 +272,7 @@ impl Opcode {
             Opcode::ReadInboxMessage => 0x8021,
             Opcode::HaltAndSetFinished => 0x8022,
             Opcode::ReadHotShotCommitment => 0x9001,
+            Opcode::ReadHotShotBlockMerkleRoot => 0x9002,
         }
     }
 
@@ -283,6 +286,7 @@ impl Opcode {
                 | Opcode::ReadPreImage
                 | Opcode::ReadInboxMessage
                 | Opcode::ReadHotShotCommitment
+                | Opcode::ReadHotShotBlockMerkleRoot
         )
     }
 }

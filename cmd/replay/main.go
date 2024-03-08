@@ -282,6 +282,7 @@ func main() {
 			hotshotHeader := jst.Header
 			height := hotshotHeader.Height
 			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
+			blockMerkleRoot := wavmio.ReadHotShotBlockMerkleRoot(height)
 			validatedHeight := wavmio.GetEspressoHeight()
 			if validatedHeight == 0 {
 				// Validators can choose their own trusted starting point to start their validation.
@@ -294,6 +295,12 @@ func main() {
 			}
 			if !commitment.Equals(hotshotHeader.Commit()) {
 				panic(fmt.Sprintf("invalid hotshot header jst header at %v expected: %v, provided %v.", height, hotshotHeader.Commit(), commitment))
+			}
+			// Validate the block merkle root, verifying that the height matches the validated block height
+			_, err = jst.BlockMerkleProof.Verify(blockMerkleRoot)
+			// TOOD: when the function above no longer returns a mock value, check that the validated height matches
+			if err != nil {
+				panic(err)
 			}
 			arbvid.VerifyNamespace(chainConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs)
 		}

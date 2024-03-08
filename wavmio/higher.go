@@ -54,6 +54,11 @@ func ReadInboxMessage(msgNum uint64) []byte {
 	})
 }
 
+func ReadHotShotBlockMerkleRoot(h uint64) (commitment [32]byte) {
+	readHotShotBlockMerkleRoot(h, commitment[:])
+	return
+}
+
 func ReadHotShotCommitment(h uint64) (commitment [32]byte) {
 	readHotShotCommitment(h, commitment[:])
 	return

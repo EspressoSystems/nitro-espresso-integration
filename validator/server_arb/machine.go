@@ -338,6 +338,29 @@ func (m *ArbitratorMachine) AddHotShotCommitment(height uint64, commitment []byt
 	}
 }
 
+func (m *ArbitratorMachine) AddHotShotBlockMerkleRoot(height uint64, root []byte) error {
+	defer runtime.KeepAlive(m)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.frozen {
+		return errors.New("machine frozen")
+	}
+	return nil
+
+	// cbyte := CreateCByteArray(root)
+	// status := C.arbitator_add_hotshot_block_merkle_root(m.ptr, C.uint64_t(height), cbyte)
+	// DestroyCByteArray(cbyte)
+	// if status == 0 {
+	// 	return nil
+	// } else if status == 1 {
+	// 	return errors.New("failed to add block merkle root: try into failed")
+	// } else if status == 3 {
+	// 	return errors.New("failed to add block merkle root: len != 32")
+	// } else {
+	// 	return errors.New("failed to add block merkle root: unreachable")
+	// }
+}
+
 func (m *ArbitratorMachine) AddSequencerInboxMessage(index uint64, data []byte) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()

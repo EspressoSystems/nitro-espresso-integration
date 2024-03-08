@@ -26,5 +26,6 @@ type ValidationInput struct {
 	// is allowed for now.
 	HotShotHeight uint64
 	// The validating hotshot commitment
-	HotShotCommitment espressoTypes.Commitment
+	HotShotCommitment      espressoTypes.Commitment
+	HotShotBlockMerkleRoot espressoTypes.BlockMerkleRoot
 }
