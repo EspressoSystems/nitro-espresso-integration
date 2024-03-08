@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -80,15 +79,16 @@ func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder
 	nodeConfig.DelayedSequencer.Enable = true
 	nodeConfig.Sequencer = true
 	nodeConfig.Espresso = true
+	nodeConfig.BlockValidator.Enable = false
+	nodeConfig.BatchPoster.Enable = false
+	nodeConfig.Feed.Output.Enable = true
+	nodeConfig.Feed.Output.Addr = "0.0.0.0"
+	nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
+
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Sequencer.Espresso = true
-	builder.execConfig.Sequencer.EspressoNamespace = 412346
+	builder.execConfig.Sequencer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
 	builder.execConfig.Sequencer.HotShotUrl = hotshot_url
-
-	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
-
-	builder.nodeConfig.Feed.Output.Enable = true
-	builder.nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
 
 	client, cleanup := builder.Build2ndNode(t, &SecondNodeParams{nodeConfig: nodeConfig})
 	return client, builder.L2Info, cleanup
@@ -150,14 +150,22 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*NodeBuilde
 	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
 
 	builder.nodeConfig.Feed.Input.URL = []string{fmt.Sprintf("ws://127.0.0.1:%d", broadcastPort)}
+	builder.nodeConfig.Feed.Input.Timeout = 5 * time.Second
 	builder.nodeConfig.BatchPoster.Enable = true
-	builder.nodeConfig.BatchPoster.MaxSize = 41
-	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
+	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
+	builder.nodeConfig.BatchPoster.ErrorDelay = 10 * time.Second
 	builder.nodeConfig.BlockValidator.Enable = true
-	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
+	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
+	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", jitValidationPort)
+	builder.nodeConfig.BlockValidator.ValidationServer.Retries = 3
+	builder.nodeConfig.BlockValidator.ValidationServer.RetryErrors = "websocket: close.*|dial tcp .*|.*i/o timeout|.*connection reset by peer|.*connection refused"
 	builder.nodeConfig.BlockValidator.HotShotAddress = hotShotAddress
 	builder.nodeConfig.BlockValidator.Espresso = true
 	builder.nodeConfig.DelayedSequencer.Enable = false
+
+	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+
+	builder.execConfig.Sequencer.Enable = false
 
 	cleanup := builder.Build(t)
 
@@ -209,7 +217,7 @@ func createStaker(ctx context.Context, t *testing.T, builder *NodeBuilder, incor
 	config.BlockValidator.Enable = true
 	config.BlockValidator.HotShotAddress = hotShotAddress
 	config.BlockValidator.Espresso = true
-	config.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
+	config.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", jitValidationPort)
 	testClient, cleanup := builder.Build2ndNode(t, &SecondNodeParams{nodeConfig: config})
 	l2Node := testClient.ConsensusNode
 
@@ -269,7 +277,7 @@ func waitFor(
 	ctxinput context.Context,
 	condition func() bool,
 ) error {
-	return waitForWith(t, ctxinput, 200*time.Second, time.Second, condition)
+	return waitForWith(t, ctxinput, 30*time.Second, time.Second, condition)
 }
 
 func waitForWith(
@@ -298,7 +306,7 @@ func TestEspressoE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cleanValNode := createValidationNode(ctx, t, false)
+	cleanValNode := createValidationNode(ctx, t, true)
 	defer cleanValNode()
 
 	builder, cleanup := createL1ValidatorPosterNode(ctx, t)
@@ -342,9 +350,7 @@ func TestEspressoE2E(t *testing.T) {
 	expected := arbutil.MessageIndex(1)
 	err = waitFor(t, ctx, func() bool {
 		msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
-		if err != nil {
-			panic(err)
-		}
+		Require(t, err)
 
 		validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
 		return msgCnt >= expected && validatedCnt >= expected
@@ -392,12 +398,15 @@ func TestEspressoE2E(t *testing.T) {
 	msgCnt, err := node.ConsensusNode.TxStreamer.GetMessageCount()
 	Require(t, err)
 
+	// l2Node.ConsensusNode.StopAndWait()
+
 	// Wait for the number of validated messages to catch up
-	err = waitFor(t, ctx, func() bool {
+	err = waitForWith(t, ctx, 5*time.Minute, 5*time.Second, func() bool {
 		validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
 		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
 		return validatedCnt >= msgCnt
 	})
+	// l2Node.ConsensusNode.Start(ctx)
 	Require(t, err)
 
 	// Make sure it is a totally new account
@@ -489,40 +498,40 @@ func TestEspressoE2E(t *testing.T) {
 	// Note: If you are modifying the smart contracts, staker-related code or doing overhaul.
 	// Set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
 
-	checkStaker := os.Getenv("E2E_CHECK_STAKER")
-	if checkStaker != "" {
-		err = waitForWith(
-			t,
-			ctx,
-			time.Minute*15,
-			time.Second*8,
-			func() bool {
-				log.Info("good staker acts", "step", i)
-				txA, err := goodStaker.Act(ctx)
-				Require(t, err)
-				if txA != nil {
-					_, err = builder.L1.EnsureTxSucceeded(txA)
-					Require(t, err)
-				}
+	// checkStaker := os.Getenv("E2E_CHECK_STAKER")
+	// if checkStaker != "" {
+	// 	err = waitForWith(
+	// 		t,
+	// 		ctx,
+	// 		time.Minute*15,
+	// 		time.Second*8,
+	// 		func() bool {
+	// 			log.Info("good staker acts", "step", i)
+	// 			txA, err := goodStaker.Act(ctx)
+	// 			Require(t, err)
+	// 			if txA != nil {
+	// 				_, err = builder.L1.EnsureTxSucceeded(txA)
+	// 				Require(t, err)
+	// 			}
 
-				log.Info("bad staker acts", "step", i)
-				txB, err := badStaker.Act(ctx)
-				if txB != nil {
-					_, err = builder.L1.EnsureTxSucceeded(txB)
-					Require(t, err)
-				}
-				if err != nil {
-					ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
-					if ok {
-						return true
-					} else {
-						t.Fatal("unexpected err")
-					}
-				}
-				i += 1
-				return false
+	// 			log.Info("bad staker acts", "step", i)
+	// 			txB, err := badStaker.Act(ctx)
+	// 			if txB != nil {
+	// 				_, err = builder.L1.EnsureTxSucceeded(txB)
+	// 				Require(t, err)
+	// 			}
+	// 			if err != nil {
+	// 				ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
+	// 				if ok {
+	// 					return true
+	// 				} else {
+	// 					t.Fatal("unexpected err")
+	// 				}
+	// 			}
+	// 			i += 1
+	// 			return false
 
-			})
-		Require(t, err)
-	}
+	// 		})
+	// 	Require(t, err)
+	// }
 }

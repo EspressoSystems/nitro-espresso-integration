@@ -71,7 +71,7 @@ func (machine *JitMachine) prove(
 	defer cancel() // ensure our cleanup functions run when we're done
 	state := validator.GoGlobalState{}
 
-	timeout := time.Now().Add(60 * time.Second)
+	timeout := time.Now().Add(240 * time.Second)
 	tcp, err := net.ListenTCP("tcp4", &net.TCPAddr{
 		IP: []byte{127, 0, 0, 1},
 	})

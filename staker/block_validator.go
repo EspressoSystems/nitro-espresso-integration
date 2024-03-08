@@ -769,6 +769,7 @@ validationsLoop:
 				}
 				if err != nil {
 					validatorFailedValidationsCounter.Inc(1)
+					log.Info("????????????????")
 					v.possiblyFatal(err)
 					return &pos, nil // if not fatal - retry
 				}
