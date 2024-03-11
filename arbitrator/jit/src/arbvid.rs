@@ -21,6 +21,8 @@ pub fn verify_namespace(mut env: WasmEnvMut, sp: u32) {
     let payload_comm_bytes = sp.read_slice(payload_comm_ptr, payload_comm_len);
     let ns_table_bytes = sp.read_slice(ns_table_bytes_ptr, ns_table_bytes_len);
     let txs_comm_bytes = sp.read_slice(txs_comm_ptr, txs_comm_len);
+    println!("!!!!");
+    println!("!!!!");
 
     verify_namespace_helper(
         namespace,

@@ -246,6 +246,7 @@ pub fn resolve_preimage_impl(
 
 fn ready_hostio(env: &mut WasmEnv) -> MaybeEscape {
     let debug = env.process.debug;
+    let debug = true;
 
     if !env.process.reached_wavmio {
         if debug {
@@ -346,5 +347,6 @@ fn ready_hostio(env: &mut WasmEnv) -> MaybeEscape {
     let writer = BufWriter::new(socket);
     env.process.socket = Some((writer, reader));
     env.process.forks = false;
+    println!("ready host io");
     Ok(())
 }

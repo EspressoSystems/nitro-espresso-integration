@@ -1,14 +1,11 @@
 // TODO import from sequencer: https://github.com/EspressoSystems/nitro-espresso-integration/issues/87
 // This module is essentially copy and pasted VID logic from the sequencer repo. It is an unfortunate workaround
 // until the VID portion of the sequencer repo is WASM-compatible.
-use core::fmt;
-use serde::{Deserialize, Serialize};
-use std::mem::size_of;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use trait_set::trait_set;
 use ark_bls12_381::Bls12_381;
-use derive_more::{Display, From, Into};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use core::fmt;
 use derivative::Derivative;
+use derive_more::{Display, From, Into};
 use jf_primitives::vid::{
     payload_prover::{PayloadProver, Statement},
     VidScheme as VidSchemeTrait,
@@ -18,8 +15,11 @@ use jf_primitives::{
     vid::advz::payload_prover::LargeRangeProof,
 };
 use num_traits::PrimInt;
+use serde::{Deserialize, Serialize};
 use std::default::Default;
+use std::mem::size_of;
 use std::{marker::PhantomData, ops::Range};
+use trait_set::trait_set;
 
 trait_set! {
     pub trait TableWordTraits = CanonicalSerialize
@@ -255,7 +255,13 @@ impl NamespaceProof {
                     .get_payload_range(ns_index, VidScheme::get_payload_byte_len(vid_common));
 
                 let ns_id = ns_table.get_table_entry(ns_index).0;
-
+                println!(
+                    "existence verify before, ns_payload_flat: {:?}",
+                    ns_payload_flat
+                );
+                println!("existence verify before, range: {:?}", ns_payload_range);
+                println!("existence verify before, commit: {:?}", commit);
+                println!("existence verify before, common: {:?}", vid_common);
                 // verify self against args
                 vid.payload_verify(
                     Statement {
@@ -266,7 +272,9 @@ impl NamespaceProof {
                     },
                     ns_proof,
                 )
-                .unwrap().unwrap();
+                .unwrap()
+                .unwrap();
+                println!("existence verify after");
 
                 // verification succeeded, return some data
                 // we know ns_id is correct because the corresponding ns_payload_range passed verification

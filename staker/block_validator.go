@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -770,6 +771,10 @@ validationsLoop:
 				if err != nil {
 					validatorFailedValidationsCounter.Inc(1)
 					log.Info("????????????????")
+					input, _ := validationStatus.Entry.ToInput()
+					file, _ := os.Create("espresso-e2e/validation_input2.json")
+					s, _ := json.Marshal(input)
+					file.Write(s)
 					v.possiblyFatal(err)
 					return &pos, nil // if not fatal - retry
 				}

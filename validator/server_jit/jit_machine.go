@@ -71,7 +71,7 @@ func (machine *JitMachine) prove(
 	defer cancel() // ensure our cleanup functions run when we're done
 	state := validator.GoGlobalState{}
 
-	timeout := time.Now().Add(240 * time.Second)
+	timeout := time.Now().Add(360 * time.Second)
 	tcp, err := net.ListenTCP("tcp4", &net.TCPAddr{
 		IP: []byte{127, 0, 0, 1},
 	})
@@ -221,6 +221,7 @@ func (machine *JitMachine) prove(
 	if err := writeExact(ready); err != nil {
 		return state, err
 	}
+	log.Info("finish sending validation input")
 
 	read := func(count uint64) ([]byte, error) {
 		slice := make([]byte, count)
@@ -247,9 +248,11 @@ func (machine *JitMachine) prove(
 
 	for {
 		kind, err := read(1)
+		fmt.Println("reading 1 byte")
 		if err != nil {
 			return state, err
 		}
+		fmt.Println("read 1 byte")
 		switch kind[0] {
 		case failureByte:
 			length, err := readUint64()

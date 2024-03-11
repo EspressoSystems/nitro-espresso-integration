@@ -73,7 +73,9 @@ fn main() {
     let run_args = &[Value::I32(1), Value::I32(argv)]; // pass argv with our single name arg
 
     let main = instance.exports.get_function("run").unwrap();
+    println!("before running wasm");
     let outcome = main.call(&mut store, run_args);
+    println!("outcome: {:?}", outcome);
     let escape = match outcome {
         Ok(outcome) => {
             println!("Go returned values {:?}", outcome);
