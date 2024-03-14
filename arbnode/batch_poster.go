@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
@@ -83,6 +84,7 @@ type BatchPoster struct {
 	config             BatchPosterConfigFetcher
 	seqInbox           *bridgegen.SequencerInbox
 	espressoClient     *espressoClient.Client
+	lightClientReader  *lightclient.LightClientReader
 	bridge             *bridgegen.Bridge
 	syncMonitor        *SyncMonitor
 	seqInboxABI        *abi.ABI
@@ -148,6 +150,7 @@ type BatchPosterConfig struct {
 	L1BlockBoundBypass time.Duration               `koanf:"l1-block-bound-bypass"                    reload:"hot"`
 	UseAccessLists     bool                        `koanf:"use-access-lists"                         reload:"hot"`
 	HotShotUrl         string
+	LightClientAddress string `koanf:"light-client-address"` //nolint
 
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
@@ -308,7 +311,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		simpleRedisLockConfig.Key = batchPosterSimpleRedisLockKey
 		return &simpleRedisLockConfig
 	}
-	mockLightClientReader, err := NewLightClientReader()
+	addr := common.HexToAddress(opts.Config().LightClientAddress)
+	lightClientReader, err := lightclient.NewLightClientReader(addr, opts.L1Reader.Client())
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +329,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		config:             opts.Config,
 		bridge:             bridge,
 		espressoClient:     espressoClient.NewClient(log.New(), opts.Config().HotShotUrl),
-		lightClientReader:  mockLightClientReader,
+		lightClientReader:  lightClientReader,
 		seqInbox:           seqInbox,
 		seqInboxABI:        seqInboxABI,
 		seqInboxAddr:       opts.DeployInfo.SequencerInbox,
@@ -470,11 +474,15 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		if err != nil {
 			return nil, err
 		}
-		validatedL1Height, err := b.lightClientReader.WaitForHotShotHeight(jst.Header.Height)
+		validatedHotShotHeight, validatedL1Height, err := b.lightClientReader.ValidatedHeight()
 		if err != nil {
 			return nil, err
 
 		}
+		if validatedHotShotHeight < jst.Header.Height {
+			return nil, fmt.Errorf("could not construct batch justification, light client is at height %v but the justification is for height %v", validatedHotShotHeight, jst.Header.Height)
+		}
+
 		proof, err := b.espressoClient.FetchBlockMerkleProof(validatedL1Height, jst.Header.Height)
 		if err != nil {
 			return nil, err
