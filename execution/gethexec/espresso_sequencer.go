@@ -134,11 +134,11 @@ func (s *EspressoSequencer) PublishTransaction(
 		return err
 	}
 	txn := espressoTypes.Transaction{
-		Vm:      s.namespace,
-		Payload: txnBytes,
+		Namespace: s.namespace,
+		Payload:   txnBytes,
 	}
 	if err := s.hotShotState.client.SubmitTransaction(parentCtx, txn); err != nil {
-		log.Error("Failed to submit transaction", err)
+		log.Error("Failed to submit transaction", "err", err)
 		return err
 	}
 	return nil
