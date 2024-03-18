@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +33,7 @@ import (
 
 var workingDir = "./espresso-e2e"
 var hotShotAddress = "0x217788c286797d56cd59af5e493f3699c39cbbe8"
+var lightClientAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
 var hostIoAddress = "0xF34C2fac45527E55ED122f80a969e79A40547e6D"
 
 var (
@@ -60,6 +62,7 @@ func runEspresso(t *testing.T, ctx context.Context) func() {
 		"espresso-sequencer1",
 		"commitment-task",
 		"state-relay-server",
+		"prover-service",
 	}
 	invocation = append(invocation, nodes...)
 	procees := exec.Command("docker", invocation...)
@@ -159,6 +162,7 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*NodeBuilde
 	builder.nodeConfig.BatchPoster.MaxSize = 41
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
+	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BlockValidator.Enable = true
 	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
 	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
@@ -173,6 +177,12 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T) (*NodeBuilde
 	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
 	Require(t, err)
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
+
+	// Fund the light client
+	mnemonic = "test test test test test test test test test test test junk"
+	err = builder.L1Info.GenerateAccountWithMnemonic("LightClient", mnemonic, 0)
+	Require(t, err)
+	builder.L1.TransferBalance(t, "Faucet", "LightClient", big.NewInt(9e18), builder.L1Info)
 
 	// Fund the stakers
 	builder.L1Info.GenerateAccount("Staker1")
@@ -335,6 +345,18 @@ func TestEspressoE2E(t *testing.T) {
 
 	cleanEspresso := runEspresso(t, ctx)
 	defer cleanEspresso()
+
+	// wait for the light client contract
+	err = waitForWith(t, ctx, 5000*time.Second, 2*time.Second, func() bool {
+		reader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
+		if err != nil {
+			log.Error("error creating light contract reader", "err", err)
+		}
+		height, l1height, err := reader.ValidatedHeight()
+		log.Info("heights", "height", height, "l1height", l1height, "err", err)
+		return false
+	})
+	Require(t, err)
 
 	// wait for the commitment task
 	err = waitFor(t, ctx, func() bool {
