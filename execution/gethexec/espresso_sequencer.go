@@ -73,12 +73,10 @@ func (s *EspressoSequencer) createBlock(ctx context.Context) (returnValue bool) 
 	nextSeqBlockNum := s.hotShotState.nextSeqBlockNum
 	header, err := s.hotShotState.client.FetchHeaderByHeight(ctx, nextSeqBlockNum)
 	if err != nil {
-		log.Warn("Unable to fetch header for block number, will retry", "block_num", nextSeqBlockNum)
 		return false
 	}
 	arbTxns, err := s.hotShotState.client.FetchTransactionsInBlock(ctx, header.Height, s.namespace)
 	if err != nil {
-		log.Error("Error fetching transactions", "err", err)
 		return false
 
 	}
