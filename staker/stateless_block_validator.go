@@ -507,7 +507,7 @@ func (v *StatelessBlockValidator) Stop() {
 }
 
 // This method should be only used in tests.
-func (s *StatelessBlockValidator) DebugEspresso_SetHotShotReader(reader lightclient.LightClientReaderInterface, t *testing.T) {
+func (s *StatelessBlockValidator) DebugEspresso_SetLightClientReader(reader lightclient.LightClientReaderInterface, t *testing.T) {
 	s.lightClientReader = reader
 }
 

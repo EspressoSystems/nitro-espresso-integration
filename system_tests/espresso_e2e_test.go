@@ -454,77 +454,60 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
-	// TOOD: uncomment once we fix fraud proofs
-	// https://github.com/EspressoSystems/nitro-espresso-integration/issues/117
+	incorrectHeight := uint64(10)
 
-	// hostIo, err := ospgen.NewOneStepProverHostIo(common.HexToAddress(hostIoAddress), builder.L1.Client)
-	// Require(t, err)
-	// actualCommitment, err := hostIo.GetHotShotCommitment(&bind.CallOpts{}, big.NewInt(1))
-	// Require(t, err)
-	// commitmentBytes := actualCommitment.Bytes()
-	// if len(commitmentBytes) != 32 {
-	// 	t.Fatal("failed to read hotshot via hostio contract, length is not 32")
-	// }
-	// empty := actualCommitment.Cmp(big.NewInt(0)) == 0
-	// if empty {
-	// 	t.Fatal("failed to read hotshot via hostio contract, empty")
-	// }
-	// log.Info("Read hotshot commitment via hostio contract successfully", "height", 1, "commitment", commitmentBytes)
+	goodStaker, blockValidatorA, cleanA := createStaker(ctx, t, builder, 0)
+	defer cleanA()
+	badStaker, blockValidatorB, cleanB := createStaker(ctx, t, builder, incorrectHeight)
+	defer cleanB()
 
-	// incorrectHeight := uint64(10)
+	err = waitForWith(t, ctx, 60*time.Second, 1*time.Second, func() bool {
+		validatedA := blockValidatorA.Validated(t)
+		validatedB := blockValidatorB.Validated(t)
+		shouldValidated := arbutil.MessageIndex(incorrectHeight - 1)
+		condition := validatedA >= shouldValidated && validatedB >= shouldValidated
+		if !condition {
+			log.Info("waiting for stakers to catch up the incorrect hotshot height", "stakerA", validatedA, "stakerB", validatedB, "target", shouldValidated)
+		}
+		return condition
+	})
+	Require(t, err)
+	validatorUtils, err := rollupgen.NewValidatorUtils(builder.L2.ConsensusNode.DeployInfo.ValidatorUtils, builder.L1.Client)
+	Require(t, err)
+	goodOpts := builder.L1Info.GetDefaultCallOpts("Staker1", ctx)
+	badOpts := builder.L1Info.GetDefaultCallOpts("Staker2", ctx)
+	i := 0
+	err = waitFor(t, ctx, func() bool {
+		log.Info("good staker acts", "step", i)
+		txA, err := goodStaker.Act(ctx)
+		Require(t, err)
+		if txA != nil {
+			_, err = builder.L1.EnsureTxSucceeded(txA)
+			Require(t, err)
+		}
 
-	// goodStaker, blockValidatorA, cleanA := createStaker(ctx, t, builder, 0)
-	// defer cleanA()
-	// badStaker, blockValidatorB, cleanB := createStaker(ctx, t, builder, incorrectHeight)
-	// defer cleanB()
+		log.Info("bad staker acts", "step", i)
+		txB, err := badStaker.Act(ctx)
+		Require(t, err)
+		if txB != nil {
+			_, err = builder.L1.EnsureTxSucceeded(txB)
+			Require(t, err)
+		}
+		i += 1
+		conflict, err := validatorUtils.FindStakerConflict(&bind.CallOpts{}, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts.From, big.NewInt(1024))
+		Require(t, err)
+		condition := staker.ConflictType(conflict.Ty) == staker.CONFLICT_TYPE_FOUND
+		if !condition {
+			log.Info("waiting for the conflict")
+		}
+		return condition
+	})
+	Require(t, err)
 
-	// err = waitForWith(t, ctx, 60*time.Second, 1*time.Second, func() bool {
-	// 	validatedA := blockValidatorA.Validated(t)
-	// 	validatedB := blockValidatorB.Validated(t)
-	// 	shouldValidated := arbutil.MessageIndex(incorrectHeight - 1)
-	// 	condition := validatedA >= shouldValidated && validatedB >= shouldValidated
-	// 	if !condition {
-	// 		log.Info("waiting for stakers to catch up the incorrect hotshot height", "stakerA", validatedA, "stakerB", validatedB, "target", shouldValidated)
-	// 	}
-	// 	return condition
-	// })
-	// Require(t, err)
-	// validatorUtils, err := rollupgen.NewValidatorUtils(builder.L2.ConsensusNode.DeployInfo.ValidatorUtils, builder.L1.Client)
-	// Require(t, err)
-	// goodOpts := builder.L1Info.GetDefaultCallOpts("Staker1", ctx)
-	// badOpts := builder.L1Info.GetDefaultCallOpts("Staker2", ctx)
-	// i := 0
-	// err = waitFor(t, ctx, func() bool {
-	// 	log.Info("good staker acts", "step", i)
-	// 	txA, err := goodStaker.Act(ctx)
-	// 	Require(t, err)
-	// 	if txA != nil {
-	// 		_, err = builder.L1.EnsureTxSucceeded(txA)
-	// 		Require(t, err)
-	// 	}
-
-	// 	log.Info("bad staker acts", "step", i)
-	// 	txB, err := badStaker.Act(ctx)
-	// 	Require(t, err)
-	// 	if txB != nil {
-	// 		_, err = builder.L1.EnsureTxSucceeded(txB)
-	// 		Require(t, err)
-	// 	}
-	// 	i += 1
-	// 	conflict, err := validatorUtils.FindStakerConflict(&bind.CallOpts{}, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts.From, big.NewInt(1024))
-	// 	Require(t, err)
-	// 	condition := staker.ConflictType(conflict.Ty) == staker.CONFLICT_TYPE_FOUND
-	// 	if !condition {
-	// 		log.Info("waiting for the conflict")
-	// 	}
-	// 	return condition
-	// })
-	// Require(t, err)
-
-	// // The following tests are very time-consuming and, given that the related code
-	// // does not change often, it's not necessary to run them every time.
-	// // Note: If you are modifying the smart contracts, staker-related code or doing overhaul.
-	// // Set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
+	// The following tests are very time-consuming and, given that the related code
+	// does not change often, it's not necessary to run them every time.
+	// Note: If you are modifying the smart contracts, staker-related code or doing overhaul.
+	// Set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
 
 	// checkStaker := os.Getenv("E2E_CHECK_STAKER")
 	// if checkStaker == "" {
