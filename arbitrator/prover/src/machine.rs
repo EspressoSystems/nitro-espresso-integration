@@ -3216,6 +3216,10 @@ impl Machine {
         self.hotshot_commitments.insert(height, commitment);
     }
 
+    pub fn add_hotshot_liveness(&mut self, height: u64, liveness: bool) {
+        self.hotshot_liveness.insert(height, liveness);
+    }
+
     pub fn get_module_names(&self, module: usize) -> Option<&NameCustomSection> {
         self.modules.get(module).map(|m| &*m.names)
     }

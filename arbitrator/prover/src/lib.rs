@@ -229,6 +229,17 @@ pub unsafe extern "C" fn arbitrator_add_hotshot_commitment(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn arbitrator_add_hotshot_liveness(
+    mach: *mut Machine,
+    height: u64,
+    liveness: u8,
+) -> c_int {
+    let mach = &mut *mach;
+    mach.add_hotshot_liveness(height, liveness > 0);
+    0
+}
+
 /// Adds a user program to the machine's known set of wasms.
 #[no_mangle]
 pub unsafe extern "C" fn arbitrator_add_user_wasm(

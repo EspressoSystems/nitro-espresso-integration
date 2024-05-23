@@ -292,7 +292,8 @@ func main() {
 
 			hotshotHeader := jst.Header
 			height := hotshotHeader.Height
-			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
+			l1_height := jst.BlockMerkleJustification.L1ProofHeight
+			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(l1_height))
 			validatedHeight := wavmio.GetEspressoHeight()
 			if validatedHeight == 0 {
 				// Validators can choose their own trusted starting point to start their validation.

@@ -148,6 +148,9 @@ type validationEntry struct {
 	UserWasms  state.UserWasms
 	DelayedMsg []byte
 
+	// If hotshot is down, this is the l1 height associated with the arbitrum original message.
+	// We use this to validate the hotshot liveness
+	// If hotshot is up, this is the l1 height indicating which l1 height is the `HotShotCommitment` from.
 	L1BlockHeight     uint64
 	HotShotCommitment espressoTypes.Commitment
 	IsHotShotLive     bool
@@ -184,6 +187,7 @@ func newValidationEntry(
 	chainConfig *params.ChainConfig,
 	hotShotCommitment *espressoTypes.Commitment,
 	isHotShotLive bool,
+	l1BlockHeight uint64,
 ) (*validationEntry, error) {
 	batchInfo := validator.BatchInfo{
 		Number:    start.Batch,
@@ -208,7 +212,7 @@ func newValidationEntry(
 		msg:               msg,
 		BatchInfo:         []validator.BatchInfo{batchInfo},
 		ChainConfig:       chainConfig,
-		L1BlockHeight:     msg.Message.Header.BlockNumber,
+		L1BlockHeight:     l1BlockHeight,
 		HotShotCommitment: *hotShotCommitment,
 		IsHotShotLive:     isHotShotLive,
 	}, nil
@@ -391,12 +395,14 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 	}
 	var comm espressoTypes.Commitment
 	var isHotShotLive bool
+	var l1BlockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
 		if err != nil {
 			return nil, err
 		}
-		fetchedCommitment, err := v.lightClientReader.FetchMerkleRootAtL1Block(jst.BlockMerkleJustification.L1ProofHeight)
+		l1BlockHeight = jst.BlockMerkleJustification.L1ProofHeight
+		fetchedCommitment, err := v.lightClientReader.FetchMerkleRootAtL1Block(l1BlockHeight)
 		if err != nil {
 			log.Error("error fetching light client commitment", "L1ProofHeight", jst.BlockMerkleJustification.L1ProofHeight, "%v", err)
 			return nil, err
@@ -406,8 +412,9 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		isHotShotLive = true
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
 		isHotShotLive = false
+		l1BlockHeight = msg.Message.Header.BlockNumber
 	}
-	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, v.streamer.ChainConfig(), &comm, isHotShotLive)
+	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, v.streamer.ChainConfig(), &comm, isHotShotLive, l1BlockHeight)
 	if err != nil {
 		return nil, err
 	}

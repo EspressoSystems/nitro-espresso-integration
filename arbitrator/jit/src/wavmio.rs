@@ -301,7 +301,7 @@ fn ready_hostio(env: &mut WasmEnv) -> MaybeEscape {
     let validated_hotshot_height = socket::read_u64(stream)?;
     let hotshot_comm = socket::read_bytes32(stream)?;
     let l1_block_height = socket::read_u64(stream)?;
-    let hotshot_avail = socket::read_u8(stream)?;
+    let hotshot_liveness = socket::read_u8(stream)?;
 
     env.small_globals = [
         inbox_position,
@@ -309,10 +309,13 @@ fn ready_hostio(env: &mut WasmEnv) -> MaybeEscape {
         validated_hotshot_height,
     ];
     env.large_globals = [last_block_hash, last_send_root];
-    env.hotshot_comm_map
-        .insert(validated_hotshot_height + 1, hotshot_comm.0);
-    env.hotshot_avail_map
-        .insert(l1_block_height, hotshot_avail > 0);
+    if hotshot_liveness > 0 {
+        // HotShot is up
+        env.hotshot_comm_map.insert(l1_block_height, hotshot_comm.0);
+    } else {
+        env.hotshot_avail_map
+            .insert(l1_block_height, hotshot_liveness > 0);
+    }
 
     while socket::read_u8(stream)? == socket::ANOTHER {
         let position = socket::read_u64(stream)?;
