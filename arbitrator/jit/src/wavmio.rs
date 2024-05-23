@@ -87,20 +87,20 @@ pub fn read_inbox_message(
     Ok(read.len() as u32)
 }
 
-pub fn get_hotshot_availability(mut env: WasmEnvMut, h: u64) -> Result<u32, Escape> {
+pub fn is_hotshot_live(mut env: WasmEnvMut, h: u64) -> Result<u32, Escape> {
     let (_mem, exec) = env.jit_env();
     ready_hostio(exec)?;
 
-    let availability = match exec.hotshot_avail_map.get(&h) {
-        Some(availability) => availability,
+    let liveness = match exec.hotshot_avail_map.get(&h) {
+        Some(liveness) => liveness,
         None => {
             return Escape::hostio(format!(
-                "jit machine failed to read the hotshot availability at {}",
+                "jit machine failed to read the hotshot liveness at {}",
                 h
             ))
         }
     };
-    if *availability {
+    if *liveness {
         Ok(1)
     } else {
         Ok(0)

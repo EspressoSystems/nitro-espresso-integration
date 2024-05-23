@@ -314,7 +314,7 @@ func main() {
 			espressocrypto.VerifyMerkleProof(jst.BlockMerkleJustification.BlockMerkleProof.Proof, jsonHeader, *jst.BlockMerkleJustification.BlockMerkleComm, commitment)
 		} else if validatingEspressoLivenessFailure {
 			l1Block := message.Message.Header.BlockNumber
-			if wavmio.GetHotShotAvailability(l1Block) {
+			if wavmio.IsHotShotLive(l1Block) {
 				panic(fmt.Sprintf("getting the centralized message while hotshot is good, l1Height: %v", l1Block))
 			}
 		}

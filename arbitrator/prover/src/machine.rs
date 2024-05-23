@@ -964,7 +964,7 @@ pub struct Machine {
     stdio_output: Vec<u8>,
     inbox_contents: HashMap<(InboxIdentifier, u64), Vec<u8>>,
     hotshot_commitments: HashMap<u64, [u8; 32]>,
-    hotshot_availabilities: HashMap<u64, bool>,
+    hotshot_liveness: HashMap<u64, bool>,
     first_too_far: u64, // Not part of machine hash
     preimage_resolver: PreimageResolverWrapper,
     /// Linkable Stylus modules in compressed form. Not part of the machine hash.
@@ -1550,7 +1550,7 @@ impl Machine {
             context: 0,
             hotshot_commitments: Default::default(),
             debug_info,
-            hotshot_availabilities: Default::default(),
+            hotshot_liveness: Default::default(),
         };
         mach.initial_hash = mach.hash();
         Ok(mach)
@@ -1602,7 +1602,7 @@ impl Machine {
             initial_hash: Bytes32::default(),
             context: 0,
             hotshot_commitments: Default::default(),
-            hotshot_availabilities: Default::default(),
+            hotshot_liveness: Default::default(),
             debug_info: false,
         };
         mach.initial_hash = mach.hash();
@@ -2492,9 +2492,9 @@ impl Machine {
                         error!()
                     }
                 }
-                Opcode::GetHotShotAvailability => {
+                Opcode::IsHotShotLive => {
                     let height = value_stack.pop().unwrap().assume_u64();
-                    if let Some(is_alive) = self.hotshot_availabilities.get(&height) {
+                    if let Some(is_alive) = self.hotshot_liveness.get(&height) {
                         let value = if *is_alive { 1 } else { 0 };
                         value_stack.push(Value::I32(value));
                     } else {
@@ -3102,13 +3102,13 @@ impl Machine {
                     panic!("Should never ever get here")
                 }
             }
-            GetHotShotAvailability => {
+            IsHotShotLive => {
                 let h = value_stack.get(0).unwrap().assume_u64();
-                if let Some(avail) = self.hotshot_availabilities.get(&h) {
+                if let Some(avail) = self.hotshot_liveness.get(&h) {
                     let v: u8 = if *avail { 1 } else { 0 };
                     data.push(v);
                 } else {
-                    panic!("cannot find the hotshot availability {}", h)
+                    panic!("cannot find the hotshot liveness {}", h)
                 }
             }
             LinkModule | UnlinkModule => {
