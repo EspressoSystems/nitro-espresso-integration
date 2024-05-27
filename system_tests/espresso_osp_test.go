@@ -73,7 +73,7 @@ func TestEspressoOsp(t *testing.T) {
 	comm, _ := big.NewInt(0).SetString(common.Hash(input.HotShotCommitment).String(), 0)
 	tx, err = hotShotConn.SetCommitment(
 		&deployerTxOpts,
-		big.NewInt(int64(0)).SetUint64(input.StartState.HotShotHeight+1),
+		big.NewInt(int64(0)).SetUint64(input.L1BlockHeight),
 		comm,
 	)
 	Require(t, err)

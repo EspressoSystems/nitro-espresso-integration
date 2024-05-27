@@ -129,5 +129,12 @@ func CreateTestArbMachine(ctx context.Context, locator *server_common.MachineLoc
 		log.Error("error while setting hotshot commitment: %w", err)
 		return nil, fmt.Errorf("error while setting hotshot commitment: %w", err)
 	}
+
+	err = mach.AddHotShotLiveness(entry.L1BlockHeight, entry.HotShotLiveness)
+	if err != nil {
+		log.Error("error while setting hotshot liveness: %w", err)
+		return nil, fmt.Errorf("error while setting hotshot liveness: %w", err)
+	}
+
 	return mach, nil
 }

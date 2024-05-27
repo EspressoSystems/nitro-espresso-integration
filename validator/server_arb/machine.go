@@ -332,6 +332,27 @@ func (m *ArbitratorMachine) DeserializeAndReplaceState(path string) error {
 	}
 }
 
+func (m *ArbitratorMachine) AddHotShotLiveness(height uint64, liveness bool) error {
+	defer runtime.KeepAlive(m)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.frozen {
+		return errors.New("machine frozen")
+	}
+
+	var livenessInt uint8
+	if liveness {
+		livenessInt = 1
+	} else {
+		livenessInt = 0
+	}
+	status := C.arbitrator_add_hotshot_liveness(m.ptr, C.uint64_t(height), C.uint8_t(livenessInt))
+	if status == 0 {
+		return nil
+	}
+	return errors.New("failed to add hotsho liveness")
+}
+
 func (m *ArbitratorMachine) AddHotShotCommitment(height uint64, commitment []byte) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()

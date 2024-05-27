@@ -407,7 +407,6 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 			log.Error("error fetching light client commitment", "L1ProofHeight", jst.BlockMerkleJustification.L1ProofHeight, "%v", err)
 			return nil, err
 		}
-		log.Error("commitment to append", "%v", fetchedCommitment)
 		comm = fetchedCommitment
 		isHotShotLive = true
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {

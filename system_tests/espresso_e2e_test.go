@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -211,14 +212,18 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl s
 	return builder, cleanup
 }
 
-//lint:ignore U1000 Ignore unused function temporarily
 func createStaker(ctx context.Context, t *testing.T, builder *NodeBuilder, incorrectHeight uint64) (*staker.Staker, *staker.BlockValidator, func()) {
 	config := arbnode.ConfigDefaultL1Test()
+	builder.takeOwnership = false
 	config.Sequencer = false
 	config.DelayedSequencer.Enable = false
 	config.BatchPoster.Enable = false
 	config.Staker.Enable = false
 	config.BlockValidator.Enable = true
+
+	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+	builder.execConfig.Sequencer.Enable = false
+
 	config.BlockValidator.ValidationPoll = 2 * time.Second
 	config.BlockValidator.LightClientAddress = lightClientAddress
 	config.BlockValidator.Espresso = true
@@ -233,7 +238,6 @@ func createStaker(ctx context.Context, t *testing.T, builder *NodeBuilder, incor
 		auth = builder.L1Info.GetDefaultTransactOpts("Staker1", ctx)
 	}
 
-	cfg := arbnode.ConfigDefaultL1NonSequencerTest()
 	parentChainID, err := builder.L1.Client.ChainID(ctx)
 	Require(t, err)
 	dp, err := arbnode.StakerDataposter(
@@ -241,7 +245,7 @@ func createStaker(ctx context.Context, t *testing.T, builder *NodeBuilder, incor
 		rawdb.NewTable(l2Node.ArbDB, storage.StakerPrefix),
 		l2Node.L1Reader,
 		&auth,
-		NewFetcherFromConfig(cfg),
+		NewFetcherFromConfig(config),
 		nil,
 		parentChainID,
 	)
@@ -509,41 +513,42 @@ func TestEspressoE2E(t *testing.T) {
 	// Note: If you are modifying the smart contracts, staker-related code or doing overhaul.
 	// Set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
 
-	// checkStaker := os.Getenv("E2E_CHECK_STAKER")
-	// if checkStaker == "" {
-	// 	return
-	// }
-	// err = waitForWith(
-	// 	t,
-	// 	ctx,
-	// 	time.Minute*20,
-	// 	time.Second*5,
-	// 	func() bool {
-	// 		log.Info("good staker acts", "step", i)
-	// 		txA, err := goodStaker.Act(ctx)
-	// 		Require(t, err)
-	// 		if txA != nil {
-	// 			_, err = builder.L1.EnsureTxSucceeded(txA)
-	// 			Require(t, err)
-	// 		}
+	checkStaker := os.Getenv("E2E_CHECK_STAKER")
+	if checkStaker == "" {
+		return
+	}
+	err = waitForWith(
+		t,
+		ctx,
+		time.Minute*20,
+		time.Second*5,
+		func() bool {
+			log.Info("good staker acts", "step", i)
+			txA, err := goodStaker.Act(ctx)
+			Require(t, err)
+			if txA != nil {
+				_, err = builder.L1.EnsureTxSucceeded(txA)
+				Require(t, err)
+			}
 
-	// 		log.Info("bad staker acts", "step", i)
-	// 		txB, err := badStaker.Act(ctx)
-	// 		if txB != nil {
-	// 			_, err = builder.L1.EnsureTxSucceeded(txB)
-	// 			Require(t, err)
-	// 		}
-	// 		if err != nil {
-	// 			ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
-	// 			if ok {
-	// 				return true
-	// 			} else {
-	// 				t.Fatal("unexpected err")
-	// 			}
-	// 		}
-	// 		i += 1
-	// 		return false
+			log.Info("bad staker acts", "step", i)
+			txB, err := badStaker.Act(ctx)
+			if txB != nil {
+				_, err = builder.L1.EnsureTxSucceeded(txB)
+				Require(t, err)
+			}
+			if err != nil {
+				ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
+				if ok {
+					return true
+				} else {
+					fmt.Println(err.Error())
+					t.Fatal("unexpected err")
+				}
+			}
+			i += 1
+			return false
 
-	// 	})
-	// Require(t, err)
+		})
+	Require(t, err)
 }
