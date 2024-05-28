@@ -262,6 +262,26 @@ func (m *ArbitratorMachine) StepUntilReadHotShot(ctx context.Context) error {
 	return ctx.Err()
 }
 
+func (m *ArbitratorMachine) StepUntilIsHotShotLive(ctx context.Context) error {
+	defer runtime.KeepAlive(m)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	if m.frozen {
+		return errors.New("machine frozen")
+	}
+
+	conditionByte, cancel := manageConditionByte(ctx)
+	defer cancel()
+
+	err := C.arbitrator_step_until_is_hotshot_live(m.ptr, conditionByte)
+	defer C.free(unsafe.Pointer(err))
+	if err != nil {
+		return errors.New(C.GoString(err))
+	}
+
+	return ctx.Err()
+}
+
 func (m *ArbitratorMachine) Hash() (hash common.Hash) {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
