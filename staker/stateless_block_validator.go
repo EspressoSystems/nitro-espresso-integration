@@ -49,13 +49,12 @@ type StatelessBlockValidator struct {
 
 	// This is a flag used to mock a wrong stateless block validator to
 	// test the functionalities of the staker. It is specifically used
-	// in espresso e2e test.
-	// If this is greater than 0, it means we are running this debug mode:
-	// - hotshot reader will read an all-zero commitment at this height
-	// - the end global state of a entry will change at this hotshot height
-	// In this way, a challenge will be created and the one-step proof should
-	// be the ReadHotShotCommitment
-	debugEspressoIncorrectHeight uint64
+	// in espresso e2e test. If this is greater than 0, it means we are running
+	// the debug mode. If the l2 height reaches to this, we will use the override
+	// function to override the validation input. In this way, we can make the staker
+	// issue a challenge and to test the OSP pipeline
+	debugEspressoIncorrectHeight   uint64
+	debugEspressoInputOverrideFunc func(input *validator.ValidationInput)
 }
 
 type BlockValidatorRegistrer interface {
@@ -511,8 +510,9 @@ func (s *StatelessBlockValidator) DebugEspresso_SetLightClientReader(reader ligh
 }
 
 // This method should be only used in tests.
-func (s *StatelessBlockValidator) DebugEspresso_SetIncorrectHeight(h uint64, t *testing.T) {
+func (s *StatelessBlockValidator) DebugEspresso_SetTrigger(t *testing.T, h uint64, f func(*validator.ValidationInput)) {
 	s.debugEspressoIncorrectHeight = h
+	s.debugEspressoInputOverrideFunc = f
 }
 
 // This method is to create a conditional branch to help mocking a challenge.
