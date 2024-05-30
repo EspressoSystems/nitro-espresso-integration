@@ -71,6 +71,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/builder:main
     ports:
       - "$ESPRESSO_BUILDER_SERVER_PORT:$ESPRESSO_BUILDER_SERVER_PORT"
+    volumes:
+      - ./genesis.toml:/genesis/demo.toml
     environment:
       - ESPRESSO_BUILDER_GENESIS_FILE
       - ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_URL=http://espresso-sequencer0:$ESPRESSO_SEQUENCER_HOTSHOT_EVENT_STREAMING_API_PORT
@@ -162,11 +164,12 @@ services:
       keydb:
         condition: service_healthy
 
-
   espresso-sequencer0:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    volumes:
+      - ./genesis.toml:/genesis/demo.toml
     # Run the API server (with options taken from the environment) and the optional submission API
     command: sequencer -- storage-sql -- http -- query -- submit -- status -- state -- hotshot-events -- config -- explorer
     environment:
@@ -187,7 +190,7 @@ services:
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_0
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=espresso-sequencer0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_0
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC=$ESPRESSO_COMMITMENT_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
@@ -219,6 +222,8 @@ services:
     image: ghcr.io/espressosystems/espresso-sequencer/sequencer:main
     ports:
       - "$ESPRESSO_SEQUENCER1_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+    volumes:
+      - ./genesis.toml:/genesis/demo.toml
     # Run the API server (with options taken from the environment)
     command: sequencer -- http
     environment:
@@ -235,7 +240,7 @@ services:
       - ESPRESSO_SEQUENCER_PRIVATE_STATE_KEY=$ESPRESSO_DEMO_SEQUENCER_STATE_PRIVATE_KEY_1
       - ESPRESSO_SEQUENCER_LIBP2P_BIND_ADDRESS=0.0.0.0:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
       - ESPRESSO_SEQUENCER_LIBP2P_ADVERTISE_ADDRESS=espresso-sequencer1:$ESPRESSO_DEMO_SEQUENCER_LIBP2P_PORT_1
-      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC=$ESPRESSO_COMMITMENT_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_ETH_ACCOUNT_INDEX
       - ESPRESSO_SEQUENCER_PREFUNDED_BUILDER_ACCOUNTS
       - ESPRESSO_SEQUENCER_STAKE_TABLE_CAPACITY=10
@@ -331,7 +336,6 @@ services:
       - RUST_LOG
       - RUST_LOG_FORMAT
       - ASYNC_STD_THREAD_COUNT
-      - RAYON_NUM_THREADS
     depends_on:
       orchestrator:
         condition: service_healthy
