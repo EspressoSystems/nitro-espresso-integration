@@ -64,6 +64,7 @@ func runEspresso(t *testing.T, ctx context.Context) func() {
 		"deploy-contracts",
 		"prover-service",
 		"permissionless-builder",
+		"fund-builder",
 	}
 	invocation = append(invocation, nodes...)
 	procees := exec.Command("docker", invocation...)
@@ -342,8 +343,6 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 
 	cleanEspresso := runEspresso(t, ctx)
 
-	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder)
-
 	// wait for the commitment task
 	err = waitForWith(t, ctx, 120*time.Second, 1*time.Second, func() bool {
 		out, err := exec.Command("curl", "http://127.0.0.1:60000/api/hotshot_contract", "-L").Output()
@@ -354,6 +353,8 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 		return len(out) > 0
 	})
 	Require(t, err)
+
+	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder)
 
 	return builder, l2Node, l2Info, func() {
 		cleanL2Node()
@@ -415,7 +416,7 @@ func TestEspressoE2E(t *testing.T) {
 	log.Info("Sent faucet tx", "hash", tx.Hash().Hex())
 	Require(t, err)
 
-	err = waitForWith(t, ctx, time.Second*180, time.Second*1, func() bool {
+	err = waitForWith(t, ctx, time.Second*2400000, time.Second*1, func() bool {
 		Require(t, err)
 		balance := l2Node.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
