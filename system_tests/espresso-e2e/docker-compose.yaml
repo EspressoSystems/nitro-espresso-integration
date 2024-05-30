@@ -52,6 +52,8 @@ services:
         condition: service_completed_successfully
       espresso-sequencer0:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   orchestrator:
     image: ghcr.io/espressosystems/espresso-sequencer/orchestrator:main
