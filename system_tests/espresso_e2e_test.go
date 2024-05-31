@@ -343,9 +343,9 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 
 	cleanEspresso := runEspresso(t, ctx)
 
-	// wait for the commitment task
-	err = waitForWith(t, ctx, 120*time.Second, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://127.0.0.1:60000/api/hotshot_contract", "-L").Output()
+	// wait for the builder
+	err = waitForWith(t, ctx, 240*time.Second, 1*time.Second, func() bool {
+		out, err := exec.Command("curl", "http://localhost:41003/block_info/builderaddress", "-L").Output()
 		if err != nil {
 			log.Warn("retry to check the commitment task", "err", err)
 			return false
@@ -416,7 +416,7 @@ func TestEspressoE2E(t *testing.T) {
 	log.Info("Sent faucet tx", "hash", tx.Hash().Hex())
 	Require(t, err)
 
-	err = waitForWith(t, ctx, time.Second*2400000, time.Second*1, func() bool {
+	err = waitForWith(t, ctx, time.Second*240, time.Second*1, func() bool {
 		Require(t, err)
 		balance := l2Node.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
