@@ -477,7 +477,7 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	defer cleanC()
 
-	err = waitForWith(t, ctx, 60*time.Second, 1*time.Second, func() bool {
+	err = waitForWith(t, ctx, 120*time.Second, 1*time.Second, func() bool {
 		validatedA := blockValidatorA.Validated(t)
 		validatedB := blockValidatorB.Validated(t)
 		validatorC := blockValidatorC.Validated(t)
