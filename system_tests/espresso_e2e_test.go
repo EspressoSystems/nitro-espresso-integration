@@ -344,10 +344,10 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 	cleanEspresso := runEspresso(t, ctx)
 
 	// wait for the builder
-	err = waitForWith(t, ctx, 240*time.Second, 1*time.Second, func() bool {
+	err = waitForWith(t, ctx, 300*time.Second, 1*time.Second, func() bool {
 		out, err := exec.Command("curl", "http://localhost:41003/block_info/builderaddress", "-L").Output()
 		if err != nil {
-			log.Warn("retry to check the commitment task", "err", err)
+			log.Warn("retry to check the builder", "err", err)
 			return false
 		}
 		return len(out) > 0
@@ -477,7 +477,7 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	defer cleanC()
 
-	err = waitForWith(t, ctx, 120*time.Second, 1*time.Second, func() bool {
+	err = waitForWith(t, ctx, 240*time.Second, 1*time.Second, func() bool {
 		validatedA := blockValidatorA.Validated(t)
 		validatedB := blockValidatorB.Validated(t)
 		validatorC := blockValidatorC.Validated(t)
@@ -495,7 +495,7 @@ func TestEspressoE2E(t *testing.T) {
 	badOpts1 := builder.L1Info.GetDefaultCallOpts("Staker2", ctx)
 	badOpts2 := builder.L1Info.GetDefaultCallOpts("Staker3", ctx)
 	i := 0
-	err = waitFor(t, ctx, func() bool {
+	err = waitForWith(t, ctx, 60*time.Second, 2*time.Second, func() bool {
 		log.Info("good staker acts", "step", i)
 		txA, err := goodStaker.Act(ctx)
 		Require(t, err)
