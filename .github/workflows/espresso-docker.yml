@@ -2,13 +2,13 @@
 #
 # The reason for building the ARM image natively instead of with QEMU is that
 # the QEMU build always failed after around 40 minutes. I'm currently not sure
-# why it failed. I did also run into insufficient space issuse on public runners
+# why it failed. I did also run into an insufficient space issuse on public runners
 # so it's possible this was always the culprit.
 #
 # After building, the images are merged together to make a multiplatform image.
 #
 # The latest wavm machine is also copied and exported as an artifact. In nitro
-# this seems to be later used as machine for the non-dev nitro-node build.
+# this seems to be later used as a machine for the non-dev nitro-node build.
 # For more details on that see the Dockerfile and ./scripts/download.sh
 name: Espresso Docker build CI
 run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
