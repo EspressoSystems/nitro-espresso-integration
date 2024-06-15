@@ -51,7 +51,7 @@ import (
 )
 
 // Dataposter implements functionality to post transactions on the chain. It
-// is initialized with specified sender/signer and keeps nonce of that address
+// is initialized with the specified sender/signer and keeps nonce of that address
 // as it posts transactions.
 // Transactions are also saved in the queue when it's being sent, and when
 // persistent storage is used for the queue, after restarting the node
@@ -73,7 +73,7 @@ type DataPoster struct {
 	parentChainID256       *uint256.Int
 
 	// These fields are protected by the mutex.
-	// TODO: factor out these fields into separate structure, since now one
+	// TODO: factor out these fields into separate structures, since now one
 	// needs to make sure call sites of methods that change these values hold
 	// the lock (currently ensured by having comments like:
 	// "the mutex must be held by the caller" above the function).
@@ -252,7 +252,7 @@ func rpcClient(ctx context.Context, opts *ExternalSignerCfg) (*rpc.Client, error
 }
 
 // externalSigner returns signer function and ethereum address of the signer.
-// Returns an error if address isn't specified or if it can't connect to the
+// Returns an error if the address isn't specified or if it can't connect to the
 // signer RPC server.
 func externalSigner(ctx context.Context, opts *ExternalSignerCfg) (signerFn, common.Address, error) {
 	if opts.Address == "" {
@@ -379,7 +379,7 @@ func (p *DataPoster) waitForL1Finality() bool {
 	return p.config().WaitForL1Finality && !p.headerReader.IsParentChainArbitrum()
 }
 
-// Requires the caller hold the mutex.
+// Requires the caller to hold the mutex.
 // Returns the next nonce, its metadata if stored, a bool indicating if the metadata is present, the cumulative weight, and an error if present.
 // Unlike GetNextNonceAndMeta, this does not call the metadataRetriever if the metadata is not stored in the queue.
 func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight uint64) (uint64, []byte, bool, uint64, error) {
