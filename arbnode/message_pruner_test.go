@@ -32,15 +32,15 @@ func TestMessagePrunerTwoHalves(t *testing.T) {
 
 	messagesCount := uint64(10)
 	_, transactionStreamerDb, pruner := setupDatabase(t, messagesCount, messagesCount)
-	// In first iteration message till messagesCount/2 are tried to be deleted.
+	// In the first iteration message till messagesCount/2 are tried to be deleted.
 	err := pruner.deleteOldMessagesFromDB(ctx, arbutil.MessageIndex(messagesCount/2), messagesCount/2)
 	Require(t, err)
-	// In first iteration all the message till messagesCount/2 are deleted.
+	// In the first iteration all the message till messagesCount/2 are deleted.
 	checkDbKeys(t, messagesCount/2, transactionStreamerDb, messagePrefix)
-	// In second iteration message till messagesCount are tried to be deleted.
+	// In the second iteration message till messagesCount are tried to be deleted.
 	err = pruner.deleteOldMessagesFromDB(ctx, arbutil.MessageIndex(messagesCount), messagesCount)
 	Require(t, err)
-	// In second iteration all the message till messagesCount are deleted.
+	// In the second iteration all the message till messagesCount are deleted.
 	checkDbKeys(t, messagesCount, transactionStreamerDb, messagePrefix)
 }
 
