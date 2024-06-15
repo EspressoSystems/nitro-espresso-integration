@@ -80,7 +80,7 @@ func (qt *QueuedTransaction) DecodeRLP(s *rlp.Stream) error {
 	return nil
 }
 
-// LegacyQueuedTransaction is used for backwards compatibility.
+// LegacyQueuedTransaction is used for backward compatibility.
 // Before https://github.com/OffchainLabs/nitro/pull/1773: the queuedTransaction
 // looked like this and was rlp encoded directly. After the pr, we are store
 // rlp encoding of Meta into queuedTransaction and rlp encoding it once more
@@ -187,7 +187,7 @@ func (le *LegacyEncoderDecoder) Decode(data []byte) (*QueuedTransaction, error) 
 	return decode(data)
 }
 
-// Typically interfaces belong to where they are being used, not at implementing
+// Typically interfaces belong to where they are being used, not to implementing
 // site, but this is used in all storages (besides no-op) and all of them
 // require all the functions for this interface.
 type EncoderDecoderInterface interface {
