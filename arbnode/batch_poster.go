@@ -109,7 +109,7 @@ type BatchPoster struct {
 	non4844BatchCount  int // Count of consecutive non-4844 batches posted
 	// This is an atomic variable that should only be accessed atomically.
 	// An estimate of the number of batches we want to post but haven't yet.
-	// This doesn't include batches which we don't want to post yet due to the L1 bounds.
+	// This doesn't include batches that we don't want to post yet due to the L1 bounds.
 	backlog         uint64
 	lastHitL1Bounds time.Time // The last time we wanted to post a message but hit the L1 bounds
 
@@ -381,7 +381,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if err != nil {
 		return nil, err
 	}
-	// Dataposter sender may be external signer address, so we should initialize
+	// Dataposter sender may be an external signer address, so we should initialize
 	// access list after initializing dataposter.
 	b.accessList = func(SequencerInboxAccs, AfterDelayedMessagesRead int) types.AccessList {
 		if !b.config().UseAccessLists || opts.L1Reader.IsParentChainArbitrum() {
