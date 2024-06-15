@@ -574,7 +574,7 @@ func (c *SeqCoordinator) update(ctx context.Context) time.Duration {
 		if err != nil {
 			log.Warn("coordinator failed to parse message from redis", "pos", msgToRead, "err", err)
 			msgReadErr = fmt.Errorf("failed to parse message: %w", err)
-			// redis messages spelled "INVALID" will be parsed as invalid L1 message, but only one at a time
+			// redis messages spelled "INVALID" will be parsed as invalid L1 messages, but only one at a time
 			if len(messages) > 0 || string(rsBytes) != redisutil.INVALID_VAL {
 				break
 			}
