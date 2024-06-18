@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/challengegen"
 	"github.com/offchainlabs/nitro/validator"
@@ -126,6 +127,7 @@ func (b *BlockChallengeBackend) FindGlobalStateFromMessageCount(count arbutil.Me
 	}
 
 	if b.EspressoDebugging(res.HotShotHeight) {
+		log.Info("jjjjjjjjjj", "h", res.HotShotHeight)
 		res.BlockHash = mockHash(res.HotShotHeight)
 	}
 
@@ -155,6 +157,7 @@ func (b *BlockChallengeBackend) GetInfoAtStep(step uint64) (validator.GoGlobalSt
 		return validator.GoGlobalState{}, 0, err
 	}
 	if b.EspressoDebugging(globalState.HotShotHeight) {
+		log.Info("hhhhhhhhh", "h", globalState.HotShotHeight)
 		globalState.BlockHash = mockHash(globalState.HotShotHeight)
 	}
 	return globalState, StatusFinished, nil

@@ -170,7 +170,7 @@ func (e *validationEntry) ToInput() (*validator.ValidationInput, error) {
 		DelayedMsg:        e.DelayedMsg,
 		StartState:        e.Start,
 		DebugChain:        e.ChainConfig.DebugMode(),
-		L1BlockHeight:     e.BlockHeight,
+		BlockHeight:       e.BlockHeight,
 		HotShotCommitment: e.HotShotCommitment,
 		HotShotLiveness:   e.IsHotShotLive,
 	}, nil

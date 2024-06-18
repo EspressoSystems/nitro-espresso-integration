@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"runtime"
 	"sync"
@@ -770,6 +771,10 @@ validationsLoop:
 		if !found {
 			return nil, fmt.Errorf("not found entry for pos %d", pos)
 		}
+		input, _ := validationStatus.Entry.ToInput()
+		file, _ := os.Create("espresso-e2e/validation_input.json")
+		s, _ := json.Marshal(input)
+		file.Write(s)
 		currentStatus := validationStatus.getStatus()
 		if currentStatus == RecordFailed {
 			// retry

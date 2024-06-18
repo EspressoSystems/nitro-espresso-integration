@@ -376,7 +376,7 @@ func (m *ChallengeManager) ScanChallengeState(ctx context.Context, backend Chall
 		if err != nil {
 			return 0, fmt.Errorf("error getting hash from challenge %v backend at step %v: %w", m.challengeIndex, segment.Position, err)
 		}
-		log.Debug("checking challenge segment", "challenge", m.challengeIndex, "position", segment.Position, "ourHash", ourHash, "segmentHash", segment.Hash)
+		log.Info("checking challenge segment", "challenge", m.challengeIndex, "position", segment.Position, "ourHash", ourHash, "segmentHash", segment.Hash)
 		if segment.Hash != ourHash {
 			if i == 0 {
 				return 0, fmt.Errorf(
@@ -474,7 +474,9 @@ func (m *ChallengeManager) createExecutionBackend(ctx context.Context, step uint
 	if err != nil {
 		return fmt.Errorf("error getting validation entry input of challenge %v msg %v: %w", m.challengeIndex, initialCount, err)
 	}
-	if m.blockChallengeBackend.EspressoDebugging(entry.End.HotShotHeight) {
+	log.Info("gggggggggggg", "entry height", entry.BlockHeight, "end height", entry.End.HotShotHeight)
+	if m.blockChallengeBackend.EspressoDebugging(entry.BlockHeight) {
+		log.Info("kkkkkkkkkkk", "entry height", entry.BlockHeight, "end height", entry.End.HotShotHeight)
 		m.blockChallengeBackend.debugEspressoInputOverrideFunc(input)
 	}
 	var prunedBatches []validator.BatchInfo
@@ -510,6 +512,7 @@ func (m *ChallengeManager) createExecutionBackend(ctx context.Context, step uint
 		return fmt.Errorf("error getting execution challenge final state: %w", err)
 	}
 	if m.blockChallengeBackend.EspressoDebugging(computedState.HotShotHeight) {
+		log.Info("llllllllllll", "h", computedState.HotShotHeight)
 		computedState.BlockHash = mockHash(computedState.HotShotHeight)
 		computedStatus = expectedStatus
 	}
@@ -546,6 +549,7 @@ func (m *ChallengeManager) Act(ctx context.Context) (*types.Transaction, error) 
 
 	var backend ChallengeBackend
 	if m.executionChallengeBackend != nil {
+		log.Info("change to execution challenge backend")
 		backend = m.executionChallengeBackend
 	} else {
 		backend = m.blockChallengeBackend
