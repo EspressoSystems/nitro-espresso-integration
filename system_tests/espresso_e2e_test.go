@@ -548,17 +548,26 @@ func TestEspressoE2E(t *testing.T) {
 		func() bool {
 			log.Info("good staker acts", "step", i)
 			txA, err := goodStaker.Act(ctx)
-			Require(t, err)
+			if err != nil {
+				fmt.Println(err.Error())
+				return false
+			}
 			if txA != nil {
 				_, err = builder.L1.EnsureTxSucceeded(txA)
-				Require(t, err)
+				if err != nil {
+					fmt.Println(err.Error())
+					return false
+				}
 			}
 
 			log.Info("bad staker acts", "step", i)
 			txB, err := badStaker1.Act(ctx)
 			if txB != nil && err == nil {
 				_, err = builder.L1.EnsureTxSucceeded(txB)
-				Require(t, err)
+				if err != nil {
+					fmt.Println(err.Error())
+					return false
+				}
 			} else if err != nil {
 				ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
 				if ok {

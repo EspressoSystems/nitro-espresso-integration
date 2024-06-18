@@ -2485,6 +2485,7 @@ impl Machine {
                     value_stack.push(Value::I32(len as u32));
                 }
                 Opcode::ReadHotShotCommitment => {
+                    println!("executing read hotshot commitment");
                     let height = value_stack.pop().unwrap().assume_u64();
                     let ptr = value_stack.pop().unwrap().assume_u32();
                     if let Some(commitment) = self.hotshot_commitments.get(&height) {
