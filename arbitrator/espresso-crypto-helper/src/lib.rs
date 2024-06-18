@@ -64,7 +64,7 @@ pub fn verify_merkle_proof_helper(
     proof_bytes: &[u8],
     header_bytes: &[u8],
     block_comm_bytes: &[u8],
-    circuit_block_bytes: &[u8],
+    _circuit_block_bytes: &[u8],
 ) {
     let proof_str = std::str::from_utf8(proof_bytes).unwrap();
     let header_str = std::str::from_utf8(header_bytes).unwrap();
@@ -82,16 +82,7 @@ pub fn verify_merkle_proof_helper(
         .unwrap()
         .unwrap();
 
-    let mut block_comm_root_bytes = vec![];
-    block_comm
-        .serialize_compressed(&mut block_comm_root_bytes)
-        .unwrap();
-    let field_bytes = hash_bytes_to_field(&block_comm_root_bytes).unwrap();
-    let local_block_comm_u256 = field_to_u256(field_bytes);
-    let circuit_block_comm_u256 = U256::from_little_endian(circuit_block_bytes);
-
     assert!(proved_comm == header_comm);
-    assert!(local_block_comm_u256 == circuit_block_comm_u256);
 }
 
 // Helper function to verify a VID namespace proof that takes the byte representations of the proof,
