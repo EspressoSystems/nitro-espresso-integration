@@ -118,6 +118,7 @@ func (b *BlockChallengeBackend) FindGlobalStateFromMessageCount(count arbutil.Me
 			return validator.GoGlobalState{}, err
 		}
 		if prevBatchMsgCount > count {
+			log.Info("prevBatchMsgCount should be smaller than count", "prevBatchMsgCount", prevBatchMsgCount, "count", count)
 			return validator.GoGlobalState{}, errors.New("findBatchFromMessageCount returned bad batch")
 		}
 	}

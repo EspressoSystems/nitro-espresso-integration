@@ -21,7 +21,7 @@ func TestEspressoArbMachine(t *testing.T) {
 	if err != nil {
 		Fatal(t, err)
 	}
-	data, err := os.ReadFile("espresso-e2e/validation_input.json")
+	data, err := os.ReadFile("espresso-e2e/validation_input_error.json")
 	Require(t, err)
 	var input validator.ValidationInput
 	err = json.Unmarshal(data, &input)
@@ -58,7 +58,7 @@ func TestEspressoJitMachine(t *testing.T) {
 	if err != nil {
 		Fatal(t, err)
 	}
-	data, err := os.ReadFile("espresso-e2e/validation_input.json")
+	data, err := os.ReadFile("espresso-e2e/validation_input_error.json")
 	Require(t, err)
 	var input validator.ValidationInput
 	err = json.Unmarshal(data, &input)
@@ -70,5 +70,6 @@ func TestEspressoJitMachine(t *testing.T) {
 	Require(t, err)
 	_, err = spawner.TestExecute(ctx, &input, common.Hash{})
 	Require(t, err)
+	panic("panic to show the message from WASM")
 
 }

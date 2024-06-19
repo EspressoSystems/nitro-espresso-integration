@@ -460,6 +460,14 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
+	// Wait for the number of validated messages to catch up
+	err = waitForWith(t, ctx, 360*time.Second, 5*time.Second, func() bool {
+		validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
+		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", 100)
+		return validatedCnt >= 100
+	})
+	Require(t, err)
+
 	incorrectHeight := uint64(10)
 
 	goodStaker, blockValidatorA, cleanA := createStaker(ctx, t, builder, 0, "Staker1", nil)
@@ -549,12 +557,14 @@ func TestEspressoE2E(t *testing.T) {
 			log.Info("good staker acts", "step", i)
 			txA, err := goodStaker.Act(ctx)
 			if err != nil {
+				fmt.Println("bbbbbbbb")
 				fmt.Println(err.Error())
 				return false
 			}
 			if txA != nil {
 				_, err = builder.L1.EnsureTxSucceeded(txA)
 				if err != nil {
+					fmt.Println("aaaaaaaa")
 					fmt.Println(err.Error())
 					return false
 				}

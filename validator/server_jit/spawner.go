@@ -2,7 +2,9 @@ package server_jit
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"runtime"
 	"sync/atomic"
 
@@ -80,6 +82,11 @@ func (v *JitSpawner) execute(
 	}
 
 	state, err := machine.prove(ctx, entry)
+	if err != nil {
+		file, _ := os.Create("espresso-e2e/validation_input_error.json")
+		s, _ := json.Marshal(entry)
+		file.Write(s)
+	}
 	return state, err
 }
 

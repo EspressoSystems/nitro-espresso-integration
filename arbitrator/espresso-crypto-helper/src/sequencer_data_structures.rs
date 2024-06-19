@@ -519,6 +519,7 @@ pub fn field_to_u256<F: PrimeField>(f: F) -> U256 {
     if F::MODULUS_BIT_SIZE > 256 {
         panic!("Shouldn't convert a >256-bit field to U256");
     }
+    println!("block commitment: {:?}", f.into_bigint().to_bytes_le());
     U256::from_little_endian(&f.into_bigint().to_bytes_le())
 }
 
