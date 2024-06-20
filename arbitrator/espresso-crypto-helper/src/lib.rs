@@ -79,7 +79,7 @@ pub fn verify_merkle_proof_helper(
 
     let proof = MerkleProof::new(header.height, proof.to_vec());
     let proved_comm = proof.elem().unwrap().clone();
-    BlockMerkleTree::verify(block_comm.digest(), pos, proof)
+    BlockMerkleTree::verify(block_comm.digest(), header.height, proof)
         .unwrap()
         .unwrap();
 

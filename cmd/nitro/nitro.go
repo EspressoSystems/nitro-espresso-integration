@@ -449,9 +449,13 @@ func mainImpl() int {
 		}
 		// Check if the on-chain WASM module root belongs to the set of allowed module roots
 		allowedWasmModuleRoots := nodeConfig.Validation.Wasm.AllowedWasmModuleRoots
+		hash := common.BytesToHash(moduleRoot[:])
+		hex := hash.Hex()
+		log.Error("module root", "root", moduleRoot, "hex", hex)
 		if len(allowedWasmModuleRoots) > 0 {
 			moduleRootMatched := false
 			for _, root := range allowedWasmModuleRoots {
+				log.Error("allowed module root", "root", root)
 				if common.HexToHash(root) == moduleRoot {
 					moduleRootMatched = true
 					break

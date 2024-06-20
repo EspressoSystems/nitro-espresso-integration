@@ -493,9 +493,8 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		if err != nil {
 			return fmt.Errorf("could not get the merkle root at height %v", jst.Header.Height)
 		}
-		if snapshot.Height != b.currentValidatedHotShotHeight {
-			b.lastValidatedHotShotHeight = b.currentValidatedHotShotHeight
-			b.currentValidatedHotShotHeight = snapshot.Height
+		if snapshot.Height <= jst.Header.Height {
+			return fmt.Errorf("light client contract does not have a root greater than %v yet", jst.Header.Height)
 		}
 		// The next header contains the block commitment merkle tree commitment that validates the header of interest
 		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, snapshot.Height)
@@ -510,8 +509,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		// } else {
 		// 	offset = b.lastValidatedHotShotHeight
 		// }
-		offset := b.lastValidatedHotShotHeight
-		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, jst.Header.Height-offset)
+		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, jst.Header.Height)
 		if err != nil {
 			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
 		}
