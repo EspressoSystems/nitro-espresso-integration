@@ -65,6 +65,7 @@ pub fn verify_merkle_proof_helper(
     header_bytes: &[u8],
     block_comm_bytes: &[u8],
     circuit_block_bytes: &[u8],
+    pos: u64,
 ) {
     let proof_str = std::str::from_utf8(proof_bytes).unwrap();
     let header_str = std::str::from_utf8(header_bytes).unwrap();
@@ -78,7 +79,7 @@ pub fn verify_merkle_proof_helper(
 
     let proof = MerkleProof::new(header.height, proof.to_vec());
     let proved_comm = proof.elem().unwrap().clone();
-    BlockMerkleTree::verify(block_comm.digest(), header.height, proof)
+    BlockMerkleTree::verify(block_comm.digest(), pos, proof)
         .unwrap()
         .unwrap();
 

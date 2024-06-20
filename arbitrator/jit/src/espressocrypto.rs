@@ -45,6 +45,7 @@ pub fn verify_merkle_proof(
     block_comm_len: u64,
     circuit_ptr: GuestPtr,
     circuit_len: u64,
+    pos: u64,
 ) -> MaybeEscape {
     let (mem, _exec) = env.jit_env();
 
@@ -58,5 +59,6 @@ pub fn verify_merkle_proof(
         &header_bytes,
         &block_comm_bytes,
         &circuit_comm_bytes,
+        pos,
     ))
 }

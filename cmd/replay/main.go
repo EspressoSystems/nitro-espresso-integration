@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -313,7 +314,17 @@ func main() {
 			fmt.Println("verifying merkle proof")
 			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
 			jsonHeader, err := json.Marshal(hotshotHeader)
-			espressocrypto.VerifyMerkleProof(jst.BlockMerkleJustification.BlockMerkleProof.Proof, jsonHeader, *jst.BlockMerkleJustification.BlockMerkleComm, commitment)
+			pos, err := strconv.ParseUint(jst.BlockMerkleJustification.BlockMerkleProof.Pos, 10, 64)
+			if err != nil {
+				panic("parse pos error")
+			}
+			espressocrypto.VerifyMerkleProof(
+				jst.BlockMerkleJustification.BlockMerkleProof.Proof,
+				jsonHeader,
+				*jst.BlockMerkleJustification.BlockMerkleComm,
+				commitment,
+				pos,
+			)
 			fmt.Println("verified merkle proof")
 			if jst.Proof != nil {
 				if err != nil {

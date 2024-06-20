@@ -41,6 +41,7 @@ pub unsafe extern "C" fn espressocrypto__verifyMerkleProof(
     block_comm_len: u64,
     circuit_ptr: GuestPtr,
     circuit_len: u64,
+    pos: u64,
 ) {
     let proof_bytes = STATIC_MEM.read_slice(proof_ptr, proof_len as usize);
     let header_bytes = STATIC_MEM.read_slice(header_ptr, header_len as usize);
@@ -52,5 +53,6 @@ pub unsafe extern "C" fn espressocrypto__verifyMerkleProof(
         &header_bytes,
         &block_comm_bytes,
         &circuit_comm_bytes,
+        pos,
     )
 }

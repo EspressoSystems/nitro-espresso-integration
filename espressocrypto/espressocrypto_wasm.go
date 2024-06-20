@@ -37,6 +37,7 @@ func verify_merkle_proof(
 	block_comm_len uint64,
 	circuit_comm_ptr unsafe.Pointer,
 	circuit_comm_len uint64,
+	pos uint64,
 )
 
 func verifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table []byte, tx_comm []byte, common_data []byte) {
@@ -50,11 +51,12 @@ func verifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table
 	)
 }
 
-func verifyMerkleProof(proof []byte, header []byte, block_comm []byte, circuit_comm []byte) {
+func verifyMerkleProof(proof []byte, header []byte, block_comm []byte, circuit_comm []byte, pos uint64) {
 	verify_merkle_proof(
 		arbutil.SliceToUnsafePointer(proof), uint64(len(proof)),
 		arbutil.SliceToUnsafePointer(header), uint64(len(header)),
 		arbutil.SliceToUnsafePointer(block_comm), uint64(len(block_comm)),
 		arbutil.SliceToUnsafePointer(circuit_comm), uint64(len(circuit_comm)),
+		pos,
 	)
 }

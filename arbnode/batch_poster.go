@@ -121,6 +121,9 @@ type BatchPoster struct {
 	// Espresso readers
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
+	// Use a stateless way and remove these.
+	lastValidatedHotShotHeight    uint64
+	currentValidatedHotShotHeight uint64
 }
 
 type l1BlockBound int
@@ -485,25 +488,34 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		if err != nil {
 			return err
 		}
-		validatedHotShotHeight, validatedL1Height, err := b.lightClientReader.ValidatedHeight()
-		if err != nil {
-			return err
 
+		snapshot, err := b.lightClientReader.FetchMerkleRoot(jst.Header.Height, nil)
+		if err != nil {
+			return fmt.Errorf("could not get the merkle root at height %v", jst.Header.Height)
 		}
-		if validatedHotShotHeight < jst.Header.Height+1 {
-			return fmt.Errorf("could not construct batch justification, light client is at height %v but the justification is for height %v", validatedHotShotHeight, jst.Header.Height)
+		if snapshot.Height != b.currentValidatedHotShotHeight {
+			b.lastValidatedHotShotHeight = b.currentValidatedHotShotHeight
+			b.currentValidatedHotShotHeight = snapshot.Height
 		}
 		// The next header contains the block commitment merkle tree commitment that validates the header of interest
-		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, validatedHotShotHeight)
+		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, snapshot.Height)
 		if err != nil {
-			return fmt.Errorf("error fetching the next header at height %v, request failed with error %w", validatedHotShotHeight, err)
+			return fmt.Errorf("error fetching the next header at height %v, request failed with error %w", snapshot.Height, err)
 		}
+		log.Info("wait......", "snapshot height", snapshot.Height, "jst header height", jst.Header.Height, "validated hotshot height", snapshot.Height)
 
-		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, validatedHotShotHeight, jst.Header.Height)
+		// var offset uint64
+		// if b.lastValidatedHotShotHeight == 0 {
+		// 	offset = 0
+		// } else {
+		// 	offset = b.lastValidatedHotShotHeight
+		// }
+		offset := b.lastValidatedHotShotHeight
+		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, jst.Header.Height-offset)
 		if err != nil {
-			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", validatedHotShotHeight, jst.Header.Height, err)
+			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
 		}
-		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, L1ProofHeight: validatedL1Height, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
+		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
 		newMsg, err := arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
 		if err != nil {
 			return err

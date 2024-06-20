@@ -44,6 +44,12 @@ func VerifyNamespace(
 	)
 }
 
-func VerifyMerkleProof(proof json.RawMessage, header json.RawMessage, blockComm espressoTypes.TaggedBase64, circuit_comm_bytes espressoTypes.Commitment) {
-	verifyMerkleProof(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:])
+func VerifyMerkleProof(
+	proof json.RawMessage,
+	header json.RawMessage,
+	blockComm espressoTypes.TaggedBase64,
+	circuit_comm_bytes espressoTypes.Commitment,
+	pos uint64,
+) {
+	verifyMerkleProof(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:], pos)
 }
