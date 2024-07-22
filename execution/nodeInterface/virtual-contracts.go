@@ -141,8 +141,7 @@ func init() {
 			return
 		}
 		posterCost, _ := state.L1PricingState().PosterDataCost(msg, l1pricing.BatchPosterAddress, brotliCompressionLevel)
-		// Use estimate mode because this is used to raise the gas cap, so we don't want to underestimate.
-		posterCostInL2Gas := arbos.GetPosterGas(state, header.BaseFee, core.MessageGasEstimationMode, posterCost)
+		posterCostInL2Gas := arbos.GetPosterGas(state, header.BaseFee, msg.TxRunMode, posterCost)
 		*gascap = arbmath.SaturatingUAdd(*gascap, posterCostInL2Gas)
 	}
 

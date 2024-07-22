@@ -25,36 +25,22 @@ func CreatePersistentStorageService(
 ) (StorageService, *LifecycleManager, error) {
 	storageServices := make([]StorageService, 0, 10)
 	var lifecycleManager LifecycleManager
-	var err error
-
-	var fs *LocalFileStorageService
-	if config.LocalFileStorage.Enable {
-		fs, err = NewLocalFileStorageService(config.LocalFileStorage)
+	if config.LocalDBStorage.Enable {
+		s, err := NewDBStorageService(ctx, &config.LocalDBStorage)
 		if err != nil {
 			return nil, nil, err
 		}
-		err = fs.start(ctx)
-		if err != nil {
-			return nil, nil, err
-		}
-		lifecycleManager.Register(fs)
-		storageServices = append(storageServices, fs)
+		lifecycleManager.Register(s)
+		storageServices = append(storageServices, s)
 	}
 
-	if config.LocalDBStorage.Enable {
-		var s *DBStorageService
-		if config.MigrateLocalDBToFileStorage {
-			s, err = NewDBStorageService(ctx, &config.LocalDBStorage, fs)
-		} else {
-			s, err = NewDBStorageService(ctx, &config.LocalDBStorage, nil)
-		}
+	if config.LocalFileStorage.Enable {
+		s, err := NewLocalFileStorageService(config.LocalFileStorage.DataDir)
 		if err != nil {
 			return nil, nil, err
 		}
-		if s != nil {
-			lifecycleManager.Register(s)
-			storageServices = append(storageServices, s)
-		}
+		lifecycleManager.Register(s)
+		storageServices = append(storageServices, s)
 	}
 
 	if config.S3Storage.Enable {
@@ -77,10 +63,6 @@ func CreatePersistentStorageService(
 	if len(storageServices) == 1 {
 		return storageServices[0], &lifecycleManager, nil
 	}
-	if len(storageServices) == 0 {
-		return nil, nil, errors.New("No data-availability storage backend has been configured")
-	}
-
 	return nil, &lifecycleManager, nil
 }
 
