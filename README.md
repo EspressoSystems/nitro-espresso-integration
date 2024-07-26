@@ -53,6 +53,6 @@ For those that prefer to deploy the Nitro software either directly on Ethereum (
 
 Discord - [Arbitrum](https://discord.com/invite/5KE54JwyTs)
 
-Twitter: [Arbitrum](https://twitter.com/arbitrum)
+X: [Arbitrum](https://twitter.com/arbitrum)
 
 
