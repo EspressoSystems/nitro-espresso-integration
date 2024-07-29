@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -40,6 +41,7 @@ import (
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
+	"github.com/offchainlabs/nitro/wavmio"
 )
 
 // TransactionStreamer produces blocks from a node's L1 messages, storing the results in the blockchain and recording their positions
@@ -116,7 +118,6 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-connection-timeout", DefaultTransactionStreamerConfig.EspressoConnectionTimeout, "timeout for the connection to the espresso network")
-
 }
 
 func NewTransactionStreamer(
@@ -141,6 +142,7 @@ func NewTransactionStreamer(
 
 	if config().SovereignSequencerEnabled {
 		streamer.espressoClient = espressoClient.NewClient(config().HotShotUrl)
+
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1014,25 +1016,60 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		BlockHash:       &msgResult.BlockHash,
 	}
 
+	l1Block := msgWithMeta.Message.Header.BlockNumber
+
+	if s.config().SovereignSequencerEnabled && s.espressoClient != nil && wavmio.IsHotShotLive(l1Block) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(s.config().EspressoConnectionTimeout))
+		defer cancel()
+		err := s.SendL2MessageToEspresso(ctx, msgWithMeta)
+		// TODO: what happens if we fail to send to Espresso? should we still continue to process the message? or return an error?
+		if err != nil {
+			return fmt.Errorf("failed to send message to Espresso: %w", err)
+		}
+	}
+
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
 		return err
 	}
 
-	if s.config().SovereignSequencerEnabled && s.espressoClient != nil {
-		tx := espressoTypes.Transaction{
-			Namespace: s.config().EspressoNamespace,
-			Payload:   msgWithBlockHash.MessageWithMeta.Message.L2msg,
-		}
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(s.config().EspressoConnectionTimeout))
-		defer cancel()
-		err = s.espressoClient.SubmitTransaction(ctx, tx)
-		if err != nil {
-			return fmt.Errorf("failed to submit transaction to espresso: %w", err)
-		}
-	}
-
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
 
+	return nil
+}
+
+func (s *TransactionStreamer) SendL2MessageToEspresso(ctx context.Context, msgWithMeta arbostypes.MessageWithMetadata) error {
+
+	tx := espressoTypes.Transaction{
+		Namespace: s.config().EspressoNamespace,
+		Payload:   msgWithMeta.Message.L2msg,
+	}
+
+	err := s.espressoClient.SubmitTransaction(ctx, tx)
+	if err != nil {
+		return fmt.Errorf("failed to submit transaction to espresso: %w", err)
+	}
+
+	maxPollingDuration := time.Minute
+	startTime := time.Now()
+	// Poll to check if the transaction is included in the block
+PollForTx:
+	for {
+		hotshotHeight := wavmio.GetEspressoHeight()
+
+		txns, err := s.espressoClient.FetchTransactionsInBlock(ctx, hotshotHeight, s.config().EspressoNamespace)
+		if err != nil {
+			return fmt.Errorf("failed to fetch transactions from espresso: %w", err)
+		}
+		for _, txPayload := range txns.Transactions {
+			if slices.Equal(txPayload, tx.Payload) {
+				break PollForTx
+			}
+		}
+		if time.Since(startTime) > maxPollingDuration {
+			return fmt.Errorf("timed out waiting for transactions:%v to be included by espresso", tx.Payload)
+		}
+		time.Sleep(time.Second)
+	}
 	return nil
 }
 
