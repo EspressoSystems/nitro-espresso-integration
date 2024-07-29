@@ -19,15 +19,16 @@ import (
 
 	"errors"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/cockroachdb/pebble"
-	flag "github.com/spf13/pflag"
-	"github.com/syndtr/goleveldb/leveldb"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	flag "github.com/spf13/pflag"
+	"github.com/syndtr/goleveldb/leveldb"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -70,32 +71,48 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
+
+	// Espresso specific fields
+	espressoClient *espressoClient.Client
 }
 
 type TransactionStreamerConfig struct {
 	MaxBroadcasterQueueSize int           `koanf:"max-broadcaster-queue-size"`
 	MaxReorgResequenceDepth int64         `koanf:"max-reorg-resequence-depth" reload:"hot"`
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
+
+	// Espresso specific fields
+	SovereignSequencerEnabled bool   `koanf:"sovereign-sequencer-enabled"`
+	HotShotUrl                string `koanf:"hotshot-url"`
+	EspressoNamespace         uint64 `koanf:"espresso-namespace"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
 
 var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize: 50_000,
-	MaxReorgResequenceDepth: 1024,
-	ExecuteMessageLoopDelay: time.Millisecond * 100,
+	MaxBroadcasterQueueSize:   50_000,
+	MaxReorgResequenceDepth:   1024,
+	ExecuteMessageLoopDelay:   time.Millisecond * 100,
+	SovereignSequencerEnabled: false,
+	HotShotUrl:                "",
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize: 10_000,
-	MaxReorgResequenceDepth: 128 * 1024,
-	ExecuteMessageLoopDelay: time.Millisecond,
+	MaxBroadcasterQueueSize:   10_000,
+	MaxReorgResequenceDepth:   128 * 1024,
+	ExecuteMessageLoopDelay:   time.Millisecond,
+	SovereignSequencerEnabled: false,
+	HotShotUrl:                "",
 }
 
 func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-broadcaster-queue-size", DefaultTransactionStreamerConfig.MaxBroadcasterQueueSize, "maximum cache of pending broadcaster messages")
 	f.Int64(prefix+".max-reorg-resequence-depth", DefaultTransactionStreamerConfig.MaxReorgResequenceDepth, "maximum number of messages to attempt to resequence on reorg (0 = never resequence, -1 = always resequence)")
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
+	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
+	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
+	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
+
 }
 
 func NewTransactionStreamer(
@@ -117,6 +134,11 @@ func NewTransactionStreamer(
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
 	}
+
+	if config().SovereignSequencerEnabled {
+		streamer.espressoClient = espressoClient.NewClient(config().HotShotUrl)
+	}
+
 	err := streamer.cleanupInconsistentState()
 	if err != nil {
 		return nil, err
@@ -991,6 +1013,19 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
 		return err
 	}
+
+	if s.config().SovereignSequencerEnabled {
+		tx := espressoTypes.Transaction{
+			Namespace: s.config().EspressoNamespace,
+			Payload:   msgWithBlockHash.MessageWithMeta.Message.L2msg,
+		}
+
+		err = s.espressoClient.SubmitTransaction(context.Background(), tx)
+		if err != nil {
+			return fmt.Errorf("failed to submit transaction to espresso: %w", err)
+		}
+	}
+
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
 
 	return nil
