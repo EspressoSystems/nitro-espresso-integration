@@ -82,9 +82,10 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 
 	// Espresso specific fields
-	SovereignSequencerEnabled bool   `koanf:"sovereign-sequencer-enabled"`
-	HotShotUrl                string `koanf:"hotshot-url"`
-	EspressoNamespace         uint64 `koanf:"espresso-namespace"`
+	SovereignSequencerEnabled bool          `koanf:"sovereign-sequencer-enabled"`
+	HotShotUrl                string        `koanf:"hotshot-url"`
+	EspressoNamespace         uint64        `koanf:"espresso-namespace"`
+	EspressoConnectionTimeout time.Duration `koanf:"espresso-connection-timeout"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -95,6 +96,7 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	ExecuteMessageLoopDelay:   time.Millisecond * 100,
 	SovereignSequencerEnabled: false,
 	HotShotUrl:                "",
+	EspressoConnectionTimeout: time.Second * 2,
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
@@ -103,6 +105,7 @@ var TestTransactionStreamerConfig = TransactionStreamerConfig{
 	ExecuteMessageLoopDelay:   time.Millisecond,
 	SovereignSequencerEnabled: false,
 	HotShotUrl:                "",
+	EspressoConnectionTimeout: time.Second * 2,
 }
 
 func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -112,6 +115,7 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
+	f.Duration(prefix+".espresso-connection-timeout", DefaultTransactionStreamerConfig.EspressoConnectionTimeout, "timeout for the connection to the espresso network")
 
 }
 
@@ -1014,13 +1018,14 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		return err
 	}
 
-	if s.config().SovereignSequencerEnabled {
+	if s.config().SovereignSequencerEnabled && s.espressoClient != nil {
 		tx := espressoTypes.Transaction{
 			Namespace: s.config().EspressoNamespace,
 			Payload:   msgWithBlockHash.MessageWithMeta.Message.L2msg,
 		}
-
-		err = s.espressoClient.SubmitTransaction(context.Background(), tx)
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(s.config().EspressoConnectionTimeout))
+		defer cancel()
+		err = s.espressoClient.SubmitTransaction(ctx, tx)
 		if err != nil {
 			return fmt.Errorf("failed to submit transaction to espresso: %w", err)
 		}
