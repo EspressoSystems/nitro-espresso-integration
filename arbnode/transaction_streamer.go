@@ -146,7 +146,6 @@ func NewTransactionStreamer(
 
 	if config().SovereignSequencerEnabled {
 		streamer.espressoClient = espressoClient.NewClient(config().HotShotUrl)
-
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1029,7 +1028,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		if err != nil {
 			return fmt.Errorf("failed to send message to espresso: %w", err)
 		}
-
 	}
 
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
