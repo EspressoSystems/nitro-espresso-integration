@@ -84,30 +84,33 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 
 	// Espresso specific fields
-	SovereignSequencerEnabled bool          `koanf:"sovereign-sequencer-enabled"`
-	HotShotUrl                string        `koanf:"hotshot-url"`
-	EspressoNamespace         uint64        `koanf:"espresso-namespace"`
-	EspressoConnectionTimeout time.Duration `koanf:"espresso-connection-timeout"`
+	SovereignSequencerEnabled   bool          `koanf:"sovereign-sequencer-enabled"`
+	HotShotUrl                  string        `koanf:"hotshot-url"`
+	EspressoNamespace           uint64        `koanf:"espresso-namespace"`
+	EspressoTimeout             time.Duration `koanf:"espresso-timeout"`
+	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-polling-interval"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
 
 var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize:   50_000,
-	MaxReorgResequenceDepth:   1024,
-	ExecuteMessageLoopDelay:   time.Millisecond * 100,
-	SovereignSequencerEnabled: false,
-	HotShotUrl:                "",
-	EspressoConnectionTimeout: time.Second * 2,
+	MaxBroadcasterQueueSize:     50_000,
+	MaxReorgResequenceDepth:     1024,
+	ExecuteMessageLoopDelay:     time.Millisecond * 100,
+	SovereignSequencerEnabled:   false,
+	HotShotUrl:                  "",
+	EspressoTimeout:             time.Second * 5,
+	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize:   10_000,
-	MaxReorgResequenceDepth:   128 * 1024,
-	ExecuteMessageLoopDelay:   time.Millisecond,
-	SovereignSequencerEnabled: false,
-	HotShotUrl:                "",
-	EspressoConnectionTimeout: time.Second * 2,
+	MaxBroadcasterQueueSize:     10_000,
+	MaxReorgResequenceDepth:     128 * 1024,
+	ExecuteMessageLoopDelay:     time.Millisecond,
+	SovereignSequencerEnabled:   false,
+	HotShotUrl:                  "",
+	EspressoTimeout:             time.Second * 5,
+	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
 
 func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -117,7 +120,8 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
-	f.Duration(prefix+".espresso-connection-timeout", DefaultTransactionStreamerConfig.EspressoConnectionTimeout, "timeout for the connection to the espresso network")
+	f.Duration(prefix+".espresso-timeout", DefaultTransactionStreamerConfig.EspressoTimeout, "timeout for the connection to the espresso network")
+	f.Duration(prefix+".espresso-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 }
 
 func NewTransactionStreamer(
@@ -1019,13 +1023,13 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	l1Block := msgWithMeta.Message.Header.BlockNumber
 
 	if s.config().SovereignSequencerEnabled && s.espressoClient != nil && wavmio.IsHotShotLive(l1Block) {
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(s.config().EspressoConnectionTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), s.config().EspressoTimeout)
 		defer cancel()
 		err := s.SendL2MessageToEspresso(ctx, msgWithMeta)
-		// TODO: what happens if we fail to send to Espresso? should we still continue to process the message? or return an error?
 		if err != nil {
-			return fmt.Errorf("failed to send message to Espresso: %w", err)
+			return fmt.Errorf("failed to send message to espresso: %w", err)
 		}
+
 	}
 
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
@@ -1049,26 +1053,28 @@ func (s *TransactionStreamer) SendL2MessageToEspresso(ctx context.Context, msgWi
 		return fmt.Errorf("failed to submit transaction to espresso: %w", err)
 	}
 
-	maxPollingDuration := time.Minute
-	startTime := time.Now()
+	ticker := time.NewTicker(s.config().EspressoTxnsPollingInterval)
+	defer ticker.Stop()
+
 	// Poll to check if the transaction is included in the block
 PollForTx:
 	for {
-		hotshotHeight := wavmio.GetEspressoHeight()
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled or timed out while polling for transaction inclusion: %w", ctx.Err())
+		case <-ticker.C:
+			hotshotHeight := wavmio.GetEspressoHeight()
 
-		txns, err := s.espressoClient.FetchTransactionsInBlock(ctx, hotshotHeight, s.config().EspressoNamespace)
-		if err != nil {
-			return fmt.Errorf("failed to fetch transactions from espresso: %w", err)
-		}
-		for _, txPayload := range txns.Transactions {
-			if slices.Equal(txPayload, tx.Payload) {
-				break PollForTx
+			txns, err := s.espressoClient.FetchTransactionsInBlock(ctx, hotshotHeight, s.config().EspressoNamespace)
+			if err != nil {
+				return fmt.Errorf("failed to fetch transactions from espresso: %w", err)
+			}
+			for _, txPayload := range txns.Transactions {
+				if slices.Equal(txPayload, tx.Payload) {
+					break PollForTx
+				}
 			}
 		}
-		if time.Since(startTime) > maxPollingDuration {
-			return fmt.Errorf("timed out waiting for transactions:%v to be included by espresso", tx.Payload)
-		}
-		time.Sleep(time.Second)
 	}
 	return nil
 }
