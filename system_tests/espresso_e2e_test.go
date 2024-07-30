@@ -81,7 +81,6 @@ func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder
 	nodeConfig.BlockValidator.Enable = false
 	nodeConfig.DelayedSequencer.Enable = true
 	nodeConfig.Sequencer = true
-	nodeConfig.Espresso = true
 	builder.execConfig.Sequencer.LightClientAddress = lightClientAddress
 	builder.execConfig.Sequencer.SwitchPollInterval = 10 * time.Second
 	builder.execConfig.Sequencer.SwitchDelayThreshold = uint64(delayThreshold)
