@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math/big"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,7 +19,6 @@ import (
 
 	"errors"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
@@ -41,7 +39,6 @@ import (
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-	"github.com/offchainlabs/nitro/wavmio"
 )
 
 // TransactionStreamer produces blocks from a node's L1 messages, storing the results in the blockchain and recording their positions
@@ -75,7 +72,7 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 
 	// Espresso specific fields
-	espressoClient *espressoClient.Client
+	espressoTransactionQueue *EspressoTransactionQueue
 }
 
 type TransactionStreamerConfig struct {
@@ -145,7 +142,14 @@ func NewTransactionStreamer(
 	}
 
 	if config().SovereignSequencerEnabled {
-		streamer.espressoClient = espressoClient.NewClient(config().HotShotUrl)
+		espressoTransactionQueueConfigFetcher := func() *EspressoTransactionQueueConfig {
+			return &EspressoTransactionQueueConfig{
+				HotShotUrl:                  config().HotShotUrl,
+				EspressoNamespace:           config().EspressoNamespace,
+				EspressoTxnsPollingInterval: config().EspressoTxnsPollingInterval,
+			}
+		}
+		streamer.espressoTransactionQueue = NewEspressoTransactionQueue(espressoTransactionQueueConfigFetcher)
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1019,15 +1023,11 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		BlockHash:       &msgResult.BlockHash,
 	}
 
-	l1Block := msgWithMeta.Message.Header.BlockNumber
-
-	if s.config().SovereignSequencerEnabled && s.espressoClient != nil && wavmio.IsHotShotLive(l1Block) {
+	if s.config().SovereignSequencerEnabled {
 		ctx, cancel := context.WithTimeout(context.Background(), s.config().EspressoTimeout)
 		defer cancel()
-		err := s.SendL2MessageToEspresso(ctx, msgWithMeta)
-		if err != nil {
-			return fmt.Errorf("failed to send message to espresso: %w", err)
-		}
+		s.SendL2MessageToEspresso(ctx, msgWithMeta)
+
 	}
 
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
@@ -1039,42 +1039,15 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	return nil
 }
 
-func (s *TransactionStreamer) SendL2MessageToEspresso(ctx context.Context, msgWithMeta arbostypes.MessageWithMetadata) error {
+func (s *TransactionStreamer) SendL2MessageToEspresso(ctx context.Context, msgWithMeta arbostypes.MessageWithMetadata) {
 
 	tx := espressoTypes.Transaction{
 		Namespace: s.config().EspressoNamespace,
 		Payload:   msgWithMeta.Message.L2msg,
 	}
 
-	err := s.espressoClient.SubmitTransaction(ctx, tx)
-	if err != nil {
-		return fmt.Errorf("failed to submit transaction to espresso: %w", err)
-	}
+	s.espressoTransactionQueue.SubmitTransaction(ctx, &tx)
 
-	ticker := time.NewTicker(s.config().EspressoTxnsPollingInterval)
-	defer ticker.Stop()
-
-	// Poll to check if the transaction is included in the block
-PollForTx:
-	for {
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("context cancelled or timed out while polling for transaction inclusion: %w", ctx.Err())
-		case <-ticker.C:
-			hotshotHeight := wavmio.GetEspressoHeight()
-
-			txns, err := s.espressoClient.FetchTransactionsInBlock(ctx, hotshotHeight, s.config().EspressoNamespace)
-			if err != nil {
-				return fmt.Errorf("failed to fetch transactions from espresso: %w", err)
-			}
-			for _, txPayload := range txns.Transactions {
-				if slices.Equal(txPayload, tx.Payload) {
-					break PollForTx
-				}
-			}
-		}
-	}
-	return nil
 }
 
 // PauseReorgs until a matching call to ResumeReorgs (may be called concurrently)
@@ -1250,5 +1223,13 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
+
+	if s.config().SovereignSequencerEnabled {
+		err := s.espressoTransactionQueue.Start(ctxIn)
+		if err != nil {
+			return fmt.Errorf("failed to start espresso transaction queue: %w", err)
+		}
+	}
+
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
 }
