@@ -376,7 +376,7 @@ func (s *ExecutionEngine) resequenceReorgedMessages(messages []*arbostypes.Messa
 		}
 		hooks := arbos.NoopSequencingHooks()
 		hooks.DiscardInvalidTxsEarly = true
-		_, err = s.sequenceTransactionsWithBlockMutex(msg.Message.Header, txes, hooks, arbos.IsEsperssoSovereignMsg(msg.Message))
+		_, err = s.sequenceTransactionsWithBlockMutex(msg.Message.Header, txes, hooks, arbos.IsEspressoSovereignMsg(msg.Message))
 		if err != nil {
 			log.Error("failed to re-sequence old user message removed by reorg", "err", err)
 			return

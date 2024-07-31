@@ -301,7 +301,7 @@ func main() {
 			height := hotshotHeader.Height
 
 			// Check the continuity of the hotshot block if we are not running the sovereign sequencer.
-			if !arbos.IsEsperssoSovereignMsg(message.Message) {
+			if !arbos.IsEspressoSovereignMsg(message.Message) {
 				validatedHeight := wavmio.GetEspressoHeight()
 				if validatedHeight == 0 {
 					// Validators can choose their own trusted starting point to start their validation.

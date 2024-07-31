@@ -107,7 +107,7 @@ const (
 	L2MessageKind_Heartbeat          = 6 // deprecated
 	L2MessageKind_SignedCompressedTx = 7
 	// 8 is reserved for BLS signed batch
-	L2MessageKind_EspressoTx          = 10
+	L2MessageKind_EspressoSequencedTx = 10
 	L2MessageKind_EspressoSovereignTx = 11
 )
 
@@ -185,7 +185,7 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			return nil, types.ErrTxTypeNotSupported
 		}
 		return types.Transactions{newTx}, nil
-	case L2MessageKind_EspressoTx:
+	case L2MessageKind_EspressoSequencedTx:
 		segments := make(types.Transactions, 0)
 		jst := true
 		for {
@@ -207,7 +207,7 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			segments = append(segments, newTx)
 		}
 	case L2MessageKind_EspressoSovereignTx:
-		// Skip the first the byte and then process it as a normal l2 message
+		// Skip the first byte and the first transaction(jst), then process it as a normal l2 message
 		var l2KindBuf [1]byte
 		if _, err := rd.Read(l2KindBuf[:]); err != nil {
 			return nil, err
@@ -244,7 +244,7 @@ func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.Espresso
 	}
 
 	switch l2KindBuf[0] {
-	case L2MessageKind_EspressoTx:
+	case L2MessageKind_EspressoSequencedTx:
 		txs := make([]espressoTypes.Bytes, 0)
 		var jst *arbostypes.EspressoBlockJustification
 		for {
@@ -503,6 +503,10 @@ func parseBatchPostingReportMessage(rd io.Reader, chainId *big.Int, msgBatchGasC
 	}), nil
 }
 
+// RLP encoding/decoding is not supported in `espresso-sequencer-go`. So the `jst` which contains
+// the `EspressoHeader` field, can not be encoded into RLP directly. And as an unfortunate workaround,
+// we encode it to `json` first.
+// https://github.com/EspressoSystems/espresso-sequencer-go/issues/16
 func GetEspressoJstBytes(jst *arbostypes.EspressoBlockJustification) ([]byte, error) {
 	var result []byte
 	jstJson, err := json.Marshal(jst)
@@ -528,7 +532,7 @@ func GetEspressoJstBytes(jst *arbostypes.EspressoBlockJustification) ([]byte, er
 func MessageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification) (arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 
-	l2Message = append(l2Message, L2MessageKind_EspressoTx)
+	l2Message = append(l2Message, L2MessageKind_EspressoSequencedTx)
 	jstBytes, err := GetEspressoJstBytes(jst)
 	if err != nil {
 		return arbostypes.L1IncomingMessage{}, err
@@ -568,20 +572,20 @@ func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.Espr
 
 func IsEspressoMsg(msg *arbostypes.L1IncomingMessage) bool {
 	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
-		(msg.L2msg[0] == L2MessageKind_EspressoTx ||
+		(msg.L2msg[0] == L2MessageKind_EspressoSequencedTx ||
 			msg.L2msg[0] == L2MessageKind_EspressoSovereignTx)
 }
 
 func IsL2NonEspressoMsg(msg *arbostypes.L1IncomingMessage) bool {
 	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
-		msg.L2msg[0] != L2MessageKind_EspressoTx
+		msg.L2msg[0] != L2MessageKind_EspressoSequencedTx
 }
 
 func IsL2Message(msg *arbostypes.L1IncomingMessage) bool {
 	return msg.Header.Kind == arbostypes.L1MessageType_L2Message
 }
 
-func IsEsperssoSovereignMsg(msg *arbostypes.L1IncomingMessage) bool {
+func IsEspressoSovereignMsg(msg *arbostypes.L1IncomingMessage) bool {
 	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
 		msg.L2msg[0] == L2MessageKind_EspressoSovereignTx
 }
