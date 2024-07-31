@@ -436,6 +436,16 @@ func setMessageCount(batch ethdb.KeyValueWriter, count arbutil.MessageIndex) err
 	return nil
 }
 
+func setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos arbutil.MessageIndex) error {
+	posBytes, err := rlp.EncodeToBytes(pos)
+	err = batch.Put(espressoSubmittedPos, posBytes)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func dbKey(prefix []byte, pos uint64) []byte {
 	var key []byte
 	key = append(key, prefix...)
@@ -520,6 +530,21 @@ func (s *TransactionStreamer) GetProcessedMessageCount() (arbutil.MessageIndex, 
 		return digestedHead + 1, nil
 	}
 	return msgCount, nil
+}
+
+func (s *TransactionStreamer) GetEspressoSubmittedPos() (arbutil.MessageIndex, error) {
+	posBytes, err := s.db.Get(espressoSubmittedPos)
+	if err != nil {
+		return 0, err
+	}
+	var pos uint64
+	err = rlp.DecodeBytes(posBytes, &pos)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return arbutil.MessageIndex(pos), nil
 }
 
 func (s *TransactionStreamer) AddMessages(pos arbutil.MessageIndex, messagesAreConfirmed bool, messages []arbostypes.MessageWithMetadata) error {
@@ -1221,14 +1246,48 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 	return s.config().ExecuteMessageLoopDelay
 }
 
+func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
+	pos, err := s.GetEspressoSubmittedPos()
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
+	pos++
+
+	msg, err := s.GetMessage(pos)
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	if !arbos.IsL2Message(msg.Message) {
+		if err != setEspressoSubmittedPos(s.db, pos) {
+			return s.config().EspressoTxnsPollingInterval
+		}
+	}
+
+	// // send the transactions here
+	// err = submitL2MessageToEspresso(msg.Message.L2msg)
+	// if err != nil {
+	// 	// retry
+	// }
+	// if confirm() {
+	// 	if err != setEspressoSubmittedPos(s.db, pos) {
+	// 		return s.config().EspressoTxnsPollingInterval
+	// 	}
+	// } else {
+	// 	// wait
+	// }
+	return 0
+}
+
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.config().SovereignSequencerEnabled {
-		err := s.espressoTransactionQueue.Start(ctxIn)
-		if err != nil {
-			return fmt.Errorf("failed to start espresso transaction queue: %w", err)
-		}
+		// err := s.espressoTransactionQueue.Start(ctxIn)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to start espresso transaction queue: %w", err)
+		// }
+		stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newMessageNotifier)
 	}
 
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)

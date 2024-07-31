@@ -16,6 +16,8 @@ var (
 	delayedMessageCountKey []byte = []byte("_delayedMessageCount") // contains the current delayed message count
 	sequencerBatchCountKey []byte = []byte("_sequencerBatchCount") // contains the current sequencer message count
 	dbSchemaVersion        []byte = []byte("_schemaVersion")       // contains a uint64 representing the database schema version
+
+	espressoSubmittedPos []byte = []byte("_espressoSubmittedPos")
 )
 
 const currentDbSchemaVersion uint64 = 1
