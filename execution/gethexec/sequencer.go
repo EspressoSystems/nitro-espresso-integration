@@ -82,7 +82,7 @@ type SequencerConfig struct {
 
 	// Espresso specific flags
 	Espresso                bool          `koanf:"espresso"`
-	EnableEspressoSovereign bool          `koanf:"enable-espresso-soveregin"`
+	EnableEspressoSovereign bool          `koanf:"enable-espresso-sovereign"`
 	HotShotUrl              string        `koanf:"hotshot-url"`
 	LightClientAddress      string        `koanf:"light-client-address"`
 	EspressoNamespace       uint64        `koanf:"espresso-namespace"`
