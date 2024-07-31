@@ -282,8 +282,20 @@ func (s *ExecutionEngine) NextDelayedMessageNumber() (uint64, error) {
 	return currentHeader.Nonce.Uint64(), nil
 }
 
-func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, txErrors []error) (*arbostypes.L1IncomingMessage, error) {
+func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, txErrors []error, espressoSovereignSequencer bool) (*arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
+	// Set a special type if the Espresso Sovereign Sequencer is running.
+	if espressoSovereignSequencer {
+		l2Message = append(l2Message, arbos.L2MessageKind_EspressoSovereignTx)
+		// Set a block justification placeholder here. That would help us easily parse
+		// our messages from `ParseEspressoMessage`.
+		jstBytes, err := arbos.GetEspressoJstBytes(&arbostypes.EspressoBlockJustification{})
+		if err != nil {
+			return nil, err
+		}
+		l2Message = append(l2Message, jstBytes...)
+	}
+
 	if len(txes) == 1 && txErrors[0] == nil {
 		txBytes, err := txes[0].MarshalBinary()
 		if err != nil {
@@ -364,7 +376,7 @@ func (s *ExecutionEngine) resequenceReorgedMessages(messages []*arbostypes.Messa
 		}
 		hooks := arbos.NoopSequencingHooks()
 		hooks.DiscardInvalidTxsEarly = true
-		_, err = s.sequenceTransactionsWithBlockMutex(msg.Message.Header, txes, hooks)
+		_, err = s.sequenceTransactionsWithBlockMutex(msg.Message.Header, txes, hooks, arbos.IsEsperssoSovereignMsg(msg.Message))
 		if err != nil {
 			log.Error("failed to re-sequence old user message removed by reorg", "err", err)
 			return
@@ -402,10 +414,10 @@ func (s *ExecutionEngine) sequencerWrapper(sequencerFunc func() (*types.Block, e
 	}
 }
 
-func (s *ExecutionEngine) SequenceTransactions(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks) (*types.Block, error) {
+func (s *ExecutionEngine) SequenceTransactions(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks, espressoSovereign bool) (*types.Block, error) {
 	return s.sequencerWrapper(func() (*types.Block, error) {
 		hooks.TxErrors = nil
-		return s.sequenceTransactionsWithBlockMutex(header, txes, hooks)
+		return s.sequenceTransactionsWithBlockMutex(header, txes, hooks, espressoSovereign)
 	})
 }
 
@@ -509,7 +521,7 @@ func (s *ExecutionEngine) SequenceTransactionsEspresso(
 // SequenceTransactionsWithProfiling runs SequenceTransactions with tracing and
 // CPU profiling enabled. If the block creation takes longer than 2 seconds, it
 // keeps both and prints out filenames in an error log line.
-func (s *ExecutionEngine) SequenceTransactionsWithProfiling(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks) (*types.Block, error) {
+func (s *ExecutionEngine) SequenceTransactionsWithProfiling(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks, espressoSovereign bool) (*types.Block, error) {
 	pprofBuf, traceBuf := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
 	if err := pprof.StartCPUProfile(pprofBuf); err != nil {
 		log.Error("Starting CPU profiling", "error", err)
@@ -518,7 +530,7 @@ func (s *ExecutionEngine) SequenceTransactionsWithProfiling(header *arbostypes.L
 		log.Error("Starting tracing", "error", err)
 	}
 	start := time.Now()
-	res, err := s.SequenceTransactions(header, txes, hooks)
+	res, err := s.SequenceTransactions(header, txes, hooks, espressoSovereign)
 	elapsed := time.Since(start)
 	pprof.StopCPUProfile()
 	trace.Stop()
@@ -544,7 +556,7 @@ func writeAndLog(pprof, trace *bytes.Buffer) {
 	log.Info("Transactions sequencing took longer than 2 seconds, created pprof and trace files", "pprof", pprofFile, "traceFile", traceFile)
 }
 
-func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks) (*types.Block, error) {
+func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks, espressoSovereign bool) (*types.Block, error) {
 	lastBlockHeader, err := s.getCurrentHeader()
 	if err != nil {
 		return nil, err
@@ -593,7 +605,7 @@ func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.
 		return nil, nil
 	}
 
-	msg, err := MessageFromTxes(header, txes, hooks.TxErrors)
+	msg, err := MessageFromTxes(header, txes, hooks.TxErrors, espressoSovereign)
 	if err != nil {
 		return nil, err
 	}

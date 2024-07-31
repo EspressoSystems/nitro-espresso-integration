@@ -42,6 +42,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*TestClient, *Blockch
 	builder.execConfig.Sequencer.Enable = true
 	// using the sovereign sequencer
 	builder.execConfig.Sequencer.Espresso = false
+	builder.execConfig.Sequencer.EnableEspressoSoveregin = true
 
 	// transaction stream config
 	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true

@@ -438,6 +438,9 @@ func setMessageCount(batch ethdb.KeyValueWriter, count arbutil.MessageIndex) err
 
 func setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos arbutil.MessageIndex) error {
 	posBytes, err := rlp.EncodeToBytes(pos)
+	if err != nil {
+		return err
+	}
 	err = batch.Put(espressoSubmittedPos, posBytes)
 	if err != nil {
 		return err
@@ -1259,7 +1262,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 	}
 
 	if !arbos.IsL2Message(msg.Message) {
-		if err != setEspressoSubmittedPos(s.db, pos) {
+		if setEspressoSubmittedPos(s.db, pos) != nil {
 			return s.config().EspressoTxnsPollingInterval
 		}
 	}
@@ -1287,7 +1290,10 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 		// if err != nil {
 		// 	return fmt.Errorf("failed to start espresso transaction queue: %w", err)
 		// }
-		stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newMessageNotifier)
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newMessageNotifier)
+		if err != nil {
+			return err
+		}
 	}
 
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
