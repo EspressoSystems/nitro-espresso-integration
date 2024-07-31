@@ -1266,14 +1266,32 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			return s.config().EspressoTxnsPollingInterval
 		}
 	}
+	_, _, err = arbos.ParseEspressoMsg(msg.Message)
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
 
-	// // send the transactions here
-	// err = submitL2MessageToEspresso(msg.Message.L2msg)
+	// // send the transaction here
+	// err = submitL2MessageToEspresso(payload)
 	// if err != nil {
 	// 	// retry
 	// }
 	// if confirm() {
-	// 	if err != setEspressoSubmittedPos(s.db, pos) {
+	// newMsg, err := arbos.MessageFromEspressoSovereignTx(tx[0], jst, msg.Message.Header)
+	// if err != nil {
+	// 	return s.config().EspressoTxnsPollingInterval
+	// }
+	// msg.Message = newMsg
+	// batch := s.db.NewBatch()
+	// err = s.writeMessage(pos, arbostypes.MessageWithMetadataAndBlockHash{MessageWithMeta: *msg}, batch)
+	// if err != nil {
+	// 	return s.config().EspressoTxnsPollingInterval
+	// }
+	// err = batch.Write()
+	// if err != nil {
+	// 	return s.config().EspressoTxnsPollingInterval
+	// }
+	// 	if setEspressoSubmittedPos(s.db, pos) != nil {
 	// 		return s.config().EspressoTxnsPollingInterval
 	// 	}
 	// } else {
