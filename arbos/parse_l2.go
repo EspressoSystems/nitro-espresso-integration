@@ -552,11 +552,13 @@ func MessageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espr
 	}, nil
 }
 
-func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, header *arbostypes.L1IncomingMessageHeader) (*arbostypes.L1IncomingMessage, error) {
+func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, header *arbostypes.L1IncomingMessageHeader, espressoHeader espressoTypes.Header) (*arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 
 	l2Message = append(l2Message, L2MessageKind_EspressoSovereignTx)
 	jstBytes, err := GetEspressoJstBytes(jst)
+	jst.Header = espressoHeader
+	
 	if err != nil {
 		return &arbostypes.L1IncomingMessage{}, err
 	}

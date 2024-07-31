@@ -9,8 +9,11 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"math/big"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +22,6 @@ import (
 
 	"errors"
 
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/cockroachdb/pebble"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -56,9 +58,11 @@ type TransactionStreamer struct {
 	config         TransactionStreamerConfigFetcher
 	snapSyncConfig *SnapSyncConfig
 
-	insertionMutex     sync.Mutex // cannot be acquired while reorgMutex is held
-	reorgMutex         sync.RWMutex
-	newMessageNotifier chan struct{}
+	insertionMutex sync.Mutex // cannot be acquired while reorgMutex is held
+	reorgMutex     sync.RWMutex
+
+	newMessageNotifier     chan struct{}
+	newSovereignTxNotifier chan struct{}
 
 	nextAllowedFeedReorgLog time.Time
 
@@ -70,9 +74,11 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
+	espressoClient  *espressoClient.Client
 
-	// Espresso specific fields
-	espressoTransactionQueue *EspressoTransactionQueue
+	pendingTxnsQueueMutex sync.Mutex // cannot be acquired while reorgMutex is held
+	pendingTxnsPos        []arbutil.MessageIndex
+	submittedTxnPos       *arbutil.MessageIndex
 }
 
 type TransactionStreamerConfig struct {
@@ -142,14 +148,8 @@ func NewTransactionStreamer(
 	}
 
 	if config().SovereignSequencerEnabled {
-		espressoTransactionQueueConfigFetcher := func() *EspressoTransactionQueueConfig {
-			return &EspressoTransactionQueueConfig{
-				HotShotUrl:                  config().HotShotUrl,
-				EspressoNamespace:           config().EspressoNamespace,
-				EspressoTxnsPollingInterval: config().EspressoTxnsPollingInterval,
-			}
-		}
-		streamer.espressoTransactionQueue = NewEspressoTransactionQueue(espressoTransactionQueueConfigFetcher)
+		espressoClient := espressoClient.NewClient(config().HotShotUrl)
+		streamer.espressoClient = espressoClient
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1051,31 +1051,14 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		BlockHash:       &msgResult.BlockHash,
 	}
 
-	if s.config().SovereignSequencerEnabled {
-		ctx, cancel := context.WithTimeout(context.Background(), s.config().EspressoTimeout)
-		defer cancel()
-		s.SendL2MessageToEspresso(ctx, msgWithMeta)
-
-	}
-
 	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, nil); err != nil {
 		return err
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-
+	s.SubmitEspressoTransactionPos(pos)
+	s.newSovereignTxNotifier <- struct{}{}
 	return nil
-}
-
-func (s *TransactionStreamer) SendL2MessageToEspresso(ctx context.Context, msgWithMeta arbostypes.MessageWithMetadata) {
-
-	tx := espressoTypes.Transaction{
-		Namespace: s.config().EspressoNamespace,
-		Payload:   msgWithMeta.Message.L2msg,
-	}
-
-	s.espressoTransactionQueue.SubmitTransaction(ctx, &tx)
-
 }
 
 // PauseReorgs until a matching call to ResumeReorgs (may be called concurrently)
@@ -1238,7 +1221,6 @@ func (s *TransactionStreamer) ExecuteNextMsg(ctx context.Context, exec execution
 		BlockHash:       &msgResult.BlockHash,
 	}
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-
 	return pos+1 < msgCount
 }
 
@@ -1249,66 +1231,125 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 	return s.config().ExecuteMessageLoopDelay
 }
 
+func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex) {
+	s.pendingTxnsQueueMutex.Lock()
+	defer s.pendingTxnsQueueMutex.Unlock()
+	s.pendingTxnsPos = append(s.pendingTxnsPos, pos)
+	s.newSovereignTxNotifier <- struct{}{}
+}
+
+func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Context) time.Duration {
+	// get the message at the submitted txn position
+	msg, err := s.getMessageWithMetadataAndBlockHash(*s.submittedTxnPos)
+	if err != nil {
+		log.Error("failed to get espresso message", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+	// parse the message to get the transaction bytes and the justification
+	txns, jst, err := arbos.ParseEspressoMsg(msg.MessageWithMeta.Message)
+	if err != nil {
+		log.Error("failed to parse espresso message", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	// get the latest block height
+	latestBlock, err := s.espressoClient.FetchLatestBlockHeight(ctx)
+	if err != nil {
+		log.Error("failed to fetch latest espresso block height", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+	// fetch the latest transactions in the block to see if the submitted txn is included
+	fetchedTransactions, err := s.espressoClient.FetchTransactionsInBlock(ctx, latestBlock, s.config().EspressoNamespace)
+	if err != nil {
+		log.Error("failed to fetch transactions in espresso block", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	if fetchedTransactions.Transactions == nil || len(fetchedTransactions.Transactions) <= 0 {
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	transactionInBlock := true
+	// check if the submitted txn is included in the block
+	for i, fetchedTransaction := range fetchedTransactions.Transactions {
+		if !slices.Equal(fetchedTransaction, txns[i]) {
+			transactionInBlock = false
+			break
+		}
+	}
+	// if not return and  try again when this function reruns
+	if !transactionInBlock {
+		return s.config().EspressoTxnsPollingInterval
+	}
+	//If we reach here, the transaction has been included in a block
+	//after confirming the transaction, we need to fetch the header and fill it into the block justification.
+	espressoHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, latestBlock)
+	if err != nil {
+		log.Error("espresso: failed to fetch header by height ", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	// Filling in the block justification with the header
+	// create a new message with the header and the txn and the updated block justification
+	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header, espressoHeader)
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
+	msg.MessageWithMeta.Message = newMsg
+	batch := s.db.NewBatch()
+	err = s.writeMessage(*s.submittedTxnPos, *msg, batch)
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
+	err = batch.Write()
+	if err != nil {
+		return s.config().EspressoTxnsPollingInterval
+	}
+	return time.Duration(0)
+}
+
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
-	pos, err := s.GetEspressoSubmittedPos()
-	if err != nil {
-		return s.config().EspressoTxnsPollingInterval
-	}
-	pos++
-
-	msg, err := s.GetMessage(pos)
-	if err != nil {
-		return s.config().EspressoTxnsPollingInterval
-	}
-
-	if !arbos.IsL2Message(msg.Message) {
-		if setEspressoSubmittedPos(s.db, pos) != nil {
+	// get the latest submitted txn positions.
+	// if the submittedTxnPos is not nil, it means that a transaction has been submitted to espresso and we need to poll for its finality
+	if s.submittedTxnPos != nil {
+		if s.PollSubmittedTransactionForFinality(ctx) != time.Duration(0) {
 			return s.config().EspressoTxnsPollingInterval
 		}
 	}
-	_, _, err = arbos.ParseEspressoMsg(msg.Message)
-	if err != nil {
-		return s.config().EspressoTxnsPollingInterval
-	}
 
-	// // send the transaction here
-	// err = submitL2MessageToEspresso(payload)
-	// if err != nil {
-	// 	// retry
-	// }
-	// if confirm() {
-	// newMsg, err := arbos.MessageFromEspressoSovereignTx(tx[0], jst, msg.Message.Header)
-	// if err != nil {
-	// 	return s.config().EspressoTxnsPollingInterval
-	// }
-	// msg.Message = newMsg
-	// batch := s.db.NewBatch()
-	// err = s.writeMessage(pos, arbostypes.MessageWithMetadataAndBlockHash{MessageWithMeta: *msg}, batch)
-	// if err != nil {
-	// 	return s.config().EspressoTxnsPollingInterval
-	// }
-	// err = batch.Write()
-	// if err != nil {
-	// 	return s.config().EspressoTxnsPollingInterval
-	// }
-	// 	if setEspressoSubmittedPos(s.db, pos) != nil {
-	// 		return s.config().EspressoTxnsPollingInterval
-	// 	}
-	// } else {
-	// 	// wait
-	// }
-	return 0
+	// we reach here in two cases
+	// 1. the txn has been submitted to espresso reached finality, and we now need to submit another txn so we will extract another one from pendingTxnsQueue
+	// 2. no transaction is currently in the submittedTxnPos, and thus we need to send a new transaction to espresso from the pendingTxnsQueue
+
+	s.pendingTxnsQueueMutex.Lock()
+	defer s.pendingTxnsQueueMutex.Unlock()
+	if s.submittedTxnPos == nil && len(s.pendingTxnsPos) > 0 {
+		// get the message at the pending txn position
+		msg, err := s.GetMessage(s.pendingTxnsPos[0])
+		if err != nil {
+			log.Error("failed to get espresso submitted pos", "err", err)
+			return s.config().EspressoTxnsPollingInterval
+		}
+		// submit the transaction to espresso
+		err = s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
+			Payload:   msg.Message.L2msg,
+			Namespace: s.config().EspressoNamespace,
+		})
+		if err != nil {
+			log.Error("failed to submit transaction to espresso", "err", err)
+			return s.config().EspressoTxnsPollingInterval
+		}
+		s.submittedTxnPos = &s.pendingTxnsPos[0]
+		s.pendingTxnsPos = s.pendingTxnsPos[1:]
+	}
+	return s.config().EspressoTxnsPollingInterval
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.config().SovereignSequencerEnabled {
-		// err := s.espressoTransactionQueue.Start(ctxIn)
-		// if err != nil {
-		// 	return fmt.Errorf("failed to start espresso transaction queue: %w", err)
-		// }
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newMessageNotifier)
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
