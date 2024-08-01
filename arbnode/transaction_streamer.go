@@ -1057,7 +1057,7 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-	go s.SubmitEspressoTransactionPos(pos)
+	s.SubmitEspressoTransactionPos(pos)
 	return nil
 }
 
@@ -1235,7 +1235,6 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	s.pendingTxnsQueueMutex.Lock()
 	defer s.pendingTxnsQueueMutex.Unlock()
 	s.pendingTxnsPos = append(s.pendingTxnsPos, pos)
-	s.newSovereignTxNotifier <- struct{}{}
 }
 
 func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Context) time.Duration {
@@ -1266,14 +1265,23 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
+	// fetch the namespace proof and vid common. Should use a more efficient way
+	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, data.BlockHeight, s.config().EspressoNamespace)
+	if err != nil {
+		log.Info("failed to fetch the transactions in block")
+		return s.config().EspressoTxnsPollingInterval
+	}
+
 	// Filling in the block justification with the header
 	jst.Header = espressoHeader
+	jst.Proof = &resp.Proof
+	jst.VidCommon = &resp.VidCommon
 	// create a new message with the header and the txn and the updated block justification
 	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header)
 	if err != nil {
 		return s.config().EspressoTxnsPollingInterval
 	}
-	msg.MessageWithMeta.Message = newMsg
+	msg.MessageWithMeta.Message = &newMsg
 	batch := s.db.NewBatch()
 	err = s.writeMessage(*s.submittedTxnPos, *msg, batch)
 	if err != nil {

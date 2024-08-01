@@ -207,12 +207,7 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			segments = append(segments, newTx)
 		}
 	case L2MessageKind_EspressoSovereignTx:
-		// Skip the first byte and the first transaction(jst), then process it as a normal l2 message
-		var l2KindBuf [1]byte
-		if _, err := rd.Read(l2KindBuf[:]); err != nil {
-			return nil, err
-		}
-		// Skip the first one. That should be justification.
+		// Skip the first transaction(jst), then process it as a normal l2 message
 		_, err := util.BytestringFromReader(rd, arbostypes.MaxL2MessageSize)
 		if err != nil {
 			segments := make(types.Transactions, 0)
@@ -552,20 +547,19 @@ func MessageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espr
 	}, nil
 }
 
-func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, header *arbostypes.L1IncomingMessageHeader) (*arbostypes.L1IncomingMessage, error) {
+func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, header *arbostypes.L1IncomingMessageHeader) (arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 
 	l2Message = append(l2Message, L2MessageKind_EspressoSovereignTx)
 	jstBytes, err := GetEspressoJstBytes(jst)
-
 	if err != nil {
-		return &arbostypes.L1IncomingMessage{}, err
+		return arbostypes.L1IncomingMessage{}, err
 	}
 
 	l2Message = append(l2Message, jstBytes...)
 	l2Message = append(l2Message, tx...)
 
-	return &arbostypes.L1IncomingMessage{
+	return arbostypes.L1IncomingMessage{
 		Header: header,
 		L2msg:  l2Message,
 	}, nil

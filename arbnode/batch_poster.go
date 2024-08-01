@@ -520,10 +520,18 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		if err != nil {
 			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
 		}
+		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
-		newMsg, err := arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
-		if err != nil {
-			return err
+		if arbos.IsEspressoSovereignMsg(msg.Message) {
+			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, msg.Message.Header)
+			if err != nil {
+				return err
+			}
+		} else {
+			newMsg, err = arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
+			if err != nil {
+				return err
+			}
 		}
 		msg.Message = &newMsg
 	}
