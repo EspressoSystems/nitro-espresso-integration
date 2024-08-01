@@ -1268,7 +1268,7 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	// fetch the namespace proof and vid common. Should use a more efficient way
 	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, data.BlockHeight, s.config().EspressoNamespace)
 	if err != nil {
-		log.Info("failed to fetch the transactions in block")
+		log.Warn("failed to fetch the transactions in block, will retry", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
@@ -1323,11 +1323,19 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to parse espresso message before submitting", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
+
+		espressoTx := espressoTypes.Transaction{
+			Payload:   bytes[0],
+			Namespace: s.config().EspressoNamespace,
+		}
+
+		log.Info("Submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
 		// submit the transaction to espresso
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   bytes[0],
 			Namespace: s.config().EspressoNamespace,
 		})
+
 		if err != nil {
 			log.Error("failed to submit transaction to espresso", "err", err)
 			return s.config().EspressoTxnsPollingInterval
