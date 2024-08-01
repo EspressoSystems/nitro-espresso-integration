@@ -437,19 +437,6 @@ func setMessageCount(batch ethdb.KeyValueWriter, count arbutil.MessageIndex) err
 	return nil
 }
 
-func setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos arbutil.MessageIndex) error {
-	posBytes, err := rlp.EncodeToBytes(pos)
-	if err != nil {
-		return err
-	}
-	err = batch.Put(espressoSubmittedPos, posBytes)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func dbKey(prefix []byte, pos uint64) []byte {
 	var key []byte
 	key = append(key, prefix...)
@@ -1257,8 +1244,6 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	//If we reach here, the transaction has been included in a block
-	//after confirming the transaction, we need to fetch the header and fill it into the block justification.
 	espressoHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, data.BlockHeight)
 	if err != nil {
 		log.Error("espresso: failed to fetch header by height ", "err", err)
