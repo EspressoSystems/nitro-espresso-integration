@@ -3,6 +3,7 @@ package arbtest
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 )
@@ -50,6 +51,11 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*TestClient, *Blockch
 	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
 
 	cleanup := builder.Build(t)
+
+	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
+	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
+	Require(t, err)
+	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
 	return builder.L2, builder.L2Info, cleanup
 }
 
@@ -60,13 +66,20 @@ func TestSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	cleanEspresso := runEspresso(t, ctx)
-	defer cleanEspresso()
-
 	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t)
 	defer cleanup()
 
-	err := checkTransferTxOnL2(t, ctx, l2Node, "User14", l2Info)
+	err := waitForL1Node(t, ctx)
+	Require(t, err)
+
+	cleanEspresso := runEspresso(t, ctx)
+	defer cleanEspresso()
+
+	// wait for the builder
+	err = waitForEspressoNode(t, ctx)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User14", l2Info)
 	Require(t, err)
 
 	msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()

@@ -315,14 +315,19 @@ func waitForWith(
 	}
 }
 
-// We run one L1 node, two L2 nodes and the espresso containers in this function.
-func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, func()) {
+func waitForEspressoNode(t *testing.T, ctx context.Context) error {
+	return waitForWith(t, ctx, 400*time.Second, 1*time.Second, func() bool {
+		out, err := exec.Command("curl", "http://localhost:41000/availability/block/10", "-L").Output()
+		if err != nil {
+			log.Warn("retry to check the builder", "err", err)
+			return false
+		}
+		return len(out) > 0
+	})
+}
 
-	cleanValNode := createValidationNode(ctx, t, false)
-
-	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl)
-
-	err := waitFor(t, ctx, func() bool {
+func waitForL1Node(t *testing.T, ctx context.Context) error {
+	return waitFor(t, ctx, func() bool {
 		if e := exec.Command(
 			"curl",
 			"-X",
@@ -337,19 +342,22 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 		}
 		return true
 	})
+}
+
+// We run one L1 node, two L2 nodes and the espresso containers in this function.
+func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, func()) {
+
+	cleanValNode := createValidationNode(ctx, t, false)
+
+	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl)
+
+	err := waitForL1Node(t, ctx)
 	Require(t, err)
 
 	cleanEspresso := runEspresso(t, ctx)
 
 	// wait for the builder
-	err = waitForWith(t, ctx, 400*time.Second, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://localhost:41000/availability/block/10", "-L").Output()
-		if err != nil {
-			log.Warn("retry to check the builder", "err", err)
-			return false
-		}
-		return len(out) > 0
-	})
+	err = waitForEspressoNode(t, ctx)
 	Require(t, err)
 
 	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder)
