@@ -9,16 +9,16 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"math/big"
 	"reflect"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 
 	"errors"
 
@@ -79,6 +79,7 @@ type TransactionStreamer struct {
 	pendingTxnsQueueMutex sync.Mutex // cannot be acquired while reorgMutex is held
 	pendingTxnsPos        []arbutil.MessageIndex
 	submittedTxnPos       *arbutil.MessageIndex
+	submittedTxHash       *espressoTypes.TaggedBase64
 }
 
 type TransactionStreamerConfig struct {
@@ -1239,6 +1240,12 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 }
 
 func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Context) time.Duration {
+
+	data, err := s.espressoClient.FetchTransactionByHash(ctx, s.submittedTxHash)
+	if err != nil {
+		log.Error("failed to fetch the transaction hash", "err", err, "pos", s.submittedTxnPos)
+		return s.config().EspressoTxnsPollingInterval
+	}
 	// get the message at the submitted txn position
 	msg, err := s.getMessageWithMetadataAndBlockHash(*s.submittedTxnPos)
 	if err != nil {
@@ -1252,46 +1259,18 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	// get the latest block height
-	latestBlock, err := s.espressoClient.FetchLatestBlockHeight(ctx)
-	if err != nil {
-		log.Error("failed to fetch latest espresso block height", "err", err)
-		return s.config().EspressoTxnsPollingInterval
-	}
-	// fetch the latest transactions in the block to see if the submitted txn is included
-	fetchedTransactions, err := s.espressoClient.FetchTransactionsInBlock(ctx, latestBlock, s.config().EspressoNamespace)
-	if err != nil {
-		log.Error("failed to fetch transactions in espresso block", "err", err)
-		return s.config().EspressoTxnsPollingInterval
-	}
-
-	if fetchedTransactions.Transactions == nil || len(fetchedTransactions.Transactions) <= 0 {
-		return s.config().EspressoTxnsPollingInterval
-	}
-
-	transactionInBlock := true
-	// check if the submitted txn is included in the block
-	for i, fetchedTransaction := range fetchedTransactions.Transactions {
-		if !slices.Equal(fetchedTransaction, txns[i]) {
-			transactionInBlock = false
-			break
-		}
-	}
-	// if not return and  try again when this function reruns
-	if !transactionInBlock {
-		return s.config().EspressoTxnsPollingInterval
-	}
 	//If we reach here, the transaction has been included in a block
 	//after confirming the transaction, we need to fetch the header and fill it into the block justification.
-	espressoHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, latestBlock)
+	espressoHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, data.BlockHeight)
 	if err != nil {
 		log.Error("espresso: failed to fetch header by height ", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
 	// Filling in the block justification with the header
+	jst.Header = espressoHeader
 	// create a new message with the header and the txn and the updated block justification
-	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header, espressoHeader)
+	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header)
 	if err != nil {
 		return s.config().EspressoTxnsPollingInterval
 	}
@@ -1305,6 +1284,8 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	if err != nil {
 		return s.config().EspressoTxnsPollingInterval
 	}
+	s.submittedTxnPos = nil
+	s.submittedTxHash = nil
 	return time.Duration(0)
 }
 
@@ -1330,9 +1311,14 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to get espresso submitted pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
+		bytes, _, err := arbos.ParseEspressoMsg(msg.Message)
+		if err != nil {
+			log.Error("failed to parse espresso message before submitting", "err", err)
+			return s.config().EspressoTxnsPollingInterval
+		}
 		// submit the transaction to espresso
-		err = s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
-			Payload:   msg.Message.L2msg,
+		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
+			Payload:   bytes[0],
 			Namespace: s.config().EspressoNamespace,
 		})
 		if err != nil {
@@ -1341,6 +1327,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		}
 		s.submittedTxnPos = &s.pendingTxnsPos[0]
 		s.pendingTxnsPos = s.pendingTxnsPos[1:]
+		s.submittedTxHash = hash
 	}
 	return s.config().EspressoTxnsPollingInterval
 }
