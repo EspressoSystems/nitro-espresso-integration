@@ -1057,8 +1057,7 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-	s.SubmitEspressoTransactionPos(pos)
-	s.newSovereignTxNotifier <- struct{}{}
+	go s.SubmitEspressoTransactionPos(pos)
 	return nil
 }
 
