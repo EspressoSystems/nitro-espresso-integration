@@ -92,7 +92,7 @@ type TransactionStreamerConfig struct {
 	HotShotUrl                  string        `koanf:"hotshot-url"`
 	EspressoNamespace           uint64        `koanf:"espresso-namespace"`
 	EspressoTimeout             time.Duration `koanf:"espresso-timeout"`
-	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-polling-interval"`
+	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -125,7 +125,7 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-timeout", DefaultTransactionStreamerConfig.EspressoTimeout, "timeout for the connection to the espresso network")
-	f.Duration(prefix+".espresso-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 }
 
 func NewTransactionStreamer(
