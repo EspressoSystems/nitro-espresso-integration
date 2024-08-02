@@ -91,7 +91,6 @@ type TransactionStreamerConfig struct {
 	SovereignSequencerEnabled   bool          `koanf:"sovereign-sequencer-enabled"`
 	HotShotUrl                  string        `koanf:"hotshot-url"`
 	EspressoNamespace           uint64        `koanf:"espresso-namespace"`
-	EspressoTimeout             time.Duration `koanf:"espresso-timeout"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 }
 
@@ -103,7 +102,6 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	ExecuteMessageLoopDelay:     time.Millisecond * 100,
 	SovereignSequencerEnabled:   false,
 	HotShotUrl:                  "",
-	EspressoTimeout:             time.Second * 5,
 	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
 
@@ -113,7 +111,6 @@ var TestTransactionStreamerConfig = TransactionStreamerConfig{
 	ExecuteMessageLoopDelay:     time.Millisecond,
 	SovereignSequencerEnabled:   false,
 	HotShotUrl:                  "",
-	EspressoTimeout:             time.Second * 5,
 	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
 
@@ -124,7 +121,6 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
-	f.Duration(prefix+".espresso-timeout", DefaultTransactionStreamerConfig.EspressoTimeout, "timeout for the connection to the espresso network")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 }
 
@@ -1267,17 +1263,11 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 }
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
-	// get the latest submitted txn positions.
-	// if the submittedTxnPos is not nil, it means that a transaction has been submitted to espresso and we need to poll for its finality
 	if s.submittedTxnPos != nil {
 		if s.PollSubmittedTransactionForFinality(ctx) != time.Duration(0) {
 			return s.config().EspressoTxnsPollingInterval
 		}
 	}
-
-	// we reach here in two cases
-	// 1. the txn has been submitted to espresso reached finality, and we now need to submit another txn so we will extract another one from pendingTxnsQueue
-	// 2. no transaction is currently in the submittedTxnPos, and thus we need to send a new transaction to espresso from the pendingTxnsQueue
 
 	s.pendingTxnsQueueMutex.Lock()
 	defer s.pendingTxnsQueueMutex.Unlock()
@@ -1300,7 +1290,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		}
 
 		log.Info("Submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
-		// submit the transaction to espresso
+
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   bytes[0],
 			Namespace: s.config().EspressoNamespace,
