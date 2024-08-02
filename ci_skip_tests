@@ -7,10 +7,14 @@
 # To see how we use this file, please check .github/workflows/ci.yml
 TestChallengeManagerFullAsserterCorrect
 TestChallengeManagerFullAsserterIncorrect
-TestProgramArbitratorEvmData
-TestProgramEvmData
-TestRPCStore
 TestLiveNodeConfig
+TestProgramActivateTwice
+TestProgramArbitratorEvmData
+TestProgramCallSimple
+TestProgramEvmData
+TestProgramLogs
+TestProgramLogsWithTracing
+TestRPCStore
 
 
 # These tests are specific to Espresso and we have a dedicated
