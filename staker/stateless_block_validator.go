@@ -393,7 +393,10 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		return nil, err
 	}
 	var comm espressoTypes.Commitment
-	var isHotShotLive bool
+	isHotShotLive, err := v.lightClientReader.IsHotShotLive(msg.Message.Header.BlockNumber)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
+	}
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
@@ -407,9 +410,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 			return nil, err
 		}
 		comm = snapShot.Root
-		isHotShotLive = true
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
-		isHotShotLive = false
 		blockHeight = msg.Message.Header.BlockNumber
 	}
 	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, v.streamer.ChainConfig(), &comm, isHotShotLive, blockHeight)
