@@ -523,21 +523,6 @@ func (s *TransactionStreamer) GetProcessedMessageCount() (arbutil.MessageIndex, 
 	return msgCount, nil
 }
 
-func (s *TransactionStreamer) GetEspressoSubmittedPos() (arbutil.MessageIndex, error) {
-	posBytes, err := s.db.Get(espressoSubmittedPos)
-	if err != nil {
-		return 0, err
-	}
-	var pos uint64
-	err = rlp.DecodeBytes(posBytes, &pos)
-
-	if err != nil {
-		return 0, err
-	}
-
-	return arbutil.MessageIndex(pos), nil
-}
-
 func (s *TransactionStreamer) AddMessages(pos arbutil.MessageIndex, messagesAreConfirmed bool, messages []arbostypes.MessageWithMetadata) error {
 	return s.AddMessagesAndEndBatch(pos, messagesAreConfirmed, messages, nil)
 }
