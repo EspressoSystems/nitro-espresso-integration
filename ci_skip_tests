@@ -21,6 +21,7 @@ TestProgramMemory
 TestProgramErrors
 TestPeriodicReloadOfLiveNodeConfig
 TestProgramLongArbitratorCall
+TestProgramArbitratorCalls
 TestProgramLongCall
 TestProgramArbitratorActivateTwice
 TestProgramArbitratorMemory
