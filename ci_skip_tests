@@ -15,6 +15,18 @@ TestProgramEvmData
 TestProgramLogs
 TestProgramLogsWithTracing
 TestRPCStore
+TestProgramTransientStorage
+TestProgramCalls
+TestProgramMemory
+TestProgramErrors
+TestPeriodicReloadOfLiveNodeConfig
+TestProgramLongArbitratorCall
+TestProgramLongCall
+TestProgramArbitratorActivateTwice
+TestProgramArbitratorMemory
+TestProgramArbitratorLogs
+TestProgramArbitratorTransientStorage
+TestProgramArbitratorErrors
 
 
 # These tests are specific to Espresso and we have a dedicated
