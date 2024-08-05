@@ -91,3 +91,40 @@ func TestSovereignSequencer(t *testing.T) {
 	})
 	Require(t, err)
 }
+
+func TestSovereignSequencerSendMultipleTxns(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	valNodeCleanup := createValidationNode(ctx, t, true)
+	defer valNodeCleanup()
+
+	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t)
+	defer cleanup()
+
+	err := waitForL1Node(t, ctx)
+	Require(t, err)
+
+	cleanEspresso := runEspresso(t, ctx)
+	defer cleanEspresso()
+
+	// wait for the builder
+	err = waitForEspressoNode(t, ctx)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User14", l2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User15", l2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User16", l2Info)
+	Require(t, err)
+
+	msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+	Require(t, err)
+
+	err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
+		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
+		return validatedCnt == msgCnt
+	})
+	Require(t, err)
+}

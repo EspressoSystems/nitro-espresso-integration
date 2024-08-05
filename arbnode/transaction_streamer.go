@@ -75,8 +75,6 @@ type TransactionStreamer struct {
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
 	espressoClient  *espressoClient.Client
-
-	pendingTxnsQueueMutex sync.Mutex // cannot be acquired while reorgMutex is held
 }
 
 type TransactionStreamerConfig struct {
@@ -1022,7 +1020,10 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-	s.SubmitEspressoTransactionPos(pos)
+	err = s.SubmitEspressoTransactionPos(pos)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1199,21 +1200,23 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Context) time.Duration {
 	submittedTxnPos, err := s.getEspressoSubmittedPos()
 	if err != nil {
+		log.Warn("submitted pos not found", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	submittedTxHash, err := s.getEspressoSubmittedHash()
 	if err != nil {
+		log.Warn("submitted hash not found", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
-		log.Error("failed to fetch the transaction hash", "err", err, "pos", submittedTxnPos)
+		log.Error("failed to fetch the submitted transaction hash", "err", err, "pos", submittedTxnPos)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	// get the message at the submitted txn position
 	msg, err := s.getMessageWithMetadataAndBlockHash(submittedTxnPos)
 	if err != nil {
-		log.Error("failed to get espresso message", "err", err)
+		log.Error("failed to get espresso message at submitted txn pos", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	// parse the message to get the transaction bytes and the justification
@@ -1240,23 +1243,28 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	jst.Header = espressoHeader
 	jst.Proof = &resp.Proof
 	jst.VidCommon = &resp.VidCommon
+
 	// create a new message with the header and the txn and the updated block justification
 	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header)
 	if err != nil {
+		log.Error("failed to parse espresso message", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	msg.MessageWithMeta.Message = &newMsg
 	batch := s.db.NewBatch()
 	err = s.writeMessage(submittedTxnPos, *msg, batch)
 	if err != nil {
+		log.Warn("failed to write the submitted txn pos to db ", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	err = s.setEspressoSubmittedPos(batch, nil)
 	if err != nil {
+		log.Warn("failed to set the submitted pos to nil", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 	err = s.setEspressoSubmittedHash(batch, nil)
 	if err != nil {
+		log.Warn("failed to set the submitted hash to nil", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
@@ -1274,7 +1282,7 @@ func (s *TransactionStreamer) getEspressoSubmittedPos() (arbutil.MessageIndex, e
 		return 0, err
 	}
 
-	var pos uint64
+	var pos arbutil.MessageIndex
 	err = rlp.DecodeBytes(posBytes, &pos)
 
 	if err != nil {
@@ -1297,17 +1305,17 @@ func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedB
 	return &hash, nil
 }
 
-func (s *TransactionStreamer) getEspressoPendingTxnsPos() (*[]arbutil.MessageIndex, error) {
-	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPos)
+func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageIndex, error) {
+	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
 	if err != nil {
 		return nil, err
 	}
-	var pendingTxnsPos []arbutil.MessageIndex
+	var pendingTxnsPos []*arbutil.MessageIndex
 	err = rlp.DecodeBytes(pendingTxnsBytes, &pendingTxnsPos)
 	if err != nil {
 		return nil, err
 	}
-	return &pendingTxnsPos, nil
+	return pendingTxnsPos, nil
 }
 
 func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
@@ -1348,9 +1356,9 @@ func (s *TransactionStreamer) setEspressoSubmittedHash(batch ethdb.KeyValueWrite
 	return nil
 }
 
-func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWriter, pos *[]arbutil.MessageIndex) error {
+func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWriter, pos []*arbutil.MessageIndex) error {
 	if pos == nil {
-		err := batch.Delete(espressoPendingTxnsPos)
+		err := batch.Delete(espressoPendingTxnsPositions)
 		return err
 	}
 
@@ -1358,7 +1366,7 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 	if err != nil {
 		return err
 	}
-	err = batch.Put(espressoPendingTxnsPos, posBytes)
+	err = batch.Put(espressoPendingTxnsPositions, posBytes)
 	if err != nil {
 		return err
 
@@ -1373,7 +1381,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 		return err
 
 	}
-	*pendingTxnsPos = append(*pendingTxnsPos, pos)
+	pendingTxnsPos = append(pendingTxnsPos, &pos)
 	err = s.setEspressoPendingTxnsPos(s.db.NewBatch(), pendingTxnsPos)
 	if err != nil {
 		log.Error("failed to set the pending txns", "err", err)
@@ -1387,7 +1395,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 	_, err := s.getEspressoSubmittedPos()
 	if err != nil {
-		log.Error("failed to get espresso submitted pos", "err", err)
+		log.Warn("submitted pos not found", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
@@ -1395,16 +1403,15 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	s.pendingTxnsQueueMutex.Lock()
-	defer s.pendingTxnsQueueMutex.Unlock()
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil || pendingTxnsPos == nil {
-		log.Error("failed to get pending txns", "err", err)
+	if err != nil {
+		log.Warn("failed to get pending txns", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
-	if len(*pendingTxnsPos) > 0 {
+
+	if len(pendingTxnsPos) > 0 {
 		// get the message at the pending txn position
-		msg, err := s.GetMessage((*pendingTxnsPos)[0])
+		msg, err := s.GetMessage(*pendingTxnsPos[0])
 		if err != nil {
 			log.Error("failed to get espresso submitted pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
@@ -1420,7 +1427,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			Namespace: s.config().EspressoNamespace,
 		}
 
-		log.Info("Submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
+		log.Info("submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
 
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   bytes[0],
@@ -1431,13 +1438,14 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to submit transaction to espresso", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
+
 		batch := s.db.NewBatch()
-		err = s.setEspressoSubmittedPos(batch, &(*pendingTxnsPos)[0])
+		err = s.setEspressoSubmittedPos(batch, pendingTxnsPos[0])
 		if err != nil {
 			log.Error("failed to set the submitted txn pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		*pendingTxnsPos = (*pendingTxnsPos)[1:]
+		pendingTxnsPos = pendingTxnsPos[1:]
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 		if err != nil {
 			log.Error("failed to set the pending txns", "err", err)
