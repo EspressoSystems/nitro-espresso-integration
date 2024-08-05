@@ -502,8 +502,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			return err
 		}
 
-		if jst.Header.Height == 0 {
-			// This means the header in the jst is still the dummy header.
+		if jst.Header == nil {
 			return fmt.Errorf("this msg has not been included in hotshot %v", jst.Header.Height)
 		}
 
