@@ -58,8 +58,9 @@ type TransactionStreamer struct {
 	config         TransactionStreamerConfigFetcher
 	snapSyncConfig *SnapSyncConfig
 
-	insertionMutex sync.Mutex // cannot be acquired while reorgMutex is held
-	reorgMutex     sync.RWMutex
+	insertionMutex                  sync.Mutex // cannot be acquired while reorgMutex is held
+	reorgMutex                      sync.RWMutex
+	espressoTxnsStateInsertionMutex sync.Mutex
 
 	newMessageNotifier     chan struct{}
 	newSovereignTxNotifier chan struct{}
@@ -1020,6 +1021,8 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
+	s.espressoTxnsStateInsertionMutex.Lock()
+	defer s.espressoTxnsStateInsertionMutex.Unlock()
 	err = s.SubmitEspressoTransactionPos(pos)
 	if err != nil {
 		return err
@@ -1251,6 +1254,10 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 	msg.MessageWithMeta.Message = &newMsg
+
+	s.espressoTxnsStateInsertionMutex.Lock()
+	defer s.espressoTxnsStateInsertionMutex.Unlock()
+
 	batch := s.db.NewBatch()
 	err = s.writeMessage(submittedTxnPos, *msg, batch)
 	if err != nil {
@@ -1375,6 +1382,7 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 }
 
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex) error {
+
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
 		log.Error("failed to get the pending txns", "err", err)
@@ -1438,6 +1446,9 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to submit transaction to espresso", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
+
+		s.espressoTxnsStateInsertionMutex.Lock()
+		defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 		batch := s.db.NewBatch()
 		err = s.setEspressoSubmittedPos(batch, pendingTxnsPos[0])
