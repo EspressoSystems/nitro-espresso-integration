@@ -1244,7 +1244,7 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	}
 
 	// Filling in the block justification with the header
-	jst.Header = espressoHeader
+	jst.Header = &espressoHeader
 	jst.Proof = &resp.Proof
 	jst.VidCommon = &resp.VidCommon
 
