@@ -585,7 +585,10 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
 	var comm espressoTypes.Commitment
-	isHotShotLive, err := v.lightClientReader.IsHotShotLive(msg.Message.Header.BlockNumber)
+	// TODO: Remove the hardcoded delayThreshold.
+	// This should be consistent with OSP contract.
+	// https://github.com/EspressoSystems/nitro-contracts/issues/16
+	isHotShotLive, err := v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
 	if err != nil {
 		return false, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
 	}
