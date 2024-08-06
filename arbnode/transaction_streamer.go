@@ -12,6 +12,7 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
 	"math/big"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -348,7 +349,7 @@ func (s *TransactionStreamer) reorg(batch ethdb.Batch, count arbutil.MessageInde
 				// oldMessage, accumulator stored in tracker, and the message re-read from l1
 				expectedAcc, err := s.inboxReader.tracker.GetDelayedAcc(delayedSeqNum)
 				if err != nil {
-					if !isErrNotFound(err) {
+					if !strings.Contains(err.Error(), "not found") {
 						log.Error("reorg-resequence: failed to read expected accumulator", "err", err)
 					}
 					continue
@@ -476,7 +477,7 @@ func (s *TransactionStreamer) getMessageWithMetadataAndBlockHash(seqNum arbutil.
 			return nil, err
 		}
 		blockHash = blockHashDBVal.BlockHash
-	} else if !isErrNotFound(err) {
+	} else if !strings.Contains(err.Error(), "not found") {
 		return nil, err
 	}
 
@@ -622,7 +623,7 @@ func (s *TransactionStreamer) AddBroadcastMessages(feedMessages []*m.BroadcastFe
 	if broadcastStartPos > 0 {
 		_, err := s.GetMessage(broadcastStartPos - 1)
 		if err != nil {
-			if !isErrNotFound(err) {
+			if !strings.Contains(err.Error(), "not found") {
 				return err
 			}
 			// Message before current message doesn't exist in database, so don't add current messages yet
@@ -1394,12 +1395,12 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil && !isErrNotFound(err) {
+	if err != nil && !strings.Contains(err.Error(), "not found") {
 		log.Error("failed to get the pending txns", "err", err)
 		return err
 	}
 
-	if err != nil && isErrNotFound(err) {
+	if err != nil && strings.Contains(err.Error(), "not found") {
 		// if the key doesn't exist, create a new array with the pos
 		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
 	} else {
@@ -1418,7 +1419,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 	_, err := s.getEspressoSubmittedPos()
 
-	if err != nil && !isErrNotFound(err) {
+	if err != nil && !strings.Contains(err.Error(), "not found") {
 		log.Warn("error getting submitted pos", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
