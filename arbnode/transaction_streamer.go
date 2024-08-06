@@ -143,6 +143,7 @@ func NewTransactionStreamer(
 	if config().SovereignSequencerEnabled {
 		espressoClient := espressoClient.NewClient(config().HotShotUrl)
 		streamer.espressoClient = espressoClient
+
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1384,12 +1385,18 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex) error {
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "not found") {
 		log.Error("failed to get the pending txns", "err", err)
 		return err
-
 	}
-	pendingTxnsPos = append(pendingTxnsPos, &pos)
+
+	if strings.Contains(err.Error(), "not found") {
+		// if the key doesn't exist, create a new array with the pos
+		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
+	} else {
+		pendingTxnsPos = append(pendingTxnsPos, &pos)
+	}
+
 	err = s.setEspressoPendingTxnsPos(s.db.NewBatch(), pendingTxnsPos)
 	if err != nil {
 		log.Error("failed to set the pending txns", "err", err)
