@@ -503,7 +503,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		}
 
 		if jst.Header == nil {
-			return fmt.Errorf("this msg has not been included in hotshot %v", jst.Header.Height)
+			return fmt.Errorf("this msg has not been included in hotshot")
 		}
 
 		snapshot, err := b.lightClientReader.FetchMerkleRoot(jst.Header.Height, nil)
