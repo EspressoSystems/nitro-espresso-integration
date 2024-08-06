@@ -141,8 +141,3 @@ jobs:
         run: |
           packages=`go list ./... | grep system_tests`
           gotestsum --format short-verbose --packages="$packages" --rerun-fails=1 -- -v -timeout 15m -p 1 ./... -run 'TestSovereignSequencer'
-
-      - name: Run sovereign sequencer test with multiple transactions
-        run: |
-          packages=`go list ./... | grep system_tests`
-          gotestsum --format short-verbose --packages="$packages" --rerun-fails=1 -- -v -timeout 15m -p 1 ./... -run 'TestSovereignSequencerMultiTx'
