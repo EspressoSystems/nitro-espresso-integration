@@ -12,7 +12,6 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
 	"math/big"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -349,7 +348,7 @@ func (s *TransactionStreamer) reorg(batch ethdb.Batch, count arbutil.MessageInde
 				// oldMessage, accumulator stored in tracker, and the message re-read from l1
 				expectedAcc, err := s.inboxReader.tracker.GetDelayedAcc(delayedSeqNum)
 				if err != nil {
-					if !strings.Contains(err.Error(), "not found") {
+					if !isErrNotFound(err) {
 						log.Error("reorg-resequence: failed to read expected accumulator", "err", err)
 					}
 					continue
@@ -1395,12 +1394,12 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil && !strings.Contains(err.Error(), "not found") {
+	if err != nil && !isErrNotFound(err) {
 		log.Error("failed to get the pending txns", "err", err)
 		return err
 	}
 
-	if err != nil && strings.Contains(err.Error(), "not found") {
+	if err != nil && isErrNotFound(err) {
 		// if the key doesn't exist, create a new array with the pos
 		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
 	} else {
@@ -1419,7 +1418,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 	_, err := s.getEspressoSubmittedPos()
 
-	if err != nil && !strings.Contains(err.Error(), "not found") {
+	if err != nil && !isErrNotFound(err) {
 		log.Warn("error getting submitted pos", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
