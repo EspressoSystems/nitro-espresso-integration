@@ -396,9 +396,12 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 	// TODO: Remove the hardcoded delayThreshold.
 	// This should be consistent with OSP contract.
 	// https://github.com/EspressoSystems/nitro-contracts/issues/16
-	isHotShotLive, err := v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
+	var isHotShotLive = false
+	if v.config.Espresso {
+		isHotShotLive, err = v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
+		}
 	}
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
