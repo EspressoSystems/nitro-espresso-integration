@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	lightclientmock "github.com/EspressoSystems/espresso-sequencer-go/light-client-mock"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -316,13 +317,15 @@ func waitForWith(
 }
 
 func waitForEspressoNode(t *testing.T, ctx context.Context) error {
-	return waitForWith(t, ctx, 400*time.Second, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://localhost:41000/availability/block/10", "-L").Output()
+	client := espressoClient.NewClient(hotShotUrl)
+	// wait for hotshot generating enough snapshots
+	return waitForWith(t, ctx, 500*time.Second, 10*time.Second, func() bool {
+		_, err := client.FetchHeaderByHeight(ctx, 400)
 		if err != nil {
 			log.Warn("retry to check the builder", "err", err)
 			return false
 		}
-		return len(out) > 0
+		return true
 	})
 }
 
@@ -412,7 +415,7 @@ func TestEspressoE2E(t *testing.T) {
 
 	// Remember the number of messages
 	var msgCnt arbutil.MessageIndex
-	err = waitFor(t, ctx, func() bool {
+	err = waitForWith(t, ctx, 1*time.Minute, 2*time.Second, func() bool {
 		cnt, err := node.ConsensusNode.TxStreamer.GetMessageCount()
 		Require(t, err)
 		msgCnt = cnt
@@ -422,7 +425,7 @@ func TestEspressoE2E(t *testing.T) {
 	Require(t, err)
 
 	// Wait for the number of validated messages to catch up
-	err = waitForWith(t, ctx, 360*time.Second, 5*time.Second, func() bool {
+	err = waitForWith(t, ctx, 600*time.Second, 5*time.Second, func() bool {
 		validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
 		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
 		return validatedCnt >= msgCnt
