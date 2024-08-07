@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"fmt"
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/offchainlabs/nitro/util/signature"
 	"math/big"
 	"reflect"
 	"sync"
@@ -77,6 +79,7 @@ type TransactionStreamer struct {
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
 	espressoClient  *espressoClient.Client
+	dataSigner      signature.DataSignerFunc
 }
 
 type TransactionStreamerConfig struct {
@@ -129,6 +132,7 @@ func NewTransactionStreamer(
 	fatalErrChan chan<- error,
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
+	dataSigner signature.DataSignerFunc,
 ) (*TransactionStreamer, error) {
 	streamer := &TransactionStreamer{
 		exec:               exec,
@@ -139,6 +143,7 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
+		dataSigner:         dataSigner,
 	}
 
 	if config().SovereignSequencerEnabled {
@@ -1456,8 +1461,18 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 		log.Info("submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
 
+		if s.dataSigner == nil {
+			log.Error("data signer is nil")
+			return s.config().EspressoTxnsPollingInterval
+		}
+		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(bytes[0]).Bytes())
+		if err != nil {
+			log.Error("failed to sign espresso transaction", "err", err)
+			return s.config().EspressoTxnsPollingInterval
+		}
+
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
-			Payload:   bytes[0],
+			Payload:   payloadSignature,
 			Namespace: s.config().EspressoNamespace,
 		})
 
