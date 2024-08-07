@@ -320,7 +320,7 @@ func waitForEspressoNode(t *testing.T, ctx context.Context) error {
 	client := espressoClient.NewClient(hotShotUrl)
 	// wait for hotshot generating enough snapshots
 	return waitForWith(t, ctx, 500*time.Second, 10*time.Second, func() bool {
-		_, err := client.FetchHeaderByHeight(ctx, 400)
+		_, err := client.FetchHeaderByHeight(ctx, 200)
 		if err != nil {
 			log.Warn("retry to check the builder", "err", err)
 			return false
