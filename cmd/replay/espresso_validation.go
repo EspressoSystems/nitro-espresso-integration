@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/wavmio"
@@ -38,7 +39,7 @@ func handleEspressoPreConditions(message *arbostypes.MessageWithMetadata, isEnab
 	} else if validatingEspressoHeightFailure {
 		// If conditions are such that we have been working in espresso mode, but we are suddenly receiving non espresso messages,
 		// something incorrect has occurred and we must panic
-		return validatingAgainstEspresso, func() {
+		return false, func() {
 			panic("The messaged received by the STF is not an Espresso message, but the validator is running in Espresso mode")
 		}
 	}

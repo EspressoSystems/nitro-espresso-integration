@@ -309,13 +309,11 @@ fn ready_hostio(env: &mut WasmEnv) -> MaybeEscape {
         validated_hotshot_height,
     ];
     env.large_globals = [last_block_hash, last_send_root];
-    if hotshot_liveness > 0 {
-        // HotShot is up
-        env.hotshot_comm_map.insert(block_height, hotshot_comm.0);
-    } else {
-        env.hotshot_avail_map
-            .insert(block_height, hotshot_liveness > 0);
-    }
+    // Machine doesn't know the current message type, thus it has no ability
+    // to tell the meaning of the block height. Just store all the possibilities.
+    env.hotshot_comm_map.insert(block_height, hotshot_comm.0);
+    env.hotshot_avail_map
+        .insert(block_height, hotshot_liveness > 0);
 
     while socket::read_u8(stream)? == socket::ANOTHER {
         let position = socket::read_u64(stream)?;
