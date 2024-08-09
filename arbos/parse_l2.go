@@ -264,6 +264,7 @@ func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.Espresso
 			txs = append(txs, nextMsg)
 		}
 	case L2MessageKind_EspressoSovereignTx:
+		log.Info("espresso sovereign tx")
 		nextMsg, err := util.BytestringFromReader(rd, arbostypes.MaxL2MessageSize)
 		if err != nil {
 			return nil, nil, err

@@ -1223,6 +1223,8 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		log.Warn("submitted hash not found", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
+
+	log.Info("fetching transaction for submitted hash", "hash", submittedTxHash.String())
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, &submittedTxHash)
 	if err != nil {
 		log.Error("failed to fetch the submitted transaction hash", "err", err, "hash", submittedTxHash.String())
@@ -1234,6 +1236,7 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		log.Error("failed to get espresso message at submitted txn pos", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
+
 	// parse the message to get the transaction bytes and the justification
 	txns, jst, err := arbos.ParseEspressoMsg(msg.MessageWithMeta.Message)
 	if err != nil {
@@ -1258,6 +1261,17 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	jst.Header = &espressoHeader
 	jst.Proof = &resp.Proof
 	jst.VidCommon = &resp.VidCommon
+
+	payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
+	if err != nil {
+		log.Error("failed to sign espresso transaction", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
+
+	var signedPayload []byte = make([]byte, 0)
+	// payload signature will always be 65 bytes long
+	signedPayload = append(signedPayload, txns[0]...)
+	signedPayload = append(signedPayload, payloadSignature...)
 
 	// create a new message with the header and the txn and the updated block justification
 	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header)
@@ -1448,33 +1462,36 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to get espresso submitted pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		bytes, _, err := arbos.ParseEspressoMsg(msg.Message)
+		txns, jst, err := arbos.ParseEspressoMsg(msg.Message)
+		log.Info("submitEspressoTransactions: parseEspressoMessage txns", "txns", txns)
+		log.Info("submitEspressoTransactions: parseEspressoMessage jst", "jst", jst)
 		if err != nil {
 			log.Error("failed to parse espresso message before submitting", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
 
-		espressoTx := espressoTypes.Transaction{
-			Payload:   bytes[0],
-			Namespace: s.config().EspressoNamespace,
-		}
-
-		log.Info("submitting transaction to espresso using sovereign sequencer", "tx", espressoTx)
-
 		if s.dataSigner == nil {
 			log.Error("data signer is nil")
 			return s.config().EspressoTxnsPollingInterval
 		}
-		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(bytes[0]).Bytes())
+
+		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
 		if err != nil {
 			log.Error("failed to sign espresso transaction", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
 
+		var signedPayload []byte = make([]byte, 0)
+		// payload signature will always be 65 bytes long
+		signedPayload = append(signedPayload, txns[0]...)
+		signedPayload = append(signedPayload, payloadSignature...)
+
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
-			Payload:   payloadSignature,
+			Payload:   signedPayload,
 			Namespace: s.config().EspressoNamespace,
 		})
+
+		log.Info("submitting transaction to espresso using sovereign sequencer", "txHash", hash)
 
 		if err != nil {
 			log.Error("failed to submit transaction to espresso", "err", err)
