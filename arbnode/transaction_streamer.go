@@ -1261,13 +1261,14 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	jst.Proof = &resp.Proof
 	jst.VidCommon = &resp.VidCommon
 
+	// signature will always be 65 bytes
 	payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
 	if err != nil {
 		log.Error("failed to sign espresso transaction", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	// create a new message with the header and the txn and the updated block justification
+	// create a new message with the header and the txn and updated block justification and payloadSignature
 	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, payloadSignature, msg.MessageWithMeta.Message.Header)
 	if err != nil {
 		log.Error("failed to parse espresso message", "err", err)

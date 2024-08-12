@@ -214,7 +214,7 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			return segments, err
 		}
 
-		// Here we know for sure there will be 65 bytes of signature at the end of the message
+		// Here we know for sure there will be 65 bytes of signature at the beginning of the transactions
 		sigBytes := make([]byte, 65)
 		_, err = rd.Read(sigBytes)
 
