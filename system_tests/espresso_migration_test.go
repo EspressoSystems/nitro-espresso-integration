@@ -179,7 +179,7 @@ func checkPostUpgradeAssertions(t *testing.T, proxyAdmin *mocksgen.ProxyAdminFor
 	updatedChallengeManagerImplAddr, err := proxyAdmin.GetProxyImplementation(callOpts, params.challengeManagerAddr)
 	Require(t, err)
 
-	//ensure the upgrade was actually a no-op
+	// ensure the upgrade was actually a no-op
 	err = errorIfAddressesUnequal(params.challengeManagerImplAddr, updatedChallengeManagerImplAddr)
 	Require(t, err)
 
@@ -194,6 +194,8 @@ func checkPostUpgradeAssertions(t *testing.T, proxyAdmin *mocksgen.ProxyAdminFor
 	err = errorIfHashesEqual(params.newWasmModuleRoot, params.oldWasmModuleRoot)
 	Require(t, err)
 	err = errorIfHashesUnequal(params.newWasmModuleRoot, params.wasmRootAfterUpdate)
+	Require(t, err)
+
 }
 
 func upgradeContracts(t *testing.T, l1Auth *bind.TransactOpts, ctx context.Context, builder *NodeBuilder) {
@@ -202,9 +204,9 @@ func upgradeContracts(t *testing.T, l1Auth *bind.TransactOpts, ctx context.Conte
 	wasmModuleRoot := common.HexToHash("0x12345")
 	log.Info("New wasm module root", "rootHex", wasmModuleRoot.Hex(), "rootBytes", wasmModuleRoot.Bytes())
 
-	//deploy the new OSP contracts to the L1 and record their addresses/
+	// deploy the new OSP contracts to the L1 and record their addresses/
 	newOspEntry, err := DeployNewOspToL1(t, ctx, builder.L1.Client, common.HexToAddress(builder.nodeConfig.BlockValidator.LightClientAddress), l1Auth)
-	//construct light client addr.
+	// construct light client addr.
 	Require(t, err)
 
 	log.Info("Get challenge manager account")
@@ -212,6 +214,7 @@ func upgradeContracts(t *testing.T, l1Auth *bind.TransactOpts, ctx context.Conte
 	challengeManagerAddress := builder.L1Info.GetAddress(challengeManagerIndex)
 
 	challengeManager, err := challengegen.NewChallengeManager(challengeManagerAddress, builder.L1.Client)
+	Require(t, err)
 
 	upgradeExecutorIndex := "UpgradeExecutor"
 	upgradeExecutorAddress := builder.L1Info.GetAddress(upgradeExecutorIndex)
@@ -278,6 +281,8 @@ func upgradeContracts(t *testing.T, l1Auth *bind.TransactOpts, ctx context.Conte
 	Require(t, err)
 
 	newWasmModuleRoot, err := rollupCore.WasmModuleRoot(builder.L1Info.GetDefaultCallOpts("RollupOwner", ctx))
+	Require(t, err)
+
 	log.Info("WasmModuleRoot", "newRoot", newWasmModuleRoot, "original", originalWasmRoot)
 	postUpgradeAssertionParams := PostTestAssertionParams{
 		challengeManagerAddr:     challengeManagerAddress,
@@ -389,7 +394,7 @@ func TestEspressoMigration(t *testing.T) {
 
 	log.Info("Turn off non--espresso sequencing by stopping previous sequencer")
 
-	//maybe wait here for contract upgrades?
+	// maybe wait here for contract upgrades?
 	cleanL2Node()
 
 	//	cleanL2Node()
@@ -397,7 +402,7 @@ func TestEspressoMigration(t *testing.T) {
 	// create L2 node in espresso mode here
 	log.Info("Turn on espresso network after sequencing some default transactions.")
 
-	l2Node, l2Info, _, cleanL2Node = createL2Node(ctx, t, hotShotUrl, builder, true)
+	l2Node, _, _, cleanL2Node = createL2Node(ctx, t, hotShotUrl, builder, true)
 	defer cleanL2Node()
 
 	scheduleArbOSUpgrade(t, &l2auth, builder)

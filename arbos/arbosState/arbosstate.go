@@ -326,7 +326,7 @@ func (state *ArbosState) UpgradeArbosVersion(
 		case 32, 33, 34:
 			// leave these versions open to orbit chains that may have performed custom upgrades post Bianca upgrading to espresso.
 		case 35:
-			//perform espresso upgrade here. No state changes are needed.
+			// perform espresso upgrade here. No state changes are needed.
 		case 36, 37, 38, 39:
 			// leave these versions open to orbit chains that want to have custom upgrades after an espresso integration.
 		default:
