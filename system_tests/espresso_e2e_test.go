@@ -74,7 +74,7 @@ func runEspresso(t *testing.T, ctx context.Context) func() {
 	return shutdown
 }
 
-func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder *NodeBuilder, is_hotshot bool) (*TestClient, info, *SecondNodeParams, func()) {
+func createL2Node(ctx context.Context, t *testing.T, hotShotUrl string, builder *NodeBuilder, isHotShot bool) (*TestClient, info, *SecondNodeParams, func()) {
 	nodeConfig := arbnode.ConfigDefaultL1Test()
 	builder.takeOwnership = false
 	nodeConfig.BatchPoster.Enable = false
@@ -87,7 +87,7 @@ func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Sequencer.Espresso = true
 	builder.execConfig.Sequencer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
-	builder.execConfig.Sequencer.HotShotUrl = hotshot_url
+	builder.execConfig.Sequencer.HotShotUrl = hotShotUrl
 
 	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
 
@@ -96,9 +96,9 @@ func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder
 	nodeConfig.Feed.Output.Enable = true
 	nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
 
-	if !is_hotshot {
-		builder.execConfig.Sequencer.Espresso = false
+	if !isHotShot {
 		builder.chainConfig.ArbitrumChainParams.EnableEspresso = false
+		builder.execConfig.Sequencer.Espresso = false
 	}
 	secondNodeParams := &SecondNodeParams{nodeConfig: nodeConfig}
 	client, cleanup := builder.Build2ndNode(t, secondNodeParams)
@@ -149,7 +149,7 @@ func createValidationNode(ctx context.Context, t *testing.T, jit bool) func() {
 
 }
 
-func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl string, is_hotshot bool) (*NodeBuilder, func()) {
+func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl string, isHotshot bool) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	builder.l1StackConfig.HTTPPort = 8545
 	builder.l1StackConfig.WSPort = 8546
@@ -176,7 +176,7 @@ func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl s
 	builder.nodeConfig.BlockValidator.Espresso = true
 	builder.nodeConfig.DelayedSequencer.Enable = false
 
-	if !is_hotshot {
+	if !isHotshot {
 		builder.chainConfig.ArbitrumChainParams.EnableEspresso = false
 	}
 
@@ -358,7 +358,7 @@ func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *Bl
 
 	cleanValNode := createValidationNode(ctx, t, false)
 
-	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl)
+	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl, true)
 
 	err := waitForL1Node(t, ctx)
 	Require(t, err)
