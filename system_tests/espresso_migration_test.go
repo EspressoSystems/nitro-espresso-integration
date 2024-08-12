@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/solgen/go/challengegen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
-	espressoOspGen "github.com/offchainlabs/nitro/solgen/go/ospgen"
+	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"github.com/offchainlabs/nitro/system_tests/non-espresso-nitro-contracts/go/rollupgen"
@@ -104,31 +104,31 @@ func DeployNewOspToL1(t *testing.T, ctx context.Context, l1client client, hotsho
 
 	client := l1Reader.Client()
 
-	osp0, tx, _, err := espressoOspGen.DeployOneStepProver0(auth, client)
+	osp0, tx, _, err := ospgen.DeployOneStepProver0(auth, client)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("osp0 deploy error: %w", err)
 	}
 
-	ospMem, tx, _, err := espressoOspGen.DeployOneStepProverMemory(auth, client)
+	ospMem, tx, _, err := ospgen.DeployOneStepProverMemory(auth, client)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("ospMemory deploy error: %w", err)
 	}
 
-	ospMath, tx, _, err := espressoOspGen.DeployOneStepProverMath(auth, client)
+	ospMath, tx, _, err := ospgen.DeployOneStepProverMath(auth, client)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("ospMath deploy error: %w", err)
 	}
 
-	ospHostIo, tx, _, err := espressoOspGen.DeployOneStepProverHostIo(auth, client, hotshot)
+	ospHostIo, tx, _, err := ospgen.DeployOneStepProverHostIo(auth, client, hotshot)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("ospHostIo deploy error: %w", err)
 	}
 
-	ospEntryAddr, tx, _, err := espressoOspGen.DeployOneStepProofEntry(auth, client, osp0, ospMem, ospMath, ospHostIo)
+	ospEntryAddr, tx, _, err := ospgen.DeployOneStepProofEntry(auth, client, osp0, ospMem, ospMath, ospHostIo)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("ospEntry deploy error: %w", err)
