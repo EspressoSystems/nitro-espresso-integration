@@ -598,11 +598,11 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 			log.Error("error attempting to fetch block merkle root from the light client contract", "blockHeight", blockHeight)
 			return false, err
 		}
-		// Here means that this message is from HotShot client. So we can simply assume
+		// Here means that this message is from HotShot client, so we can simply assume
 		// hotshot is live.
 		isHotShotLive = true
 		comm = snapShot.Root
-	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
+	} else if arbos.IsL2NonEspressoMsg(msg.Message) && v.config().Espresso {
 		// TODO: Remove the hardcoded delayThreshold.
 		// This should be consistent with OSP contract.
 		// https://github.com/EspressoSystems/nitro-contracts/issues/16

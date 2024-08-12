@@ -408,7 +408,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		}
 		comm = snapShot.Root
 		isHotShotLive = true
-	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
+	} else if arbos.IsL2NonEspressoMsg(msg.Message) && v.config.Espresso {
 		blockHeight = msg.Message.Header.BlockNumber
 		// TODO: Remove the hardcoded delayThreshold.
 		// This should be consistent with OSP contract.
