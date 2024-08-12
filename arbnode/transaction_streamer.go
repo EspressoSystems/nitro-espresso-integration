@@ -1224,7 +1224,6 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	log.Info("fetching transaction for submitted hash", "hash", submittedTxHash.String())
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, &submittedTxHash)
 	if err != nil {
 		log.Error("failed to fetch the submitted transaction hash", "err", err, "hash", submittedTxHash.String())
@@ -1268,13 +1267,8 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	var signedPayload []byte = make([]byte, 0)
-	// payload signature will always be 65 bytes long
-	signedPayload = append(signedPayload, txns[0]...)
-	signedPayload = append(signedPayload, payloadSignature...)
-
 	// create a new message with the header and the txn and the updated block justification
-	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, msg.MessageWithMeta.Message.Header)
+	newMsg, err := arbos.MessageFromEspressoSovereignTx(txns[0], jst, payloadSignature, msg.MessageWithMeta.Message.Header)
 	if err != nil {
 		log.Error("failed to parse espresso message", "err", err)
 		return s.config().EspressoTxnsPollingInterval
@@ -1462,9 +1456,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to get espresso submitted pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		txns, jst, err := arbos.ParseEspressoMsg(msg.Message)
-		log.Info("submitEspressoTransactions: parseEspressoMessage txns", "txns", txns)
-		log.Info("submitEspressoTransactions: parseEspressoMessage jst", "jst", jst)
+		txns, _, err := arbos.ParseEspressoMsg(msg.Message)
 		if err != nil {
 			log.Error("failed to parse espresso message before submitting", "err", err)
 			return s.config().EspressoTxnsPollingInterval
@@ -1481,10 +1473,10 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			return s.config().EspressoTxnsPollingInterval
 		}
 
-		var signedPayload []byte = make([]byte, 0)
-		// payload signature will always be 65 bytes long
-		signedPayload = append(signedPayload, txns[0]...)
+		var signedPayload []byte
+
 		signedPayload = append(signedPayload, payloadSignature...)
+		signedPayload = append(signedPayload, txns[0]...)
 
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   signedPayload,

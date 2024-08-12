@@ -527,7 +527,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
 		if arbos.IsEspressoSovereignMsg(msg.Message) {
-			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, msg.Message.Header)
+			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, []byte{}, msg.Message.Header)
 			if err != nil {
 				return err
 			}

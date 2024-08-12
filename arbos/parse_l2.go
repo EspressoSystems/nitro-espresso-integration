@@ -213,6 +213,15 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			segments := make(types.Transactions, 0)
 			return segments, err
 		}
+
+		// Here we know for sure there will be 65 bytes of signature at the end of the message
+		sigBytes := make([]byte, 65)
+		_, err = rd.Read(sigBytes)
+
+		if err != nil {
+			return nil, err
+		}
+
 		result, err := parseL2Message(rd, poster, timestamp, requestId, chainId, depth)
 		if err != nil {
 			return nil, err
@@ -264,7 +273,6 @@ func parseEspressoMsg(rd io.Reader) ([]espressoTypes.Bytes, *arbostypes.Espresso
 			txs = append(txs, nextMsg)
 		}
 	case L2MessageKind_EspressoSovereignTx:
-		log.Info("espresso sovereign tx")
 		nextMsg, err := util.BytestringFromReader(rd, arbostypes.MaxL2MessageSize)
 		if err != nil {
 			return nil, nil, err
@@ -548,7 +556,7 @@ func MessageFromEspresso(header *arbostypes.L1IncomingMessageHeader, txes []espr
 	}, nil
 }
 
-func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, header *arbostypes.L1IncomingMessageHeader) (arbostypes.L1IncomingMessage, error) {
+func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.EspressoBlockJustification, payloadSignature []byte, header *arbostypes.L1IncomingMessageHeader) (arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 
 	l2Message = append(l2Message, L2MessageKind_EspressoSovereignTx)
@@ -558,6 +566,7 @@ func MessageFromEspressoSovereignTx(tx espressoTypes.Bytes, jst *arbostypes.Espr
 	}
 
 	l2Message = append(l2Message, jstBytes...)
+	l2Message = append(l2Message, payloadSignature...)
 	l2Message = append(l2Message, tx...)
 
 	return arbostypes.L1IncomingMessage{
