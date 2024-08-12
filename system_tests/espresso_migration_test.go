@@ -310,12 +310,6 @@ func scheduleArbOSUpgrade(t *testing.T, auth *bind.TransactOpts, builder *NodeBu
 	tx, err = arbOwner.ScheduleArbOSUpgrade(auth, 35, 0) // schedule the upgrade at timestamp 0 to upgrade instantly.
 	Require(t, err)
 
-	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder, false)
-
-	return builder, l2Node, l2Info, cleanL2Node, func() {
-		cleanup()
-		cleanValNode()
-	}
 	_, err = builder.L2.EnsureTxSucceeded(tx)
 	Require(t, err)
 }
