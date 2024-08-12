@@ -585,13 +585,7 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
 	var comm espressoTypes.Commitment
-	var isHotShotLive = true
-	if v.config().Espresso {
-		isHotShotLive, err = v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
-		if err != nil {
-			return false, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
-		}
-	}
+	var isHotShotLive = false
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
@@ -604,6 +598,9 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 			log.Error("error attempting to fetch block merkle root from the light client contract", "blockHeight", blockHeight)
 			return false, err
 		}
+		// Here means that this message is from HotShot client. So we can simply assume
+		// hotshot is live.
+		isHotShotLive = true
 		comm = snapShot.Root
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
 		// TODO: Remove the hardcoded delayThreshold.

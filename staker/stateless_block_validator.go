@@ -393,7 +393,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		return nil, err
 	}
 	var comm espressoTypes.Commitment
-	var isHotShotLive = true
+	var isHotShotLive = false
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
@@ -407,6 +407,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 			return nil, err
 		}
 		comm = snapShot.Root
+		isHotShotLive = true
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
 		blockHeight = msg.Message.Header.BlockNumber
 		// TODO: Remove the hardcoded delayThreshold.
