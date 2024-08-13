@@ -1389,7 +1389,6 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 }
 
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
-	log.Info("Submitting transaction to espresso - test", "pos", pos)
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil && !isErrNotFound(err) {
 		log.Error("failed to get the pending txns", "err", err)
@@ -1411,7 +1410,6 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	err = batch.Write()
 	if err != nil {
 		return err
-
 	}
 
 	return nil
