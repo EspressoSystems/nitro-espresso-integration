@@ -7,7 +7,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/util/signature"
 	"testing"
 )
 
@@ -18,14 +17,10 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	privateKey, err := crypto.GenerateKey()
-	Require(t, err)
-	dataSigner := signature.DataSignerFromPrivateKey(privateKey)
-
-	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t, dataSigner)
+	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t)
 	defer cleanup()
 
-	err = waitForL1Node(t, ctx)
+	err := waitForL1Node(t, ctx)
 	Require(t, err)
 
 	cleanEspresso := runEspresso(t, ctx)
@@ -42,6 +37,7 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	Require(t, err)
 
 	//msgCnt, err =
+	privateKey := l2Info.GetInfoWithPrivKey("DataSigner").PrivateKey
 
 	message, err := l2Node.ConsensusNode.TxStreamer.GetMessage(msgCnt - 1)
 	Require(t, err)
