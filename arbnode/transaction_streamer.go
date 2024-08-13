@@ -1264,7 +1264,7 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 	// signature will always be 65 bytes
 	payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
 	if err != nil {
-		log.Error("failed to sign espresso transaction", "err", err)
+		log.Error("failed to sign transaction hash before submitting to espresso", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
@@ -1471,7 +1471,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		// Internally the signature doesn't need to verified because the batch poster receives the transactions from the sequencer.
 		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
 		if err != nil {
-			log.Error("failed to sign espresso transaction", "err", err)
+			log.Error("failed to sign transaction hash before submitting to espresso", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
 
