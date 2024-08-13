@@ -926,13 +926,7 @@ func createTestNode(
 	execNode, err := gethexec.CreateExecutionNode(ctx, stack, chainDb, blockchain, nil, execConfigFetcher)
 	Require(t, err)
 
-	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
-	err = l2info.GenerateAccountWithMnemonic("DataSigner", mnemonic, 10)
-	Require(t, err)
-	dataSigner := signature.DataSignerFromPrivateKey(l2info.GetInfoWithPrivKey("DataSigner").PrivateKey)
-	Require(t, err)
-
-	currentNode, err := arbnode.CreateNode(ctx, stack, execNode, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), nil, nil, nil, nil, dataSigner, feedErrChan, big.NewInt(1337), nil)
+	currentNode, err := arbnode.CreateNode(ctx, stack, execNode, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil)
 	Require(t, err)
 
 	// Give the node an init message

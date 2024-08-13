@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func createL1AndL2Node(ctx context.Context, t *testing.T) (*TestClient, *BlockchainTestInfo, func()) {
+func createL1AndL2Node(ctx context.Context, t *testing.T) (*TestClient, *BlockchainTestInfo, *BlockchainTestInfo, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	builder.l1StackConfig.HTTPPort = 8545
 	builder.l1StackConfig.WSPort = 8546
@@ -56,7 +56,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*TestClient, *Blockch
 	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
 	Require(t, err)
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
-	return builder.L2, builder.L2Info, cleanup
+	return builder.L2, builder.L2Info, builder.L1Info, cleanup
 }
 
 func TestSovereignSequencer(t *testing.T) {
@@ -66,7 +66,7 @@ func TestSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t)
+	l2Node, l2Info, _, cleanup := createL1AndL2Node(ctx, t)
 	defer cleanup()
 
 	err := waitForL1Node(t, ctx)

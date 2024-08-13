@@ -17,7 +17,7 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	l2Node, l2Info, cleanup := createL1AndL2Node(ctx, t)
+	l2Node, l2Info, l1Info, cleanup := createL1AndL2Node(ctx, t)
 	defer cleanup()
 
 	err := waitForL1Node(t, ctx)
@@ -36,18 +36,17 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
 	Require(t, err)
 
-	//msgCnt, err =
-	privateKey := l2Info.GetInfoWithPrivKey("DataSigner").PrivateKey
+	privateKey := l1Info.GetInfoWithPrivKey("Sequencer").PrivateKey
 
 	message, err := l2Node.ConsensusNode.TxStreamer.GetMessage(msgCnt - 1)
 	Require(t, err)
 
-	err = checkSignatureValidation(l2Node, message, privateKey.PublicKey)
+	err = checkSignatureValidation(message, privateKey.PublicKey)
 	Require(t, err)
 
 }
 
-func checkSignatureValidation(l2Node *TestClient, message *arbostypes.MessageWithMetadata, publicKey ecdsa.PublicKey) error {
+func checkSignatureValidation(message *arbostypes.MessageWithMetadata, publicKey ecdsa.PublicKey) error {
 	txns, _, err := arbos.ParseEspressoMsg(message.Message)
 	if err != nil {
 		return err
