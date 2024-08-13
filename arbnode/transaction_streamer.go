@@ -1464,10 +1464,11 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		}
 
 		if s.dataSigner == nil {
-			log.Error("data signer is nil")
-			return s.config().EspressoTxnsPollingInterval
+			panic("data signer not initialized, needs to be initialized to sign the transaction before submitting it to espresso")
 		}
 
+		// Signing the transaction here before sending it to espresso so that external parties have a way to verify that a transaction belongs to a certain namespace
+		// Internally the signature doesn't need to verified because the batch poster receives the transactions from the sequencer.
 		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(txns[0]).Bytes())
 		if err != nil {
 			log.Error("failed to sign espresso transaction", "err", err)
@@ -1479,6 +1480,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		signedPayload = append(signedPayload, payloadSignature...)
 		signedPayload = append(signedPayload, txns[0]...)
 
+		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   signedPayload,
 			Namespace: s.config().EspressoNamespace,
