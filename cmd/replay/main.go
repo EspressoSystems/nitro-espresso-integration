@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+	"github.com/offchainlabs/nitro/arbcompress"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -103,6 +104,11 @@ func (i WavmInbox) ReadDelayedInbox(seqNum uint64) (*arbostypes.L1IncomingMessag
 	return arbostypes.ParseIncomingL1Message(bytes.NewReader(data), func(batchNum uint64) ([]byte, error) {
 		return wavmio.ReadInboxMessage(batchNum), nil
 	})
+}
+
+func (i WavmInbox) RecedeSequencerInbox() {
+	log.Info("RecedeSequencerInbox")
+	wavmio.RecedeInboxMessage()
 }
 
 type PreimageDASReader struct {
@@ -203,6 +209,80 @@ func main() {
 	statedb, err := state.NewDeterministic(lastBlockStateRoot, db)
 	if err != nil {
 		panic(fmt.Sprintf("Error opening state db: %v", err.Error()))
+	}
+
+	readHotShotPayload := func(dasEnabled bool, unconfirmed, num uint64) ([]byte, error) {
+		/// 1. Create the inbox multiplexer. Copied from `readMessage`.
+		var delayedMessagesRead uint64
+		if lastBlockHeader != nil {
+			delayedMessagesRead = lastBlockHeader.Nonce.Uint64()
+		}
+		var dasReader daprovider.DASReader
+		var dasKeysetFetcher daprovider.DASKeysetFetcher
+		if dasEnabled {
+			// DAS batch and keysets are all together in the same preimage binary.
+			dasReader = &PreimageDASReader{}
+			dasKeysetFetcher = &PreimageDASReader{}
+		}
+		backend := WavmInbox{}
+		var keysetValidationMode = daprovider.KeysetPanicIfInvalid
+		if backend.GetPositionWithinMessage() > 0 {
+			keysetValidationMode = daprovider.KeysetDontValidate
+		}
+		var dapReaders []daprovider.Reader
+		if dasReader != nil {
+			dapReaders = append(dapReaders, daprovider.NewReaderForDAS(dasReader, dasKeysetFetcher))
+		}
+		dapReaders = append(dapReaders, daprovider.NewReaderForBlobReader(&BlobPreimageReader{}))
+		inboxMultiplexer := arbstate.NewInboxMultiplexer(backend, delayedMessagesRead, dapReaders, keysetValidationMode)
+
+		// Set the current index
+		inboxMultiplexer.SetCurrentIndex(wavmio.GetPositionWithinMessage())
+		ctx := context.Background()
+		// Skip the num of unconfirmed messages
+		for {
+			if unconfirmed == 0 {
+				break
+			}
+			bytes, err := inboxMultiplexer.RecedeSequencerMessage(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			if isL2Message(bytes) {
+				unconfirmed -= 1
+			}
+
+		}
+
+		// Get the hotshot payload
+		for {
+			if num == 0 {
+				break
+			}
+			bytes, err := inboxMultiplexer.RecedeSequencerMessage(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			if !isL2Message(bytes) {
+				continue
+			}
+
+			num -= 1
+			kind := bytes[0]
+			segment := bytes[1:]
+			if kind == 1 {
+				decompressed, err := arbcompress.Decompress(segment, arbostypes.MaxL2MessageSize)
+				if err != nil {
+					return nil, nil
+				}
+				segment = decompressed
+			}
+			// Parse the message and get the hotshot transaction
+		}
+
+		return nil, nil
 	}
 
 	readMessage := func(dasEnabled bool) *arbostypes.MessageWithMetadata {
@@ -385,4 +465,11 @@ func main() {
 	wavmio.SetSendRoot(extraInfo.SendRoot)
 
 	wavmio.StubFinal()
+}
+
+func isL2Message(segment []byte) bool {
+	segmentKind := segment[0]
+	// const BatchSegmentKindL2Message uint8 = 0
+	// const BatchSegmentKindL2MessageBrotli uint8 = 1
+	return segmentKind == 0 || segmentKind == 1
 }

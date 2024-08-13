@@ -154,6 +154,10 @@ func AdvanceInboxMessage() {
 	seqAdvanced++
 }
 
+func RecedeInboxMessage() {
+	seqAdvanced--
+}
+
 func ResolveTypedPreimage(ty arbutil.PreimageType, hash common.Hash) ([]byte, error) {
 	val, ok := preimages[hash]
 	if !ok {

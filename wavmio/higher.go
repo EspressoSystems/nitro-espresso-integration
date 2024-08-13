@@ -85,6 +85,11 @@ func AdvanceInboxMessage() {
 	setGlobalStateU64(IDX_INBOX_POSITION, pos+1)
 }
 
+func RecedeInboxMessage() {
+	pos := getGlobalStateU64(IDX_INBOX_POSITION)
+	setGlobalStateU64(IDX_INBOX_POSITION, pos-1)
+}
+
 func ResolveTypedPreimage(ty arbutil.PreimageType, hash common.Hash) ([]byte, error) {
 	return readBuffer(func(offset uint32, buf unsafe.Pointer) uint32 {
 		hashUnsafe := unsafe.Pointer(&hash[0])

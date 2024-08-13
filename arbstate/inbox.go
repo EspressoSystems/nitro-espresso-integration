@@ -29,6 +29,7 @@ type InboxBackend interface {
 
 	GetSequencerInboxPosition() uint64
 	AdvanceSequencerInbox()
+	RecedeSequencerInbox()
 
 	GetPositionWithinMessage() uint64
 	SetPositionWithinMessage(pos uint64)
@@ -172,6 +173,8 @@ type inboxMultiplexer struct {
 	cachedSegmentBlockNumber  uint64
 	cachedSubMessageNumber    uint64
 	keysetValidationMode      daprovider.KeysetValidationMode
+
+	cachedEspressoIndex uint64
 }
 
 func NewInboxMultiplexer(backend InboxBackend, delayedMessagesRead uint64, dapReaders []daprovider.Reader, keysetValidationMode daprovider.KeysetValidationMode) arbostypes.InboxMultiplexer {
@@ -220,6 +223,39 @@ func (r *inboxMultiplexer) Pop(ctx context.Context) (*arbostypes.MessageWithMeta
 		}
 	}
 	return msg, err
+}
+
+func (r *inboxMultiplexer) RecedeSequencerMessage(ctx context.Context) ([]byte, error) {
+	if r.cachedSequencerMessage == nil {
+		// Note: batchBlockHash will be zero in the replay binary, but that's fine
+		bytes, batchBlockHash, realErr := r.backend.PeekSequencerInbox()
+		if realErr != nil {
+			return nil, realErr
+		}
+		var err error
+		r.cachedSequencerMessage, err = parseSequencerMessage(ctx, 0, batchBlockHash, bytes, r.dapReaders, r.keysetValidationMode)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if r.cachedEspressoIndex > 0 {
+		r.cachedEspressoIndex -= 1
+		return r.cachedSequencerMessage.segments[r.cachedEspressoIndex], nil
+	}
+
+	r.backend.RecedeSequencerInbox()
+	bytes, batchBlockHash, _ := r.backend.PeekSequencerInbox()
+	var err error
+	r.cachedSequencerMessage, err = parseSequencerMessage(ctx, 0, batchBlockHash, bytes, r.dapReaders, r.keysetValidationMode)
+	if err != nil {
+		return nil, err
+	}
+	r.cachedEspressoIndex = uint64(len(r.cachedSequencerMessage.segments)) - 1
+	return r.cachedSequencerMessage.segments[r.cachedEspressoIndex], nil
+}
+
+func (r *inboxMultiplexer) SetCurrentIndex(index uint64) {
+	r.cachedEspressoIndex = index
 }
 
 func (r *inboxMultiplexer) advanceSequencerMsg() {
