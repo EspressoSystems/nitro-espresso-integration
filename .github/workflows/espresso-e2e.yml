@@ -139,12 +139,12 @@ jobs:
 
       - name: Run espresso migration test
         run: |
-          gotestsum --format=testname short-verbose --packages=./system_tests --rerun-fails=1 -- -v -timeout 15m -run 'TestEspressoMigration'
+          gotestsum --format=testname --packages=./system_tests --rerun-fails=1 -- -v -timeout 15m -run 'TestEspressoMigration'
 
       - name: Run E2E test
         run: |
-          gotestsum --format=testname short-verbose --packages=./system_tests --rerun-fails=1 -- -v -timeout 35m -run 'TestEspressoE2E'
+          gotestsum --format=testname --packages=./system_tests --rerun-fails=1 -- -v -timeout 35m -run 'TestEspressoE2E'
 
       - name: Run sovereign sequencer test
         run: |
-          gotestsum --format=testname short-verbose --packages=./system_tests --rerun-fails=1 -- -v -timeout 15m -run 'TestSovereignSequencer'
+          gotestsum --format=testname --packages=./system_tests --rerun-fails=1 -- -v -timeout 15m -run 'TestSovereignSequencer'
