@@ -11,11 +11,10 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
+	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
-	"github.com/offchainlabs/nitro/system_tests/non-espresso-nitro-contracts/go/rollupgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -41,34 +40,13 @@ func BuildNonEspressoNetwork(ctx context.Context, t *testing.T) (*NodeBuilder, *
 
 	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl, false)
 
-	err := waitFor(t, ctx, func() bool {
-		if e := exec.Command(
-			"curl",
-			"-X",
-			"POST",
-			"-H",
-			"Content-Type: application/json",
-			"-d",
-			"{'jsonrpc':'2.0','id':45678,'method':'eth_chainId','params':[]}",
-			"http://localhost:8545",
-		).Run(); e != nil {
-			return false
-		}
-		return true
-	})
+	err := waitForL1Node(t, ctx)
 	Require(t, err)
 
 	cleanEspresso := runEspresso(t, ctx)
 
 	// wait for the builder
-	err = waitForWith(t, ctx, 400*time.Second, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://localhost:41000/availability/block/10", "-L").Output()
-		if err != nil {
-			log.Warn("retry to check the builder", "err", err)
-			return false
-		}
-		return len(out) > 0
-	})
+	err = waitForEspressoNode(t, ctx)
 	Require(t, err)
 
 	l2Node, l2Info, secondNodeParams, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder, false)
