@@ -188,7 +188,7 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	// Espresso specific flags
 	f.Bool(prefix+".espresso", DefaultSequencerConfig.Espresso, "enable the Espresso integration")
 	f.String(prefix+".hotshot-url", DefaultSequencerConfig.HotShotUrl, "URL to the hotshot query service of an Espresso node")
-	f.Uint64(prefix+".espresso-namespace", DefaultSequencerConfig.EspressoNamespace, "Espresso namespace that corresponds this Nitro chain")
+	f.Uint64(prefix+".espresso-namespace", DefaultSequencerConfig.EspressoNamespace, "Espresso namespace that corresponds to this Nitro chain")
 	f.Uint64(prefix+".start-hotshot-block", DefaultSequencerConfig.StartHotShotBlock, "the Espresso block number when the Nitro chain is created")
 	f.Duration(prefix+".switch-poll-interval", DefaultSequencerConfig.SwitchPollInterval, "Espresso escape hatch polling interval to check for HotShot liveness")
 	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable sovereign sequencer mode for the Espresso integration")
