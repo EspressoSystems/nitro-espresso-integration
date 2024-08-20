@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/wavmio"

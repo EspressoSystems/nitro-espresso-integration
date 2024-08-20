@@ -393,7 +393,7 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		return nil, err
 	}
 	var comm espressoTypes.Commitment
-	var isHotShotLive bool
+	var isHotShotLive = false
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
@@ -408,9 +408,15 @@ func (v *StatelessBlockValidator) CreateReadyValidationEntry(ctx context.Context
 		}
 		comm = snapShot.Root
 		isHotShotLive = true
-	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
-		isHotShotLive = false
+	} else if arbos.IsL2NonEspressoMsg(msg.Message) && v.config.Espresso {
 		blockHeight = msg.Message.Header.BlockNumber
+		// TODO: Remove the hardcoded delayThreshold.
+		// This should be consistent with OSP contract.
+		// https://github.com/EspressoSystems/nitro-contracts/issues/16
+		isHotShotLive, err = v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
+		if err != nil {
+			return nil, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
+		}
 	}
 	entry, err := newValidationEntry(pos, start, end, msg, seqMsg, batchBlockHash, prevDelayed, v.streamer.ChainConfig(), &comm, isHotShotLive, blockHeight)
 	if err != nil {

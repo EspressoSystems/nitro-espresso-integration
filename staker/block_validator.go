@@ -585,7 +585,7 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
 	var comm espressoTypes.Commitment
-	var isHotShotLive bool
+	var isHotShotLive = false
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
 		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
@@ -598,10 +598,18 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 			log.Error("error attempting to fetch block merkle root from the light client contract", "blockHeight", blockHeight)
 			return false, err
 		}
-		comm = snapShot.Root
+		// Here means that this message is from HotShot client, so we can simply assume
+		// hotshot is live.
 		isHotShotLive = true
-	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
-		isHotShotLive = false
+		comm = snapShot.Root
+	} else if arbos.IsL2NonEspressoMsg(msg.Message) && v.config().Espresso {
+		// TODO: Remove the hardcoded delayThreshold.
+		// This should be consistent with OSP contract.
+		// https://github.com/EspressoSystems/nitro-contracts/issues/16
+		isHotShotLive, err = v.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, 3)
+		if err != nil {
+			return false, fmt.Errorf("error fetching the hotshot liveness at L1height %d: %w", msg.Message.Header.BlockNumber, err)
+		}
 		blockHeight = msg.Message.Header.BlockNumber
 	}
 	chainConfig := v.streamer.ChainConfig()
