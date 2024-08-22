@@ -1027,7 +1027,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	if arbos.IsEspressoMsg(msgWithMeta.Message) {
-		log.Info("Submitting transaction to espresso", "tx", msgWithMeta.Message)
 		err = s.SubmitEspressoTransactionPos(pos, s.db.NewBatch())
 		if err != nil {
 			return err
@@ -1417,7 +1416,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	if err != nil {
 		return err
 	}
-	log.Info("Submitted transaction to espresso successfully", "pos", pos)
+
 	return nil
 }
 
