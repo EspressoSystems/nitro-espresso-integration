@@ -2,25 +2,23 @@ package arbtest
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/offchainlabs/nitro/arbutil"
 	"math/big"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
-	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/staker/validatorwallet"
 	"github.com/offchainlabs/nitro/validator"
@@ -34,12 +32,13 @@ var workingDir = "./espresso-e2e"
 var lightClientAddress = "0xb075b82c7a23e0994df4793422a1f03dbcf9136f"
 
 var hotShotUrl = "http://127.0.0.1:41000"
-var delayThreshold = 10
+
+// var delayThreshold = 10
 
 var (
 	jitValidationPort = 54320
 	arbValidationPort = 54321
-	broadcastPort     = 9642
+	// broadcastPort     = 9642
 )
 
 func runEspresso(t *testing.T, ctx context.Context) func() {
@@ -70,38 +69,38 @@ func runEspresso(t *testing.T, ctx context.Context) func() {
 	return shutdown
 }
 
-func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder *NodeBuilder) (*TestClient, info, func()) {
-	nodeConfig := arbnode.ConfigDefaultL1Test()
-	builder.takeOwnership = false
-	nodeConfig.BatchPoster.Enable = false
-	nodeConfig.BlockValidator.Enable = false
-	nodeConfig.DelayedSequencer.Enable = true
-	nodeConfig.Sequencer = true
-	builder.execConfig.Sequencer.LightClientAddress = lightClientAddress
-	builder.execConfig.Sequencer.SwitchPollInterval = 10 * time.Second
-	builder.execConfig.Sequencer.SwitchDelayThreshold = uint64(delayThreshold)
-	builder.execConfig.Sequencer.Enable = true
-	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
-	builder.execConfig.Sequencer.Espresso = false
-	builder.execConfig.Sequencer.EnableEspressoSovereign = true
-	builder.execConfig.Sequencer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
-	builder.execConfig.Sequencer.HotShotUrl = hotshot_url
-
-	// transaction stream config
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
-	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
-	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
-
-	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
-
-	nodeConfig.Feed.Output.Enable = true
-	nodeConfig.Feed.Output.Addr = "0.0.0.0"
-	nodeConfig.Feed.Output.Enable = true
-	nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
-
-	client, cleanup := builder.Build2ndNode(t, &SecondNodeParams{nodeConfig: nodeConfig})
-	return client, builder.L2Info, cleanup
-}
+// func createL2Node(ctx context.Context, t *testing.T, hotshot_url string, builder *NodeBuilder) (*TestClient, info, func()) {
+//	nodeConfig := arbnode.ConfigDefaultL1Test()
+//	builder.takeOwnership = false
+//	nodeConfig.BatchPoster.Enable = false
+//	nodeConfig.BlockValidator.Enable = false
+//	nodeConfig.DelayedSequencer.Enable = true
+//	nodeConfig.Sequencer = true
+//	builder.execConfig.Sequencer.LightClientAddress = lightClientAddress
+//	builder.execConfig.Sequencer.SwitchPollInterval = 10 * time.Second
+//	builder.execConfig.Sequencer.SwitchDelayThreshold = uint64(delayThreshold)
+//	builder.execConfig.Sequencer.Enable = true
+//	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
+//	builder.execConfig.Sequencer.Espresso = false
+//	builder.execConfig.Sequencer.EnableEspressoSovereign = true
+//	builder.execConfig.Sequencer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
+//	builder.execConfig.Sequencer.HotShotUrl = hotshot_url
+//
+//	// transaction stream config
+//	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
+//	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
+//	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
+//
+//	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+//
+//	nodeConfig.Feed.Output.Enable = true
+//	nodeConfig.Feed.Output.Addr = "0.0.0.0"
+//	nodeConfig.Feed.Output.Enable = true
+//	nodeConfig.Feed.Output.Port = fmt.Sprintf("%d", broadcastPort)
+//
+//	client, cleanup := builder.Build2ndNode(t, &SecondNodeParams{nodeConfig: nodeConfig})
+//	return client, builder.L2Info, cleanup
+//}
 
 func createValidationNode(ctx context.Context, t *testing.T, jit bool) func() {
 	stackConf := node.DefaultConfig
@@ -147,88 +146,88 @@ func createValidationNode(ctx context.Context, t *testing.T, jit bool) func() {
 
 }
 
-func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl string) (*NodeBuilder, func()) {
-	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	builder.l1StackConfig.HTTPPort = 8545
-	builder.l1StackConfig.WSPort = 8546
-	builder.l1StackConfig.HTTPHost = "0.0.0.0"
-	builder.l1StackConfig.HTTPVirtualHosts = []string{"*"}
-	builder.l1StackConfig.WSHost = "0.0.0.0"
-	builder.l1StackConfig.DataDir = t.TempDir()
-	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
-
-	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
-
-	builder.nodeConfig.Feed.Input.URL = []string{fmt.Sprintf("ws://127.0.0.1:%d", broadcastPort)}
-	builder.nodeConfig.BatchPoster.Enable = true
-	builder.nodeConfig.BatchPoster.ErrorDelay = 5 * time.Second
-	builder.nodeConfig.BatchPoster.MaxSize = 41
-	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
-	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
-	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotshotUrl
-	builder.nodeConfig.BlockValidator.Enable = true
-	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
-	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
-	builder.nodeConfig.BlockValidator.LightClientAddress = lightClientAddress
-	builder.nodeConfig.BlockValidator.Espresso = true
-	builder.nodeConfig.DelayedSequencer.Enable = false
-
-	// sequencer config
-	builder.nodeConfig.Sequencer = true
-	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
-	builder.execConfig.Sequencer.Enable = true
-	builder.execConfig.Sequencer.Espresso = false
-	builder.execConfig.Sequencer.EnableEspressoSovereign = true
-
-	// transaction stream config
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
-	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
-	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
-
-	cleanup := builder.Build(t)
-
-	// Fund the commitment task
-	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
-	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
-	Require(t, err)
-	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
-
-	// Fund the stakers
-	builder.L1Info.GenerateAccount("Staker1")
-	builder.L1.TransferBalance(t, "Faucet", "Staker1", big.NewInt(9e18), builder.L1Info)
-	builder.L1Info.GenerateAccount("Staker2")
-	builder.L1.TransferBalance(t, "Faucet", "Staker2", big.NewInt(9e18), builder.L1Info)
-	builder.L1Info.GenerateAccount("Staker3")
-	builder.L1.TransferBalance(t, "Faucet", "Staker3", big.NewInt(9e18), builder.L1Info)
-
-	// Update the rollup
-	deployAuth := builder.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	upgradeExecutor, err := upgrade_executorgen.NewUpgradeExecutor(builder.L2.ConsensusNode.DeployInfo.UpgradeExecutor, builder.L1.Client)
-	Require(t, err)
-	rollupABI, err := abi.JSON(strings.NewReader(rollupgen.RollupAdminLogicABI))
-	Require(t, err)
-
-	setMinAssertPeriodCalldata, err := rollupABI.Pack("setMinimumAssertionPeriod", big.NewInt(0))
-	Require(t, err, "unable to generate setMinimumAssertionPeriod calldata")
-	tx, err := upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setMinAssertPeriodCalldata)
-	Require(t, err, "unable to set minimum assertion period")
-	_, err = builder.L1.EnsureTxSucceeded(tx)
-	Require(t, err)
-
-	// Add the stakers into the validator whitelist
-	staker1Addr := builder.L1Info.GetAddress("Staker1")
-	staker2Addr := builder.L1Info.GetAddress("Staker2")
-	staker3Addr := builder.L1Info.GetAddress("Staker3")
-	setValidatorCalldata, err := rollupABI.Pack("setValidator", []common.Address{staker1Addr, staker2Addr, staker3Addr}, []bool{true, true, true})
-	Require(t, err, "unable to generate setValidator calldata")
-	tx, err = upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setValidatorCalldata)
-	Require(t, err, "unable to set validators")
-	_, err = builder.L1.EnsureTxSucceeded(tx)
-	Require(t, err)
-
-	return builder, cleanup
-}
+// func createL1ValidatorPosterNode(ctx context.Context, t *testing.T, hotshotUrl string) (*NodeBuilder, func()) {
+//	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
+//	builder.l1StackConfig.HTTPPort = 8545
+//	builder.l1StackConfig.WSPort = 8546
+//	builder.l1StackConfig.HTTPHost = "0.0.0.0"
+//	builder.l1StackConfig.HTTPVirtualHosts = []string{"*"}
+//	builder.l1StackConfig.WSHost = "0.0.0.0"
+//	builder.l1StackConfig.DataDir = t.TempDir()
+//	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
+//
+//	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+//
+//	builder.nodeConfig.Feed.Input.URL = []string{fmt.Sprintf("ws://127.0.0.1:%d", broadcastPort)}
+//	builder.nodeConfig.BatchPoster.Enable = true
+//	builder.nodeConfig.BatchPoster.ErrorDelay = 5 * time.Second
+//	builder.nodeConfig.BatchPoster.MaxSize = 41
+//	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
+//	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
+//	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
+//	builder.nodeConfig.BatchPoster.HotShotUrl = hotshotUrl
+//	builder.nodeConfig.BlockValidator.Enable = true
+//	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
+//	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
+//	builder.nodeConfig.BlockValidator.LightClientAddress = lightClientAddress
+//	builder.nodeConfig.BlockValidator.Espresso = true
+//	builder.nodeConfig.DelayedSequencer.Enable = false
+//
+//	// sequencer config
+//	builder.nodeConfig.Sequencer = true
+//	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
+//	builder.execConfig.Sequencer.Enable = true
+//	builder.execConfig.Sequencer.Espresso = false
+//	builder.execConfig.Sequencer.EnableEspressoSovereign = true
+//
+//	// transaction stream config
+//	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
+//	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
+//	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
+//
+//	cleanup := builder.Build(t)
+//
+//	// Fund the commitment task
+//	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
+//	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
+//	Require(t, err)
+//	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
+//
+//	// Fund the stakers
+//	builder.L1Info.GenerateAccount("Staker1")
+//	builder.L1.TransferBalance(t, "Faucet", "Staker1", big.NewInt(9e18), builder.L1Info)
+//	builder.L1Info.GenerateAccount("Staker2")
+//	builder.L1.TransferBalance(t, "Faucet", "Staker2", big.NewInt(9e18), builder.L1Info)
+//	builder.L1Info.GenerateAccount("Staker3")
+//	builder.L1.TransferBalance(t, "Faucet", "Staker3", big.NewInt(9e18), builder.L1Info)
+//
+//	// Update the rollup
+//	deployAuth := builder.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
+//	upgradeExecutor, err := upgrade_executorgen.NewUpgradeExecutor(builder.L2.ConsensusNode.DeployInfo.UpgradeExecutor, builder.L1.Client)
+//	Require(t, err)
+//	rollupABI, err := abi.JSON(strings.NewReader(rollupgen.RollupAdminLogicABI))
+//	Require(t, err)
+//
+//	setMinAssertPeriodCalldata, err := rollupABI.Pack("setMinimumAssertionPeriod", big.NewInt(0))
+//	Require(t, err, "unable to generate setMinimumAssertionPeriod calldata")
+//	tx, err := upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setMinAssertPeriodCalldata)
+//	Require(t, err, "unable to set minimum assertion period")
+//	_, err = builder.L1.EnsureTxSucceeded(tx)
+//	Require(t, err)
+//
+//	// Add the stakers into the validator whitelist
+//	staker1Addr := builder.L1Info.GetAddress("Staker1")
+//	staker2Addr := builder.L1Info.GetAddress("Staker2")
+//	staker3Addr := builder.L1Info.GetAddress("Staker3")
+//	setValidatorCalldata, err := rollupABI.Pack("setValidator", []common.Address{staker1Addr, staker2Addr, staker3Addr}, []bool{true, true, true})
+//	Require(t, err, "unable to generate setValidator calldata")
+//	tx, err = upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setValidatorCalldata)
+//	Require(t, err, "unable to set validators")
+//	_, err = builder.L1.EnsureTxSucceeded(tx)
+//	Require(t, err)
+//
+//	return builder, cleanup
+//}
 
 func createStaker(
 	ctx context.Context,
@@ -360,30 +359,30 @@ func waitForL1Node(t *testing.T, ctx context.Context) error {
 }
 
 // We run one L1 node, two L2 nodes and the espresso containers in this function.
-func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, func()) {
-
-	cleanValNode := createValidationNode(ctx, t, true)
-
-	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl)
-
-	err := waitForL1Node(t, ctx)
-	Require(t, err)
-
-	cleanEspresso := runEspresso(t, ctx)
-
-	// wait for the builder
-	err = waitForEspressoNode(t, ctx)
-	Require(t, err)
-
-	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder)
-
-	return builder, l2Node, l2Info, func() {
-		cleanL2Node()
-		cleanup()
-		cleanValNode()
-		cleanEspresso()
-	}
-}
+// func runNodes(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, func()) {
+//
+//	cleanValNode := createValidationNode(ctx, t, true)
+//
+//	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl)
+//
+//	err := waitForL1Node(t, ctx)
+//	Require(t, err)
+//
+//	cleanEspresso := runEspresso(t, ctx)
+//
+//	// wait for the builder
+//	err = waitForEspressoNode(t, ctx)
+//	Require(t, err)
+//
+//	l2Node, l2Info, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder)
+//
+//	return builder, l2Node, l2Info, func() {
+//		cleanL2Node()
+//		cleanup()
+//		cleanValNode()
+//		cleanEspresso()
+//	}
+//}
 
 func TestEspressoE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -405,7 +404,7 @@ func TestEspressoE2E(t *testing.T) {
 	l2Node := builder.L2
 	l2Info := builder.L2Info
 
-	//Wait for the initial message
+	// Wait for the initial message
 	expected := arbutil.MessageIndex(1)
 	err = waitFor(t, ctx, func() bool {
 		msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
@@ -415,6 +414,22 @@ func TestEspressoE2E(t *testing.T) {
 
 		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
 		return msgCnt >= expected && validatedCnt >= expected
+	})
+	Require(t, err)
+
+	// wait for the latest hotshot block
+	err = waitFor(t, ctx, func() bool {
+		out, err := exec.Command("curl", "http://127.0.0.1:41000/status/block-height", "-L").Output()
+		if err != nil {
+			return false
+		}
+		h := 0
+		err = json.Unmarshal(out, &h)
+		if err != nil {
+			return false
+		}
+		log.Info("waiting for latest hotshot block", "height", h)
+		return h > 0
 	})
 	Require(t, err)
 
@@ -465,84 +480,108 @@ func TestEspressoE2E(t *testing.T) {
 		return balance2.Cmp(transferAmount) >= 0
 	})
 	Require(t, err)
-	//
-	//incorrectHeight := uint64(10)
-	//
-	//goodStaker, blockValidatorA, cleanA := createStaker(ctx, t, builder, 0, "Staker1", nil)
-	//defer cleanA()
-	//badStaker1, blockValidatorB, cleanB := createStaker(ctx, t, builder, incorrectHeight, "Staker2", func(input *validator.ValidationInput) {
-	//	log.Info("previousinput", "input", input.HotShotCommitment)
-	//	input.HotShotCommitment = espressoTypes.Commitment{}
-	//	log.Info("afterinput", "input", input.HotShotCommitment)
-	//})
-	//defer cleanB()
-	//badStaker2, blockValidatorC, cleanC := createStaker(ctx, t, builder, incorrectHeight, "Staker3", func(input *validator.ValidationInput) {
-	//	input.HotShotLiveness = !input.HotShotLiveness
-	//})
-	//defer cleanC()
-	//
-	//err = waitForWith(t, ctx, 240*time.Second, 1*time.Second, func() bool {
-	//	validatedA := blockValidatorA.Validated(t)
-	//	validatedB := blockValidatorB.Validated(t)
-	//	validatorC := blockValidatorC.Validated(t)
-	//	shouldValidated := arbutil.MessageIndex(incorrectHeight - 1)
-	//	condition := validatedA >= shouldValidated && validatedB >= shouldValidated && validatorC >= shouldValidated
-	//	if !condition {
-	//		log.Info("waiting for stakers to catch up the incorrect hotshot height", "stakerA", validatedA, "stakerB", validatedB, "target", shouldValidated)
-	//	}
-	//	return condition
-	//})
-	//Require(t, err)
-	//validatorUtils, err := rollupgen.NewValidatorUtils(builder.L2.ConsensusNode.DeployInfo.ValidatorUtils, builder.L1.Client)
-	//Require(t, err)
-	//goodOpts := builder.L1Info.GetDefaultCallOpts("Staker1", ctx)
-	//badOpts1 := builder.L1Info.GetDefaultCallOpts("Staker2", ctx)
-	//badOpts2 := builder.L1Info.GetDefaultCallOpts("Staker3", ctx)
+
+	msgCnt, err = l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+	Require(t, err)
+	// Wait for the number of validated messages to catch up
+	err = waitForWith(t, ctx, 360*time.Second, 5*time.Second, func() bool {
+		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
+		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
+		return validatedCnt >= msgCnt
+	})
+	Require(t, err)
+
+	validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
+	incorrectHeight := uint64(validatedCnt + 1)
+
+	goodStaker, blockValidatorA, cleanA := createStaker(ctx, t, builder, 0, "Staker1", nil)
+	defer cleanA()
+
+	badStaker1, blockValidatorB, cleanB := createStaker(ctx, t, builder, incorrectHeight, "Staker2", func(input *validator.ValidationInput) {
+		log.Info("setting hotshot commitment to empty for badStaker1")
+		input.HotShotCommitment = espressoTypes.Commitment{}
+	})
+	defer cleanB()
+	badStaker2, blockValidatorC, cleanC := createStaker(ctx, t, builder, incorrectHeight, "Staker3", func(input *validator.ValidationInput) {
+		log.Info("setting hotshot liveness to false for badStaker2")
+		input.HotShotLiveness = !input.HotShotLiveness
+	})
+	defer cleanC()
+
+	err = waitForWith(t, ctx, 360*time.Second, 5*time.Second, func() bool {
+		validatedA := blockValidatorA.Validated(t)
+		validatedB := blockValidatorB.Validated(t)
+		validatorC := blockValidatorC.Validated(t)
+		condition := validatedA >= validatedCnt && validatedB >= validatedCnt && validatorC >= validatedCnt
+		if !condition {
+			log.Info("waiting for stakers to catch up to previously validated blocks", "stakerA", validatedA, "stakerB", validatedB, "target", validatedCnt)
+		}
+		return condition
+	})
+	Require(t, err)
 	//i := 0
-	//err = waitForWith(t, ctx, 60*time.Second, 2*time.Second, func() bool {
-	//	log.Info("good staker acts", "step", i)
-	//	txA, err := goodStaker.Act(ctx)
-	//	Require(t, err)
-	//	if txA != nil {
-	//		_, err = builder.L1.EnsureTxSucceeded(txA)
-	//		Require(t, err)
-	//	}
+
+	// Check if the tx is executed correctly
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User15", l2Info)
+	Require(t, err)
+
+	validatorUtils, err := rollupgen.NewValidatorUtils(builder.L2.ConsensusNode.DeployInfo.ValidatorUtils, builder.L1.Client)
+	Require(t, err)
+	goodOpts := builder.L1Info.GetDefaultCallOpts("Staker1", ctx)
+	badOpts1 := builder.L1Info.GetDefaultCallOpts("Staker2", ctx)
+	badOpts2 := builder.L1Info.GetDefaultCallOpts("Staker3", ctx)
+	err = waitForWith(t, ctx, 1000*time.Second, 30*time.Second, func() bool {
+		out, err := exec.Command("curl", "http://127.0.0.1:41000/status/block-height", "-L").Output()
+		if err != nil {
+			return false
+		}
+		h := 0
+		err = json.Unmarshal(out, &h)
+		if err != nil {
+			return false
+		}
+		log.Info("waiting for latest hotshot block in staking test", "height", h)
+		log.Info("E2E TEST: ACTING AS GOOD STAKER", "address", goodOpts.From)
+		txA, err := goodStaker.Act(ctx)
+		Require(t, err)
+		if txA != nil {
+			_, err = builder.L1.EnsureTxSucceeded(txA)
+			Require(t, err)
+		}
+		log.Info("E2E TEST: ACTING AS BAD STAKER 1", "address", badOpts1.From)
+		txB, err := badStaker1.Act(ctx)
+		Require(t, err)
+		if txB != nil {
+			_, err = builder.L1.EnsureTxSucceeded(txB)
+			Require(t, err)
+		}
+		log.Info("E2E TEST: ACTING AS BAD STAKER 2", "address", badOpts2.From)
+		txC, err := badStaker2.Act(ctx)
+		Require(t, err)
+		if txC != nil {
+			_, err = builder.L1.EnsureTxSucceeded(txC)
+			Require(t, err)
+		}
+
+		conflict1, err := validatorUtils.FindStakerConflict(nil, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts1.From, big.NewInt(1024))
+		Require(t, err)
+		conflict2, err := validatorUtils.FindStakerConflict(nil, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts2.From, big.NewInt(1024))
+		Require(t, err)
+		condition := staker.ConflictType(conflict1.Ty) == staker.CONFLICT_TYPE_FOUND && staker.ConflictType(conflict2.Ty) == staker.CONFLICT_TYPE_FOUND
+		if !condition {
+			log.Info("waiting for the conflict")
+		}
+		return condition
+	})
+	Require(t, err)
+
+	// The following tests are very time-consuming and, given that the related code
+	// does not change often, it's not necessary to run them every time.
+	// Note: If you are modifying the smart contracts, staker-related code or doing overhaul,
+	// set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
 	//
-	//	log.Info("bad staker1 acts", "step", i)
-	//	txB, err := badStaker1.Act(ctx)
-	//	Require(t, err)
-	//	if txB != nil {
-	//		_, err = builder.L1.EnsureTxSucceeded(txB)
-	//		Require(t, err)
-	//	}
-	//
-	//	log.Info("bad staker2 acts", "step", i)
-	//	txC, err := badStaker2.Act(ctx)
-	//	Require(t, err)
-	//	if txC != nil {
-	//		_, err = builder.L1.EnsureTxSucceeded(txC)
-	//		Require(t, err)
-	//	}
-	//
-	//	i += 1
-	//	conflict1, err := validatorUtils.FindStakerConflict(nil, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts1.From, big.NewInt(1024))
-	//	Require(t, err)
-	//	conflict2, err := validatorUtils.FindStakerConflict(nil, builder.L2.ConsensusNode.DeployInfo.Rollup, goodOpts.From, badOpts2.From, big.NewInt(1024))
-	//	Require(t, err)
-	//	condition := staker.ConflictType(conflict1.Ty) == staker.CONFLICT_TYPE_FOUND && staker.ConflictType(conflict2.Ty) == staker.CONFLICT_TYPE_FOUND
-	//	if !condition {
-	//		log.Info("waiting for the conflict")
-	//	}
-	//	return condition
-	//})
-	//Require(t, err)
-	//
-	//// The following tests are very time-consuming and, given that the related code
-	//// does not change often, it's not necessary to run them every time.
-	//// Note: If you are modifying the smart contracts, staker-related code or doing overhaul,
-	//// set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
-	//
-	//checkStaker := os.Getenv("E2E_CHECK_STAKER")
+	// Commented out the following code because with sovereign sequencer, the escape hatch is not needed
+	// checkStaker := os.Getenv("E2E_CHECK_STAKER")
 	//if checkStaker == "" {
 	//	log.Info("Checking the escape hatch")
 	//	// Start to check the escape hatch
@@ -563,12 +602,12 @@ func TestEspressoE2E(t *testing.T) {
 	//	Require(t, err)
 	//
 	//	// Wait for the switch to be totally finished
-	//	currMsg, err := node.ConsensusNode.TxStreamer.GetMessageCount()
+	//	currMsg, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
 	//	Require(t, err)
 	//	var validatedMsg arbutil.MessageIndex
 	//	err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
 	//
-	//		validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
+	//		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
 	//		if validatedCnt >= currMsg {
 	//			validatedMsg = validatedCnt
 	//			return true
@@ -583,7 +622,7 @@ func TestEspressoE2E(t *testing.T) {
 	//	Require(t, err)
 	//
 	//	err = waitForWith(t, ctx, 3*time.Minute, 20*time.Second, func() bool {
-	//		validated := node.ConsensusNode.BlockValidator.Validated(t)
+	//		validated := l2Node.ConsensusNode.BlockValidator.Validated(t)
 	//		return validated >= validatedMsg
 	//	})
 	//	Require(t, err)
@@ -594,13 +633,15 @@ func TestEspressoE2E(t *testing.T) {
 	//
 	//	// Check if the validated count is increasing
 	//	err = waitForWith(t, ctx, 3*time.Minute, 20*time.Second, func() bool {
-	//		validated := node.ConsensusNode.BlockValidator.Validated(t)
+	//		validated := l2Node.ConsensusNode.BlockValidator.Validated(t)
 	//		return validated >= validatedMsg+10
 	//	})
 	//	Require(t, err)
 	//
 	//	return
 	//}
+
+	//log.Info("Reached E2E_CHECK_STAKER")
 	//err = waitForWith(
 	//	t,
 	//	ctx,
