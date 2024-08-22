@@ -39,6 +39,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
+          ref: ${{ github.event.inputs.branch }}
+          path: ${{ github.sha }}
 
       - name: Install dependencies
         run: >
