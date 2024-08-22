@@ -34,3 +34,7 @@
 [submodule "arbitrator/langs/bf"]
 	path = arbitrator/langs/bf
 	url = https://github.com/OffchainLabs/stylus-sdk-bf.git
+[submodule "orbit-actions"]
+	path = orbit-actions
+	url = git@github.com:EspressoSystems/orbit-actions.git
+	branch = espresso-migration
