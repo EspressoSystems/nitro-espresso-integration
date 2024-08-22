@@ -656,15 +656,16 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 		}
 		s.inactiveLastCheckedNode = nil
 	}
-
 	if effectiveStrategy <= DefensiveStrategy && s.inactiveLastCheckedNode != nil {
 		info.LatestStakedNode = s.inactiveLastCheckedNode.id
 		info.LatestStakedNodeHash = s.inactiveLastCheckedNode.hash
 	}
+
 	latestConfirmedNode, err := s.rollup.LatestConfirmed(callOpts)
 	if err != nil {
 		return nil, fmt.Errorf("error getting latest confirmed node: %w", err)
 	}
+
 	requiredStakeElevated, err := s.isRequiredStakeElevated(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error checking if required stake is elevated: %w", err)
@@ -700,6 +701,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 			info.LatestStakedNodeHash = nodeInfo.NodeHash
 		}
 	}
+
 	canActFurther := func() bool {
 		return s.wallet.CanBatchTxs() || s.builder.BuildingTransactionCount() == 0
 	}
@@ -731,6 +733,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 			return s.wallet.ExecuteTransactions(ctx, s.builder, s.config.gasRefunder)
 		}
 	}
+
 	if walletAddressOrZero != (common.Address{}) && canActFurther() {
 		withdrawable, err := s.rollup.WithdrawableFunds(callOpts, walletAddressOrZero)
 		if err != nil {
@@ -747,11 +750,13 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 			}
 		}
 	}
+
 	if rawInfo != nil && canActFurther() {
 		if err = s.handleConflict(ctx, rawInfo); err != nil {
 			return nil, fmt.Errorf("error handling conflict: %w", err)
 		}
 	}
+
 	// Don't attempt to create a new stake if we're resolving a node and the stake is elevated,
 	// as that might affect the current required stake.
 	if (rawInfo != nil || !resolvingNode || !requiredStakeElevated) && canActFurther() {
@@ -783,12 +788,10 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 }
 
 func (s *Staker) handleConflict(ctx context.Context, info *StakerInfo) error {
-	log.Info("handling conflict in staker", "staker", info.CurrentChallenge)
 	if info.CurrentChallenge == nil {
 		s.activeChallenge = nil
 		return nil
 	}
-	log.Info("entered challenge in staker", "challenge", *info.CurrentChallenge)
 
 	if s.activeChallenge == nil || s.activeChallenge.ChallengeIndex() != *info.CurrentChallenge {
 		log.Error("entered challenge", "challenge", *info.CurrentChallenge)
@@ -830,6 +833,7 @@ func (s *Staker) advanceStake(ctx context.Context, info *OurStakerInfo, effectiv
 		log.Error("found incorrect assertion in watchtower mode")
 	}
 	if action == nil {
+		info.CanProgress = false
 		return nil
 	}
 
@@ -904,7 +908,7 @@ func (s *Staker) advanceStake(ctx context.Context, info *OurStakerInfo, effectiv
 			return nil
 		}
 		log.Info("staking on existing node", "node", action.number)
-		// We'll return early if we already have a stake
+		// We'll return early if we already havea stake
 		if info.StakeExists {
 			auth, err := s.builder.Auth(ctx)
 			if err != nil {
@@ -945,7 +949,7 @@ func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
 	if info.CurrentChallenge != nil {
 		return nil
 	}
-	log.Info("creating conflict in staker", "currentChallenge", info.CurrentChallenge)
+
 	callOpts := s.getCallOpts(ctx)
 	stakers, moreStakers, err := s.validatorUtils.GetStakers(callOpts, s.rollupAddress, 0, 1024)
 	if err != nil {
@@ -970,8 +974,6 @@ func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
 		if err != nil {
 			return fmt.Errorf("error getting staker %v info: %w", staker, err)
 		}
-
-		log.Info("staker info", "staker 1 address", walletAddr, "staker 2 address", staker.Hex())
 		if stakerInfo == nil {
 			return fmt.Errorf("staker %v (returned from ValidatorUtils's GetStakers function) not found in rollup", staker)
 		}
@@ -995,6 +997,7 @@ func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
 			// Immaterial as this is past the confirmation point; this must be a zombie
 			continue
 		}
+
 		node1Info, err := s.rollup.LookupNode(ctx, conflictInfo.Node1)
 		if err != nil {
 			return fmt.Errorf("error looking up node %v: %w", conflictInfo.Node1, err)
@@ -1024,7 +1027,6 @@ func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
 		}
 	}
 	// No conflicts exist
-	log.Info("no conflicts exist")
 	return nil
 }
 
