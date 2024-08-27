@@ -3,12 +3,7 @@ package arbtest
 import (
 	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
-	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"math/big"
-	"strings"
 	"testing"
 	"time"
 )
@@ -70,31 +65,6 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.L1.TransferBalance(t, "Faucet", "Staker2", big.NewInt(9e18), builder.L1Info)
 	builder.L1Info.GenerateAccount("Staker3")
 	builder.L1.TransferBalance(t, "Faucet", "Staker3", big.NewInt(9e18), builder.L1Info)
-
-	// Update the rollup
-	deployAuth := builder.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	upgradeExecutor, err := upgrade_executorgen.NewUpgradeExecutor(builder.L2.ConsensusNode.DeployInfo.UpgradeExecutor, builder.L1.Client)
-	Require(t, err)
-	rollupABI, err := abi.JSON(strings.NewReader(rollupgen.RollupAdminLogicABI))
-	Require(t, err)
-
-	setMinAssertPeriodCalldata, err := rollupABI.Pack("setMinimumAssertionPeriod", big.NewInt(0))
-	Require(t, err, "unable to generate setMinimumAssertionPeriod calldata")
-	tx, err := upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setMinAssertPeriodCalldata)
-	Require(t, err, "unable to set minimum assertion period")
-	_, err = builder.L1.EnsureTxSucceeded(tx)
-	Require(t, err)
-
-	// Add the stakers into the validator whitelist
-	staker1Addr := builder.L1Info.GetAddress("Staker1")
-	staker2Addr := builder.L1Info.GetAddress("Staker2")
-	staker3Addr := builder.L1Info.GetAddress("Staker3")
-	setValidatorCalldata, err := rollupABI.Pack("setValidator", []common.Address{staker1Addr, staker2Addr, staker3Addr}, []bool{true, true, true})
-	Require(t, err, "unable to generate setValidator calldata")
-	tx, err = upgradeExecutor.ExecuteCall(&deployAuth, builder.L2.ConsensusNode.DeployInfo.Rollup, setValidatorCalldata)
-	Require(t, err, "unable to set validators")
-	_, err = builder.L1.EnsureTxSucceeded(tx)
-	Require(t, err)
 
 	return builder, cleanup
 }
