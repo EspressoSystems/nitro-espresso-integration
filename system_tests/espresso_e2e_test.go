@@ -236,7 +236,6 @@ func TestEspressoE2E(t *testing.T) {
 
 	// Transfer via the delayed inbox
 	delayedTx := l2Info.PrepareTx("Owner", newAccount2, 3e7, transferAmount, nil)
-
 	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
