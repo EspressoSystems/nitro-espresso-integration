@@ -58,14 +58,6 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	Require(t, err)
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
 
-	// Fund the stakers
-	builder.L1Info.GenerateAccount("Staker1")
-	builder.L1.TransferBalance(t, "Faucet", "Staker1", big.NewInt(9e18), builder.L1Info)
-	builder.L1Info.GenerateAccount("Staker2")
-	builder.L1.TransferBalance(t, "Faucet", "Staker2", big.NewInt(9e18), builder.L1Info)
-	builder.L1Info.GenerateAccount("Staker3")
-	builder.L1.TransferBalance(t, "Faucet", "Staker3", big.NewInt(9e18), builder.L1Info)
-
 	return builder, cleanup
 }
 

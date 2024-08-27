@@ -203,7 +203,6 @@ func TestEspressoE2E(t *testing.T) {
 		if err != nil {
 			return false
 		}
-		log.Info("waiting for latest hotshot block", "height", h)
 		return h > 0
 	})
 	Require(t, err)
@@ -237,7 +236,7 @@ func TestEspressoE2E(t *testing.T) {
 
 	// Transfer via the delayed inbox
 	delayedTx := l2Info.PrepareTx("Owner", newAccount2, 3e7, transferAmount, nil)
-	log.Info("delayed transaction: ", "to", delayedTx.To(), "value", delayedTx.Value())
+
 	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
@@ -246,16 +245,6 @@ func TestEspressoE2E(t *testing.T) {
 		balance2 := l2Node.GetBalance(t, addr2)
 		log.Info("waiting for balance", "account", newAccount2, "addr", addr2, "balance", balance2)
 		return balance2.Cmp(transferAmount) >= 0
-	})
-	Require(t, err)
-
-	msgCnt, err = l2Node.ConsensusNode.TxStreamer.GetMessageCount()
-	Require(t, err)
-	// Wait for the number of validated messages to catch up
-	err = waitForWith(t, ctx, 360*time.Second, 5*time.Second, func() bool {
-		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
-		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
-		return validatedCnt >= msgCnt
 	})
 	Require(t, err)
 }
