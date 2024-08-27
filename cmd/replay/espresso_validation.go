@@ -24,7 +24,7 @@ func handleEspressoPreConditions(message *arbostypes.MessageWithMetadata, isEnab
 	isNonEspressoMessage := arbos.IsL2NonEspressoMsg(message.Message)
 
 	validatingEspressoLivenessFailure := isNonEspressoMessage && isEnabled
-	validatingEspressoHeightFailure := isNonEspressoMessage
+	validatingEspressoHeightFailure := isNonEspressoMessage && isEnabled
 	validatingAgainstEspresso := arbos.IsEspressoMsg(message.Message) && isEnabled
 
 	if validatingEspressoLivenessFailure {
