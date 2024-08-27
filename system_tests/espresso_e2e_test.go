@@ -242,13 +242,6 @@ func TestEspressoE2E(t *testing.T) {
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
 
-	// sending l1 messages creates l1 blocks.. make enough to get that delayed inbox message in
-	for i := 0; i < 30; i++ {
-		SendWaitTestTransactions(t, ctx, builder.L1.Client, []*types.Transaction{
-			builder.L1Info.PrepareTx("Faucet", "Faucet", 30000, big.NewInt(1e12), nil),
-		})
-	}
-
 	err = waitForWith(t, ctx, 180*time.Second, 2*time.Second, func() bool {
 		balance2 := l2Node.GetBalance(t, addr2)
 		log.Info("waiting for balance", "account", newAccount2, "addr", addr2, "balance", balance2)

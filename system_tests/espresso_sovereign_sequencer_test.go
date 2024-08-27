@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"math/big"
@@ -125,7 +124,7 @@ func TestSovereignSequencer(t *testing.T) {
 
 	msgCnt, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
 	Require(t, err)
-	log.Info("msgCnt", "msgCnt", msgCnt)
+
 	err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
 		validatedCnt := builder.L2.ConsensusNode.BlockValidator.Validated(t)
 		return validatedCnt == msgCnt
