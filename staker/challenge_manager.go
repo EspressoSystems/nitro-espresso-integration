@@ -509,10 +509,6 @@ func (m *ChallengeManager) createExecutionBackend(ctx context.Context, step uint
 	if err != nil {
 		return fmt.Errorf("error getting execution challenge final state: %w", err)
 	}
-	if m.blockChallengeBackend.EspressoDebugging(computedState.HotShotHeight) {
-		computedState.BlockHash = mockHash(computedState.HotShotHeight)
-		computedStatus = expectedStatus
-	}
 	if expectedStatus != computedStatus {
 		return fmt.Errorf("after msg %v expected status %v but got %v", initialCount, expectedStatus, computedStatus)
 	}

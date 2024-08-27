@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
-	lightclientmock "github.com/EspressoSystems/espresso-sequencer-go/light-client-mock"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -514,106 +512,6 @@ func TestEspressoE2E(t *testing.T) {
 		}
 		return condition
 	})
-	Require(t, err)
-
-	// The following tests are very time-consuming and, given that the related code
-	// does not change often, it's not necessary to run them every time.
-	// Note: If you are modifying the smart contracts, staker-related code or doing overhaul,
-	// set the E2E_CHECK_STAKER env variable to any non-empty string to run the check.
-
-	checkStaker := os.Getenv("E2E_CHECK_STAKER")
-	if checkStaker == "" {
-		log.Info("Checking the escape hatch")
-		// Start to check the escape hatch
-		address := common.HexToAddress(lightClientAddress)
-
-		txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
-		// Freeze the l1 height
-		err := lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
-		Require(t, err)
-
-		err = waitForWith(t, ctx, 1*time.Minute, 1*time.Second, func() bool {
-			isLive, err := lightclientmock.IsHotShotLive(t, builder.L1.Client, address, uint64(delayThreshold))
-			if err != nil {
-				return false
-			}
-			return !isLive
-		})
-		Require(t, err)
-
-		// Wait for the switch to be totally finished
-		currMsg, err := node.ConsensusNode.TxStreamer.GetMessageCount()
-		Require(t, err)
-		var validatedMsg arbutil.MessageIndex
-		err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
-
-			validatedCnt := node.ConsensusNode.BlockValidator.Validated(t)
-			if validatedCnt >= currMsg {
-				validatedMsg = validatedCnt
-				return true
-			}
-			return false
-		})
-		Require(t, err)
-
-		err = checkTransferTxOnL2(t, ctx, l2Node, "User12", l2Info)
-		Require(t, err)
-		err = checkTransferTxOnL2(t, ctx, l2Node, "User13", l2Info)
-		Require(t, err)
-
-		err = waitForWith(t, ctx, 3*time.Minute, 20*time.Second, func() bool {
-			validated := node.ConsensusNode.BlockValidator.Validated(t)
-			return validated >= validatedMsg
-		})
-		Require(t, err)
-
-		// Unfreeze the l1 height
-		err = lightclientmock.UnfreezeL1Height(t, builder.L1.Client, address, &txOpts)
-		Require(t, err)
-
-		// Check if the validated count is increasing
-		err = waitForWith(t, ctx, 3*time.Minute, 20*time.Second, func() bool {
-			validated := node.ConsensusNode.BlockValidator.Validated(t)
-			return validated >= validatedMsg+10
-		})
-		Require(t, err)
-
-		return
-	}
-	err = waitForWith(
-		t,
-		ctx,
-		time.Minute*20,
-		time.Second*5,
-		func() bool {
-			log.Info("good staker acts", "step", i)
-			txA, err := goodStaker.Act(ctx)
-			if err != nil {
-				return false
-			}
-			if txA != nil {
-				_, err = builder.L1.EnsureTxSucceeded(txA)
-				Require(t, err)
-			}
-
-			log.Info("bad staker acts", "step", i)
-			txB, err := badStaker1.Act(ctx)
-			if txB != nil && err == nil {
-				_, err = builder.L1.EnsureTxSucceeded(txB)
-				Require(t, err)
-			} else if err != nil {
-				ok := strings.Contains(err.Error(), "ERROR_HOTSHOT_COMMITMENT")
-				if ok {
-					return true
-				} else {
-					fmt.Println(err.Error())
-					t.Fatal("unexpected err")
-				}
-			}
-			i += 1
-			return false
-
-		})
 	Require(t, err)
 }
 

@@ -132,11 +132,10 @@ func (b *BlockChallengeBackend) FindGlobalStateFromMessageCount(count arbutil.Me
 	}
 
 	return validator.GoGlobalState{
-		BlockHash:     res.BlockHash,
-		SendRoot:      res.SendRoot,
-		Batch:         batch,
-		PosInBatch:    uint64(count - prevBatchMsgCount),
-		HotShotHeight: res.HotShotHeight,
+		BlockHash:  res.BlockHash,
+		SendRoot:   res.SendRoot,
+		Batch:      batch,
+		PosInBatch: uint64(count - prevBatchMsgCount),
 	}, nil
 }
 
@@ -155,9 +154,6 @@ func (b *BlockChallengeBackend) GetInfoAtStep(step uint64) (validator.GoGlobalSt
 	globalState, err := b.FindGlobalStateFromMessageCount(msgNum)
 	if err != nil {
 		return validator.GoGlobalState{}, 0, err
-	}
-	if b.EspressoDebugging(globalState.HotShotHeight) {
-		globalState.BlockHash = mockHash(globalState.HotShotHeight)
 	}
 	return globalState, StatusFinished, nil
 }
