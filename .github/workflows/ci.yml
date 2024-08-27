@@ -39,8 +39,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: true
-          ref: ${{ github.event.inputs.branch }}
-          path: ${{ github.sha }}
 
       - name: Install dependencies
         run: >
@@ -145,10 +143,11 @@ jobs:
         run: make -j build-node-deps
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v5
         with:
           version: latest
-          skip-pkg-cache: true
+          skip-cache: true
+
       - name: Custom Lint
         run: |
           go run ./linters ./...
