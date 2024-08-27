@@ -42,6 +42,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.nodeConfig.BlockValidator.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BlockValidator.Espresso = true
 	builder.nodeConfig.DelayedSequencer.Enable = true
+	builder.nodeConfig.DelayedSequencer.FinalizeDistance = 1
 
 	// sequencer config
 	builder.nodeConfig.Sequencer = true
