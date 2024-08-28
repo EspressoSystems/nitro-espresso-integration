@@ -80,14 +80,7 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	EnableEspressoSovereign bool          `koanf:"enable-espresso-sovereign"`
-	HotShotUrl              string        `koanf:"hotshot-url"`
-	LightClientAddress      string        `koanf:"light-client-address"`
-	EspressoNamespace       uint64        `koanf:"espresso-namespace"`
-	StartHotShotBlock       uint64        `koanf:"start-hotshot-block"`
-	SwitchPollInterval      time.Duration `koanf:"switch-poll-interval"`
-	// TODO: Wrtie this into the config chain
-	SwitchDelayThreshold uint64 `koanf:"switch-delay-threshold"`
+	EnableEspressoSovereign bool `koanf:"enable-espresso-sovereign"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -167,10 +160,6 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 
 	// Espresso specific flags
-	f.String(prefix+".hotshot-url", DefaultSequencerConfig.HotShotUrl, "URL to the hotshot query service of an Espresso node")
-	f.Uint64(prefix+".espresso-namespace", DefaultSequencerConfig.EspressoNamespace, "Espresso namespace that corresponds to this Nitro chain")
-	f.Uint64(prefix+".start-hotshot-block", DefaultSequencerConfig.StartHotShotBlock, "the Espresso block number when the Nitro chain is created")
-	f.Duration(prefix+".switch-poll-interval", DefaultSequencerConfig.SwitchPollInterval, "Espresso escape hatch polling interval to check for HotShot liveness")
 	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable sovereign sequencer mode for the Espresso integration")
 }
 
