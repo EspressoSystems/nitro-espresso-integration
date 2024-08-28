@@ -3,15 +3,15 @@ package arbtest
 import (
 	"context"
 	"encoding/json"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/offchainlabs/nitro/arbutil"
 	"math/big"
 	"os/exec"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/validator/server_api"
 	"github.com/offchainlabs/nitro/validator/valnode"
 )
@@ -218,7 +218,7 @@ func TestEspressoE2E(t *testing.T) {
 		Require(t, err)
 		msgCnt = cnt
 		log.Info("waiting for message count", "cnt", msgCnt)
-		return msgCnt >= 2
+		return msgCnt > 6
 	})
 	Require(t, err)
 
