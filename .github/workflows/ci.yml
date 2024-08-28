@@ -18,7 +18,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: buildjet-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
 
     # Creates a redis container for redis tests
     services:
@@ -33,6 +33,36 @@ jobs:
         test-mode: [defaults, race, challenge, stylus, long]
 
     steps:
+      - uses: cargo-bins/cargo-binstall@main
+        if: matrix.runs-on == 'ubuntu-latest'
+
+      # Make more disk space available on public runner
+      - name: Remove unused software
+        if: matrix.runs-on == 'ubuntu-latest'
+        run: |
+          cargo binstall -y rmz
+          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+
+          echo "Available storage before:"
+          sudo df -h
+          echo
+          sudo rmz -f /usr/share/dotnet
+          sudo rmz -f /usr/share/swift
+          sudo rmz -f /usr/share/gradle-*
+          sudo rmz -f /usr/share/az_*
+          sudo rmz -f /usr/local/lib/android
+          sudo rmz -f /usr/local/lib/node_modules
+          sudo rmz -f /opt/ghc
+          sudo rmz -f /opt/az
+          sudo rmz -f /opt/pipx
+          sudo rmz -f /opt/google
+          sudo rmz -f /opt/microsoft
+          sudo rmz -f /opt/hostedtoolcache
+          echo "Available storage after:"
+          sudo df -h
+          echo
+
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -89,7 +119,7 @@ jobs:
           rustup target add wasm32-unknown-unknown --toolchain nightly
 
       - name: Cache Build Products
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         with:
           path: |
             ~/go/pkg/mod
@@ -98,7 +128,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Cache Rust Build Products
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry/
@@ -111,7 +141,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         id: cache-cbrotli
         with:
           path: |
