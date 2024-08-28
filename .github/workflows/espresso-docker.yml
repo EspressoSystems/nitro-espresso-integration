@@ -45,15 +45,15 @@ jobs:
     steps:
 
       - uses: cargo-bins/cargo-binstall@main
-
-      - run: |
-          cargo binstall -y rmz
-          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+        if: matrix.runs-on == 'ubuntu-latest'
 
       # Make more disk space available on public runner
       - name: Remove unused software
         if: matrix.runs-on == 'ubuntu-latest'
         run: |
+          cargo binstall -y rmz
+          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+
           echo "Available storage before:"
           sudo df -h
           echo
