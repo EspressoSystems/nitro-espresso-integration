@@ -33,12 +33,9 @@ jobs:
         test-mode: [defaults, race, challenge, stylus, long]
 
     steps:
-      - uses: cargo-bins/cargo-binstall@main
-        if: matrix.runs-on == 'ubuntu-latest'
-
       # Make more disk space available on public runner
+      - uses: cargo-bins/cargo-binstall@main
       - name: Remove unused software
-        if: matrix.runs-on == 'ubuntu-latest'
         run: |
           cargo binstall -y rmz
           sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
