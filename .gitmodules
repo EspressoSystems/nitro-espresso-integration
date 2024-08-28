@@ -1,7 +1,7 @@
 [submodule "go-ethereum"]
 	path = go-ethereum
 	url = https://github.com/EspressoSystems/geth-arbitrum.git
-	branch = integration
+	branch = jh/remove-global-state
 [submodule "fastcache"]
 	path = fastcache
 	url = https://github.com/OffchainLabs/fastcache.git
