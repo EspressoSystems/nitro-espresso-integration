@@ -18,9 +18,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    container:
-      image: ghcr.io/catthehacker/ubuntu:js-22.04
-    runs-on: [self-hosted, X64]
+    runs-on: buildjet-4vcpu-ubuntu-2204
 
     # Creates a redis container for redis tests
     services:
@@ -91,7 +89,7 @@ jobs:
           rustup target add wasm32-unknown-unknown --toolchain nightly
 
       - name: Cache Build Products
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         with:
           path: |
             ~/go/pkg/mod
@@ -100,7 +98,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Cache Rust Build Products
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         with:
           path: |
             ~/.cargo/registry/
@@ -113,7 +111,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
-        uses: actions/cache@v3
+        uses: buildjet/cache@v3
         id: cache-cbrotli
         with:
           path: |
