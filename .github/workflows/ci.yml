@@ -145,9 +145,9 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v5
         with:
-          annotations: false
-          version: latest
-          skip-pkg-cache: true
+          version: v1.59.1
+          skip-cache: true
+
       - name: Custom Lint
         run: |
           go run ./linters ./...
