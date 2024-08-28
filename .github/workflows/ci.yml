@@ -48,13 +48,11 @@ jobs:
           sudo rmz -f /usr/share/gradle-*
           sudo rmz -f /usr/share/az_*
           sudo rmz -f /usr/local/lib/android
-          sudo rmz -f /usr/local/lib/node_modules
           sudo rmz -f /opt/ghc
           sudo rmz -f /opt/az
           sudo rmz -f /opt/pipx
           sudo rmz -f /opt/google
           sudo rmz -f /opt/microsoft
-          sudo rmz -f /opt/hostedtoolcache
           echo "Available storage after:"
           sudo df -h
           echo
