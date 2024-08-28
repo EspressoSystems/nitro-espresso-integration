@@ -47,10 +47,10 @@ jobs:
       - uses: cargo-bins/cargo-binstall@main
         if: matrix.runs-on == 'ubuntu-latest'
 
-      # Make more disk space available on public runner
-      - name: Remove unused software
+      - name: Make more disk space available on public runner
         if: matrix.runs-on == 'ubuntu-latest'
         run: |
+          # rmz seems to be faster at deleting files than rm
           cargo binstall -y rmz
           sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
 
@@ -139,6 +139,10 @@ jobs:
         if: matrix.platform == 'linux/amd64' && startsWith(github.ref, 'refs/tags/')
         with:
           files: target/machines/latest/*
+
+      - name: Check available space after CI run
+        run: |
+          sudo df -h
 
   # Merge the AMD64 and ARM64 images into the final (multiplatform) image.
   #

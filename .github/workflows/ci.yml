@@ -33,10 +33,10 @@ jobs:
         test-mode: [defaults, race, challenge, stylus, long]
 
     steps:
-      # Make more disk space available on public runner
       - uses: cargo-bins/cargo-binstall@main
-      - name: Remove unused software
+      - name: Make more disk space available on public runner
         run: |
+          # rmz seems to be faster at deleting files than rm
           cargo binstall -y rmz
           sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
 
@@ -240,3 +240,7 @@ jobs:
           files: ./coverage.txt,./coverage-redis.txt
           verbose: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Check available space after CI run
+        run: |
+          sudo df -h
