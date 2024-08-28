@@ -43,14 +43,22 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
 
     steps:
-      # TODO We should be able to remove this but currently it's needed to avoid
-      # permission errors during checkout.
-      - name: Fix submodule permissions check
+      # Make more disk space available on public runner
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        if: matrix.runs-on == ubuntu-latest
+        with:
+          root-reserve-mb: 512
+          swap-size-mb: 1024
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+
+      - name: Check free space
         run: |
-          sudo chown -R runner:runner .
-          # Remove potentially leftover files from last run, it's unclear why
-          # this only works with `sudo` despite the chown command above.
-          sudo rm -rfv ./target
+          echo "Free space:"
+          df -h
+
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
