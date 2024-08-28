@@ -43,6 +43,13 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
 
     steps:
+
+      - uses: cargo-bins/cargo-binstall@main
+
+      - run: |
+          cargo binstall -y rmz
+          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+
       # Make more disk space available on public runner
       - name: Remove unused software
         if: matrix.runs-on == 'ubuntu-latest'
@@ -50,10 +57,18 @@ jobs:
           echo "Available storage before:"
           sudo df -h
           echo
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rmz -f /usr/share/dotnet
+          sudo rmz -f /usr/share/swift
+          sudo rmz -f /usr/share/gradle-*
+          sudo rmz -f /usr/share/az_*
+          sudo rmz -f /usr/local/lib/android
+          sudo rmz -f /usr/local/lib/node_modules
+          sudo rmz -f /opt/ghc
+          sudo rmz -f /opt/az
+          sudo rmz -f /opt/pipx
+          sudo rmz -f /opt/google
+          sudo rmz -f /opt/microsoft
+          sudo rmz -f /opt/hostedtoolcache
           echo "Available storage after:"
           sudo df -h
           echo
