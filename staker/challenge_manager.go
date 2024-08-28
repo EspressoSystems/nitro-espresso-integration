@@ -132,9 +132,6 @@ func NewChallengeManager(
 	if err != nil {
 		return nil, fmt.Errorf("error creating block challenge backend for challenge %v: %w", challengeIndex, err)
 	}
-	if val.debugEspressoIncorrectHeight > 0 {
-		backend.DebugEspresso_SetTrigger(val.debugEspressoIncorrectHeight, val.debugEspressoInputOverrideFunc)
-	}
 	return &ChallengeManager{
 		challengeCore: &challengeCore{
 			con:                  con,
@@ -473,9 +470,6 @@ func (m *ChallengeManager) createExecutionBackend(ctx context.Context, step uint
 	input, err := entry.ToInput()
 	if err != nil {
 		return fmt.Errorf("error getting validation entry input of challenge %v msg %v: %w", m.challengeIndex, initialCount, err)
-	}
-	if m.blockChallengeBackend.EspressoDebugging(entry.BlockHeight) {
-		m.blockChallengeBackend.debugEspressoInputOverrideFunc(input)
 	}
 	var prunedBatches []validator.BatchInfo
 	for _, batch := range input.BatchInfo {
