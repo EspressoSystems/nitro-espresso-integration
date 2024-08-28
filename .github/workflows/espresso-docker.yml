@@ -36,11 +36,11 @@ jobs:
         platform: [linux/amd64, linux/arm64]
         include:
           - platform: linux/amd64
-            runs-on: X64
+            runs-on: ubuntu-latest
           - platform: linux/arm64
-            runs-on: ARM64
+            runs-on: buildjet-4vcpu-ubuntu-2204-arm
 
-    runs-on: [self-hosted, "${{ matrix.runs-on }}"]
+    runs-on: ${{ matrix.runs-on }}
 
     steps:
       # TODO We should be able to remove this but currently it's needed to avoid
