@@ -46,7 +46,7 @@ jobs:
       # Make more disk space available on public runner
       - name: Maximize build space
         uses: easimon/maximize-build-space@master
-        if: matrix.runs-on == ubuntu-latest
+        if: matrix.runs-on == "ubuntu-latest"
         with:
           root-reserve-mb: 512
           swap-size-mb: 1024
