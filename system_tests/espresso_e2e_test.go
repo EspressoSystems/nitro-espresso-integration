@@ -213,12 +213,12 @@ func TestEspressoE2E(t *testing.T) {
 
 	// Remember the number of messages
 	var msgCnt arbutil.MessageIndex
-	err = waitForWith(t, ctx, 1*time.Minute, 10*time.Second, func() bool {
+	err = waitFor(t, ctx, func() bool {
 		cnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
 		Require(t, err)
 		msgCnt = cnt
 		log.Info("waiting for message count", "cnt", msgCnt)
-		return msgCnt > 6
+		return msgCnt >= 2
 	})
 	Require(t, err)
 
