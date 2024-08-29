@@ -19,10 +19,6 @@ jobs:
   test:
     name: Go Tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        # Set the default working directory for 'run:' steps
-        working-directory: /tmp/gha-work
 
     # Creates a redis container for redis tests
     services:
@@ -45,8 +41,10 @@ jobs:
       - name: Move repo to avoid too long file paths
         run: |
           rsync -a ./ /tmp/gha-work/
-        # Run from the original workspace directory because the new one doesn't exist yet.
-        working-directory: ${{ github.workspace }}
+          cd /tmp/gha-work
+          rm -rf $GITHUB_WORKSPACE
+          # Link the original workspace to the new workspace directory
+          ln -sv /tmp/gha-work $GITHUB_WORKSPACE
 
       - uses: cargo-bins/cargo-binstall@main
       - name: Make more disk space available on public runner
@@ -180,7 +178,6 @@ jobs:
         with:
           version: v1.59.1
           skip-cache: true
-          working-directory: /tmp/gha-work
 
       - name: Custom Lint
         run: |
@@ -241,7 +238,6 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test-mode }}-full.log
-          path: /tmp/gha-work/full.log
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
@@ -251,7 +247,6 @@ jobs:
           files: ./coverage.txt,./coverage-redis.txt
           verbose: false
           token: ${{ secrets.CODECOV_TOKEN }}
-          working-directory: /tmp/gha-work
 
       - name: Check available space after CI run
         if: '!cancelled()'
