@@ -35,10 +35,10 @@ type PostTestAssertionParams struct {
 	wasmRootAfterUpdate      common.Hash
 }
 
-func BuildNonEspressoNetwork(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, *SecondNodeParams, func(), func()) {
+func BuildNonEspressoNetwork(ctx context.Context, t *testing.T) (*NodeBuilder, *TestClient, *BlockchainTestInfo, func(), func()) {
 	cleanValNode := createValidationNode(ctx, t, false)
 
-	builder, cleanup := createL1ValidatorPosterNode(ctx, t, hotShotUrl, false)
+	builder, cleanup, cleanL2Node := createL1AndL2Node(ctx, t, false)
 
 	err := waitForL1Node(t, ctx)
 	Require(t, err)
@@ -49,13 +49,11 @@ func BuildNonEspressoNetwork(ctx context.Context, t *testing.T) (*NodeBuilder, *
 	err = waitForEspressoNode(t, ctx)
 	Require(t, err)
 
-	l2Node, l2Info, secondNodeParams, cleanL2Node := createL2Node(ctx, t, hotShotUrl, builder, false)
-
 	for k, v := range builder.L1Info.Accounts {
 		log.Info("L2 Accounts", "Account pneumonic", k, "Entry", v, "Address", v.Address)
 	}
 
-	return builder, l2Node, l2Info, secondNodeParams, cleanL2Node, func() {
+	return builder, builder.L2, builder.L2Info, cleanL2Node, func() {
 		cleanup()
 		cleanValNode()
 		cleanEspresso()
@@ -301,7 +299,7 @@ func TestEspressoMigration(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	builder, l2Node, l2Info, _, cleanL2Node, cleanup := BuildNonEspressoNetwork(ctx, t)
+	builder, l2Node, l2Info, cleanL2Node, cleanup := BuildNonEspressoNetwork(ctx, t)
 	defer cleanup()
 	node := builder.L2
 
@@ -379,9 +377,6 @@ func TestEspressoMigration(t *testing.T) {
 
 	// create L2 node in espresso mode here
 	log.Info("Turn on espresso network after sequencing some default transactions.")
-
-	l2Node, _, _, cleanL2Node = createL2Node(ctx, t, hotShotUrl, builder, true)
-	defer cleanL2Node()
 
 	scheduleArbOSUpgrade(t, &l2auth, builder)
 

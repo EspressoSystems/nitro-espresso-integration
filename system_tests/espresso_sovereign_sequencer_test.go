@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func()) {
+func createL1AndL2Node(ctx context.Context, t *testing.T, Hotshot bool) (*NodeBuilder, func(), func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	builder.l1StackConfig.HTTPPort = 8545
 	builder.l1StackConfig.WSPort = 8546
@@ -18,7 +18,11 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.l1StackConfig.DataDir = t.TempDir()
 	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
 
-	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+	if Hotshot {
+		builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
+	} else {
+		builder.chainConfig.ArbitrumChainParams.EnableEspresso = false
+	}
 
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = true
@@ -43,11 +47,21 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
 	// using the sovereign sequencer
-	builder.execConfig.Sequencer.Espresso = false
-	builder.execConfig.Sequencer.EnableEspressoSovereign = true
+
+	if Hotshot {
+		builder.execConfig.Sequencer.Espresso = false
+		builder.execConfig.Sequencer.EnableEspressoSovereign = true
+	} else {
+		builder.execConfig.Sequencer.Espresso = false
+		builder.execConfig.Sequencer.EnableEspressoSovereign = false
+	}
 
 	// transaction stream config
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
+	if Hotshot {
+		builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
+	} else {
+		builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = false
+	}
 	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
 	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
 
@@ -58,7 +72,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	Require(t, err)
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
 
-	return builder, cleanup
+	return builder, cleanup, builder.L2.cleanup
 }
 
 func TestSovereignSequencer(t *testing.T) {
@@ -68,7 +82,7 @@ func TestSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2Node(ctx, t)
+	builder, cleanup, _ := createL1AndL2Node(ctx, t, true)
 	defer cleanup()
 
 	err := waitForL1Node(t, ctx)
