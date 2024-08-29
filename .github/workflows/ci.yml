@@ -238,6 +238,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test-mode }}-full.log
+          path: full.log
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
