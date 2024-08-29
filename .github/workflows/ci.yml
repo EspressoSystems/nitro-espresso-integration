@@ -19,6 +19,10 @@ jobs:
   test:
     name: Go Tests
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Set the default working directory for 'run:' steps
+        working-directory: /tmp/gha-work
 
     # Creates a redis container for redis tests
     services:
@@ -33,6 +37,17 @@ jobs:
         test-mode: [defaults, race, challenge, stylus, long]
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Move repo to avoid too long file paths
+        run: |
+          rsync -a ./ /tmp/gha-work/
+        # Run from the original workspace directory because the new one doesn't exist yet.
+        working-directory: ${{ github.workspace }}
+
       - uses: cargo-bins/cargo-binstall@main
       - name: Make more disk space available on public runner
         run: |
@@ -57,11 +72,6 @@ jobs:
           sudo df -h
           echo
 
-
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: true
 
       - name: Install dependencies
         run: >
