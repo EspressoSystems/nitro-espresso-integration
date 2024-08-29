@@ -180,6 +180,7 @@ jobs:
         with:
           version: v1.59.1
           skip-cache: true
+          working-directory: /tmp/gha-work
 
       - name: Custom Lint
         run: |
@@ -240,7 +241,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.test-mode }}-full.log
-          path: full.log
+          path: /tmp/gha-work/full.log
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
@@ -250,6 +251,7 @@ jobs:
           files: ./coverage.txt,./coverage-redis.txt
           verbose: false
           token: ${{ secrets.CODECOV_TOKEN }}
+          working-directory: /tmp/gha-work
 
       - name: Check available space after CI run
         if: '!cancelled()'
