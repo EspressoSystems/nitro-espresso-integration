@@ -33,18 +33,18 @@ jobs:
         test-mode: [defaults, race, challenge, stylus, long]
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          submodules: true
-
       - name: Move repo to avoid too long file paths
         run: |
-          rsync -a ./ /tmp/gha-work/
+          mkdir /tmp/gha-work
           cd /tmp/gha-work
           rm -rf $GITHUB_WORKSPACE
           # Link the original workspace to the new workspace directory
           ln -sv /tmp/gha-work $GITHUB_WORKSPACE
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
 
       - uses: cargo-bins/cargo-binstall@main
       - name: Make more disk space available on public runner
@@ -81,7 +81,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'yarn'
-          cache-dependency-path: '**/yarn.lock'
+          cache-dependency-path: '/tmp/gha-work/**/yarn.lock'
 
       - name: Install go
         uses: actions/setup-go@v4
