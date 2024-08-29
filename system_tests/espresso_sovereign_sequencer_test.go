@@ -18,8 +18,6 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.l1StackConfig.DataDir = t.TempDir()
 	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
 
-	builder.chainConfig.ArbitrumChainParams.EnableEspresso = true
-
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = true
 	builder.nodeConfig.BatchPoster.ErrorDelay = 5 * time.Second
