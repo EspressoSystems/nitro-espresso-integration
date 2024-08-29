@@ -141,6 +141,7 @@ jobs:
           files: target/machines/latest/*
 
       - name: Check available space after CI run
+        if: '!cancelled()'
         run: |
           sudo df -h
 

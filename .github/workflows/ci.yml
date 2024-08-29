@@ -242,5 +242,6 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Check available space after CI run
+        if: '!cancelled()'
         run: |
           sudo df -h
