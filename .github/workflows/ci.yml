@@ -76,12 +76,12 @@ jobs:
           sudo apt update && sudo apt install -y wabt gotestsum
           cmake build-essential bison golang clang make wabt
 
-      - name: Setup nodejs
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: '/tmp/gha-work/**/yarn.lock'
+      # - name: Setup nodejs
+      #   uses: actions/setup-node@v3
+      #   with:
+      #     node-version: '18'
+      #     cache: 'yarn'
+      #     cache-dependency-path: '/tmp/gha-work/**/yarn.lock'
 
       - name: Install go
         uses: actions/setup-go@v4
