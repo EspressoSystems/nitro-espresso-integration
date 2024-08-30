@@ -209,7 +209,7 @@ jobs:
 
       - name: run redis tests
         if: matrix.test-mode == 'defaults'
-        run: TEST_REDIS=redis://redis:6379/0 gotestsum --format short-verbose -- -timeout 20m -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./...
+        run: TEST_REDIS=redis://localhost:6379/0 gotestsum --format short-verbose -- -timeout 20m -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./...
 
       - name: run challenge tests
         if: matrix.test-mode == 'challenge'
