@@ -206,6 +206,8 @@ jobs:
         run: |
 
           # HACK: move to directory with shorter path to avoid IPC paths over 107 characters
+          ls -lah /tmp
+          rm -rf /tmp/gha-work
           CHECKOUT_DIR=$PWD
           cd /
           mv -v $CHECKOUT_DIR /tmp/gha-work
