@@ -325,13 +325,13 @@ func (state *ArbosState) UpgradeArbosVersion(
 			ensure(params.Save())
 
 		case 32, 33, 34:
-		// leave these versions open to orbit chains that may have performed ArbOS upgrades post Bianca.
+			// these versions are left to Orbit chains for custom upgrades.
 
 		case 35:
 			// Espresso marketplace compatible ArbOS version.
 
 		case 36, 37, 38, 39:
-			//leave these versions open to orbit chains that may want to perform ArbOS upgrades after upgrading to an espresso integration.
+			// these versions are left to Orbit chains for custom upgrades.
 
 		default:
 			return fmt.Errorf(
