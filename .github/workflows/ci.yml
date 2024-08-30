@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test-mode: [defaults, race, challenge, stylus, long]
+        test-mode: [defaults, race, challenge, stylus, long, redis]
 
     steps:
       - name: Move repo to avoid too long file paths
@@ -175,12 +175,14 @@ jobs:
         run: make -j build-node-deps
 
       - name: Lint
+        if: matrix.test-mode == 'defaults'
         uses: golangci/golangci-lint-action@v5
         with:
           version: v1.59.1
           skip-cache: true
 
       - name: Custom Lint
+        if: matrix.test-mode == 'defaults'
         run: |
           go run ./linters ./...
 
@@ -208,7 +210,7 @@ jobs:
           stdbuf -oL gotestsum --format short-verbose --packages="$packages" --rerun-fails=1 --no-color=false -- ./... -race -skip "$skip_tests" -timeout=40m > >(stdbuf -oL tee full.log | grep -vE "INFO|seal")
 
       - name: run redis tests
-        if: matrix.test-mode == 'defaults'
+        if: matrix.test-mode == 'redis'
         run: TEST_REDIS=redis://localhost:6379/0 gotestsum --format short-verbose -- -timeout 20m -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./...
 
       - name: run challenge tests
