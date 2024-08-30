@@ -129,11 +129,11 @@ jobs:
           path: |
             ~/.cargo/registry/
             ~/.cargo/git/
-            arbitrator/target/
+            arbitrator/**/target/
             arbitrator/wasm-libraries/target/
             arbitrator/wasm-libraries/soft-float/SoftFloat/build
             target/etc/initial-machine-cache/
-          key: v1-${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-min-${{ hashFiles('arbitrator/Cargo.lock') }}-${{ matrix.test-mode }}
+          key: v2-${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-min-${{ hashFiles('arbitrator/Cargo.lock') }}-${{ matrix.test-mode }}
           restore-keys: v1-${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
