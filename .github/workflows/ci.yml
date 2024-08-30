@@ -208,7 +208,7 @@ jobs:
           # HACK: move to directory with shorter path to avoid IPC paths over 107 characters
           CHECKOUT_DIR=$PWD
           cd /
-          mv -v CHECKOUT_DIR /tmp/gha-work
+          mv -v $CHECKOUT_DIR /tmp/gha-work
           cd /tmp/gha-work
 
           TEST_REDIS=redis://localhost:6379/0 gotestsum --format short-verbose -- -timeout 20m -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./...
