@@ -1023,16 +1023,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-	s.espressoTxnsStateInsertionMutex.Lock()
-	defer s.espressoTxnsStateInsertionMutex.Unlock()
-
-	if arbos.IsEspressoMsg(msgWithMeta.Message) {
-		err = s.SubmitEspressoTransactionPos(pos, s.db.NewBatch())
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 

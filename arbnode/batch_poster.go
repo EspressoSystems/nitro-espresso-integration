@@ -1315,6 +1315,15 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			)
 			break
 		}
+
+		if arbos.IsEspressoMsg(msg.Message) {
+			err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
+			if err != nil {
+				log.Error("failed to submit espresso transaction", "pos", b.building.msgCount, "err", err)
+				break
+			}
+		}
+
 		err = b.addEspressoBlockMerkleProof(ctx, msg)
 		if err != nil {
 			return false, fmt.Errorf("error adding hotshot block merkle proof to justification: %w", err)
