@@ -620,6 +620,10 @@ func (b *multiplexerBackend) ReadDelayedInbox(seqNum uint64) (*arbostypes.L1Inco
 	return b.inbox.GetDelayedMessage(seqNum)
 }
 
+func (b *multiplexerBackend) RecedeSequencerInbox() {
+	panic("This method is not supposed to be used")
+}
+
 var delayedMessagesMismatch = errors.New("sequencer batch delayed messages missing or different")
 
 func (t *InboxTracker) AddSequencerBatches(ctx context.Context, client arbutil.L1Interface, batches []*SequencerInboxBatch) error {

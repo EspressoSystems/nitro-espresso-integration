@@ -49,4 +49,6 @@ func (m *MessageWithMetadata) Hash(sequenceNumber arbutil.MessageIndex, chainId 
 type InboxMultiplexer interface {
 	Pop(context.Context) (*MessageWithMetadata, error)
 	DelayedMessagesRead() uint64
+	RecedeSequencerMessage(context.Context) ([]byte, error)
+	SetCurrentIndex(uint64)
 }

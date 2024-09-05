@@ -57,6 +57,10 @@ func (b *multiplexerBackend) ReadDelayedInbox(seqNum uint64) (*arbostypes.L1Inco
 	return msg, nil
 }
 
+func (b *multiplexerBackend) RecedeSequencerInbox() {
+	panic("This method is not supposed to be used here")
+}
+
 func FuzzInboxMultiplexer(f *testing.F) {
 	f.Fuzz(func(t *testing.T, seqMsg []byte, delayedMsg []byte) {
 		if len(seqMsg) < 40 {
