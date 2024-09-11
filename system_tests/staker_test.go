@@ -193,7 +193,6 @@ func stakerTestImpl(t *testing.T, faultyStaker bool, honestStakerInactive bool) 
 	statelessA, err := staker.NewStatelessBlockValidator(
 		l2nodeA.InboxReader,
 		l2nodeA.InboxTracker,
-		nil,
 		l2nodeA.TxStreamer,
 		execNodeA,
 		l2nodeA.ArbDB,
@@ -246,7 +245,6 @@ func stakerTestImpl(t *testing.T, faultyStaker bool, honestStakerInactive bool) 
 	statelessB, err := staker.NewStatelessBlockValidator(
 		l2nodeB.InboxReader,
 		l2nodeB.InboxTracker,
-		nil,
 		l2nodeB.TxStreamer,
 		execNodeB,
 		l2nodeB.ArbDB,

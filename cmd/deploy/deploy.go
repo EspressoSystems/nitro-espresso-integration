@@ -1,227 +1,290 @@
-// Copyright 2021-2022, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-
-package main
+package deploy
 
 import (
 	"context"
-	"encoding/json"
-	"flag"
+	"errors"
 	"fmt"
-	"io"
 	"math/big"
-	"os"
-	"strings"
-	"time"
 
-	"github.com/offchainlabs/nitro/cmd/chaininfo"
-	"github.com/offchainlabs/nitro/cmd/genericconf"
-	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
-	"github.com/offchainlabs/nitro/util/headerreader"
-	"github.com/offchainlabs/nitro/validator/server_common"
-
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/offchainlabs/nitro/arbnode"
-	"github.com/offchainlabs/nitro/cmd/util"
-	deploycode "github.com/offchainlabs/nitro/deploy"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/offchainlabs/nitro/cmd/chaininfo"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/challengegen"
+	"github.com/offchainlabs/nitro/solgen/go/ospgen"
+	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
+	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
+	"github.com/offchainlabs/nitro/solgen/go/yulgen"
+	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
-func main() {
-	glogger := log.NewGlogHandler(
-		log.NewTerminalHandler(io.Writer(os.Stderr), false))
-	glogger.Verbosity(log.LvlDebug)
-	log.SetDefault(log.NewLogger(glogger))
-	log.Info("deploying rollup")
-
-	ctx := context.Background()
-
-	l1conn := flag.String("l1conn", "", "l1 connection")
-	l1keystore := flag.String("l1keystore", "", "l1 private key store")
-	deployAccount := flag.String("l1DeployAccount", "", "l1 seq account to use (default is first account in keystore)")
-	ownerAddressString := flag.String("ownerAddress", "", "the rollup owner's address")
-	sequencerAddressString := flag.String("sequencerAddress", "", "the sequencer's address")
-	batchPostersString := flag.String("batchPosters", "", "the comma separated array of addresses of batch posters. Defaults to sequencer address")
-	batchPosterManagerAddressString := flag.String("batchPosterManger", "", "the batch poster manger's address. Defaults to owner address")
-	nativeTokenAddressString := flag.String("nativeTokenAddress", "0x0000000000000000000000000000000000000000", "address of the ERC20 token which is used as native L2 currency")
-	maxDataSizeUint := flag.Uint64("maxDataSize", 117964, "maximum data size of a batch or a cross-chain message (default = 90% of Geth's 128KB tx size limit)")
-	loserEscrowAddressString := flag.String("loserEscrowAddress", "", "the address which half of challenge loser's funds accumulate at")
-	wasmmoduleroot := flag.String("wasmmoduleroot", "", "WASM module root hash")
-	wasmrootpath := flag.String("wasmrootpath", "", "path to machine folders")
-	l1passphrase := flag.String("l1passphrase", "passphrase", "l1 private key file passphrase")
-	l1privatekey := flag.String("l1privatekey", "", "l1 private key")
-	outfile := flag.String("l1deployment", "deploy.json", "deployment output json file")
-	l1ChainIdUint := flag.Uint64("l1chainid", 1337, "L1 chain ID")
-	l2ChainConfig := flag.String("l2chainconfig", "l2_chain_config.json", "L2 chain config json file")
-	l2ChainName := flag.String("l2chainname", "", "L2 chain name (will be included in chain info output json file)")
-	l2ChainInfo := flag.String("l2chaininfo", "l2_chain_info.json", "L2 chain info output json file")
-	authorizevalidators := flag.Uint64("authorizevalidators", 0, "Number of validators to preemptively authorize")
-	txTimeout := flag.Duration("txtimeout", 10*time.Minute, "Timeout when waiting for a transaction to be included in a block")
-	prod := flag.Bool("prod", false, "Whether to configure the rollup for production or testing")
-	hotshotAddr := flag.String("hotshot", "", "the address of hotshot contract in L1")
-	isUsingFeeToken := flag.Bool("isUsingFeeToken", false, "true if the chain uses custom fee token")
-	flag.Parse()
-	l1ChainId := new(big.Int).SetUint64(*l1ChainIdUint)
-	maxDataSize := new(big.Int).SetUint64(*maxDataSizeUint)
-
-	if *prod {
-		if *wasmmoduleroot == "" {
-			panic("must specify wasm module root when launching prod chain")
-		}
-	}
-	if *l2ChainName == "" {
-		panic("must specify l2 chain name")
-	}
-
-	wallet := genericconf.WalletConfig{
-		Pathname:   *l1keystore,
-		Account:    *deployAccount,
-		Password:   *l1passphrase,
-		PrivateKey: *l1privatekey,
-	}
-	l1TransactionOpts, _, err := util.OpenWallet("l1", &wallet, l1ChainId)
+func andTxSucceeded(ctx context.Context, l1Reader *headerreader.HeaderReader, tx *types.Transaction, err error) error {
 	if err != nil {
-		flag.Usage()
-		log.Error("error reading keystore")
-		panic(err)
+		return fmt.Errorf("error submitting tx: %w", err)
 	}
-
-	l1client, err := ethclient.Dial(*l1conn)
+	_, err = l1Reader.WaitForTxApproval(ctx, tx)
 	if err != nil {
-		flag.Usage()
-		log.Error("error creating l1client")
-		panic(err)
+		return fmt.Errorf("error executing tx: %w", err)
 	}
+	return nil
+}
 
-	if !common.IsHexAddress(*sequencerAddressString) && len(*sequencerAddressString) > 0 {
-		panic("specified sequencer address is invalid")
-	}
-	sequencerAddress := common.HexToAddress(*sequencerAddressString)
+func deployBridgeCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts, maxDataSize *big.Int, isUsingFeeToken bool) (common.Address, error) {
+	client := l1Reader.Client()
 
-	if !common.IsHexAddress(*ownerAddressString) {
-		panic("please specify a valid rollup owner address")
-	}
-	ownerAddress := common.HexToAddress(*ownerAddressString)
-
-	if *prod && !common.IsHexAddress(*loserEscrowAddressString) {
-		panic("please specify a valid loser escrow address")
-	}
-
-	var batchPosters []common.Address
-	if len(*batchPostersString) > 0 {
-		batchPostersArr := strings.Split(*batchPostersString, ",")
-		for _, address := range batchPostersArr {
-			if !common.IsHexAddress(address) {
-				log.Error("invalid address in batch posters array", "address", address)
-				continue
-			}
-			batchPosters = append(batchPosters, common.HexToAddress(address))
-		}
-		if len(batchPosters) != len(batchPostersArr) {
-			panic("found at least one invalid address in batch posters array")
-		}
-	}
-	if len(batchPosters) == 0 {
-		log.Info("batch posters array was empty, defaulting to sequencer address")
-		batchPosters = append(batchPosters, sequencerAddress)
-	}
-
-	var batchPosterManagerAddress common.Address
-	if common.IsHexAddress(*batchPosterManagerAddressString) {
-		batchPosterManagerAddress = common.HexToAddress(*batchPosterManagerAddressString)
-	} else {
-		if len(*batchPosterManagerAddressString) > 0 {
-			panic("please specify a valid batch poster manager address")
-		}
-		log.Info("batch poster manager address was empty, defaulting to owner address")
-		batchPosterManagerAddress = ownerAddress
-	}
-
-	loserEscrowAddress := common.HexToAddress(*loserEscrowAddressString)
-	if sequencerAddress != (common.Address{}) && ownerAddress != l1TransactionOpts.From {
-		panic("cannot specify sequencer address if owner is not deployer")
-	}
-
-	var moduleRoot common.Hash
-	if *wasmmoduleroot == "" {
-		locator, err := server_common.NewMachineLocator(*wasmrootpath)
-		if err != nil {
-			panic(err)
-		}
-		moduleRoot = locator.LatestWasmModuleRoot()
-	} else {
-		moduleRoot = common.HexToHash(*wasmmoduleroot)
-	}
-	if moduleRoot == (common.Hash{}) {
-		panic("wasmModuleRoot not found")
-	}
-
-	headerReaderConfig := headerreader.DefaultConfig
-	headerReaderConfig.TxTimeout = *txTimeout
-
-	chainConfigJson, err := os.ReadFile(*l2ChainConfig)
+	/// deploy eth based templates
+	bridgeTemplate, tx, _, err := bridgegen.DeployBridge(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		panic(fmt.Errorf("failed to read l2 chain config file: %w", err))
-	}
-	var chainConfig params.ChainConfig
-	err = json.Unmarshal(chainConfigJson, &chainConfig)
-	if err != nil {
-		panic(fmt.Errorf("failed to deserialize chain config: %w", err))
+		return common.Address{}, fmt.Errorf("bridge deploy error: %w", err)
 	}
 
-	arbSys, _ := precompilesgen.NewArbSys(types.ArbSysAddress, l1client)
-	l1Reader, err := headerreader.New(ctx, l1client, func() *headerreader.Config { return &headerReaderConfig }, arbSys)
+	reader4844, tx, _, err := yulgen.DeployReader4844(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
-		panic(fmt.Errorf("failed to create header reader: %w", err))
+		return common.Address{}, fmt.Errorf("blob basefee reader deploy error: %w", err)
 	}
-	l1Reader.Start(ctx)
-	defer l1Reader.StopAndWait()
+	seqInboxTemplate, tx, _, err := bridgegen.DeploySequencerInbox(auth, client, maxDataSize, reader4844, isUsingFeeToken)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("sequencer inbox deploy error: %w", err)
+	}
 
-	nativeToken := common.HexToAddress(*nativeTokenAddressString)
-	hotshot := common.HexToAddress(*hotshotAddr)
-	deployedAddresses, err := deploycode.DeployOnL1(
-		ctx,
-		l1Reader,
-		l1TransactionOpts,
-		batchPosters,
-		batchPosterManagerAddress,
-		*authorizevalidators,
-		arbnode.GenerateRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress),
-		nativeToken,
-		maxDataSize,
-		hotshot,
-		*isUsingFeeToken,
+	inboxTemplate, tx, _, err := bridgegen.DeployInbox(auth, client, maxDataSize)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("inbox deploy error: %w", err)
+	}
+
+	rollupEventBridgeTemplate, tx, _, err := rollupgen.DeployRollupEventInbox(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("rollup event bridge deploy error: %w", err)
+	}
+
+	outboxTemplate, tx, _, err := bridgegen.DeployOutbox(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("outbox deploy error: %w", err)
+	}
+
+	ethBasedTemplates := rollupgen.BridgeCreatorBridgeContracts{
+		Bridge:           bridgeTemplate,
+		SequencerInbox:   seqInboxTemplate,
+		Inbox:            inboxTemplate,
+		RollupEventInbox: rollupEventBridgeTemplate,
+		Outbox:           outboxTemplate,
+	}
+
+	/// deploy ERC20 based templates
+	erc20BridgeTemplate, tx, _, err := bridgegen.DeployERC20Bridge(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("bridge deploy error: %w", err)
+	}
+
+	erc20InboxTemplate, tx, _, err := bridgegen.DeployERC20Inbox(auth, client, maxDataSize)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("inbox deploy error: %w", err)
+	}
+
+	erc20RollupEventBridgeTemplate, tx, _, err := rollupgen.DeployERC20RollupEventInbox(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("rollup event bridge deploy error: %w", err)
+	}
+
+	erc20OutboxTemplate, tx, _, err := bridgegen.DeployERC20Outbox(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("outbox deploy error: %w", err)
+	}
+
+	erc20BasedTemplates := rollupgen.BridgeCreatorBridgeContracts{
+		Bridge:           erc20BridgeTemplate,
+		SequencerInbox:   seqInboxTemplate,
+		Inbox:            erc20InboxTemplate,
+		RollupEventInbox: erc20RollupEventBridgeTemplate,
+		Outbox:           erc20OutboxTemplate,
+	}
+
+	bridgeCreatorAddr, tx, _, err := rollupgen.DeployBridgeCreator(auth, client, ethBasedTemplates, erc20BasedTemplates)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("bridge creator deploy error: %w", err)
+	}
+
+	return bridgeCreatorAddr, nil
+}
+
+func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts) (common.Address, common.Address, error) {
+	client := l1Reader.Client()
+	osp0, tx, _, err := ospgen.DeployOneStepProver0(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("osp0 deploy error: %w", err)
+	}
+
+	ospMem, tx, _, err := ospgen.DeployOneStepProverMemory(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("ospMemory deploy error: %w", err)
+	}
+
+	ospMath, tx, _, err := ospgen.DeployOneStepProverMath(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("ospMath deploy error: %w", err)
+	}
+
+	ospHostIo, tx, _, err := ospgen.DeployOneStepProverHostIo(auth, client, common.Address{})
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("ospHostIo deploy error: %w", err)
+	}
+
+	challengeManagerAddr, tx, _, err := challengegen.DeployChallengeManager(auth, client)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("challenge manager deploy error: %w", err)
+	}
+
+	ospEntryAddr, tx, _, err := ospgen.DeployOneStepProofEntry(auth, client, osp0, ospMem, ospMath, ospHostIo)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return common.Address{}, common.Address{}, fmt.Errorf("ospEntry deploy error: %w", err)
+	}
+
+	return ospEntryAddr, challengeManagerAddr, nil
+}
+
+func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts, maxDataSize *big.Int, isUsingFeeToken bool) (*rollupgen.RollupCreator, common.Address, common.Address, common.Address, error) {
+	bridgeCreator, err := deployBridgeCreator(ctx, l1Reader, auth, maxDataSize, isUsingFeeToken)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("bridge creator deploy error: %w", err)
+	}
+
+	ospEntryAddr, challengeManagerAddr, err := deployChallengeFactory(ctx, l1Reader, auth)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, err
+	}
+
+	rollupAdminLogic, tx, _, err := rollupgen.DeployRollupAdminLogic(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup admin logic deploy error: %w", err)
+	}
+
+	rollupUserLogic, tx, _, err := rollupgen.DeployRollupUserLogic(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup user logic deploy error: %w", err)
+	}
+
+	rollupCreatorAddress, tx, rollupCreator, err := rollupgen.DeployRollupCreator(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup creator deploy error: %w", err)
+	}
+
+	upgradeExecutor, tx, _, err := upgrade_executorgen.DeployUpgradeExecutor(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("upgrade executor deploy error: %w", err)
+	}
+
+	validatorUtils, tx, _, err := rollupgen.DeployValidatorUtils(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator utils deploy error: %w", err)
+	}
+
+	validatorWalletCreator, tx, _, err := rollupgen.DeployValidatorWalletCreator(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("validator wallet creator deploy error: %w", err)
+	}
+
+	l2FactoriesDeployHelper, tx, _, err := rollupgen.DeployDeployHelper(auth, l1Reader.Client())
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("deploy helper creator deploy error: %w", err)
+	}
+
+	tx, err = rollupCreator.SetTemplates(
+		auth,
+		bridgeCreator,
+		ospEntryAddr,
+		challengeManagerAddr,
+		rollupAdminLogic,
+		rollupUserLogic,
+		upgradeExecutor,
+		validatorUtils,
+		validatorWalletCreator,
+		l2FactoriesDeployHelper,
+	)
+	err = andTxSucceeded(ctx, l1Reader, tx, err)
+	if err != nil {
+		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("rollup set template error: %w", err)
+	}
+
+	return rollupCreator, rollupCreatorAddress, validatorUtils, validatorWalletCreator, nil
+}
+
+func DeployOnL1(ctx context.Context, parentChainReader *headerreader.HeaderReader, deployAuth *bind.TransactOpts, batchPosters []common.Address, batchPosterManager common.Address, authorizeValidators uint64, config rollupgen.Config, nativeToken common.Address, maxDataSize *big.Int, isUsingFeeToken bool) (*chaininfo.RollupAddresses, error) {
+	if config.WasmModuleRoot == (common.Hash{}) {
+		return nil, errors.New("no machine specified")
+	}
+
+	rollupCreator, _, validatorUtils, validatorWalletCreator, err := deployRollupCreator(ctx, parentChainReader, deployAuth, maxDataSize, isUsingFeeToken)
+	if err != nil {
+		return nil, fmt.Errorf("error deploying rollup creator: %w", err)
+	}
+
+	var validatorAddrs []common.Address
+	for i := uint64(1); i <= authorizeValidators; i++ {
+		validatorAddrs = append(validatorAddrs, crypto.CreateAddress(validatorWalletCreator, i))
+	}
+
+	deployParams := rollupgen.RollupCreatorRollupDeploymentParams{
+		Config:                    config,
+		Validators:                validatorAddrs,
+		MaxDataSize:               maxDataSize,
+		NativeToken:               nativeToken,
+		DeployFactoriesToL2:       false,
+		MaxFeePerGasForRetryables: big.NewInt(0), // needed when utility factories are deployed
+		BatchPosters:              batchPosters,
+		BatchPosterManager:        batchPosterManager,
+	}
+
+	tx, err := rollupCreator.CreateRollup(
+		deployAuth,
+		deployParams,
 	)
 	if err != nil {
-		flag.Usage()
-		log.Error("error deploying on l1")
-		panic(err)
+		return nil, fmt.Errorf("error submitting create rollup tx: %w", err)
 	}
-	deployData, err := json.Marshal(deployedAddresses)
+	receipt, err := parentChainReader.WaitForTxApproval(ctx, tx)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("error executing create rollup tx: %w", err)
 	}
-	if err := os.WriteFile(*outfile, deployData, 0600); err != nil {
-		panic(err)
-	}
-	parentChainIsArbitrum := l1Reader.IsParentChainArbitrum()
-	chainsInfo := []chaininfo.ChainInfo{
-		{
-			ChainName:             *l2ChainName,
-			ParentChainId:         l1ChainId.Uint64(),
-			ParentChainIsArbitrum: &parentChainIsArbitrum,
-			ChainConfig:           &chainConfig,
-			RollupAddresses:       deployedAddresses,
-		},
-	}
-	chainsInfoJson, err := json.Marshal(chainsInfo)
+	info, err := rollupCreator.ParseRollupCreated(*receipt.Logs[len(receipt.Logs)-1])
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("error parsing rollup created log: %w", err)
 	}
-	if err := os.WriteFile(*l2ChainInfo, chainsInfoJson, 0600); err != nil {
-		panic(err)
-	}
+
+	return &chaininfo.RollupAddresses{
+		Bridge:                 info.Bridge,
+		Inbox:                  info.InboxAddress,
+		SequencerInbox:         info.SequencerInbox,
+		DeployedAt:             receipt.BlockNumber.Uint64(),
+		Rollup:                 info.RollupAddress,
+		NativeToken:            nativeToken,
+		UpgradeExecutor:        info.UpgradeExecutor,
+		ValidatorUtils:         validatorUtils,
+		ValidatorWalletCreator: validatorWalletCreator,
+	}, nil
 }

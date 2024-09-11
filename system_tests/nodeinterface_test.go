@@ -42,7 +42,7 @@ func TestFindBatch(t *testing.T) {
 	fatalErrChan := make(chan error, 10)
 	locator, err := server_common.NewMachineLocator("")
 	Require(t, err)
-	rollupAddresses, initMsg := DeployOnTestL1(t, ctx, l1Info, l1Backend, chainConfig, locator.LatestWasmModuleRoot(), common.Address{})
+	rollupAddresses, initMsg := DeployOnTestL1(t, ctx, l1Info, l1Backend, chainConfig, locator.LatestWasmModuleRoot())
 
 	bridgeAddr, seqInbox, seqInboxAddr := setupSequencerInboxStub(ctx, t, l1Info, l1Backend, chainConfig)
 
