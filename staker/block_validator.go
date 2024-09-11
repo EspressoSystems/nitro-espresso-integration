@@ -15,14 +15,12 @@ import (
 	"testing"
 	"time"
 
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/offchainlabs/nitro/arbnode/resourcemanager"
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/rpcclient"
@@ -108,10 +106,6 @@ type BlockValidatorConfig struct {
 	ValidationServerConfigsList string                        `koanf:"validation-server-configs-list"`
 
 	memoryFreeLimit int
-
-	// Espresso specific flags
-	Espresso           bool   `koanf:"espresso"`
-	LightClientAddress string `koanf:"light-client-address"` //nolint
 }
 
 func (c *BlockValidatorConfig) Validate() error {
@@ -159,9 +153,7 @@ func BlockValidatorConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".prerecorded-blocks", DefaultBlockValidatorConfig.PrerecordedBlocks, "record that many blocks ahead of validation (larger footprint)")
 	f.String(prefix+".current-module-root", DefaultBlockValidatorConfig.CurrentModuleRoot, "current wasm module root ('current' read from chain, 'latest' from machines/latest dir, or provide hash)")
 	f.String(prefix+".pending-upgrade-module-root", DefaultBlockValidatorConfig.PendingUpgradeModuleRoot, "pending upgrade wasm module root to additionally validate (hash, 'latest' or empty)")
-	f.String(prefix+".light-client-address", DefaultBlockValidatorConfig.LightClientAddress, "address of the hotshot light client contract")
 	f.Bool(prefix+".failure-is-fatal", DefaultBlockValidatorConfig.FailureIsFatal, "failing a validation is treated as a fatal error")
-	f.Bool(prefix+".espresso", DefaultBlockValidatorConfig.Espresso, "if true, hotshot header preimages will be added to validation entries to verify that transactions have been sequenced by espresso")
 	BlockValidatorDangerousConfigAddOptions(prefix+".dangerous", f)
 	f.String(prefix+".memory-free-limit", DefaultBlockValidatorConfig.MemoryFreeLimit, "minimum free-memory limit after reaching which the blockvalidator pauses validation. Enabled by default as 1GB, to disable provide empty string")
 }
@@ -440,7 +432,7 @@ func GlobalStateToMsgCount(tracker InboxTrackerInterface, streamer TransactionSt
 		return false, 0, err
 	}
 	if res.BlockHash != gs.BlockHash || res.SendRoot != gs.SendRoot {
-		return false, count, fmt.Errorf("%w: count %d hash %v expected %v, sendroot %v expected %v", ErrGlobalStateNotInChain, count, gs.BlockHash, res.BlockHash, gs.SendRoot, res.SendRoot)
+		return false, 0, fmt.Errorf("%w: count %d hash %v expected %v, sendroot %v expected %v", ErrGlobalStateNotInChain, count, gs.BlockHash, res.BlockHash, gs.SendRoot, res.SendRoot)
 	}
 	return true, count, nil
 }
@@ -582,29 +574,9 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 	} else {
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
-	var comm espressoTypes.Commitment
-	var isHotShotLive bool
-	var blockHeight uint64
-	if arbos.IsEspressoMsg(msg.Message) {
-		_, jst, err := arbos.ParseEspressoMsg(msg.Message)
-		if err != nil {
-			return false, err
-		}
-		blockHeight = jst.Header.Height
-		snapShot, err := v.lightClientReader.FetchMerkleRoot(blockHeight, nil)
-		if err != nil {
-			log.Error("error attempting to fetch block merkle root from the light client contract", "blockHeight", blockHeight)
-			return false, err
-		}
-		comm = snapShot.Root
-		isHotShotLive = true
-	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
-		isHotShotLive = false
-		blockHeight = msg.Message.Header.BlockNumber
-	}
 	chainConfig := v.streamer.ChainConfig()
 	entry, err := newValidationEntry(
-		pos, v.nextCreateStartGS, endGS, msg, v.nextCreateBatch, v.nextCreateBatchBlockHash, v.nextCreatePrevDelayed, chainConfig, &comm, isHotShotLive, blockHeight,
+		pos, v.nextCreateStartGS, endGS, msg, v.nextCreateBatch, v.nextCreateBatchBlockHash, v.nextCreatePrevDelayed, chainConfig,
 	)
 	if err != nil {
 		return false, err
