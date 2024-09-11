@@ -23,7 +23,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -33,7 +32,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/das/dastree"
-	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/gethhook"
 	"github.com/offchainlabs/nitro/wavmio"
 )
@@ -284,45 +282,6 @@ func main() {
 		chainContext := WavmChainContext{}
 		batchFetcher := func(batchNum uint64) ([]byte, error) {
 			return wavmio.ReadInboxMessage(batchNum), nil
-		}
-
-		// Handle the various pre-conditions if the message is an Espresso message
-		validatingAgainstEspresso := chainConfig.ArbitrumChainParams.EnableEspresso && arbos.IsEspressoMsg(message.Message)
-		if validatingAgainstEspresso {
-			txs, jst, err := arbos.ParseEspressoMsg(message.Message)
-			if err != nil {
-				panic(err)
-			}
-			if jst == nil {
-				panic("batch missing espresso justification")
-			}
-
-			hotshotHeader := jst.Header
-			height := hotshotHeader.Height
-
-			if jst.BlockMerkleJustification == nil {
-				panic("block merkle justification missing")
-			}
-
-			if jst.Proof == nil && len(txs) != 0 {
-				panic("namespace proof missing")
-			}
-
-			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
-			jsonHeader, err := json.Marshal(hotshotHeader)
-			if err != nil {
-				panic("unable to serialize header")
-			}
-			espressocrypto.VerifyMerkleProof(
-				jst.BlockMerkleJustification.BlockMerkleProof.Proof,
-				jsonHeader,
-				*jst.BlockMerkleJustification.BlockMerkleComm,
-				commitment,
-			)
-			if jst.Proof != nil {
-				espressocrypto.VerifyNamespace(chainConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
-			}
-
 		}
 		newBlock, _, err = arbos.ProduceBlock(message.Message, message.DelayedMessagesRead, lastBlockHeader, statedb, chainContext, chainConfig, batchFetcher, false)
 		if err != nil {
