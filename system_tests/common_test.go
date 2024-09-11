@@ -191,7 +191,7 @@ func (b *NodeBuilder) DefaultConfig(t *testing.T, withL1 bool) *NodeBuilder {
 	b.L1Info = NewL1TestInfo(t)
 	b.L2Info = NewArbTestInfo(t, b.chainConfig.ChainID)
 	b.dataDir = t.TempDir()
-	b.l1StackConfig = createStackConfigForTest(t.TempDir())
+	b.l1StackConfig = createStackConfigForTest(b.dataDir)
 	b.l2StackConfig = createStackConfigForTest(b.dataDir)
 	cp := valnode.TestValidationConfig
 	b.valnodeConfig = &cp
@@ -222,7 +222,7 @@ func (b *NodeBuilder) Build(t *testing.T) func() {
 	if b.withL1 {
 		l1, l2 := NewTestClient(b.ctx), NewTestClient(b.ctx)
 		b.L2Info, l2.ConsensusNode, l2.Client, l2.Stack, b.L1Info, l1.L1Backend, l1.Client, l1.Stack =
-			createTestNodeOnL1WithConfigImpl(t, b.ctx, b.isSequencer, b.nodeConfig, b.execConfig, b.chainConfig, b.l1StackConfig, b.l2StackConfig, b.valnodeConfig, b.L2Info)
+			createTestNodeWithL1(t, b.ctx, b.isSequencer, b.nodeConfig, b.execConfig, b.chainConfig, b.l2StackConfig, b.valnodeConfig, b.L2Info)
 		b.L1, b.L2 = l1, l2
 		b.L1.cleanup = func() { requireClose(t, b.L1.Stack) }
 	} else {
@@ -719,7 +719,7 @@ func getInitMessage(ctx context.Context, t *testing.T, l1client client, addresse
 }
 
 func DeployOnTestL1(
-	t *testing.T, ctx context.Context, l1info info, l1client client, chainConfig *params.ChainConfig, wasmModuleRoot common.Hash, hotshotAddr common.Address,
+	t *testing.T, ctx context.Context, l1info info, l1client client, chainConfig *params.ChainConfig, wasmModuleRoot common.Hash,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
 	l1info.GenerateAccount("RollupOwner")
 	l1info.GenerateAccount("Sequencer")
@@ -754,7 +754,6 @@ func DeployOnTestL1(
 		arbnode.GenerateRollupConfig(false, wasmModuleRoot, l1info.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}),
 		nativeToken,
 		maxDataSize,
-		hotshotAddr,
 		false,
 	)
 	Require(t, err)
@@ -820,14 +819,14 @@ func ClientForStack(t *testing.T, backend *node.Node) *ethclient.Client {
 	return ethclient.NewClient(rpcClient)
 }
 
-func createTestNodeOnL1WithConfigImpl(
+// Create and deploy L1 and arbnode for L2
+func createTestNodeWithL1(
 	t *testing.T,
 	ctx context.Context,
 	isSequencer bool,
 	nodeConfig *arbnode.Config,
 	execConfig *gethexec.Config,
 	chainConfig *params.ChainConfig,
-	l1StackConfig *node.Config,
 	stackConfig *node.Config,
 	valnodeConfig *valnode.Config,
 	l2info_in info,
@@ -845,7 +844,7 @@ func createTestNodeOnL1WithConfigImpl(
 		chainConfig = params.ArbitrumDevTestChainConfig()
 	}
 	fatalErrChan := make(chan error, 10)
-	l1info, l1client, l1backend, l1stack = createTestL1BlockChainWithConfig(t, nil, l1StackConfig)
+	l1info, l1client, l1backend, l1stack = createTestL1BlockChain(t, nil)
 	var l2chainDb ethdb.Database
 	var l2arbDb ethdb.Database
 	var l2blockchain *core.BlockChain
@@ -853,13 +852,9 @@ func createTestNodeOnL1WithConfigImpl(
 	if l2info == nil {
 		l2info = NewArbTestInfo(t, chainConfig.ChainID)
 	}
-	var lightClientAddr common.Address
-	if nodeConfig.BlockValidator.LightClientAddress != "" {
-		lightClientAddr = common.HexToAddress(nodeConfig.BlockValidator.LightClientAddress)
-	}
 	locator, err := server_common.NewMachineLocator(valnodeConfig.Wasm.RootPath)
 	Require(t, err)
-	addresses, initMessage := DeployOnTestL1(t, ctx, l1info, l1client, chainConfig, locator.LatestWasmModuleRoot(), lightClientAddr)
+	addresses, initMessage := DeployOnTestL1(t, ctx, l1info, l1client, chainConfig, locator.LatestWasmModuleRoot())
 	_, l2stack, l2chainDb, l2arbDb, l2blockchain = createL2BlockChainWithStackConfig(t, l2info, "", chainConfig, initMessage, stackConfig, &execConfig.Caching)
 	var sequencerTxOptsPtr *bind.TransactOpts
 	var dataSigner signature.DataSignerFunc
