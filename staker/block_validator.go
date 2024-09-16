@@ -582,7 +582,7 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 	} else {
 		return false, fmt.Errorf("illegal batch msg count %d pos %d batch %d", v.nextCreateBatchMsgCount, pos, endGS.Batch)
 	}
-	var comm espressoTypes.Commitment
+	var comm espressoTypes.BlockMerkleRoot
 	var isHotShotLive bool
 	var blockHeight uint64
 	if arbos.IsEspressoMsg(msg.Message) {
@@ -591,12 +591,11 @@ func (v *BlockValidator) createNextValidationEntry(ctx context.Context) (bool, e
 			return false, err
 		}
 		blockHeight = jst.Header.Height
-		snapShot, err := v.lightClientReader.FetchMerkleRoot(blockHeight, nil)
+		comm, err = v.lightClientReader.FetchMerkleRoot(blockHeight, nil)
 		if err != nil {
 			log.Error("error attempting to fetch block merkle root from the light client contract", "blockHeight", blockHeight)
 			return false, err
 		}
-		comm = snapShot.Root
 		isHotShotLive = true
 	} else if arbos.IsL2NonEspressoMsg(msg.Message) {
 		isHotShotLive = false
