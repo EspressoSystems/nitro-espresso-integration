@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"testing"
 )
 
 func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
@@ -17,8 +18,12 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	l2Node, l2Info, l1Info, cleanup := createL1AndL2Node(ctx, t)
+	builder, cleanup := createL1AndL2Node(ctx, t)
 	defer cleanup()
+
+	l2Node := builder.L2
+	l2Info := builder.L2Info
+	l1Info := builder.L1Info
 
 	err := waitForL1Node(t, ctx)
 	Require(t, err)
