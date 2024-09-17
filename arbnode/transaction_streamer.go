@@ -9,16 +9,17 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
-	"github.com/offchainlabs/nitro/util/signature"
 	"math/big"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+	"github.com/offchainlabs/nitro/util/signature"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
@@ -1475,13 +1476,13 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		signedPayload = append(signedPayload, payloadSignature...)
 		signedPayload = append(signedPayload, txns[0]...)
 
+		log.Info("submitting transaction to espresso using sovereign sequencer")
+
 		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   signedPayload,
 			Namespace: s.config().EspressoNamespace,
 		})
-
-		log.Info("submitting transaction to espresso using sovereign sequencer")
 
 		if err != nil {
 			log.Error("failed to submit transaction to espresso", "err", err)
