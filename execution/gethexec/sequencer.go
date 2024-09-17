@@ -10,7 +10,6 @@ import (
 	"math"
 	"math/big"
 	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -81,15 +80,7 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	Espresso                bool          `koanf:"espresso"`
-	EnableEspressoSovereign bool          `koanf:"enable-espresso-sovereign"`
-	HotShotUrl              string        `koanf:"hotshot-url"`
-	LightClientAddress      string        `koanf:"light-client-address"`
-	EspressoNamespace       uint64        `koanf:"espresso-namespace"`
-	StartHotShotBlock       uint64        `koanf:"start-hotshot-block"`
-	SwitchPollInterval      time.Duration `koanf:"switch-poll-interval"`
-	// TODO: Wrtie this into the config chain
-	SwitchDelayThreshold uint64 `koanf:"switch-delay-threshold"`
+	EnableEspressoSovereign bool `koanf:"enable-espresso-sovereign"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -100,23 +91,6 @@ func (c *SequencerConfig) Validate() error {
 		}
 		if !common.IsHexAddress(address) {
 			return fmt.Errorf("sequencer sender whitelist entry \"%v\" is not a valid address", address)
-		}
-	}
-	if c.LightClientAddress == "" && c.Espresso {
-		log.Warn("LightClientAddress is empty, running the espresso test mode")
-		var err error
-		if c.ExpectedSurplusSoftThreshold != "default" {
-			if c.expectedSurplusSoftThreshold, err = strconv.Atoi(c.ExpectedSurplusSoftThreshold); err != nil {
-				return fmt.Errorf("invalid expected-surplus-soft-threshold value provided in batchposter config %w", err)
-			}
-		}
-		if c.ExpectedSurplusHardThreshold != "default" {
-			if c.expectedSurplusHardThreshold, err = strconv.Atoi(c.ExpectedSurplusHardThreshold); err != nil {
-				return fmt.Errorf("invalid expected-surplus-hard-threshold value provided in batchposter config %w", err)
-			}
-		}
-		if c.expectedSurplusSoftThreshold < c.expectedSurplusHardThreshold {
-			return errors.New("expected-surplus-soft-threshold cannot be lower than expected-surplus-hard-threshold")
 		}
 	}
 	if c.MaxTxDataSize > arbostypes.MaxL2MessageSize-50000 {
@@ -181,17 +155,12 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-tx-data-size", DefaultSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
 	f.Int(prefix+".nonce-failure-cache-size", DefaultSequencerConfig.NonceFailureCacheSize, "number of transactions with too high of a nonce to keep in memory while waiting for their predecessor")
 	f.Duration(prefix+".nonce-failure-cache-expiry", DefaultSequencerConfig.NonceFailureCacheExpiry, "maximum amount of time to wait for a predecessor before rejecting a tx with nonce too high")
-	f.Bool(prefix+".espresso", DefaultSequencerConfig.Espresso, "if true, transactions will be fetched from the espresso sequencer network")
-
-	f.String(prefix+".hotshot-url", DefaultSequencerConfig.HotShotUrl, "")
-	f.Uint64(prefix+".espresso-namespace", DefaultSequencerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
-	f.Uint64(prefix+".start-hotshot-block", DefaultSequencerConfig.StartHotShotBlock, "the starting block number of hotshot")
-	f.Duration(prefix+".switch-poll-interval", DefaultSequencerConfig.SwitchPollInterval, "the poll interval of checking the sequencer should be switched or not")
 	f.String(prefix+".expected-surplus-soft-threshold", DefaultSequencerConfig.ExpectedSurplusSoftThreshold, "if expected surplus is lower than this value, warnings are posted")
 	f.String(prefix+".expected-surplus-hard-threshold", DefaultSequencerConfig.ExpectedSurplusHardThreshold, "if expected surplus is lower than this value, new incoming transactions will be denied")
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 
-	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable CPU profiling and tracing")
+	// Espresso specific flags
+	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable sovereign sequencer mode for the Espresso integration")
 }
 
 type txQueueItem struct {

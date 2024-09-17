@@ -169,7 +169,7 @@ const (
 	BlockHashMismatchLogMsg = "BlockHash from feed doesn't match locally computed hash. Check feed source."
 )
 
-// Encodes a uint64 as bytes in a lexically sortable manner for database iteration.
+// Encodes an uint64 as bytes in a lexically sortable manner for database iteration.
 // Generally this is only used for database keys, which need sorted.
 // A shorter RLP encoding is usually used for database values.
 func uint64ToKey(x uint64) []byte {
@@ -966,7 +966,7 @@ func (s *TransactionStreamer) addMessagesAndEndBatchImpl(messageStartPos arbutil
 	}
 
 	if clearQueueOnSuccess {
-		// Check if new messages were added at the end of cache, if they were, then dont remove those particular messages
+		// Check if new messages were added at the end of cache, if they were, then don't remove those particular messages
 		if len(s.broadcasterQueuedMessages) > cacheClearLen {
 			s.broadcasterQueuedMessages = s.broadcasterQueuedMessages[cacheClearLen:]
 			atomic.StoreUint64(&s.broadcasterQueuedMessagesPos, uint64(broadcastStartPos)+uint64(cacheClearLen))
@@ -995,6 +995,7 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	msgWithMeta arbostypes.MessageWithMetadata,
 	msgResult execution.MessageResult,
 ) error {
+
 	if err := s.ExpectChosenSequencer(); err != nil {
 		return err
 	}
@@ -1022,23 +1023,11 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 		MessageWithMeta: msgWithMeta,
 		BlockHash:       &msgResult.BlockHash,
 	}
-	batch := s.db.NewBatch()
-	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, batch); err != nil {
+	if err := s.writeMessages(pos, []arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, s.db.NewBatch()); err != nil {
 		return err
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
-	s.espressoTxnsStateInsertionMutex.Lock()
-	defer s.espressoTxnsStateInsertionMutex.Unlock()
-	err = s.SubmitEspressoTransactionPos(pos, batch)
-	if err != nil {
-		return err
-	}
-	err = batch.Write()
-	if err != nil {
-		return err
-
-	}
 	return nil
 }
 
@@ -1339,6 +1328,7 @@ func (s *TransactionStreamer) getEspressoSubmittedHash() (espressoTypes.TaggedBa
 }
 
 func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageIndex, error) {
+
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
 	if err != nil {
 		return nil, err
@@ -1410,7 +1400,7 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil && !isErrNotFound(err) {
-		log.Error("failed to get the pending txns", "err", err)
+		log.Error("failed to get the pending txns position", "err", err)
 		return err
 	}
 
@@ -1423,6 +1413,11 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 	if err != nil {
 		log.Error("failed to set the pending txns", "err", err)
+		return err
+	}
+
+	err = batch.Write()
+	if err != nil {
 		return err
 	}
 
@@ -1446,7 +1441,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		log.Warn("failed to get pending txns", "err", err)
+		log.Warn("failed to get pending txns position", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
@@ -1486,7 +1481,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			Namespace: s.config().EspressoNamespace,
 		})
 
-		log.Info("submitting transaction to espresso using sovereign sequencer", "txHash", hash)
+		log.Info("submitting transaction to espresso using sovereign sequencer")
 
 		if err != nil {
 			log.Error("failed to submit transaction to espresso", "err", err)

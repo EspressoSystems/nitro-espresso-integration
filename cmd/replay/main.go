@@ -286,8 +286,8 @@ func main() {
 			return wavmio.ReadInboxMessage(batchNum), nil
 		}
 
-		// Handle the various pre-conditions and panics that can happen before we should enter the espresso logic in the validators STF
-		validatingAgainstEspresso, panicHandler := handleEspressoPreConditions(message, chainConfig.ArbitrumChainParams.EnableEspresso)
+		// Handle the various pre-conditions if the message is an Espresso message
+		validatingAgainstEspresso := chainConfig.ArbitrumChainParams.EnableEspresso && arbos.IsEspressoMsg(message.Message)
 		if validatingAgainstEspresso {
 			txs, jst, err := arbos.ParseEspressoMsg(message.Message)
 			if err != nil {
@@ -300,19 +300,6 @@ func main() {
 			hotshotHeader := jst.Header
 			height := hotshotHeader.Height
 
-			// Check the continuity of the hotshot block if we are not running the sovereign sequencer.
-			if !arbos.IsEspressoSovereignMsg(message.Message) {
-				validatedHeight := wavmio.GetEspressoHeight()
-				if validatedHeight == 0 {
-					// Validators can choose their own trusted starting point to start their validation.
-					// TODO: Check the starting point is greater than the first valid hotshot block number.
-					wavmio.SetEspressoHeight(height)
-				} else if validatedHeight+1 == height {
-					wavmio.SetEspressoHeight(height)
-				} else {
-					panic(fmt.Sprintf("invalid hotshot block height: %v, got: %v", height, validatedHeight+1))
-				}
-			}
 			if jst.BlockMerkleJustification == nil {
 				panic("block merkle justification missing")
 			}
@@ -336,11 +323,7 @@ func main() {
 				espressocrypto.VerifyNamespace(chainConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
 			}
 
-		} else if panicHandler != nil {
-			// Call the error case closure returned by handleEspressoPreconditions() if it isn't nil
-			panicHandler()
 		}
-
 		newBlock, _, err = arbos.ProduceBlock(message.Message, message.DelayedMessagesRead, lastBlockHeader, statedb, chainContext, chainConfig, batchFetcher, false)
 		if err != nil {
 			panic(err)
