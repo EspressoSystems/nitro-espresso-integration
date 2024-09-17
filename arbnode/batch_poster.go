@@ -506,28 +506,23 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			return fmt.Errorf("this msg has not been included in hotshot")
 		}
 
-		_, err = b.lightClientReader.FetchMerkleRoot(jst.Header.Height, nil)
+		snapshot, err := b.lightClientReader.FetchMerkleRoot(jst.Header.Height, nil)
 		if err != nil {
 			return fmt.Errorf("could not get the merkle root at height %v", jst.Header.Height)
 		}
-		validatedHeight, _, err := b.lightClientReader.ValidatedHeight()
-		if err != nil {
-			return fmt.Errorf("could not get the validated height: %w", err)
-		}
 
-		if validatedHeight <= jst.Header.Height {
-			return fmt.Errorf("light client contract does not have a root greater than %v yet, current height: %v", jst.Header.Height, validatedHeight)
+		if snapshot.Height <= jst.Header.Height {
+			return fmt.Errorf("light client contract does not have a root greater than %v yet, current snapshot height: %v", jst.Header.Height, snapshot.Height)
 		}
-
 		// The next header contains the block commitment merkle tree commitment that validates the header of interest
-		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, validatedHeight)
+		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, snapshot.Height)
 		if err != nil {
-			return fmt.Errorf("error fetching the next header at height %v, request failed with error %w", validatedHeight, err)
+			return fmt.Errorf("error fetching the next header at height %v, request failed with error %w", snapshot.Height, err)
 		}
 
-		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, validatedHeight, jst.Header.Height)
+		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, jst.Header.Height)
 		if err != nil {
-			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", validatedHeight, jst.Header.Height, err)
+			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
 		}
 		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
