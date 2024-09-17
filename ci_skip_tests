@@ -7,6 +7,7 @@
 # To see how we use this file, please check .github/workflows/ci.yml
 TestChallengeManagerFullAsserterCorrect
 TestChallengeManagerFullAsserterIncorrect
+TestChallengeManagerFullAsserterCorrectWithPublishedMachine
 TestLiveNodeConfig
 TestProgramActivateTwice
 TestProgramArbitratorEvmData
