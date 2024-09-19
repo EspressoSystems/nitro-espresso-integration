@@ -7,7 +7,6 @@
 # To see how we use this file, please check .github/workflows/ci.yml
 TestChallengeManagerFullAsserterCorrect
 TestChallengeManagerFullAsserterIncorrect
-TestChallengeManagerFullAsserterCorrectWithPublishedMachine
 TestLiveNodeConfig
 TestProgramActivateTwice
 TestProgramArbitratorEvmData
@@ -31,6 +30,8 @@ TestProgramArbitratorTransientStorage
 TestProgramArbitratorErrors
 TestBlockValidatorSimpleJITOnchain
 TestMockChallengeManagerAsserterIncorrect
+TestChallengeStakersFaultyHonestActive
+TestChallengeManagerFullAsserterCorrectWithPublishedMachine
 
 
 # These tests are specific to Espresso and we have a dedicated
