@@ -120,7 +120,7 @@ func deployBridgeCreator(ctx context.Context, l1Reader *headerreader.HeaderReade
 	return bridgeCreatorAddr, nil
 }
 
-func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts, hotshot common.Address) (common.Address, common.Address, error) {
+func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts) (common.Address, common.Address, error) {
 	client := l1Reader.Client()
 	osp0, tx, _, err := ospgen.DeployOneStepProver0(auth, client)
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
@@ -140,7 +140,7 @@ func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderRe
 		return common.Address{}, common.Address{}, fmt.Errorf("ospMath deploy error: %w", err)
 	}
 
-	ospHostIo, tx, _, err := ospgen.DeployOneStepProverHostIo(auth, client, hotshot)
+	ospHostIo, tx, _, err := ospgen.DeployOneStepProverHostIo(auth, client, common.Address{})
 	err = andTxSucceeded(ctx, l1Reader, tx, err)
 	if err != nil {
 		return common.Address{}, common.Address{}, fmt.Errorf("ospHostIo deploy error: %w", err)
@@ -161,13 +161,13 @@ func deployChallengeFactory(ctx context.Context, l1Reader *headerreader.HeaderRe
 	return ospEntryAddr, challengeManagerAddr, nil
 }
 
-func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts, maxDataSize *big.Int, hotshot common.Address, isUsingFeeToken bool) (*rollupgen.RollupCreator, common.Address, common.Address, common.Address, error) {
+func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReader, auth *bind.TransactOpts, maxDataSize *big.Int, isUsingFeeToken bool) (*rollupgen.RollupCreator, common.Address, common.Address, common.Address, error) {
 	bridgeCreator, err := deployBridgeCreator(ctx, l1Reader, auth, maxDataSize, isUsingFeeToken)
 	if err != nil {
 		return nil, common.Address{}, common.Address{}, common.Address{}, fmt.Errorf("bridge creator deploy error: %w", err)
 	}
 
-	ospEntryAddr, challengeManagerAddr, err := deployChallengeFactory(ctx, l1Reader, auth, hotshot)
+	ospEntryAddr, challengeManagerAddr, err := deployChallengeFactory(ctx, l1Reader, auth)
 	if err != nil {
 		return nil, common.Address{}, common.Address{}, common.Address{}, err
 	}
@@ -234,12 +234,12 @@ func deployRollupCreator(ctx context.Context, l1Reader *headerreader.HeaderReade
 	return rollupCreator, rollupCreatorAddress, validatorUtils, validatorWalletCreator, nil
 }
 
-func DeployOnL1(ctx context.Context, parentChainReader *headerreader.HeaderReader, deployAuth *bind.TransactOpts, batchPosters []common.Address, batchPosterManager common.Address, authorizeValidators uint64, config rollupgen.Config, nativeToken common.Address, maxDataSize *big.Int, hotshot common.Address, isUsingFeeToken bool) (*chaininfo.RollupAddresses, error) {
+func DeployOnL1(ctx context.Context, parentChainReader *headerreader.HeaderReader, deployAuth *bind.TransactOpts, batchPosters []common.Address, batchPosterManager common.Address, authorizeValidators uint64, config rollupgen.Config, nativeToken common.Address, maxDataSize *big.Int, isUsingFeeToken bool) (*chaininfo.RollupAddresses, error) {
 	if config.WasmModuleRoot == (common.Hash{}) {
 		return nil, errors.New("no machine specified")
 	}
 
-	rollupCreator, _, validatorUtils, validatorWalletCreator, err := deployRollupCreator(ctx, parentChainReader, deployAuth, maxDataSize, hotshot, isUsingFeeToken)
+	rollupCreator, _, validatorUtils, validatorWalletCreator, err := deployRollupCreator(ctx, parentChainReader, deployAuth, maxDataSize, isUsingFeeToken)
 	if err != nil {
 		return nil, fmt.Errorf("error deploying rollup creator: %w", err)
 	}

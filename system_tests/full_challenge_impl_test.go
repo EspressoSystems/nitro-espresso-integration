@@ -285,7 +285,7 @@ func RunChallengeTest(t *testing.T, asserterIsCorrect bool, useStubs bool, chall
 	fatalErrChan := make(chan error, 10)
 	locator, err := server_common.NewMachineLocator(wasmRootDir)
 	Require(t, err)
-	asserterRollupAddresses, initMessage := DeployOnTestL1(t, ctx, l1Info, l1Backend, chainConfig, locator.LatestWasmModuleRoot(), common.Address{})
+	asserterRollupAddresses, initMessage := DeployOnTestL1(t, ctx, l1Info, l1Backend, chainConfig, locator.LatestWasmModuleRoot())
 
 	deployerTxOpts := l1Info.GetDefaultTransactOpts("deployer", ctx)
 	sequencerTxOpts := l1Info.GetDefaultTransactOpts("sequencer", ctx)
@@ -390,7 +390,7 @@ func RunChallengeTest(t *testing.T, asserterIsCorrect bool, useStubs bool, chall
 
 	confirmLatestBlock(ctx, t, l1Info, l1Backend)
 
-	asserterValidator, err := staker.NewStatelessBlockValidator(asserterL2.InboxReader, asserterL2.InboxTracker, nil, asserterL2.TxStreamer, asserterExec.Recorder, asserterL2.ArbDB, nil, StaticFetcherFrom(t, &conf.BlockValidator), valStack)
+	asserterValidator, err := staker.NewStatelessBlockValidator(asserterL2.InboxReader, asserterL2.InboxTracker, asserterL2.TxStreamer, asserterExec.Recorder, asserterL2.ArbDB, nil, StaticFetcherFrom(t, &conf.BlockValidator), valStack)
 	if err != nil {
 		Fatal(t, err)
 	}
@@ -407,7 +407,7 @@ func RunChallengeTest(t *testing.T, asserterIsCorrect bool, useStubs bool, chall
 	if err != nil {
 		Fatal(t, err)
 	}
-	challengerValidator, err := staker.NewStatelessBlockValidator(challengerL2.InboxReader, challengerL2.InboxTracker, nil, challengerL2.TxStreamer, challengerExec.Recorder, challengerL2.ArbDB, nil, StaticFetcherFrom(t, &conf.BlockValidator), valStack)
+	challengerValidator, err := staker.NewStatelessBlockValidator(challengerL2.InboxReader, challengerL2.InboxTracker, challengerL2.TxStreamer, challengerExec.Recorder, challengerL2.ArbDB, nil, StaticFetcherFrom(t, &conf.BlockValidator), valStack)
 	if err != nil {
 		Fatal(t, err)
 	}
