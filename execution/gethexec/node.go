@@ -185,7 +185,12 @@ func CreateExecutionNode(
 		if err != nil {
 			return nil, err
 		}
-		txPublisher = sequencer
+		if config.Sequencer.EnableEspressoFinalityNode {
+			espressoFinalityNode := NewEspressoFinalityNode(execEngine, seqConfigFetcher)
+			txPublisher = espressoFinalityNode
+		} else {
+			txPublisher = sequencer
+		}
 	} else {
 		if config.Forwarder.RedisUrl != "" {
 			txPublisher = NewRedisTxForwarder(config.forwardingTarget, &config.Forwarder)
