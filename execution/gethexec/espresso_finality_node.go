@@ -52,8 +52,8 @@ func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher Sequence
 	return &EspressoFinalityNode{
 		execEngine:   execEngine,
 		config:       configFetcher,
-		namespace:    config.EspressoFinaliyNode.Namespace,
-		hotshotState: NewHotsShotState(config.EspressoFinaliyNode.HotShotUrl, config.EspressoFinaliyNode.StartBlock),
+		namespace:    config.EspressoFinalityNodeConfig.Namespace,
+		hotshotState: NewHotsShotState(config.EspressoFinalityNodeConfig.HotShotUrl, config.EspressoFinalityNodeConfig.StartBlock),
 	}
 }
 

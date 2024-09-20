@@ -42,11 +42,11 @@ func createL1AndL2NodeEspressoFinalityNode(ctx context.Context, t *testing.T) (*
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
 
-	//Using the espresso finality node
+	// Using the espresso finality node
 	builder.execConfig.Sequencer.EnableEspressoFinalityNode = true
-	builder.execConfig.Sequencer.EspressoFinaliyNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	builder.execConfig.Sequencer.EspressoFinaliyNode.HotShotUrl = hotShotUrl
-	builder.execConfig.Sequencer.EspressoFinaliyNode.StartBlock = 0
+	builder.execConfig.Sequencer.EspressoFinalityNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
+	builder.execConfig.Sequencer.EspressoFinalityNodeConfig.HotShotUrl = hotShotUrl
+	builder.execConfig.Sequencer.EspressoFinalityNodeConfig.StartBlock = 0
 
 	// transaction stream config
 	cleanup := builder.Build(t)
