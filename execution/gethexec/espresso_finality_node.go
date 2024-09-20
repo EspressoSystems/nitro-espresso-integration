@@ -2,6 +2,7 @@ package gethexec
 
 import (
 	"context"
+	"fmt"
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
@@ -115,13 +116,16 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 
 func (n *EspressoFinalityNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	n.CallIterativelySafe(func(ctx context.Context) time.Duration {
+	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock(ctx)
 		if madeBlock {
 			return 0
 		}
 		return retryTime
 	})
+	if err != nil {
+		return fmt.Errorf("failed to start espresso finality node: %w", err)
+	}
 	return nil
 }
 
