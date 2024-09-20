@@ -80,7 +80,9 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	EnableEspressoSovereign bool `koanf:"enable-espresso-sovereign"`
+	EnableEspressoSovereign    bool                       `koanf:"enable-espresso-sovereign"`
+	EspressoFinaliyNode        EspressoFinalityNodeConfig `koanf:"espresso-finality-node-config"`
+	EnableEspressoFinalityNode bool                       `koanf:"enable-espresso-finality-node"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -101,6 +103,18 @@ func (c *SequencerConfig) Validate() error {
 
 type SequencerConfigFetcher func() *SequencerConfig
 
+type EspressoFinalityNodeConfig struct {
+	HotShotUrl string `koanf:"hot-shot-url"`
+	StartBlock uint64 `koanf:"start-block"`
+	Namespace  uint64 `koanf:"namespace"`
+}
+
+var DefaultEspressoFinalityNodeConfig = EspressoFinalityNodeConfig{
+	HotShotUrl: "http://localhost:8080",
+	StartBlock: 0,
+	Namespace:  1,
+}
+
 var DefaultSequencerConfig = SequencerConfig{
 	Enable:                      false,
 	MaxBlockSpeed:               time.Millisecond * 250,
@@ -119,7 +133,9 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EnableEspressoSovereign: false,
+	EspressoFinaliyNode:        DefaultEspressoFinalityNodeConfig,
+	EnableEspressoFinalityNode: false,
+	EnableEspressoSovereign:    false,
 }
 
 var TestSequencerConfig = SequencerConfig{
@@ -139,7 +155,9 @@ var TestSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EnableEspressoSovereign: false,
+	EspressoFinaliyNode:        DefaultEspressoFinalityNodeConfig,
+	EnableEspressoFinalityNode: false,
+	EnableEspressoSovereign:    false,
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -160,6 +178,8 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 
 	// Espresso specific flags
+	f.Bool(prefix+".enable-espresso-finality-node", DefaultSequencerConfig.EnableEspressoFinalityNode, "enable espresso finality node")
+	f.Bool(prefix+".espresso-finality-node-config", DefaultSequencerConfig.EnableEspressoFinalityNode, "config for espresso finality node")
 	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable sovereign sequencer mode for the Espresso integration")
 }
 
