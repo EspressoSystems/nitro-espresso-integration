@@ -82,7 +82,8 @@ type SequencerConfig struct {
 	// Espresso specific flags
 	EnableEspressoSovereign    bool                       `koanf:"enable-espresso-sovereign"`
 	EspressoFinalityNodeConfig EspressoFinalityNodeConfig `koanf:"espresso-finality-node-config"`
-	EnableEspressoFinalityNode bool                       `koanf:"enable-espresso-finality-node"`
+	// Espresso Finality Node creates blocks with finalized hotshot transactions
+	EnableEspressoFinalityNode bool `koanf:"enable-espresso-finality-node"`
 }
 
 func (c *SequencerConfig) Validate() error {

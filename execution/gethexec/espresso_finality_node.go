@@ -36,6 +36,9 @@ func (s *HotsShotState) advance() {
 	s.nextSeqBlockBum += 1
 }
 
+/*
+Espresso Finality Node creates blocks with finalized hotshot transactions
+*/
 type EspressoFinalityNode struct {
 	stopwaiter.StopWaiter
 
