@@ -109,12 +109,6 @@ type EspressoFinalityNodeConfig struct {
 	Namespace  uint64 `koanf:"namespace"`
 }
 
-var DefaultEspressoFinalityNodeConfig = EspressoFinalityNodeConfig{
-	HotShotUrl: "",
-	StartBlock: 0,
-	Namespace:  1,
-}
-
 var DefaultSequencerConfig = SequencerConfig{
 	Enable:                      false,
 	MaxBlockSpeed:               time.Millisecond * 250,
@@ -133,7 +127,6 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EspressoFinalityNodeConfig: DefaultEspressoFinalityNodeConfig,
 	EnableEspressoFinalityNode: false,
 	EnableEspressoSovereign:    false,
 }
@@ -155,7 +148,6 @@ var TestSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EspressoFinalityNodeConfig: DefaultEspressoFinalityNodeConfig,
 	EnableEspressoFinalityNode: false,
 	EnableEspressoSovereign:    false,
 }
