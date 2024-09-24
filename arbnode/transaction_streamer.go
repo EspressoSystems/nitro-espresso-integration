@@ -1233,7 +1233,6 @@ func (s *TransactionStreamer) PollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	log.Info("fetching header by height", "height", data.BlockHeight)
 	espressoHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, data.BlockHeight)
 	if err != nil {
 		log.Error("espresso: failed to fetch header by height ", "err", err)
