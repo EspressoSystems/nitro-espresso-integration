@@ -20,32 +20,18 @@ var (
 	retryTime = time.Second * 1
 )
 
-type HotsShotState struct {
-	client          espressoClient.Client
-	nextSeqBlockBum uint64
-}
-
-func NewHotsShotState(url string, startBlock uint64) *HotsShotState {
-	return &HotsShotState{
-		client:          *espressoClient.NewClient(url),
-		nextSeqBlockBum: startBlock,
-	}
-}
-
-func (s *HotsShotState) advance() {
-	s.nextSeqBlockBum += 1
-}
-
 /*
 Espresso Finality Node creates blocks with finalized hotshot transactions
 */
 type EspressoFinalityNode struct {
 	stopwaiter.StopWaiter
 
-	config       SequencerConfigFetcher
-	execEngine   *ExecutionEngine
-	hotshotState *HotsShotState
-	namespace    uint64
+	config     SequencerConfigFetcher
+	execEngine *ExecutionEngine
+	namespace  uint64
+
+	espressoClient  *espressoClient.Client
+	nextSeqBlockNum uint64
 }
 
 func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher) *EspressoFinalityNode {
@@ -54,33 +40,34 @@ func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher Sequence
 		panic(err)
 	}
 	return &EspressoFinalityNode{
-		execEngine:   execEngine,
-		config:       configFetcher,
-		namespace:    config.EspressoFinalityNodeConfig.Namespace,
-		hotshotState: NewHotsShotState(config.EspressoFinalityNodeConfig.HotShotUrl, config.EspressoFinalityNodeConfig.StartBlock),
+		execEngine:      execEngine,
+		config:          configFetcher,
+		namespace:       config.EspressoFinalityNodeConfig.Namespace,
+		espressoClient:  espressoClient.NewClient(config.EspressoFinalityNodeConfig.HotShotUrl),
+		nextSeqBlockNum: config.EspressoFinalityNodeConfig.StartBlock,
 	}
 }
 
 func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue bool) {
 
-	if n.hotshotState.nextSeqBlockBum == 0 {
-		latestBlock, err := n.hotshotState.client.FetchLatestBlockHeight(ctx)
+	if n.nextSeqBlockNum == 0 {
+		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil && latestBlock == 0 {
 			log.Warn("unable to fetch latest hotshot block", "err", err)
 			return false
 		}
 		log.Info("Started espresso finality node at the latest hotshot block", "block number", latestBlock)
-		n.hotshotState.nextSeqBlockBum = latestBlock
+		n.nextSeqBlockNum = latestBlock
 	}
 
-	nextSeqBlockNum := n.hotshotState.nextSeqBlockBum
-	header, err := n.hotshotState.client.FetchHeaderByHeight(ctx, nextSeqBlockNum)
+	nextSeqBlockNum := n.nextSeqBlockNum
+	header, err := n.espressoClient.FetchHeaderByHeight(ctx, nextSeqBlockNum)
 	if err != nil {
 		arbos.LogFailedToFetchHeader(nextSeqBlockNum)
 		return false
 	}
 
-	arbTxns, err := n.hotshotState.client.FetchTransactionsInBlock(ctx, header.Height, n.namespace)
+	arbTxns, err := n.espressoClient.FetchTransactionsInBlock(ctx, header.Height, n.namespace)
 	if err != nil {
 		arbos.LogFailedToFetchTransactions(header.Height, err)
 		return false
@@ -112,7 +99,7 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 		log.Error("Espresso Finality Node: Failed to sequence transactions", "err", err)
 		return false
 	}
-	n.hotshotState.advance()
+	n.nextSeqBlockNum += 1
 
 	return true
 }
@@ -142,7 +129,7 @@ func (n *EspressoFinalityNode) PublishTransaction(ctx context.Context, tx *types
 		Namespace: n.namespace,
 		Payload:   txBytes,
 	}
-	if _, err := n.hotshotState.client.SubmitTransaction(ctx, txn); err != nil {
+	if _, err := n.espressoClient.SubmitTransaction(ctx, txn); err != nil {
 		log.Error("Espresso Finality Node: Failed to submit transaction", "err", err)
 		return err
 	}

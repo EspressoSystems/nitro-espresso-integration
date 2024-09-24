@@ -105,7 +105,7 @@ func (c *SequencerConfig) Validate() error {
 type SequencerConfigFetcher func() *SequencerConfig
 
 type EspressoFinalityNodeConfig struct {
-	HotShotUrl string `koanf:"hot-shot-url"`
+	HotShotUrl string `koanf:"hotshot-url"`
 	StartBlock uint64 `koanf:"start-block"`
 	Namespace  uint64 `koanf:"namespace"`
 }
