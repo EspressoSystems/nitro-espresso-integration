@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -28,19 +27,21 @@ type EspressoFinalityNode struct {
 
 	config     SequencerConfigFetcher
 	execEngine *ExecutionEngine
+	sequencer  *Sequencer
 	namespace  uint64
 
 	espressoClient  *espressoClient.Client
 	nextSeqBlockNum uint64
 }
 
-func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher) *EspressoFinalityNode {
+func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher, sequencer *Sequencer) *EspressoFinalityNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
 		panic(err)
 	}
 	return &EspressoFinalityNode{
 		execEngine:      execEngine,
+		sequencer:       sequencer,
 		config:          configFetcher,
 		namespace:       config.EspressoFinalityNodeConfig.Namespace,
 		espressoClient:  espressoClient.NewClient(config.EspressoFinalityNodeConfig.HotShotUrl),
@@ -49,7 +50,6 @@ func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher Sequence
 }
 
 func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue bool) {
-
 	if n.nextSeqBlockNum == 0 {
 		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil && latestBlock == 0 {
@@ -72,7 +72,6 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 		arbos.LogFailedToFetchTransactions(header.Height, err)
 		return false
 	}
-
 	arbHeader := &arbostypes.L1IncomingMessageHeader{
 		Kind:        arbostypes.L1MessageType_L2Message,
 		Poster:      l1pricing.BatchPosterAddress,
@@ -82,12 +81,15 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 		L1BaseFee:   nil,
 	}
 
-	// Deserialize the transactions and ignore the malformed transactions
+	// Deserialize the transactions and remove the signature from the transactions.
+	// Ignore the malformed transactions
 	txes := types.Transactions{}
 	for _, tx := range arbTxns.Transactions {
 		var out types.Transaction
+		// signature from teh data poster  is the first 65 bytes of a transaction
+		tx = tx[65:]
 		if err := out.UnmarshalBinary(tx); err != nil {
-			log.Warn("Malformed tx is found")
+			log.Warn("malformed tx found")
 			continue
 		}
 		txes = append(txes, &out)
@@ -96,7 +98,7 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 	hooks := arbos.NoopSequencingHooks()
 	_, err = n.execEngine.SequenceTransactions(arbHeader, txes, hooks, false)
 	if err != nil {
-		log.Error("Espresso Finality Node: Failed to sequence transactions", "err", err)
+		log.Error("espresso finality node: failed to sequence transactions", "err", err)
 		return false
 	}
 	n.nextSeqBlockNum += 1
@@ -120,19 +122,6 @@ func (n *EspressoFinalityNode) Start(ctx context.Context) error {
 }
 
 func (n *EspressoFinalityNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	txn := espressoTypes.Transaction{
-		Namespace: n.namespace,
-		Payload:   txBytes,
-	}
-	if _, err := n.espressoClient.SubmitTransaction(ctx, txn); err != nil {
-		log.Error("Espresso Finality Node: Failed to submit transaction", "err", err)
-		return err
-	}
 	return nil
 }
 

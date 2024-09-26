@@ -186,7 +186,7 @@ func CreateExecutionNode(
 			return nil, err
 		}
 		if config.Sequencer.EnableEspressoFinalityNode {
-			espressoFinalityNode := NewEspressoFinalityNode(execEngine, seqConfigFetcher)
+			espressoFinalityNode := NewEspressoFinalityNode(execEngine, seqConfigFetcher, sequencer)
 			txPublisher = espressoFinalityNode
 		} else {
 			txPublisher = sequencer
@@ -334,6 +334,7 @@ func (n *ExecutionNode) StopAndWait() {
 	if n.TxPublisher.Started() {
 		n.TxPublisher.StopAndWait()
 	}
+
 	n.Recorder.OrderlyShutdown()
 	if n.ParentChainReader != nil && n.ParentChainReader.Started() {
 		n.ParentChainReader.StopAndWait()
