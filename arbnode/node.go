@@ -704,7 +704,13 @@ func createNodeImpl(
 			Streamer:      txStreamer,
 			VersionGetter: exec,
 			SyncMonitor:   syncMonitor,
-			Config:        func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
+			Config: func() *BatchPosterConfig {
+				// Load a reference to a bool into the config
+				escapeHatchOpen := true
+				config := &configFetcher.Get().BatchPoster
+				config.EscapeHatchOpen = &escapeHatchOpen
+				return &configFetcher.Get().BatchPoster
+			},
 			DeployInfo:    deployInfo,
 			TransactOpts:  txOptsBatchPoster,
 			DAPWriter:     dapWriter,
