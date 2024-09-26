@@ -126,10 +126,11 @@ type BatchPoster struct {
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead int) types.AccessList
 
-	// Espresso related state (readers and
+	// Espresso related state (readers and sub-processes)
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
 	escapeHatchMutex  *sync.Mutex
+	hotShotMonitor    *HotShotMonitor
 }
 
 type l1BlockBound int
@@ -186,9 +187,9 @@ type BatchPosterConfig struct {
 	// Espresso specific flags
 	LightClientAddress string `koanf:"light-client-address"`
 	HotShotUrl         string `koanf:"hotshot-url"`
-	//controls switching back to centralized sequencing if there is an issue with Espresso.
+	// controls switching back to centralized sequencing if there is an issue with Espresso.
 	//True means we are in centralized sequencer mode.
-	EscapeHatchOpen bool `koanf:"escape-hatch-open"`
+	EscapeHatchOpen *bool `koanf:"escape-hatch-open"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -270,8 +271,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	RedisLock:                      redislock.DefaultCfg,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
 	ReorgResistanceMargin:          10 * time.Minute,
-
-	EscapeHatchOpen: true,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -302,8 +301,6 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	L1BlockBoundBypass:             time.Hour,
 	UseAccessLists:                 true,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
-
-	EscapeHatchOpen: true,
 }
 
 type BatchPosterOpts struct {
@@ -365,6 +362,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 	}
+	escapeHatchMutex := sync.Mutex{}
+	escapeHatchOpen := true
+
+	opts.Config().EscapeHatchOpen = &escapeHatchOpen
+
+	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, time.Second, uint64(100), &escapeHatchMutex, &escapeHatchOpen)
+	if err != nil {
+		log.Error("Unable to construct HotShotMonitor in BatchPoster", "err", err)
+		return nil, err
+	}
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
@@ -383,6 +390,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		redisLock:          redisLock,
 		hotshotClient:      hotShotClient,
 		lightClientReader:  lightClientReader,
+		hotShotMonitor:     hotShotMonitor,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1325,9 +1333,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 
-		// If the message is an Espresso message, store the pos in the database to be used later
+		b.escapeHatchMutex.Lock()
+		escapeHatchOpen := b.config().EscapeHatchOpen
+		b.escapeHatchMutex.Unlock()
+		// If the message is an Espresso message, and hotshot is live store the pos in the database to be used later
 		// to submit the message to hotshot for finalization.
-		if arbos.IsEspressoMsg(msg.Message) { //TDOD Add !EscapeHatchOpen here
+		if arbos.IsEspressoMsg(msg.Message) && !(*escapeHatchOpen) {
 			log.Info("Updating db with espresso txns pos (This may be an initialization)")
 			err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
 			if err != nil {
@@ -1569,6 +1580,7 @@ func (b *BatchPoster) GetBacklogEstimate() uint64 {
 func (b *BatchPoster) Start(ctxIn context.Context) {
 	b.dataPoster.Start(ctxIn)
 	b.redisLock.Start(ctxIn)
+	b.hotShotMonitor.Start(ctxIn)
 	b.StopWaiter.Start(ctxIn, b)
 	b.LaunchThread(b.pollForReverts)
 	b.LaunchThread(b.pollForL1PriceData)
