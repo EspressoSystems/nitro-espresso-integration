@@ -63,9 +63,11 @@ func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface,
 		return nil, errors.New("NewHotShotMonitor: escapeHatchOpen is nil")
 	}
 	monitor := &HotShotMonitor{
-		lightClientReader: lightClientReader,
-		escapeHatchMutex:  escapeHatchMutex,
-		escapeHatchOpen:   escapeHatchOpen,
+		lightClientReader:    lightClientReader,
+		escapeHatchMutex:     escapeHatchMutex,
+		escapeHatchOpen:      escapeHatchOpen,
+		pollInterval:         pollInterval,
+		switchDelayThreshold: switchDelayThreshold,
 	}
 	return monitor, nil
 }
@@ -96,7 +98,6 @@ func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration
 		temp := true // We need to save this boolean in memory to be able to declare a pointer for it.
 		m.escapeHatchOpen = &temp
 		m.escapeHatchMutex.Unlock()
-
 	}
 	return m.pollInterval
 }
