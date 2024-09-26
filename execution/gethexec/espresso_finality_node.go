@@ -27,21 +27,19 @@ type EspressoFinalityNode struct {
 
 	config     SequencerConfigFetcher
 	execEngine *ExecutionEngine
-	sequencer  *Sequencer
 	namespace  uint64
 
 	espressoClient  *espressoClient.Client
 	nextSeqBlockNum uint64
 }
 
-func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher, sequencer *Sequencer) *EspressoFinalityNode {
+func NewEspressoFinalityNode(execEngine *ExecutionEngine, configFetcher SequencerConfigFetcher) *EspressoFinalityNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
 		panic(err)
 	}
 	return &EspressoFinalityNode{
 		execEngine:      execEngine,
-		sequencer:       sequencer,
 		config:          configFetcher,
 		namespace:       config.EspressoFinalityNodeConfig.Namespace,
 		espressoClient:  espressoClient.NewClient(config.EspressoFinalityNodeConfig.HotShotUrl),
