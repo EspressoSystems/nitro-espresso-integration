@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/big"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -125,9 +126,10 @@ type BatchPoster struct {
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead int) types.AccessList
 
-	// Espresso readers
+	// Espresso related state (readers and
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
+	escapeHatchMutex  *sync.Mutex
 }
 
 type l1BlockBound int
@@ -184,6 +186,9 @@ type BatchPosterConfig struct {
 	// Espresso specific flags
 	LightClientAddress string `koanf:"light-client-address"`
 	HotShotUrl         string `koanf:"hotshot-url"`
+	//controls switching back to centralized sequencing if there is an issue with Espresso.
+	//True means we are in centralized sequencer mode.
+	EscapeHatchOpen bool `koanf:"escape-hatch-open"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -265,6 +270,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	RedisLock:                      redislock.DefaultCfg,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
 	ReorgResistanceMargin:          10 * time.Minute,
+
+	EscapeHatchOpen: true,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -295,6 +302,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	L1BlockBoundBypass:             time.Hour,
 	UseAccessLists:                 true,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
+
+	EscapeHatchOpen: true,
 }
 
 type BatchPosterOpts struct {
@@ -1318,7 +1327,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 		// If the message is an Espresso message, store the pos in the database to be used later
 		// to submit the message to hotshot for finalization.
-		if arbos.IsEspressoMsg(msg.Message) {
+		if arbos.IsEspressoMsg(msg.Message) { //TDOD Add !EscapeHatchOpen here
+			log.Info("Updating db with espresso txns pos (This may be an initialization)")
 			err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
 			if err != nil {
 				log.Error("failed to submit espresso transaction pos", "pos", b.building.msgCount, "err", err)
