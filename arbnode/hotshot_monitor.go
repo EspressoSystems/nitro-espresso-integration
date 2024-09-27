@@ -86,7 +86,7 @@ func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration
 		if *m.escapeHatchOpen {
 			log.Info("Hotshot has regained liveness. closing the Espresso escape hatch")
 		}
-		m.escapeHatchOpen = new(bool) // booleans are by default false in go, This is just an easy way to set the boolean to false.
+		*m.escapeHatchOpen = false // booleans are by default false in go, This is just an easy way to set the boolean to false.
 		m.escapeHatchMutex.Unlock()
 	case false:
 		if err != nil {
@@ -95,8 +95,8 @@ func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration
 			log.Warn("HotShot is not live, opening escape hatch")
 		}
 		m.escapeHatchMutex.Lock()
-		temp := true // We need to save this boolean in memory to be able to declare a pointer for it.
-		m.escapeHatchOpen = &temp
+		// We need to save this boolean in memory to be able to declare a pointer for it.
+		*m.escapeHatchOpen = true
 		m.escapeHatchMutex.Unlock()
 	}
 	return m.pollInterval

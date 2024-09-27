@@ -76,7 +76,10 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
-	espressoClient  *espressoClient.Client
+	//state related to espresso operation
+	espressoClient   *espressoClient.Client
+	escapeHatchOpen  *bool
+	escapeHatchMutex *sync.Mutex
 }
 
 type TransactionStreamerConfig struct {
@@ -1490,6 +1493,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
+	//Potential TODO: We might need to have a startInner function that polls with the frequencies in submitEspressoTransactions or executeMessages and chooses which method to call based on the escape hatch
 	if s.config().SovereignSequencerEnabled {
 		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newSovereignTxNotifier)
 		if err != nil {

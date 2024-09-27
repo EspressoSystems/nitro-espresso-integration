@@ -130,6 +130,7 @@ type BatchPoster struct {
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
 	escapeHatchMutex  *sync.Mutex
+	escapeHatchOpen   *bool
 	hotShotMonitor    *HotShotMonitor
 }
 
@@ -189,7 +190,6 @@ type BatchPosterConfig struct {
 	HotShotUrl         string `koanf:"hotshot-url"`
 	// controls switching back to centralized sequencing if there is an issue with Espresso.
 	//True means we are in centralized sequencer mode.
-	EscapeHatchOpen *bool `koanf:"escape-hatch-open"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -365,9 +365,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	escapeHatchMutex := sync.Mutex{}
 	escapeHatchOpen := true
 
-	opts.Config().EscapeHatchOpen = &escapeHatchOpen
-
-	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, time.Second, uint64(100), &escapeHatchMutex, &escapeHatchOpen)
+	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, 300*time.Millisecond, uint64(10), &escapeHatchMutex, &escapeHatchOpen)
 	if err != nil {
 		log.Error("Unable to construct HotShotMonitor in BatchPoster", "err", err)
 		return nil, err
@@ -391,6 +389,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		hotshotClient:      hotShotClient,
 		lightClientReader:  lightClientReader,
 		hotShotMonitor:     hotShotMonitor,
+		escapeHatchMutex:   &escapeHatchMutex,
+		escapeHatchOpen:    &escapeHatchOpen,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1334,11 +1334,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 
 		b.escapeHatchMutex.Lock()
-		escapeHatchOpen := b.config().EscapeHatchOpen
+		escapeHatchOpen := *b.escapeHatchOpen
 		b.escapeHatchMutex.Unlock()
 		// If the message is an Espresso message, and hotshot is live store the pos in the database to be used later
 		// to submit the message to hotshot for finalization.
-		if arbos.IsEspressoMsg(msg.Message) && !(*escapeHatchOpen) {
+		log.Info("Escape Hatch Status:", "escapeHatchOpen", escapeHatchOpen)
+		if arbos.IsEspressoMsg(msg.Message) && !(escapeHatchOpen) {
 			log.Info("Updating db with espresso txns pos (This may be an initialization)")
 			err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
 			if err != nil {
