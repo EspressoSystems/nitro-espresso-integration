@@ -84,7 +84,7 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 	txes := types.Transactions{}
 	for _, tx := range arbTxns.Transactions {
 		var out types.Transaction
-		// signature from teh data poster  is the first 65 bytes of a transaction
+		// signature from the data poster is the first 65 bytes of a transaction
 		tx = tx[65:]
 		if err := out.UnmarshalBinary(tx); err != nil {
 			log.Warn("malformed tx found")
@@ -99,7 +99,6 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 		log.Error("espresso finality node: failed to sequence transactions", "err", err)
 		return false
 	}
-	n.nextSeqBlockNum += 1
 
 	return true
 }
@@ -109,6 +108,7 @@ func (n *EspressoFinalityNode) Start(ctx context.Context) error {
 	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock(ctx)
 		if madeBlock {
+			n.nextSeqBlockNum += 1
 			return 0
 		}
 		return retryTime

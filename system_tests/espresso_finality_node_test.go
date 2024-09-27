@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func createL1AndL2NodeEspressoFinalityNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
+func createEspressoFinalityNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
 	// poster config
@@ -34,11 +34,10 @@ func createL1AndL2NodeEspressoFinalityNode(t *testing.T, builder *NodeBuilder) (
 	execConfig.Sequencer.EspressoFinalityNodeConfig.StartBlock = 1
 	execConfig.Sequencer.EspressoFinalityNodeConfig.HotShotUrl = hotShotUrl
 
-	params := &SecondNodeParams{
+	return builder.Build2ndNode(t, &SecondNodeParams{
 		nodeConfig: nodeConfig,
 		execConfig: execConfig,
-	}
-	return builder.Build2ndNode(t, params)
+	})
 }
 
 func TestEspressoFinalityNode(t *testing.T) {
@@ -74,7 +73,7 @@ func TestEspressoFinalityNode(t *testing.T) {
 	Require(t, err)
 
 	// start the finality node
-	builderEspressoFinalityNode, cleanupEspressoFinalityNode := createL1AndL2NodeEspressoFinalityNode(t, builder)
+	builderEspressoFinalityNode, cleanupEspressoFinalityNode := createEspressoFinalityNode(t, builder)
 	defer cleanupEspressoFinalityNode()
 
 	err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
@@ -82,5 +81,5 @@ func TestEspressoFinalityNode(t *testing.T) {
 		Require(t, err)
 		return msgCntFinalityNode == msgCnt
 	})
-
+	Require(t, err)
 }
