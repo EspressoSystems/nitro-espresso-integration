@@ -33,6 +33,7 @@ func createEspressoFinalityNode(t *testing.T, builder *NodeBuilder) (*TestClient
 	execConfig.Sequencer.EspressoFinalityNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
 	execConfig.Sequencer.EspressoFinalityNodeConfig.StartBlock = 1
 	execConfig.Sequencer.EspressoFinalityNodeConfig.HotShotUrl = hotShotUrl
+
 	// disable sovereign sequencer
 	execConfig.Sequencer.EnableEspressoSovereign = false
 	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = false
