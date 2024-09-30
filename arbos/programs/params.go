@@ -15,7 +15,7 @@ import (
 	am "github.com/offchainlabs/nitro/util/arbmath"
 )
 
-const MaxWasmSize = 128 * 1024      // max decompressed wasm size (programs are also bounded by compressed size)
+const MaxWasmSize = 128 * 5 * 1024  // max decompressed wasm size (programs are also bounded by compressed size)
 const initialStackDepth = 4 * 65536 // 4 page stack.
 const InitialFreePages = 2          // 2 pages come free (per tx).
 const InitialPageGas = 1000         // linear cost per allocation.

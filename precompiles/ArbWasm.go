@@ -4,6 +4,8 @@
 package precompiles
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/offchainlabs/nitro/arbos/programs"
 	"github.com/offchainlabs/nitro/arbos/util"
@@ -38,15 +40,21 @@ func (con ArbWasm) ActivateProgram(c ctx, evm mech, value huge, program addr) (u
 		return 0, nil, err
 	}
 	version, codeHash, moduleHash, dataFee, takeAllGas, err := programs.ActivateProgram(evm, program, runMode, debug)
+	fmt.Println("33333333")
 	if takeAllGas {
+		fmt.Println("gas?????????")
 		_ = c.BurnOut()
 	}
 	if err != nil {
+		fmt.Println("kkkkkkkkkk")
+		fmt.Printf("kkkkkkkkkk, %v", err)
 		return version, dataFee, err
 	}
+	fmt.Println("111111")
 	if err := con.payActivationDataFee(c, evm, value, dataFee); err != nil {
 		return version, dataFee, err
 	}
+	fmt.Println("!!!!!!!!!!")
 	return version, dataFee, con.ProgramActivated(c, evm, codeHash, moduleHash, program, dataFee, version)
 }
 

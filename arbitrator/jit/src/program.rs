@@ -45,7 +45,7 @@ pub fn activate(
             mem.write_u64(gas_ptr, *gas_left);
             mem.write_u16(pages_ptr, data.footprint);
             mem.write_u32(asm_estimate_ptr, data.asm_estimate);
-            mem.write_u16(init_cost_ptr, data.init_cost);
+            mem.write_u32(init_cost_ptr, data.init_cost);
             mem.write_u16(cached_init_cost_ptr, data.cached_init_cost);
             mem.write_bytes32(module_hash_ptr, module.hash());
             Ok(0)

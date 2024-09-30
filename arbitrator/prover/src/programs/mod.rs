@@ -345,7 +345,7 @@ impl<'a> ModuleMod for WasmBinary<'a> {
             .iter()
             .position(|x| x.module == module && x.name == name)
             .map(|x| ImportIndex::Function(FunctionIndex::from_u32(x as u32)))
-            .ok_or_else(|| eyre!("missing import {}", name.red()))
+            .ok_or_else(|| eyre!("missing import {} from module {}", name.red(), module.red()))
     }
 
     fn move_start_function(&mut self, name: &str) -> Result<bool> {
@@ -393,7 +393,7 @@ pub struct StylusData {
     /// Global index for the amount of stack space remaining.
     pub depth_left: u32,
     /// Cost paid to invoke the program. See `programs.go` for the translation to gas.
-    pub init_cost: u16,
+    pub init_cost: u32,
     /// Cost paid to invoke the program when stored in the init cache.
     pub cached_init_cost: u16,
     /// Canonical estimate of the asm length in bytes.

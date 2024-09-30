@@ -590,6 +590,7 @@ impl Module {
         debug_funcs: bool,
         stylus_data: Option<StylusData>,
     ) -> Result<Module> {
+        println!("from user binary: {:?}", stylus_data);
         Self::from_binary(
             bin,
             &USER_IMPORTS,
@@ -1291,6 +1292,7 @@ impl Machine {
             self.debug_info = true;
         }
 
+        println!("add program");
         let module = Module::from_user_binary(&bin, debug_funcs, Some(stylus_data))?;
         let hash = module.hash();
         self.add_stylus_module(hash, module.into_bytes());
