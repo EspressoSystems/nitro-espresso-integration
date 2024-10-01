@@ -41,11 +41,8 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.nodeConfig.Sequencer = true
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
-	// using the sovereign sequencer
-	builder.execConfig.Sequencer.EnableEspressoSovereign = true
 
 	// transaction stream config
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
 	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
 	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
 
