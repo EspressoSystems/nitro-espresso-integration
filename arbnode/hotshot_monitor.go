@@ -24,10 +24,10 @@ type HotShotMonitor struct {
 	pollInterval         time.Duration
 	switchDelayThreshold uint64
 
-	// Mutex shared by the batch poster and hotshot monitor to read/write to the boolean reference used for the escape hatch.
-	escapeHatchMutex *sync.Mutex
-	// Pointer to boolean that controls the escape hatch.
-	escapeHatchOpen *bool
+	// Mutex used by hotshot monitor to ensure thread safety as IsEscapeHatchOpen is intended to be called by multiple threads
+	escapeHatchMutex sync.Mutex
+	// Boolean that controls the escape hatch.
+	escapeHatchOpen bool
 }
 
 // NewHotShotMonitor creates a new instance of HotShotMonitor
@@ -46,7 +46,7 @@ type HotShotMonitor struct {
 // Errors:
 //
 //	In the event that any parameters are nil, this function will return an error as the HotShotMonitor would not be able to operate.
-func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface, pollInterval time.Duration, switchDelayThreshold uint64, escapeHatchMutex *sync.Mutex, escapeHatchOpen *bool) (*HotShotMonitor, error) {
+func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface, pollInterval time.Duration, switchDelayThreshold uint64) (*HotShotMonitor, error) {
 	if lightClientReader == nil {
 		return nil, errors.New("NewHotShotMonitor: lightClientReader is nil")
 	}
@@ -56,16 +56,10 @@ func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface,
 	if switchDelayThreshold == 0 {
 		return nil, errors.New("NewHotShotMonitor: switchDelayThreshold is 0")
 	}
-	if escapeHatchMutex == nil {
-		return nil, errors.New("NewHotShotMonitor: escapeHatchMutex is nil")
-	}
-	if escapeHatchOpen == nil {
-		return nil, errors.New("NewHotShotMonitor: escapeHatchOpen is nil")
-	}
 	monitor := &HotShotMonitor{
 		lightClientReader:    lightClientReader,
-		escapeHatchMutex:     escapeHatchMutex,
-		escapeHatchOpen:      escapeHatchOpen,
+		escapeHatchMutex:     sync.Mutex{},
+		escapeHatchOpen:      true,
 		pollInterval:         pollInterval,
 		switchDelayThreshold: switchDelayThreshold,
 	}
@@ -74,7 +68,7 @@ func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface,
 
 // monitorHotshotLiveness is the work function for this types task.
 // It will periodically poll the light client on the rollup destination to determine if HotShot is live.
-// As necessary, it will update the shared boolean reference to alert it's parent process.
+// As necessary, it will update its internal boolean that can be read by other processes via `IsEscapeHatchOpen`.
 func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration {
 	isHotShotLive, err := m.lightClientReader.IsHotShotLive(m.switchDelayThreshold)
 	switch isHotShotLive {
@@ -83,23 +77,31 @@ func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration
 		// Therefore if isHotShotLive is true, we need not check that err is nil
 		m.escapeHatchMutex.Lock()
 		// in the case that hotshot is live, we can close (or keep closed) the escape hatch
-		if *m.escapeHatchOpen {
+		if m.escapeHatchOpen {
 			log.Info("Hotshot has regained liveness. closing the Espresso escape hatch")
 		}
-		*m.escapeHatchOpen = false // booleans are by default false in go, This is just an easy way to set the boolean to false.
+		m.escapeHatchOpen = false
 		m.escapeHatchMutex.Unlock()
 	case false:
 		if err != nil {
 			log.Warn("Failed to check if HotShot is live, opening escape hatch", "err", err)
 		} else {
-			log.Warn("HotShot is not live, opening escape hatch")
+			log.Warn("HotShot is not live, opening escape hatch") // We should probably add a verbosity argument.
 		}
 		m.escapeHatchMutex.Lock()
 		// We need to save this boolean in memory to be able to declare a pointer for it.
-		*m.escapeHatchOpen = true
+		m.escapeHatchOpen = true
 		m.escapeHatchMutex.Unlock()
 	}
 	return m.pollInterval
+}
+
+// IsEscapeHatchOpen is a utility function that allows other processes to read the escape hatch boolean with mutex safety enforced by the API of the HotShotMonitor
+// Returns: A boolean representing the state of the escape hatch.
+func (m *HotShotMonitor) IsEscapeHatchOpen() bool {
+	m.escapeHatchMutex.Lock()
+	defer m.escapeHatchMutex.Unlock()
+	return m.escapeHatchOpen
 }
 
 // Start can be called on an instance of HotShotMonitor to have it begin monitoring HotShot.

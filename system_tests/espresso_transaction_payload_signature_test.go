@@ -28,7 +28,7 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	err := waitForL1Node(t, ctx)
 	Require(t, err)
 
-	cleanEspresso := runEspresso(t, ctx)
+	cleanEspresso, _, _ := runEspresso(t, ctx)
 	defer cleanEspresso()
 
 	// wait for the builder

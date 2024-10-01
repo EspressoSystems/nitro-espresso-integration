@@ -80,10 +80,9 @@ type TransactionStreamer struct {
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
 	//state related to espresso operation
-	espressoClient   *espressoClient.Client
-	escapeHatchOpen  *bool
-	escapeHatchMutex *sync.Mutex
-	dataSigner      signature.DataSignerFunc
+	espressoClient *espressoClient.Client
+	hotShotMonitor *HotShotMonitor
+	dataSigner     signature.DataSignerFunc
 }
 
 type TransactionStreamerConfig struct {
@@ -136,6 +135,7 @@ func NewTransactionStreamer(
 	fatalErrChan chan<- error,
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
+	hotShotMonitor *HotShotMonitor,
 	dataSigner signature.DataSignerFunc,
 ) (*TransactionStreamer, error) {
 	streamer := &TransactionStreamer{
@@ -147,6 +147,7 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
+		hotShotMonitor:     hotShotMonitor,
 		dataSigner:         dataSigner,
 	}
 
@@ -1523,16 +1524,20 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 	return s.config().EspressoTxnsPollingInterval
 }
 
+func (s *TransactionStreamer) startInner(ctxIn context.Context, ignored struct{}) time.Duration {
+	if s.hotShotMonitor.IsEscapeHatchOpen() { // If the escape hatch is open, we should execute messages according to the normal Arbitrum behavior
+		return s.executeMessages(ctxIn, ignored)
+	} else { // Otherwise we should use espresso behavior
+		return s.submitEspressoTransactions(ctxIn, ignored)
+	}
+}
+
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
-	//Potential TODO: We might need to have a startInner function that polls with the frequencies in submitEspressoTransactions or executeMessages and chooses which method to call based on the escape hatch
-	if s.config().SovereignSequencerEnabled {
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
+	err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.startInner, s.newMessageNotifier)
+	if err != nil {
+		return err
 	}
-
-	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
+	return nil
 }

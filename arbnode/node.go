@@ -430,7 +430,19 @@ func createNodeImpl(
 	}
 
 	transactionStreamerConfigFetcher := func() *TransactionStreamerConfig { return &configFetcher.Get().TransactionStreamer }
-	txStreamer, err := NewTransactionStreamer(arbDb, l2Config, exec, broadcastServer, fatalErrChan, transactionStreamerConfigFetcher, &configFetcher.Get().SnapSyncTest, dataSigner)
+
+	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(configFetcher.Get().BatchPoster.LightClientAddress), l1Reader.Client())
+
+	if err != nil {
+		log.Error("Unable to create light client reader", "err", err)
+	}
+
+	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, 300*time.Millisecond, uint64(10))
+	if err != nil {
+		log.Error("Unable to create HotShotMonitor", "err", err)
+	}
+
+	txStreamer, err := NewTransactionStreamer(arbDb, l2Config, exec, broadcastServer, fatalErrChan, transactionStreamerConfigFetcher, &configFetcher.Get().SnapSyncTest, hotShotMonitor, dataSigner)
 	if err != nil {
 		return nil, err
 	}
@@ -698,17 +710,18 @@ func createNodeImpl(
 			dapWriter = daprovider.NewWriterForDAS(daWriter)
 		}
 		batchPoster, err = NewBatchPoster(ctx, &BatchPosterOpts{
-			DataPosterDB:  rawdb.NewTable(arbDb, storage.BatchPosterPrefix),
-			L1Reader:      l1Reader,
-			Inbox:         inboxTracker,
-			Streamer:      txStreamer,
-			VersionGetter: exec,
-			SyncMonitor:   syncMonitor,
-			Config:        func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
-			DeployInfo:    deployInfo,
-			TransactOpts:  txOptsBatchPoster,
-			DAPWriter:     dapWriter,
-			ParentChainID: parentChainID,
+			DataPosterDB:   rawdb.NewTable(arbDb, storage.BatchPosterPrefix),
+			L1Reader:       l1Reader,
+			Inbox:          inboxTracker,
+			Streamer:       txStreamer,
+			HotShotMonitor: hotShotMonitor,
+			VersionGetter:  exec,
+			SyncMonitor:    syncMonitor,
+			Config:         func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
+			DeployInfo:     deployInfo,
+			TransactOpts:   txOptsBatchPoster,
+			DAPWriter:      dapWriter,
+			ParentChainID:  parentChainID,
 		})
 		if err != nil {
 			return nil, err

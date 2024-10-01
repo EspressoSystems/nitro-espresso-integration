@@ -12,7 +12,6 @@ import (
 	"math"
 	"math/big"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -129,8 +128,6 @@ type BatchPoster struct {
 	// Espresso related state (readers and sub-processes)
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
-	escapeHatchMutex  *sync.Mutex
-	escapeHatchOpen   *bool
 	hotShotMonitor    *HotShotMonitor
 }
 
@@ -302,17 +299,18 @@ var TestBatchPosterConfig = BatchPosterConfig{
 }
 
 type BatchPosterOpts struct {
-	DataPosterDB  ethdb.Database
-	L1Reader      *headerreader.HeaderReader
-	Inbox         *InboxTracker
-	Streamer      *TransactionStreamer
-	VersionGetter execution.FullExecutionClient
-	SyncMonitor   *SyncMonitor
-	Config        BatchPosterConfigFetcher
-	DeployInfo    *chaininfo.RollupAddresses
-	TransactOpts  *bind.TransactOpts
-	DAPWriter     daprovider.Writer
-	ParentChainID *big.Int
+	DataPosterDB   ethdb.Database
+	L1Reader       *headerreader.HeaderReader
+	Inbox          *InboxTracker
+	Streamer       *TransactionStreamer
+	HotShotMonitor *HotShotMonitor
+	VersionGetter  execution.FullExecutionClient
+	SyncMonitor    *SyncMonitor
+	Config         BatchPosterConfigFetcher
+	DeployInfo     *chaininfo.RollupAddresses
+	TransactOpts   *bind.TransactOpts
+	DAPWriter      daprovider.Writer
+	ParentChainID  *big.Int
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -360,10 +358,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 	}
-	escapeHatchMutex := sync.Mutex{}
-	escapeHatchOpen := true
 
-	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, 300*time.Millisecond, uint64(10), &escapeHatchMutex, &escapeHatchOpen)
 	if err != nil {
 		log.Error("Unable to construct HotShotMonitor in BatchPoster", "err", err)
 		return nil, err
@@ -386,9 +381,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		redisLock:          redisLock,
 		hotshotClient:      hotShotClient,
 		lightClientReader:  lightClientReader,
-		hotShotMonitor:     hotShotMonitor,
-		escapeHatchMutex:   &escapeHatchMutex,
-		escapeHatchOpen:    &escapeHatchOpen,
+		hotShotMonitor:     opts.HotShotMonitor,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -518,11 +511,8 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		}
 
 		if jst.Header == nil {
-			// If the message is an Espresso message, store the pos in the database to be used later
-			// to submit the message to hotshot for finalization.
-			b.escapeHatchMutex.Lock()
-			escapeHatchOpen := *b.escapeHatchOpen
-			b.escapeHatchMutex.Unlock()
+
+			escapeHatchOpen := b.hotShotMonitor.IsEscapeHatchOpen()
 			// If the message is an Espresso message, and hotshot is live store the pos in the database to be used later
 			// to submit the message to hotshot for finalization.
 			log.Info("Escape Hatch Status:", "escapeHatchOpen", escapeHatchOpen)

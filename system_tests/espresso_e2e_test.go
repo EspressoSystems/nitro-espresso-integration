@@ -221,7 +221,7 @@ func TestEspressoE2E(t *testing.T) {
 		return msgCnt >= expected && validatedCnt >= expected
 	})
 	Require(t, err)
-
+	log.Info("waited for initial msg")
 	// wait for the latest hotshot block
 	err = waitFor(t, ctx, func() bool {
 		out, err := exec.Command("curl", "http://127.0.0.1:41000/status/block-height", "-L").Output()
@@ -236,6 +236,7 @@ func TestEspressoE2E(t *testing.T) {
 		return h > 0
 	})
 	Require(t, err)
+	log.Info("waited for initial hotshot block")
 
 	// Check if the tx is executed correctly
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User10", l2Info)
@@ -316,7 +317,7 @@ func TestEspressoE2E(t *testing.T) {
 			return false
 		})
 		Require(t, err)
-
+		resumeEspresso()
 		err = checkTransferTxOnL2(t, ctx, l2Node, "User12", l2Info)
 		Require(t, err)
 		err = checkTransferTxOnL2(t, ctx, l2Node, "User13", l2Info)
