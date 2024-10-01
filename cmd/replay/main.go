@@ -300,27 +300,29 @@ func main() {
 			hotshotHeader := jst.Header
 			height := hotshotHeader.Height
 
-			if jst.BlockMerkleJustification == nil {
-				panic("block merkle justification missing")
-			}
+			if wavmio.IsHotShotLive(height) {
+				if jst.BlockMerkleJustification == nil {
+					panic("block merkle justification missing")
+				}
 
-			if jst.Proof == nil && len(txs) != 0 {
-				panic("namespace proof missing")
-			}
+				if jst.Proof == nil && len(txs) != 0 {
+					panic("namespace proof missing")
+				}
 
-			commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
-			jsonHeader, err := json.Marshal(hotshotHeader)
-			if err != nil {
-				panic("unable to serialize header")
-			}
-			espressocrypto.VerifyMerkleProof(
-				jst.BlockMerkleJustification.BlockMerkleProof.Proof,
-				jsonHeader,
-				*jst.BlockMerkleJustification.BlockMerkleComm,
-				commitment,
-			)
-			if jst.Proof != nil {
-				espressocrypto.VerifyNamespace(chainConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
+				commitment := espressoTypes.Commitment(wavmio.ReadHotShotCommitment(height))
+				jsonHeader, err := json.Marshal(hotshotHeader)
+				if err != nil {
+					panic("unable to serialize header")
+				}
+				espressocrypto.VerifyMerkleProof(
+					jst.BlockMerkleJustification.BlockMerkleProof.Proof,
+					jsonHeader,
+					*jst.BlockMerkleJustification.BlockMerkleComm,
+					commitment,
+				)
+				if jst.Proof != nil {
+					espressocrypto.VerifyNamespace(chainConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
+				}
 			}
 
 		}
