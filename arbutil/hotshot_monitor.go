@@ -1,4 +1,4 @@
-package arbnode
+package arbutil
 
 import (
 	"context"
