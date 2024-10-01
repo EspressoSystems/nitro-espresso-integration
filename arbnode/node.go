@@ -430,16 +430,22 @@ func createNodeImpl(
 	}
 
 	transactionStreamerConfigFetcher := func() *TransactionStreamerConfig { return &configFetcher.Get().TransactionStreamer }
-
+	if l1Reader == nil {
+		//build a parent chain reader even if we need to create a new one so that th transaction streamer and batch poster can have a hotshot monitor
+		arbSys, _ := precompilesgen.NewArbSys(types.ArbSysAddress, l1client)
+		l1Reader, err = headerreader.New(ctx, l1client, func() *headerreader.Config { return &configFetcher.Get().ParentChainReader }, arbSys)
+		if err != nil {
+			return nil, err
+		}
+	}
 	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(configFetcher.Get().BatchPoster.LightClientAddress), l1Reader.Client())
-
 	if err != nil {
 		log.Error("Unable to create light client reader", "err", err)
 	}
 
-	hotShotMonitor, err := NewHotShotMonitor(lightClientReader, 300*time.Millisecond, uint64(10))
+	hotShotMonitor, err := arbutil.NewHotShotMonitor(lightClientReader, config.BatchPoster.SwitchPollInterval, config.BatchPoster.SwitchDelayThreshold)
 	if err != nil {
-		log.Error("Unable to create HotShotMonitor", "err", err)
+		log.Error("Unable to create HotShot monitor", "err", err)
 	}
 
 	txStreamer, err := NewTransactionStreamer(arbDb, l2Config, exec, broadcastServer, fatalErrChan, transactionStreamerConfigFetcher, &configFetcher.Get().SnapSyncTest, hotShotMonitor, dataSigner)
@@ -771,22 +777,7 @@ func (n *Node) OnConfigReload(_ *Config, _ *Config) error {
 	return nil
 }
 
-func CreateNode(
-	ctx context.Context,
-	stack *node.Node,
-	exec execution.FullExecutionClient,
-	arbDb ethdb.Database,
-	configFetcher ConfigFetcher,
-	l2Config *params.ChainConfig,
-	l1client arbutil.L1Interface,
-	deployInfo *chaininfo.RollupAddresses,
-	txOptsValidator *bind.TransactOpts,
-	txOptsBatchPoster *bind.TransactOpts,
-	dataSigner signature.DataSignerFunc,
-	fatalErrChan chan error,
-	parentChainID *big.Int,
-	blobReader daprovider.BlobReader,
-) (*Node, error) {
+func CreateNode(ctx context.Context, stack *node.Node, exec execution.FullExecutionClient, arbDb ethdb.Database, configFetcher ConfigFetcher, l2Config *params.ChainConfig, l1client arbutil.L1Interface, deployInfo *chaininfo.RollupAddresses, txOptsValidator *bind.TransactOpts, txOptsBatchPoster *bind.TransactOpts, dataSigner signature.DataSignerFunc, fatalErrChan chan error, parentChainID *big.Int, blobReader daprovider.BlobReader) (*Node, error) {
 	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader)
 	if err != nil {
 		return nil, err

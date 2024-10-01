@@ -81,7 +81,7 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 	//state related to espresso operation
 	espressoClient *espressoClient.Client
-	hotShotMonitor *HotShotMonitor
+	hotShotMonitor *arbutil.HotShotMonitor
 	dataSigner     signature.DataSignerFunc
 }
 
@@ -91,7 +91,6 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 
 	// Espresso specific fields
-	SovereignSequencerEnabled   bool          `koanf:"sovereign-sequencer-enabled"`
 	HotShotUrl                  string        `koanf:"hotshot-url"`
 	EspressoNamespace           uint64        `koanf:"espresso-namespace"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
@@ -103,7 +102,6 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize:     50_000,
 	MaxReorgResequenceDepth:     1024,
 	ExecuteMessageLoopDelay:     time.Millisecond * 100,
-	SovereignSequencerEnabled:   false,
 	HotShotUrl:                  "",
 	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
@@ -112,7 +110,6 @@ var TestTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize:     10_000,
 	MaxReorgResequenceDepth:     128 * 1024,
 	ExecuteMessageLoopDelay:     time.Millisecond,
-	SovereignSequencerEnabled:   false,
 	HotShotUrl:                  "",
 	EspressoTxnsPollingInterval: time.Millisecond * 100,
 }
@@ -121,7 +118,6 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-broadcaster-queue-size", DefaultTransactionStreamerConfig.MaxBroadcasterQueueSize, "maximum cache of pending broadcaster messages")
 	f.Int64(prefix+".max-reorg-resequence-depth", DefaultTransactionStreamerConfig.MaxReorgResequenceDepth, "maximum number of messages to attempt to resequence on reorg (0 = never resequence, -1 = always resequence)")
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
-	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
@@ -135,7 +131,7 @@ func NewTransactionStreamer(
 	fatalErrChan chan<- error,
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
-	hotShotMonitor *HotShotMonitor,
+	hotShotMonitor *arbutil.HotShotMonitor,
 	dataSigner signature.DataSignerFunc,
 ) (*TransactionStreamer, error) {
 	streamer := &TransactionStreamer{
@@ -151,11 +147,8 @@ func NewTransactionStreamer(
 		dataSigner:         dataSigner,
 	}
 
-	if config().SovereignSequencerEnabled {
-		espressoClient := espressoClient.NewClient(config().HotShotUrl)
-		streamer.espressoClient = espressoClient
-
-	}
+	espressoClient := espressoClient.NewClient(config().HotShotUrl)
+	streamer.espressoClient = espressoClient
 
 	err := streamer.cleanupInconsistentState()
 	if err != nil {
@@ -1525,7 +1518,8 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 }
 
 func (s *TransactionStreamer) startInner(ctxIn context.Context, ignored struct{}) time.Duration {
-	if s.hotShotMonitor.IsEscapeHatchOpen() { // If the escape hatch is open, we should execute messages according to the normal Arbitrum behavior
+	// if the hotShotMonitor is nil, we should use normal Arbitrum behavior
+	if s.hotShotMonitor == nil || s.hotShotMonitor.IsEscapeHatchOpen() { // If the escape hatch is open, we should execute messages according to the normal Arbitrum behavior
 		return s.executeMessages(ctxIn, ignored)
 	} else { // Otherwise we should use espresso behavior
 		return s.submitEspressoTransactions(ctxIn, ignored)

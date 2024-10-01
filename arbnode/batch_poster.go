@@ -128,7 +128,7 @@ type BatchPoster struct {
 	// Espresso related state (readers and sub-processes)
 	lightClientReader lightclient.LightClientReaderInterface
 	hotshotClient     *hotshotClient.Client
-	hotShotMonitor    *HotShotMonitor
+	hotShotMonitor    *arbutil.HotShotMonitor
 }
 
 type l1BlockBound int
@@ -183,8 +183,10 @@ type BatchPosterConfig struct {
 	l1BlockBound l1BlockBound
 
 	// Espresso specific flags
-	LightClientAddress string `koanf:"light-client-address"`
-	HotShotUrl         string `koanf:"hotshot-url"`
+	LightClientAddress   string        `koanf:"light-client-address"`
+	HotShotUrl           string        `koanf:"hotshot-url"`
+	SwitchPollInterval   time.Duration `koanf:"switch-poll-interval"`
+	SwitchDelayThreshold uint64        `koanf:"switch-delay-threshold"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -236,6 +238,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
+	f.Duration(prefix+".switch-poll-interval", DefaultBatchPosterConfig.SwitchPollInterval, "Espresso escape hatch polling interval to check for HotShot liveness")
+	f.Uint64(prefix+".switch-delay-threshold", DefaultBatchPosterConfig.SwitchDelayThreshold, "Espresso escape hatch switch delay threshold used in checking HotShot liveness")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -266,6 +270,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	RedisLock:                      redislock.DefaultCfg,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
 	ReorgResistanceMargin:          10 * time.Minute,
+	SwitchPollInterval:             500 * time.Millisecond,
+	SwitchDelayThreshold:           uint64(10),
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -296,6 +302,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	L1BlockBoundBypass:             time.Hour,
 	UseAccessLists:                 true,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInBips * 3 / 2,
+	SwitchPollInterval:             500 * time.Millisecond,
+	SwitchDelayThreshold:           uint64(10),
 }
 
 type BatchPosterOpts struct {
@@ -303,7 +311,7 @@ type BatchPosterOpts struct {
 	L1Reader       *headerreader.HeaderReader
 	Inbox          *InboxTracker
 	Streamer       *TransactionStreamer
-	HotShotMonitor *HotShotMonitor
+	HotShotMonitor *arbutil.HotShotMonitor
 	VersionGetter  execution.FullExecutionClient
 	SyncMonitor    *SyncMonitor
 	Config         BatchPosterConfigFetcher

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"math"
 	"math/big"
 	"runtime/debug"
@@ -80,7 +81,9 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	EnableEspressoSovereign bool `koanf:"enable-espresso-sovereign"`
+	LightClientAddress   string        `koanf:"light-client-address"`
+	SwitchPollInterval   time.Duration `koanf:"switch-poll-interval"`
+	SwitchDelayThreshold uint64        `koanf:"switch-delay-threshold"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -119,7 +122,8 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EnableEspressoSovereign: false,
+	SwitchPollInterval:   500 * time.Millisecond,
+	SwitchDelayThreshold: uint64(10),
 }
 
 var TestSequencerConfig = SequencerConfig{
@@ -139,7 +143,8 @@ var TestSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	EnableEspressoSovereign: false,
+	SwitchPollInterval:   500 * time.Millisecond,
+	SwitchDelayThreshold: uint64(10),
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -160,7 +165,8 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 
 	// Espresso specific flags
-	f.Bool(prefix+".enable-espresso-sovereign", DefaultSequencerConfig.EnableEspressoSovereign, "enable sovereign sequencer mode for the Espresso integration")
+	f.Duration(prefix+".switch-poll-interval", DefaultSequencerConfig.SwitchPollInterval, "Espresso escape hatch polling interval to check for HotShot liveness")
+	f.Uint64(prefix+".switch-delay-threshold", DefaultSequencerConfig.SwitchDelayThreshold, "Espresso escape hatch switch delay threshold used in checking HotShot liveness")
 }
 
 type txQueueItem struct {
@@ -329,6 +335,10 @@ type Sequencer struct {
 	expectedSurplusMutex   sync.RWMutex
 	expectedSurplus        int64
 	expectedSurplusUpdated bool
+
+	// component related to espresso operation
+	hotShotMonitor *arbutil.HotShotMonitor
+	// Maybe the HotShotMonitor should live in it's own package with a config considering we are sharing one between multiple different nodes in nitro.go
 }
 
 func NewSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher SequencerConfigFetcher) (*Sequencer, error) {
@@ -344,6 +354,17 @@ func NewSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderRead
 		}
 		senderWhitelist[common.HexToAddress(address)] = struct{}{}
 	}
+
+	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(config.LightClientAddress), l1Reader.Client())
+	if err != nil {
+		log.Error("Unable to create light client reader", "err", err)
+	}
+
+	hotShotMonitor, err := arbutil.NewHotShotMonitor(lightClientReader, config.SwitchPollInterval, config.SwitchDelayThreshold)
+	if err != nil {
+		log.Error("Unable to create HotShot monitor", "err", err)
+	}
+
 	s := &Sequencer{
 		execEngine:      execEngine,
 		txQueue:         make(chan txQueueItem, config.QueueSize),
@@ -355,6 +376,7 @@ func NewSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderRead
 		l1Timestamp:     0,
 		pauseChan:       nil,
 		onForwarderSet:  make(chan struct{}, 1),
+		hotShotMonitor:  hotShotMonitor,
 	}
 	s.nonceFailures = &nonceFailureCache{
 		containers.NewLruCacheWithOnEvict(config.NonceCacheSize, s.onNonceFailureEvict),
@@ -926,10 +948,13 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		block *types.Block
 		err   error
 	)
+
+	shouldSequenceWithEspresso := s.hotShotMonitor.IsEscapeHatchOpen()
+
 	if config.EnableProfiling {
-		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, config.EnableEspressoSovereign)
+		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, shouldSequenceWithEspresso)
 	} else {
-		block, err = s.execEngine.SequenceTransactions(header, txes, hooks, config.EnableEspressoSovereign)
+		block, err = s.execEngine.SequenceTransactions(header, txes, hooks, shouldSequenceWithEspresso)
 	}
 	elapsed := time.Since(start)
 	blockCreationTimer.Update(elapsed)
@@ -1071,6 +1096,7 @@ func (s *Sequencer) updateExpectedSurplus(ctx context.Context) (int64, error) {
 
 func (s *Sequencer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
+	s.hotShotMonitor.Start(ctxIn)
 	config := s.config()
 	if (config.ExpectedSurplusHardThreshold != "default" || config.ExpectedSurplusSoftThreshold != "default") && s.l1Reader == nil {
 		return errors.New("expected surplus soft/hard thresholds are enabled but l1Reader is nil")
