@@ -41,6 +41,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.nodeConfig.Sequencer = true
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
+	builder.execConfig.Sequencer.LightClientAddress = lightClientAddress
 
 	// transaction stream config
 	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()

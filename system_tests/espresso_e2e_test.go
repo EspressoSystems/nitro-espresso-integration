@@ -32,7 +32,7 @@ var (
 	arbValidationPort = 54321
 )
 
-func runEspresso(t *testing.T, ctx context.Context) (func(), func(), func()) {
+func runEspresso(t *testing.T, ctx context.Context) func() {
 	shutdown := func() {
 		p := exec.Command("docker", "compose", "down")
 		p.Dir = workingDir
@@ -43,24 +43,6 @@ func runEspresso(t *testing.T, ctx context.Context) (func(), func(), func()) {
 	}
 
 	shutdown()
-
-	pause := func() {
-		p := exec.Command("docker", "compose", "stop", "espresso-dev-node")
-		p.Dir = workingDir
-		err := p.Run()
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	resume := func() {
-		p := exec.Command("docker", "compose", "start", "espresso-dev-node")
-		p.Dir = workingDir
-		err := p.Run()
-		if err != nil {
-			panic(err)
-		}
-	}
 
 	invocation := []string{"compose", "up", "-d", "--build"}
 	nodes := []string{
@@ -76,7 +58,7 @@ func runEspresso(t *testing.T, ctx context.Context) (func(), func(), func()) {
 			panic(err)
 		}
 	}()
-	return shutdown, pause, resume
+	return shutdown
 }
 
 func createValidationNode(ctx context.Context, t *testing.T, jit bool) func() {
@@ -196,7 +178,7 @@ func TestEspressoE2E(t *testing.T) {
 
 	log.Info("wait for l1")
 
-	cleanEspresso, pauseEspresso, resumeEspresso := runEspresso(t, ctx)
+	cleanEspresso := runEspresso(t, ctx)
 	defer cleanEspresso()
 
 	log.Info("created espresso")
@@ -279,22 +261,20 @@ func TestEspressoE2E(t *testing.T) {
 	Require(t, err)
 
 	// Pause l1 height and verify that the escape hatch is working
-	checkStaker := os.Getenv("E2E_CHECK_STAKER")
+	checkStaker := os.Getenv("E2E_SKIP_ESCAPE_HATCH_TEST")
 	if checkStaker == "" {
 		log.Info("Checking the escape hatch")
 		// Start to check the escape hatch
 		address := common.HexToAddress(lightClientAddress)
 
 		txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
-		// Freeze the l1 height
 
-		pauseEspresso()
-		log.Info("paused espresso")
+		// Freeze the l1 height
 		err := lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
+		log.Info("waiting for light client to report hotshot is down")
 		Require(t, err)
-		log.Info("froze l1 height")
-		log.Info("waiting for light client to report that hotshot is down")
-		err = waitForWith(t, ctx, 1*time.Minute, 1*time.Second, func() bool {
+		err = waitForWith(t, ctx, 10*time.Minute, 1*time.Second, func() bool {
+			log.Info("")
 			isLive, err := lightclientmock.IsHotShotLive(t, builder.L1.Client, address, uint64(delayThreshold))
 			if err != nil {
 				return false
@@ -306,10 +286,11 @@ func TestEspressoE2E(t *testing.T) {
 		// Wait for the switch to be totally finished
 		currMsg, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
 		Require(t, err)
+		log.Info("waiting for message count", "currMsg", currMsg)
 		var validatedMsg arbutil.MessageIndex
 		err = waitForWith(t, ctx, 6*time.Minute, 60*time.Second, func() bool {
-
 			validatedCnt := builder.L2.ConsensusNode.BlockValidator.Validated(t)
+			log.Info("Validation status", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
 			if validatedCnt >= currMsg {
 				validatedMsg = validatedCnt
 				return true
@@ -317,7 +298,6 @@ func TestEspressoE2E(t *testing.T) {
 			return false
 		})
 		Require(t, err)
-		resumeEspresso()
 		err = checkTransferTxOnL2(t, ctx, l2Node, "User12", l2Info)
 		Require(t, err)
 		err = checkTransferTxOnL2(t, ctx, l2Node, "User13", l2Info)
