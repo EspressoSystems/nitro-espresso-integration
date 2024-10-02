@@ -274,7 +274,6 @@ func TestEspressoE2E(t *testing.T) {
 		log.Info("waiting for light client to report hotshot is down")
 		Require(t, err)
 		err = waitForWith(t, ctx, 10*time.Minute, 1*time.Second, func() bool {
-			log.Info("")
 			isLive, err := lightclientmock.IsHotShotLive(t, builder.L1.Client, address, uint64(delayThreshold))
 			if err != nil {
 				return false
