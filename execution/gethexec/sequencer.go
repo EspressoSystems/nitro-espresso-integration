@@ -81,9 +81,12 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	LightClientAddress   string        `koanf:"light-client-address"`
-	SwitchPollInterval   time.Duration `koanf:"switch-poll-interval"`
-	SwitchDelayThreshold uint64        `koanf:"switch-delay-threshold"`
+	LightClientAddress         string                     `koanf:"light-client-address"`
+	SwitchPollInterval         time.Duration              `koanf:"switch-poll-interval"`
+	SwitchDelayThreshold       uint64                     `koanf:"switch-delay-threshold"`
+	EspressoFinalityNodeConfig EspressoFinalityNodeConfig `koanf:"espresso-finality-node-config"`
+	// Espresso Finality Node creates blocks with finalized hotshot transactions
+	EnableEspressoFinalityNode bool `koanf:"enable-espresso-finality-node"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -104,6 +107,12 @@ func (c *SequencerConfig) Validate() error {
 
 type SequencerConfigFetcher func() *SequencerConfig
 
+type EspressoFinalityNodeConfig struct {
+	HotShotUrl string `koanf:"hotshot-url"`
+	StartBlock uint64 `koanf:"start-block"`
+	Namespace  uint64 `koanf:"namespace"`
+}
+
 var DefaultSequencerConfig = SequencerConfig{
 	Enable:                      false,
 	MaxBlockSpeed:               time.Millisecond * 250,
@@ -122,8 +131,9 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	SwitchPollInterval:   500 * time.Millisecond,
-	SwitchDelayThreshold: uint64(10),
+	SwitchPollInterval:         500 * time.Millisecond,
+	SwitchDelayThreshold:       uint64(10),
+	EnableEspressoFinalityNode: false,
 }
 
 var TestSequencerConfig = SequencerConfig{
@@ -143,8 +153,9 @@ var TestSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 
-	SwitchPollInterval:   500 * time.Millisecond,
-	SwitchDelayThreshold: uint64(10),
+	SwitchPollInterval:         500 * time.Millisecond,
+	SwitchDelayThreshold:       uint64(10),
+	EnableEspressoFinalityNode: false,
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -165,6 +176,7 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 
 	// Espresso specific flags
+	f.Bool(prefix+".enable-espresso-finality-node", DefaultSequencerConfig.EnableEspressoFinalityNode, "enable espresso finality node")
 	f.Duration(prefix+".switch-poll-interval", DefaultSequencerConfig.SwitchPollInterval, "Espresso escape hatch polling interval to check for HotShot liveness")
 	f.Uint64(prefix+".switch-delay-threshold", DefaultSequencerConfig.SwitchDelayThreshold, "Espresso escape hatch switch delay threshold used in checking HotShot liveness")
 }
@@ -1096,7 +1108,6 @@ func (s *Sequencer) updateExpectedSurplus(ctx context.Context) (int64, error) {
 
 func (s *Sequencer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
-	s.hotShotMonitor.Start(ctxIn)
 	config := s.config()
 	if (config.ExpectedSurplusHardThreshold != "default" || config.ExpectedSurplusSoftThreshold != "default") && s.l1Reader == nil {
 		return errors.New("expected surplus soft/hard thresholds are enabled but l1Reader is nil")
