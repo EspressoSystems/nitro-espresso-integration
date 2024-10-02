@@ -35,8 +35,8 @@ func createEspressoFinalityNode(t *testing.T, builder *NodeBuilder) (*TestClient
 	execConfig.Sequencer.EspressoFinalityNodeConfig.HotShotUrl = hotShotUrl
 
 	// disable sovereign sequencer
-	execConfig.Sequencer.EnableEspressoSovereign = false
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = false
+	//TODO: a future PR will fix this test by connecting this flag to the usage of the sovereign sequencer.
+	builder.chainConfig.ArbitrumChainParams.EnableEspresso = false
 
 	return builder.Build2ndNode(t, &SecondNodeParams{
 		nodeConfig: nodeConfig,
