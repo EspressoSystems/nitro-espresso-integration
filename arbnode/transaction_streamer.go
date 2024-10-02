@@ -66,8 +66,7 @@ type TransactionStreamer struct {
 	reorgMutex                      sync.RWMutex
 	espressoTxnsStateInsertionMutex sync.Mutex
 
-	newMessageNotifier     chan struct{}
-	newSovereignTxNotifier chan struct{}
+	newMessageNotifier chan struct{}
 
 	nextAllowedFeedReorgLog time.Time
 
@@ -79,7 +78,7 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
-	//state related to espresso operation
+	// state related to espresso operation
 	espressoClient *espressoClient.Client
 	hotShotMonitor *arbutil.HotShotMonitor
 	dataSigner     signature.DataSignerFunc

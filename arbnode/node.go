@@ -432,7 +432,7 @@ func createNodeImpl(
 
 	transactionStreamerConfigFetcher := func() *TransactionStreamerConfig { return &configFetcher.Get().TransactionStreamer }
 	if l1Reader == nil {
-		//build a parent chain reader even if we need to create a new one so that th transaction streamer and batch poster can have a hotshot monitor
+		// We need a parent chain reader for the sovereign sequencer, We should fail if we aren't able to make one.
 		arbSys, _ := precompilesgen.NewArbSys(types.ArbSysAddress, l1client)
 		l1Reader, err = headerreader.New(ctx, l1client, func() *headerreader.Config { return &configFetcher.Get().ParentChainReader }, arbSys)
 		if err != nil {
