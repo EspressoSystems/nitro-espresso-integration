@@ -70,7 +70,7 @@ func NewHotShotMonitor(lightClientReader lightclient.LightClientReaderInterface,
 // It will periodically poll the light client on the rollup destination to determine if HotShot is live.
 // As necessary, it will update its internal boolean that can be read by other processes via `IsEscapeHatchOpen`.
 func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration {
-	isHotShotLive, err := m.lightClientReader.IsHotShotLive(m.switchDelayThreshold)
+	isHotShotLive, _ := m.lightClientReader.IsHotShotLive(m.switchDelayThreshold)
 	switch isHotShotLive {
 	case true:
 		// IsHotShotLive can never return (true, err) it will always return either (false, err), (false, nil), or (true, nil)
@@ -83,11 +83,6 @@ func (m *HotShotMonitor) monitorHotshotLiveness(_ context.Context) time.Duration
 		m.escapeHatchOpen = false
 		m.escapeHatchMutex.Unlock()
 	case false:
-		if err != nil {
-			log.Warn("Failed to check if HotShot is live, opening escape hatch", "err", err)
-		} else {
-			log.Warn("HotShot is not live, opening escape hatch") // We should probably add a verbosity argument.
-		}
 		m.escapeHatchMutex.Lock()
 		// We need to save this boolean in memory to be able to declare a pointer for it.
 		m.escapeHatchOpen = true

@@ -275,6 +275,7 @@ type Node struct {
 	SyncMonitor             *SyncMonitor
 	configFetcher           ConfigFetcher
 	ctx                     context.Context
+	hotShotMonitor          *arbutil.HotShotMonitor
 }
 
 type SnapSyncConfig struct {
@@ -769,6 +770,7 @@ func createNodeImpl(
 		SyncMonitor:             syncMonitor,
 		configFetcher:           configFetcher,
 		ctx:                     ctx,
+		hotShotMonitor:          hotShotMonitor,
 	}, nil
 }
 
@@ -825,6 +827,9 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if execClient != nil {
 		execClient.SetConsensusClient(n)
+	}
+	if n.hotShotMonitor != nil {
+		n.hotShotMonitor.Start(ctx)
 	}
 	err = n.Execution.Start(ctx)
 	if err != nil {
