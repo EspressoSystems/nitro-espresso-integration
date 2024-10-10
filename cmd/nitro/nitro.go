@@ -586,7 +586,7 @@ func mainImpl() int {
 
 	// Validate sequencer's MaxTxDataSize and batchPoster's MaxSize params.
 	// SequencerInbox's maxDataSize is defaulted to 117964 which is 90% of Geth's 128KB tx size limit, leaving ~13KB for proving.
-	seqInboxMaxDataSize := 117964
+	seqInboxMaxDataSize := 317964
 	if nodeConfig.Node.ParentChainReader.Enable {
 		seqInbox, err := bridgegen.NewSequencerInbox(rollupAddrs.SequencerInbox, l1Client)
 		if err != nil {
@@ -614,6 +614,7 @@ func mainImpl() int {
 	if nodeConfig.Execution.Sequencer.Enable {
 		if nodeConfig.Execution.Sequencer.MaxTxDataSize > nodeConfig.Node.BatchPoster.MaxSize-5000 ||
 			nodeConfig.Execution.Sequencer.MaxTxDataSize > seqInboxMaxDataSize-15000 {
+			log.Info("too large", "max tx data size", nodeConfig.Execution.Sequencer.MaxTxDataSize, "batch poster", nodeConfig.Node.BatchPoster.MaxSize, "inbox size", seqInboxMaxDataSize)
 			log.Error("sequencer's MaxTxDataSize too large")
 			return 1
 		}

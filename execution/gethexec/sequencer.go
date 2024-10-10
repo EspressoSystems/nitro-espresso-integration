@@ -849,6 +849,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 			continue
 		}
 		if queueItem.txSize > config.MaxTxDataSize {
+			log.Info("txSize", "txSize", queueItem.txSize, "max size limit", config.MaxTxDataSize)
 			// This tx is too large
 			queueItem.returnResult(txpool.ErrOversizedData)
 			continue
