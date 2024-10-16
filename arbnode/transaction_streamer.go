@@ -1519,14 +1519,20 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 	return s.config().EspressoTxnsPollingInterval
 }
 
+func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
+	if s.ChainConfig().ArbitrumChainParams.EnableEspresso {
+		return s.submitEspressoTransactions(ctx, ignored)
+	} else {
+		return s.config().EspressoTxnsPollingInterval * 10
+	}
+}
+
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
-	if s.config().SovereignSequencerEnabled {
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitEspressoTransactions, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
+	err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.espressoSwitch, s.newSovereignTxNotifier)
+	if err != nil {
+		return err
 	}
 
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)

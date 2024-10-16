@@ -971,12 +971,12 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 	// This is a side effect of the sequencer having the capability to run without an L1 reader. For the Espresso integration this is a necessary component of the sequencer.
 	// However, many tests use the case of having a nil l1 reader
 	if s.lightClientReader != nil {
-		shouldSequenceWithEspresso, err = s.lightClientReader.IsHotShotLiveAtHeight(l1Block, s.config().SwitchDelayThreshold)
-	}
-
-	if err != nil {
-		log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
-		shouldSequenceWithEspresso = false
+		isHotShotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Block, s.config().SwitchDelayThreshold)
+		if err != nil {
+			log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
+			shouldSequenceWithEspresso = false
+		}
+		shouldSequenceWithEspresso = isHotShotLive && s.execEngine.bc.Config().ArbitrumChainParams.EnableEspresso
 	}
 
 	if config.EnableProfiling {
