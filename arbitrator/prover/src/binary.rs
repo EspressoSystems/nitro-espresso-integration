@@ -19,7 +19,7 @@ use nom::{
     sequence::{preceded, tuple},
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::TryInto, fmt::Debug, hash::Hash, mem, path::Path, str::FromStr};
+use std::{convert::TryInto, fmt::Debug, hash::Hash, mem, path::Path, str::FromStr, u16};
 use wasmer_types::{entity::EntityRef, ExportIndex, FunctionIndex, LocalFunctionIndex};
 use wasmparser::{
     Data, Element, ExternalKind, MemoryType, Name, NameSectionReader, Naming, Operator, Parser,
@@ -631,7 +631,8 @@ impl<'a> WasmBinary<'a> {
             ink_status: ink_status.as_u32(),
             depth_left: depth_left.as_u32(),
             init_cost: init.try_into().wrap_err("init cost too high")?,
-            cached_init_cost: cached_init.try_into().wrap_err("cached cost too high")?,
+            // Limit the cached init cost
+            cached_init_cost: cached_init.try_into().unwrap_or(u16::MAX),
             asm_estimate: asm_estimate.try_into().wrap_err("asm estimate too large")?,
             footprint,
             user_main,

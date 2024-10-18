@@ -367,7 +367,9 @@ func newApiClosures(
 			return []byte{statusByte}, ret, cost
 		case Create1, Create2:
 			gas := takeU64()
+			log.Info("gas value", "gas", gas)
 			endowment := takeU256()
+			log.Info("endowment", "endowment", endowment)
 			var salt *u256
 			if req == Create2 {
 				salt = takeU256()

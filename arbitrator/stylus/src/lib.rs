@@ -185,6 +185,7 @@ pub unsafe extern "C" fn stylus_call(
     gas: *mut u64,
     long_term_tag: u32,
 ) -> UserOutcomeKind {
+    println!("stylus call started");
     let module = module.slice();
     let calldata = calldata.slice().to_vec();
     let evm_api = EvmApiRequestor::new(req_handler);
