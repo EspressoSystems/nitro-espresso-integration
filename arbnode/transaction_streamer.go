@@ -1520,10 +1520,20 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 }
 
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
-	if s.ChainConfig().ArbitrumChainParams.EnableEspresso {
+	retryRate := s.config().EspressoTxnsPollingInterval * 50
+	config, err := s.exec.GetArbOSConfigAtHeight(0) // Pass 0 to get the ArbOS config at current block height.
+	if err != nil {
+		log.Error("Error Obtaining ArbOS Config ", "err", err)
+		return retryRate
+	}
+	if config == nil {
+		log.Error("ArbOS Config is nil")
+		return retryRate
+	}
+	if config.ArbitrumChainParams.EnableEspresso {
 		return s.submitEspressoTransactions(ctx, ignored)
 	} else {
-		return s.config().EspressoTxnsPollingInterval * 10
+		return retryRate
 	}
 }
 

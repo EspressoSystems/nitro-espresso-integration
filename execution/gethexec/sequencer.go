@@ -967,6 +967,8 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		shouldSequenceWithEspresso bool
 	)
 
+	arbOSconfig, err := s.execEngine.GetArbOSConfigAtHeight(0) // pass 0 to get the current ArbOS config.
+
 	// Initialize shouldSequenceWithEspresso to false and if we have a light client reader then give it a value based on hotshot liveness
 	// This is a side effect of the sequencer having the capability to run without an L1 reader. For the Espresso integration this is a necessary component of the sequencer.
 	// However, many tests use the case of having a nil l1 reader
@@ -976,7 +978,9 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 			log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
 			shouldSequenceWithEspresso = false
 		}
-		shouldSequenceWithEspresso = isHotShotLive && s.execEngine.bc.Config().ArbitrumChainParams.EnableEspresso
+		shouldSequenceWithEspresso = isHotShotLive && arbOSconfig.ArbitrumChainParams.EnableEspresso
+
+		log.Info("After escape-hatch and chain config logic in sequencer", "ShouldSequenceWithEspresso", shouldSequenceWithEspresso, "EnableEspresso", arbOSconfig.ArbitrumChainParams.EnableEspresso, "isHotShotLive", isHotShotLive)
 	}
 
 	if config.EnableProfiling {
