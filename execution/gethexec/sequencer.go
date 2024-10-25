@@ -979,7 +979,6 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		isHotShotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Block, s.config().SwitchDelayThreshold)
 		if err != nil {
 			log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
-			shouldSequenceWithEspresso = false
 		}
 		shouldSequenceWithEspresso = isHotShotLive && arbOSconfig.ArbitrumChainParams.EnableEspresso
 
