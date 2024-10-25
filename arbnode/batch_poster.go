@@ -502,6 +502,9 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		if err != nil {
 			return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
 		}
+		if arbOSConfig == nil {
+			return fmt.Errorf("Cannot use a nil ArbOSConfig")
+		}
 		if !arbOSConfig.ArbitrumChainParams.EnableEspresso {
 			// This case should be highly unlikely, as espresso messages are not produced while ArbitrumChainParams.EnableEspresso is false
 			// However, in the event that an espresso message was created, and then Enable Espresso was set to false, we should ensure

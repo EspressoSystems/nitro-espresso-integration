@@ -968,11 +968,14 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 	)
 
 	arbOSconfig, err := s.execEngine.GetArbOSConfigAtHeight(0) // pass 0 to get the current ArbOS config.
+	if err != nil {
+		log.Warn("Error fetching ArbOS chainConfig in sequencer.")
+	}
 
 	// Initialize shouldSequenceWithEspresso to false and if we have a light client reader then give it a value based on hotshot liveness
 	// This is a side effect of the sequencer having the capability to run without an L1 reader. For the Espresso integration this is a necessary component of the sequencer.
 	// However, many tests use the case of having a nil l1 reader
-	if s.lightClientReader != nil {
+	if s.lightClientReader != nil && arbOSconfig != nil {
 		isHotShotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Block, s.config().SwitchDelayThreshold)
 		if err != nil {
 			log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
