@@ -573,13 +573,14 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			return fmt.Errorf("this msg has not been included in hotshot")
 		}
 
-		snapshot, err := b.lightClientReader.FetchMerkleRoot(jst.Header.Height, nil)
+		height := jst.Header.Header.GetBlockHeight()
+		snapshot, err := b.lightClientReader.FetchMerkleRoot(height, nil)
 		if err != nil {
-			return fmt.Errorf("could not get the merkle root at height %v", jst.Header.Height)
+			return fmt.Errorf("could not get the merkle root at height %v, err %v", height, err)
 		}
 
-		if snapshot.Height <= jst.Header.Height {
-			return fmt.Errorf("light client contract does not have a root greater than %v yet, current snapshot height: %v", jst.Header.Height, snapshot.Height)
+		if snapshot.Height <= height {
+			return fmt.Errorf("light client contract does not have a root greater than %v yet, current snapshot height: %v", height, snapshot.Height)
 		}
 		// The next header contains the block commitment merkle tree commitment that validates the header of interest
 		nextHeader, err := b.hotshotClient.FetchHeaderByHeight(ctx, snapshot.Height)
@@ -587,12 +588,12 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			return fmt.Errorf("error fetching the next header at height %v, request failed with error %w", snapshot.Height, err)
 		}
 
-		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, jst.Header.Height)
+		proof, err := b.hotshotClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
 		if err != nil {
-			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
+			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, height, err)
 		}
 		var newMsg arbostypes.L1IncomingMessage
-		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
+		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.Header.GetBlockMerkleTreeRoot()}
 		if arbos.IsEspressoSovereignMsg(msg.Message) {
 			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
 			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, []byte{}, msg.Message.Header)

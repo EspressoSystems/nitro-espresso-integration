@@ -4,9 +4,10 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"testing"
+
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"github.com/ethereum/go-ethereum/common"
-	"testing"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/arbos"
@@ -27,21 +28,21 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 	l2Info := builder.L2Info
 	l1Info := builder.L1Info
 
-	err := waitForL1Node(t, ctx)
+	err := waitForL1Node(ctx)
 	Require(t, err)
 
-	cleanEspresso := runEspresso(t, ctx)
+	cleanEspresso := runEspresso()
 	defer cleanEspresso()
 
 	// wait for the builder
-	err = waitForEspressoNode(t, ctx)
+	err = waitForEspressoNode(ctx)
 	Require(t, err)
 
 	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
 	Require(t, err)
 	// wait for hotshot liveness
 
-	err = waitForHotShotLiveness(t, ctx, lightClientReader)
+	err = waitForHotShotLiveness(ctx, lightClientReader)
 	Require(t, err)
 
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User14", l2Info)
