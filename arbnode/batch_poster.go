@@ -45,7 +45,8 @@ import (
 	"github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
-	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/cmd/genericconf" 
+	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util"
@@ -549,10 +550,15 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		}
 		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
+
+    // Verify the namespace proof.
+    log.Info("Attempting to verify namespace proof")
+    espressocrypto.VerifyNamespace(412346, *jst.Proof, *jst.BlockMerkleJustification.BlockMerkleComm, *jst.Header.NsTable, txs, *jst.VidCommon)
+
 		if arbos.IsEspressoSovereignMsg(msg.Message) {
 			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
 			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, []byte{}, msg.Message.Header)
-			if err != nil {
+      if err != nil {
 				return err
 			}
 		} else {
