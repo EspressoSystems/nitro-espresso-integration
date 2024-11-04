@@ -144,7 +144,15 @@ stylus_test_read-return-data_src  = $(call get_stylus_test_rust,read-return-data
 stylus_test_wasms = $(stylus_test_keccak_wasm) $(stylus_test_keccak-100_wasm) $(stylus_test_fallible_wasm) $(stylus_test_storage_wasm) $(stylus_test_multicall_wasm) $(stylus_test_log_wasm) $(stylus_test_create_wasm) $(stylus_test_math_wasm) $(stylus_test_sdk-storage_wasm) $(stylus_test_erc20_wasm) $(stylus_test_read-return-data_wasm) $(stylus_test_evm-data_wasm) $(stylus_test_bfs:.b=.wasm)
 stylus_benchmarks = $(wildcard $(stylus_dir)/*.toml $(stylus_dir)/src/*.rs) $(stylus_test_wasms)
 
+espresso_crypto_lib = espressocrypto/lib
+
 # user targets
+
+.PHONY: build-espresso-crypto
+build-espresso-crypto:
+	@cargo build --release --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
+	@cp $(espresso_crypto_lib)/espresso-crypto-helper/target/release/libespresso_crypto_helper.a lib/
+	go build espressocrypto/native.go
 
 push: lint test-go .make/fmt
 	@printf "%bdone building %s%b\n" $(color_pink) $$(expr $$(echo $? | wc -w) - 1) $(color_reset)
