@@ -151,7 +151,6 @@ espresso_crypto_lib = espressocrypto/lib
 .PHONY: build-espresso-crypto
 build-espresso-crypto:
 	@cargo build --release --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
-	@cp $(espresso_crypto_lib)/espresso-crypto-helper/target/release/libespresso_crypto_helper.a lib/
 	go build espressocrypto/native.go
 
 push: lint test-go .make/fmt

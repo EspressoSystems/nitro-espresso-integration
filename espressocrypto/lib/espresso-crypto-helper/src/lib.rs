@@ -21,12 +21,6 @@ use sequencer_data_structures::{
     field_to_u256, BlockMerkleCommitment, BlockMerkleTree, Header, Transaction,
 };
 use sha2::{Digest, Sha256};
-use std::{
-    ffi::{
-        CStr,
-        c_char,
-    }
-};
 use tagged_base64::TaggedBase64;
 
 #[derive(
@@ -61,30 +55,26 @@ pub type Proof = Vec<MerkleNode<Commitment<Header>, u64, Sha3Node>>;
 pub type CircuitField = ark_ed_on_bn254::Fq;
 
 // Helper function to verify a block merkle proof.
-// For the purposes of FFI with go, the parameters in to this function must be of type const* c_char
 // proof_bytes: Byte representation of a block merkle proof.
 // root_bytes: Byte representation of a Sha3Node merkle root.
 // header_bytes: Byte representation of the HotShot header being validated as a Merkle leaf.
 // circuit_block_bytes: Circuit representation of the HotShot header commitment returned by the light client contract.
 #[no_mangle]
 pub extern "C" fn verify_merkle_proof_helper(
-    proof_c_bytes: *const c_char,
-    header_c_bytes: *const c_char,
-    block_comm_c_bytes: *const c_char,
-    circuit_block_c_bytes: *const c_char,
+    proof_ptr: *const u8,
+    proof_len: usize,
+    header_ptr: *const u8,
+    header_len: usize,
+    block_comm_ptr: *const u8,
+    block_comm_len: usize,
+    circuit_block_ptr: *const u8,
+    circuit_block_len: usize,
 ) -> bool {
-    let proof_c_str = unsafe { CStr::from_ptr(proof_c_bytes) };
-
-    let header_c_str = unsafe { CStr::from_ptr(header_c_bytes) };
-
-    let block_comm_c_str = unsafe { CStr::from_ptr(block_comm_c_bytes) };
-
-    let circuit_block_c_str = unsafe { CStr::from_ptr(circuit_block_c_bytes) };
-
-    let proof_bytes = proof_c_str.to_bytes();
-    let header_bytes = header_c_str.to_bytes();
-    let block_comm_bytes = block_comm_c_str.to_bytes();
-    let circuit_block_bytes = circuit_block_c_str.to_bytes();
+    let proof_bytes = unsafe { std::slice::from_raw_parts(proof_ptr, proof_len) };
+    let header_bytes = unsafe { std::slice::from_raw_parts(header_ptr, header_len) };
+    let block_comm_bytes = unsafe { std::slice::from_raw_parts(block_comm_ptr, block_comm_len) };
+    let circuit_block_bytes =
+        unsafe { std::slice::from_raw_parts(circuit_block_ptr, circuit_block_len) };
 
     let proof_str = std::str::from_utf8(proof_bytes).unwrap();
     let header_str = std::str::from_utf8(header_bytes).unwrap();
@@ -129,25 +119,22 @@ pub extern "C" fn verify_merkle_proof_helper(
 #[no_mangle]
 pub extern "C" fn verify_namespace_helper(
     namespace: u64,
-    proof_c_bytes: *const c_char,
-    commit_c_bytes: *const c_char,
-    ns_table_c_bytes: *const c_char,
-    tx_comm_c_bytes: *const c_char,
-    common_data_c_bytes: *const c_char,
+    proof_ptr: *const u8,
+    proof_len: usize,
+    commit_ptr: *const u8,
+    commit_len: usize,
+    ns_table_ptr: *const u8,
+    ns_table_len: usize,
+    tx_comm_ptr: *const u8,
+    tx_comm_len: usize,
+    common_data_ptr: *const u8,
+    common_data_len: usize,
 ) -> bool {
-    let ns_table_c_str = unsafe { CStr::from_ptr(ns_table_c_bytes) };
-
-    let proof_c_str = unsafe { CStr::from_ptr(proof_c_bytes) };
-    let commit_c_str = unsafe { CStr::from_ptr(commit_c_bytes) };
-    let tx_comm_c_str = unsafe { CStr::from_ptr(tx_comm_c_bytes) };
-
-    let common_data_c_str = unsafe { CStr::from_ptr(common_data_c_bytes) };
-
-    let ns_table_bytes = ns_table_c_str.to_bytes();
-    let proof_bytes = proof_c_str.to_bytes();
-    let commit_bytes = commit_c_str.to_bytes();
-    let tx_comm_bytes = tx_comm_c_str.to_bytes();
-    let common_data_bytes = common_data_c_str.to_bytes();
+    let ns_table_bytes = unsafe { std::slice::from_raw_parts(ns_table_ptr, ns_table_len) };
+    let proof_bytes = unsafe { std::slice::from_raw_parts(proof_ptr, proof_len) };
+    let commit_bytes = unsafe { std::slice::from_raw_parts(commit_ptr, commit_len) };
+    let tx_comm_bytes = unsafe { std::slice::from_raw_parts(tx_comm_ptr, tx_comm_len) };
+    let common_data_bytes = unsafe { std::slice::from_raw_parts(common_data_ptr, common_data_len) };
 
     let proof_str = std::str::from_utf8(proof_bytes).unwrap();
     let commit_str = std::str::from_utf8(commit_bytes).unwrap();
