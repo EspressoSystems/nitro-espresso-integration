@@ -21,7 +21,7 @@ const InitialFreePages = 2          // 2 pages come free (per tx).
 const InitialPageGas = 1000         // linear cost per allocation.
 const initialPageRamp = 620674314   // targets 8MB costing 32 million gas, minus the linear term.
 const initialPageLimit = 128        // reject wasms with memories larger than 8MB.
-const initialInkPrice = 100000      // 1 evm gas buys 10k ink.
+const initialInkPrice = 10000       // 1 evm gas buys 10k ink.
 const initialMinInitGas = 72        // charge 72 * 128 = 9216 gas.
 const initialMinCachedGas = 11      // charge 11 *  32 = 352 gas.
 const initialInitCostScalar = 50    // scale costs 1:1 (100%)
