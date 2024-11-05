@@ -5,6 +5,7 @@ mod namespace_payload;
 mod sequencer_data_structures;
 mod uint_bytes;
 mod utils;
+mod v0_3;
 
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -20,6 +21,7 @@ use jf_rescue::{crhf::VariableLengthRescueCRHF, RescueError};
 use sequencer_data_structures::{
     field_to_u256, BlockMerkleCommitment, BlockMerkleTree, Header, Transaction,
 };
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tagged_base64::TaggedBase64;
 
@@ -35,6 +37,8 @@ use tagged_base64::TaggedBase64;
     CanonicalSerialize,
     PartialOrd,
     Ord,
+    Serialize,
+    Deserialize,
 )]
 pub struct NamespaceId(u64);
 
@@ -86,9 +90,9 @@ pub extern "C" fn verify_merkle_proof_helper(
     let header: Header = serde_json::from_str(header_str).unwrap();
     let header_comm: Commitment<Header> = header.commit();
 
-    let proof = MerkleProof::new(header.height, proof.to_vec());
+    let proof = MerkleProof::new(header.height(), proof.to_vec());
     let proved_comm = proof.elem().unwrap().clone();
-    BlockMerkleTree::verify(block_comm.digest(), header.height, proof)
+    BlockMerkleTree::verify(block_comm.digest(), header.height(), proof)
         .unwrap()
         .unwrap();
 
