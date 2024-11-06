@@ -37,7 +37,7 @@ precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 output_root=target
 output_latest=$(output_root)/machines/latest
 
-repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das precompiles solgen system_tests util validator wavmio
+repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das espressocrypto precompiles solgen system_tests util validator wavmio
 go_source.go = $(wildcard $(patsubst %,%/*.go, $(repo_dirs)) $(patsubst %,%/*/*.go, $(repo_dirs)))
 go_source.s  = $(wildcard $(patsubst %,%/*.s, $(repo_dirs)) $(patsubst %,%/*/*.s, $(repo_dirs)))
 go_source = $(go_source.go) $(go_source.s)
@@ -148,10 +148,11 @@ espresso_crypto_lib = espressocrypto/lib
 
 # user targets
 
-.PHONY: build-espresso-crypto
-build-espresso-crypto:
+.PHONY: compile-espresso-crypto
+compile-espresso-crypto:
 	@cargo build --release --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
-	go build espressocrypto/native.go
+	go build "$(CURDIR)/espressocrypto"
+
 
 push: lint test-go .make/fmt
 	@printf "%bdone building %s%b\n" $(color_pink) $$(expr $$(echo $? | wc -w) - 1) $(color_reset)
@@ -163,7 +164,7 @@ all: build build-replay-env test-gen-proofs
 build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver datool seq-coordinator-invalidate nitro-val seq-coordinator-manager)
 	@printf $(done)
 
-build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib
+build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib .make/espressocrypto
 
 test-go-deps: \
 	build-replay-env \
@@ -171,6 +172,8 @@ test-go-deps: \
 	$(arbitrator_stylus_lib) \
 	$(arbitrator_generated_header) \
 	$(patsubst %,$(arbitrator_cases)/%.wasm, global-state read-inboxmsg-10 global-state-wrapper const read-hotshot-10)
+
+build-espresso-crypto: $(output_root)/bin/espressocrypto
 
 build-prover-header: $(arbitrator_generated_header)
 
@@ -243,7 +246,9 @@ clean:
 	@rm -rf contracts/build contracts/cache solgen/go/
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
-	# Ensure lib64 is a symlink to lib
+	cargo clean --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
+
+# Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib
 	ln -s lib $(output_root)/lib64
 
@@ -541,6 +546,10 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 .make/machines: $(DEP_PREDICATE) $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p $(output_latest)
 	touch $@
+
+.make/espressocrypto: .make
+	cargo build --release --manifest-path espressocrypto/lib/espresso-crypto-helper/Cargo.toml
+
 
 .make:
 	mkdir .make

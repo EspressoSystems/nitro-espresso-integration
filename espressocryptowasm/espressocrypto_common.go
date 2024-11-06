@@ -1,7 +1,7 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/nitro/blob/master/LICENSE
 
-package espressocrypto
+package espressocryptowasm
 
 import (
 	"crypto/sha256"
@@ -32,9 +32,9 @@ func VerifyNamespace(
 	ns_table espressoTypes.NsTable,
 	txs []espressoTypes.Bytes,
 	common_data json.RawMessage,
-) bool {
+) {
 	var txnComm = hashTxns(uint32(namespace), txs)
-  res := verifyNamespace(
+  VerifyNamespaceWasm(
 		namespace,
 		proof,
 		[]byte(block_comm.String()),
@@ -42,7 +42,6 @@ func VerifyNamespace(
 		[]byte(txnComm),
 		common_data,
 	)
-  return res
 }
 
 func VerifyMerkleProof(
@@ -50,6 +49,6 @@ func VerifyMerkleProof(
 	header json.RawMessage,
 	blockComm espressoTypes.TaggedBase64,
 	circuit_comm_bytes espressoTypes.Commitment,
-) bool {
-	return verifyMerkleProof(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:])
+) {
+	VerifyMerkleProofWasm(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:])
 }

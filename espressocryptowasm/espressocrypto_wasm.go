@@ -4,7 +4,7 @@
 //go:build wasm
 // +build wasm
 
-package espressocrypto
+package espressocryptowasm
 
 import (
 	"unsafe"
@@ -36,10 +36,10 @@ func verify_merkle_proof(
 	block_comm_ptr unsafe.Pointer,
 	block_comm_len uint64,
 	circuit_comm_ptr unsafe.Pointer,
-	circuit_comm_len uint64,
+  circuit_comm_len uint64,
 )
-
-func VerifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table []byte, tx_comm []byte, common_data []byte) {
+// for some reason these functions need to be public to be callable from espressocrypto_common. I don't think we should even have this file after we remove the validation from the validator and the replay binary, so I think it's fine.
+func VerifyNamespaceWasm(namespace uint64, proof []byte, block_comm []byte, ns_table []byte, tx_comm []byte, common_data []byte) {
 	verify_namespace(
 		namespace,
 		arbutil.SliceToUnsafePointer(proof), uint64(len(proof)),
@@ -50,7 +50,7 @@ func VerifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table
 	)
 }
 
-func verifyMerkleProof(proof []byte, header []byte, block_comm []byte, circuit_comm []byte) {
+func VerifyMerkleProofWasm(proof []byte, header []byte, block_comm []byte, circuit_comm []byte) {
 	verify_merkle_proof(
 		arbutil.SliceToUnsafePointer(proof), uint64(len(proof)),
 		arbutil.SliceToUnsafePointer(header), uint64(len(header)),
