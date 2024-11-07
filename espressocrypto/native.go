@@ -1,9 +1,7 @@
-
 package espressocrypto
 
 /*
-#cgo CFLAGS: -I./lib/espresso-crypto-helper/target/release
-#cgo LDFLAGS: -L./lib/espresso-crypto-helper/target/release -lespresso_crypto_helper
+#cgo LDFLAGS: -L${SRCDIR}/../target/lib/ -lespresso_crypto_helper
 #include <stdbool.h>
 #include <stdint.h>
 
