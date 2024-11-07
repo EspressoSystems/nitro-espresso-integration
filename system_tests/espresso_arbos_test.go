@@ -123,5 +123,6 @@ func TestEspressoArbOSConfig(t *testing.T) {
 	Require(t, err)
 	// check if chain config is updated TODO replace this with a wait for with to poll for some time potentially
 
-	waitForConfigUpdate(t, ctx, builder)
+	err = waitForConfigUpdate(t, ctx, builder)
+	Require(t, err)
 }
