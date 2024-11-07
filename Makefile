@@ -144,15 +144,19 @@ stylus_test_read-return-data_src  = $(call get_stylus_test_rust,read-return-data
 stylus_test_wasms = $(stylus_test_keccak_wasm) $(stylus_test_keccak-100_wasm) $(stylus_test_fallible_wasm) $(stylus_test_storage_wasm) $(stylus_test_multicall_wasm) $(stylus_test_log_wasm) $(stylus_test_create_wasm) $(stylus_test_math_wasm) $(stylus_test_sdk-storage_wasm) $(stylus_test_erc20_wasm) $(stylus_test_read-return-data_wasm) $(stylus_test_evm-data_wasm) $(stylus_test_bfs:.b=.wasm)
 stylus_benchmarks = $(wildcard $(stylus_dir)/*.toml $(stylus_dir)/src/*.rs) $(stylus_test_wasms)
 
-espresso_crypto_lib = espressocrypto/lib
+espresso_crypto_dir = ./espressocrypto/lib/espresso-crypto-helper
+espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_crypto_dir)/src/*.rs)
+espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper.a
 
 # user targets
 
-.PHONY: compile-espresso-crypto
-compile-espresso-crypto:
-	@cargo build --release --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
-	go build "$(CURDIR)/espressocrypto"
+.PHONY: build-espresso-crypto-lib
+build-espresso-crypto-lib: $(espresso_crypto_lib)
 
+$(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
+	mkdir -p `dirname $(espresso_crypto_lib)`
+	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
+	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.a $@
 
 push: lint test-go .make/fmt
 	@printf "%bdone building %s%b\n" $(color_pink) $$(expr $$(echo $? | wc -w) - 1) $(color_reset)
@@ -164,7 +168,7 @@ all: build build-replay-env test-gen-proofs
 build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver datool seq-coordinator-invalidate nitro-val seq-coordinator-manager)
 	@printf $(done)
 
-build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib .make/espressocrypto
+build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
 
 test-go-deps: \
 	build-replay-env \
@@ -172,8 +176,6 @@ test-go-deps: \
 	$(arbitrator_stylus_lib) \
 	$(arbitrator_generated_header) \
 	$(patsubst %,$(arbitrator_cases)/%.wasm, global-state read-inboxmsg-10 global-state-wrapper const read-hotshot-10)
-
-build-espresso-crypto: $(output_root)/bin/espressocrypto
 
 build-prover-header: $(arbitrator_generated_header)
 
@@ -246,7 +248,7 @@ clean:
 	@rm -rf contracts/build contracts/cache solgen/go/
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
-	cargo clean --manifest-path $(espresso_crypto_lib)/espresso-crypto-helper/Cargo.toml
+	cargo clean --manifest-path $(espresso_crypto_dir)/Cargo.toml
 
 # Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib
@@ -546,10 +548,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 .make/machines: $(DEP_PREDICATE) $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p $(output_latest)
 	touch $@
-
-.make/espressocrypto: .make
-	cargo build --manifest-path ./espressocrypto/lib/espresso-crypto-helper/Cargo.toml --release
-
 
 .make:
 	mkdir .make
