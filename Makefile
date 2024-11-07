@@ -548,7 +548,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	touch $@
 
 .make/espressocrypto: .make
-	cargo build --release --manifest-path espressocrypto/lib/espresso-crypto-helper/Cargo.toml
+	cargo build --manifest-path ./espressocrypto/lib/espresso-crypto-helper/Cargo.toml --release
 
 
 .make:
