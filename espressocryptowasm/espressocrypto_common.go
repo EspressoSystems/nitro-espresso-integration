@@ -34,7 +34,7 @@ func VerifyNamespace(
 	common_data json.RawMessage,
 ) {
 	var txnComm = hashTxns(uint32(namespace), txs)
-  VerifyNamespaceWasm(
+  verifyNamespace(
 		namespace,
 		proof,
 		[]byte(block_comm.String()),
@@ -50,5 +50,5 @@ func VerifyMerkleProof(
 	blockComm espressoTypes.TaggedBase64,
 	circuit_comm_bytes espressoTypes.Commitment,
 ) {
-	VerifyMerkleProofWasm(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:])
+	verifyMerkleProof(proof, header, []byte(blockComm.String()), circuit_comm_bytes[:])
 }
