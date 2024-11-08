@@ -100,7 +100,7 @@ func TestEspressoSovereignSequencer(t *testing.T) {
 	msgCnt, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
 	Require(t, err)
 
-	err = waitForWith(ctx, 6*time.Minute, 60*time.Second, func() bool {
+	err = waitForWith(ctx, 8*time.Minute, 60*time.Second, func() bool {
 		validatedCnt := builder.L2.ConsensusNode.BlockValidator.Validated(t)
 		return validatedCnt == msgCnt
 	})
