@@ -576,7 +576,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		height := jst.Header.Header.GetBlockHeight()
 		snapshot, err := b.lightClientReader.FetchMerkleRoot(height, nil)
 		if err != nil {
-			return fmt.Errorf("could not get the merkle root at height %v, err %v", height, err)
+			return fmt.Errorf("could not get the merkle root at height %v, err %w", height, err)
 		}
 
 		if snapshot.Height <= height {
