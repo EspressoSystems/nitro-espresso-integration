@@ -158,6 +158,13 @@ espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_cryp
 espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper.a
 
 # user targets
+.PHONY: build-espresso-crypto-lib
+build-espresso-crypto-lib: $(espresso_crypto_lib)
+
+$(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
+	mkdir -p `dirname $(espresso_crypto_lib)`
+	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
+	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.a $@
 
 .PHONY: push
 push: lint test-go .make/fmt
