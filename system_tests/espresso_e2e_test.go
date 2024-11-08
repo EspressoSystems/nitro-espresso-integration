@@ -149,7 +149,7 @@ func waitForEspressoNode(ctx context.Context) error {
 func waitForHotShotLiveness(ctx context.Context, lightClientReader *lightclient.LightClientReader) error {
 	return waitForWith(ctx, 400*time.Second, 1*time.Second, func() bool {
 		log.Info("Waiting for HotShot Liveness")
-		live, err := lightClientReader.IsHotShotLive(10)
+		live, err := lightClientReader.IsHotShotLive(0)
 		if err != nil {
 			return false
 		}
