@@ -39,7 +39,7 @@ func verify_merkle_proof(
 	circuit_comm_len uint64,
 )
 
-func VerifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table []byte, tx_comm []byte, common_data []byte) {
+func verifyNamespace(namespace uint64, proof []byte, block_comm []byte, ns_table []byte, tx_comm []byte, common_data []byte) {
 	verify_namespace(
 		namespace,
 		arbutil.SliceToUnsafePointer(proof), uint64(len(proof)),
