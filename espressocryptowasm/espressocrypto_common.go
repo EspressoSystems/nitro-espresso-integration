@@ -33,8 +33,11 @@ func VerifyNamespace(
 	txs []espressoTypes.Bytes,
 	common_data json.RawMessage,
 ) {
+	// TODO: this code will likely no longer be used in the STF soon.
+	// G115: integer overflow conversion uint64 -> uint32 (gosec)
+	// #nosec G115
 	var txnComm = hashTxns(uint32(namespace), txs)
-  verifyNamespace(
+	verifyNamespace(
 		namespace,
 		proof,
 		[]byte(block_comm.String()),
