@@ -542,7 +542,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 	ctx context.Context,
 	msg *arbostypes.MessageWithMetadata,
 ) error {
-  // TODO Add escape hatch check after checking arbitrum chain params for enable espresso. 
+	// TODO Add escape hatch check after checking arbitrum chain params for enable espresso.
 	if arbos.IsEspressoMsg(msg.Message) {
 		arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
 		if err != nil {
@@ -595,24 +595,24 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		}
 		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
-   
-    log.Info("About to validate merkle and namespace proofs")
-    
-    //Validate espresso proofs.
-    json_header, err := json.Marshal(jst.Header)
-    if err != nil{
-      return fmt.Errorf("Failed to Marshal the jst Header")
-    }
 
-    valid_proof := espressocrypto.VerifyMerkleProof(proof.Proof, json_header, *jst.BlockMerkleJustification.BlockMerkleComm, snapshot.Root)
-    valid_namespace := espressocrypto.VerifyNamespace(arbOSConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon) 
-		if !(valid_proof && valid_namespace){
-      return fmt.Errorf("Cannot add Espresso block merkle proof as it is not valid")
-    }
+		log.Info("About to validate merkle and namespace proofs")
 
-    log.Info("Espresso proofs have been validated!")
-    
-    if arbos.IsEspressoSovereignMsg(msg.Message) {
+		//Validate espresso proofs.
+		json_header, err := json.Marshal(jst.Header)
+		if err != nil {
+			return fmt.Errorf("Failed to Marshal the jst Header")
+		}
+
+		valid_proof := espressocrypto.VerifyMerkleProof(proof.Proof, json_header, *jst.BlockMerkleJustification.BlockMerkleComm, snapshot.Root)
+		valid_namespace := espressocrypto.VerifyNamespace(arbOSConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
+		if !(valid_proof && valid_namespace) {
+			return fmt.Errorf("Cannot add Espresso block merkle proof as it is not valid")
+		}
+
+		log.Info("Espresso proofs have been validated!")
+
+		if arbos.IsEspressoSovereignMsg(msg.Message) {
 			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
 			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, []byte{}, msg.Message.Header)
 			if err != nil {
