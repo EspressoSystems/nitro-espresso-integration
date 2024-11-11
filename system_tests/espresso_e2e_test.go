@@ -11,7 +11,6 @@ import (
 
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	lightclientmock "github.com/EspressoSystems/espresso-sequencer-go/light-client-mock"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -150,11 +149,8 @@ func waitForEspressoNode(ctx context.Context) error {
 func waitForHotShotLiveness(ctx context.Context, lightClientReader *lightclient.LightClientReader) error {
 	return waitForWith(ctx, 400*time.Second, 1*time.Second, func() bool {
 		log.Info("Waiting for HotShot Liveness")
-		_, err := lightClientReader.FetchMerkleRoot(1, &bind.CallOpts{})
-		if err != nil {
-			return false
-		}
-		return true
+		_, err := lightClientReader.FetchMerkleRoot(1, nil)
+		return err == nil
 	})
 }
 

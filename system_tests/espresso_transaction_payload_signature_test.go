@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"testing"
+	"time"
 
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"github.com/ethereum/go-ethereum/common"
@@ -44,16 +45,36 @@ func TestEspressoTransactionSignatureForSovereignSequencer(t *testing.T) {
 
 	err = waitForHotShotLiveness(ctx, lightClientReader)
 	Require(t, err)
+	msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+	Require(t, err)
+	flag := true
+
+	// Wait for the msgCnt to stop increasing
+	err = waitForWith(ctx, 3*time.Minute, 60*time.Second, func() bool {
+		if flag {
+			flag = false
+			return false
+		}
+		cnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+		if err != nil {
+			return false
+		}
+		if cnt == msgCnt {
+			return true
+		}
+
+		msgCnt = cnt
+		return false
+
+	})
+	Require(t, err)
 
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User14", l2Info)
 	Require(t, err)
 
-	msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
-	Require(t, err)
-
 	privateKey := l1Info.GetInfoWithPrivKey("Sequencer").PrivateKey
 
-	message, err := l2Node.ConsensusNode.TxStreamer.GetMessage(msgCnt - 1)
+	message, err := l2Node.ConsensusNode.TxStreamer.GetMessage(msgCnt)
 	Require(t, err)
 
 	err = checkSignatureValidation(message, privateKey.PublicKey)
