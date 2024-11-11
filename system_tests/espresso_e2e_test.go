@@ -25,7 +25,7 @@ import (
 var workingDir = "./espresso-e2e"
 
 // light client proxy
-var lightClientAddress = "0x60571c8f4b52954a24a5e7306d435e951528d963"
+var lightClientAddress = "0xb075b82c7a23e0994df4793422a1f03dbcf9136f"
 
 var hotShotUrl = "http://127.0.0.1:41000"
 var delayThreshold uint64 = 10
