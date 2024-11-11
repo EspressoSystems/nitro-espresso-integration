@@ -2,7 +2,7 @@
 // For license information, see https://github.com/nitro/blob/master/LICENSE
 
 use crate::{
-    arbcompress, caller_env::GoRuntimeState, espressocrypto, program, socket,
+    arbcompress, caller_env::GoRuntimeState, program, socket,
     stylus_backend::CothreadHandler, wasip1_stub, wavmio, Opts,
 };
 use arbutil::{Bytes32, Color, PreimageType};
@@ -65,10 +65,6 @@ pub fn create(opts: &Opts, env: WasmEnv) -> (Instance, FunctionEnv<WasmEnv>, Sto
         };
     }
     let imports = imports! {
-        "espressocrypto" => {
-            "verifyNamespace" => func!(espressocrypto::verify_namespace),
-            "verifyMerkleProof" => func!(espressocrypto::verify_merkle_proof),
-        },
         "arbcompress" => {
             "brotli_compress" => func!(arbcompress::brotli_compress),
             "brotli_decompress" => func!(arbcompress::brotli_decompress),
