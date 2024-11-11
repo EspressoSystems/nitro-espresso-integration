@@ -598,7 +598,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 
 		log.Info("About to validate merkle and namespace proofs")
 
-		//Validate espresso proofs.
+		// Validate espresso proofs.
 		json_header, err := json.Marshal(jst.Header)
 		if err != nil {
 			return fmt.Errorf("Failed to Marshal the jst Header")
