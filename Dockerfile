@@ -33,7 +33,9 @@ COPY contracts/package.json contracts/yarn.lock contracts/
 RUN cd contracts && yarn install
 COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
-RUN cd safe-smart-account && yarn install
+# Check if there are any unexpected .git directories or worktree files
+RUN find . -type d -name ".git" -printf "%p DIR\n" -o -type f -name ".git" -printf "%p FILE\n" && exit 1
+RUN cd safe-smart-account && yarn install --verbose
 COPY Makefile .
 RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
