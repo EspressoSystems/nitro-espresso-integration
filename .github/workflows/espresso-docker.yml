@@ -89,6 +89,11 @@ jobs:
         with:
           submodules: recursive
 
+      # TODO shouldn't need this
+      - name: Clean up Git worktree files
+        run: |
+          find . -type f -name '.git' -print -exec rm -f {} \;
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
