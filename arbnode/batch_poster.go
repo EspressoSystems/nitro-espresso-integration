@@ -10,13 +10,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
 	"math"
 	"math/big"
 	"os"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/andybalholm/brotli"
 	"github.com/spf13/pflag"
@@ -1142,16 +1143,11 @@ func getAttestationQuote(userData []byte) ([]byte, error) {
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
 	// Write the message to "/dev/attestation/user_report_data"
-	file, err := os.Create("/dev/attestation/user_report_data")
+	err := os.WriteFile("/dev/attestation/user_report_data", userDataHash, 0644)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
-	defer file.Close()
 
-	_, err = file.Write(userDataHash)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to write user report data file: %w", err)
-	}
 	// Read the quote from "/dev/attestation/quote"
 	attestationQuote, err := os.ReadFile("/dev/attestation/quote")
 	if err != nil {
