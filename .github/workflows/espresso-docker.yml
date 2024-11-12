@@ -89,11 +89,6 @@ jobs:
         with:
           submodules: recursive
 
-      # TODO shouldn't need this
-      - name: Clean up Git worktree files
-        run: |
-          find . -type f -name '.git' -print -exec rm -f {} \;
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -107,6 +102,7 @@ jobs:
       - name: Build nitro-node image
         uses: ./.github/actions/docker-image
         with:
+          context: .
           file: Dockerfile
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
@@ -116,6 +112,7 @@ jobs:
         uses: ./.github/actions/docker-image
         id: nitro-node-dev
         with:
+          context: .
           file: Dockerfile
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
           target: nitro-node-dev
