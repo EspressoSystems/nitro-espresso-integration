@@ -10,8 +10,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"math"
 	"math/big"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -1084,10 +1086,15 @@ func (b *BatchPoster) encodeAddBatch(
 	var calldata []byte
 	var kzgBlobs []kzg4844.Blob
 	var err error
+	var userData []byte
 	if use4844 {
 		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
+		}
+		_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to compute blob hashes: %w", err)
 		}
 		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
 		calldata, err = method.Inputs.Pack(
@@ -1097,6 +1104,19 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
+		// userData has blobHashes along with other calldata for EIP-4844 transactions
+		userData, err = method.Inputs.Pack(
+			seqNum,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			blobHashes,
+		)
+		_, err = getAttestationQuote(userData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
+		}
 	} else {
 		calldata, err = method.Inputs.Pack(
 			seqNum,
@@ -1106,13 +1126,40 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
+
+		_, err = getAttestationQuote(calldata)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
+		}
 	}
-	if err != nil {
-		return nil, nil, err
-	}
+	// TODO: when contract is updated add attestationQuote to the calldata
 	fullCalldata := append([]byte{}, method.ID...)
 	fullCalldata = append(fullCalldata, calldata...)
 	return fullCalldata, kzgBlobs, nil
+}
+
+func getAttestationQuote(userData []byte) ([]byte, error) {
+	// keccak256 hash of userData
+	userDataHash := crypto.Keccak256(userData)
+	// Write the message to "/dev/attestation/user_report_data"
+	file, err := os.Create("/dev/attestation/user_report_data")
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
+	}
+	defer file.Close()
+
+	_, err = file.Write(userDataHash)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to write user report data file: %w", err)
+	}
+	// Read the quote from "/dev/attestation/quote"
+	attestationQuote, err := os.ReadFile("/dev/attestation/quote")
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
+	}
+
+	log.Info("Attestation quote generated", "quote", attestationQuote)
+	return attestationQuote, nil
 }
 
 var ErrNormalGasEstimationFailed = errors.New("normal gas estimation failed")
