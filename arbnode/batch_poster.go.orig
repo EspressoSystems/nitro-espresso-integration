@@ -13,12 +13,9 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
-
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/andybalholm/brotli"
 	"github.com/spf13/pflag"
@@ -545,6 +542,41 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 	ctx context.Context,
 	msg *arbostypes.MessageWithMetadata,
 ) error {
+<<<<<<< left
+	// TODO Add escape hatch check after checking arbitrum chain params for enable espresso.
+	if arbos.IsEspressoMsg(msg.Message) {
+		arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
+		if err != nil {
+			return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+		}
+		if arbOSConfig == nil {
+			return fmt.Errorf("Cannot use a nil ArbOSConfig")
+		}
+		if !arbOSConfig.ArbitrumChainParams.EnableEspresso {
+			// This case should be highly unlikely, as espresso messages are not produced while ArbitrumChainParams.EnableEspresso is false
+			// However, in the event that an espresso message was created, and then Enable Espresso was set to false, we should ensure
+			// the transaction streamer doesn't send any more messages to the espresso network.
+			return fmt.Errorf("Cannot process Espresso messages when Espresso is not enabled in the ArbOS chain config")
+		}
+		txs, jst, err := arbos.ParseEspressoMsg(msg.Message)
+||||||| base
+
+	if arbos.IsEspressoMsg(msg.Message) {
+		arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
+		if err != nil {
+			return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+		}
+		if arbOSConfig == nil {
+			return fmt.Errorf("Cannot use a nil ArbOSConfig")
+		}
+		if !arbOSConfig.ArbitrumChainParams.EnableEspresso {
+			// This case should be highly unlikely, as espresso messages are not produced while ArbitrumChainParams.EnableEspresso is false
+			// However, in the event that an espresso message was created, and then Enable Espresso was set to false, we should ensure
+			// the transaction streamer doesn't send any more messages to the espresso network.
+			return fmt.Errorf("Cannot process Espresso messages when Espresso is not enabled in the ArbOS chain config")
+		}
+		txs, jst, err := arbos.ParseEspressoMsg(msg.Message)
+=======
 
 	if !arbos.IsEspressoMsg(msg.Message) {
 		return nil
@@ -575,6 +607,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		// TODO: Verify if this msgCount is already in the pending queue.
 		// Currently, this check is performed in the function below.
 		err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
+>>>>>>> right
 		if err != nil {
 			log.Error("failed to submit espresso transaction pos", "pos", b.building.msgCount, "err", err)
 			return err
@@ -613,9 +646,11 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 	} else {
 		newMsg, err = arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
 		if err != nil {
-			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Header.GetBlockHeight(), err)
+<<<<<<< left
+			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
 		}
-		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.Header.GetBlockMerkleTreeRoot()}
+		var newMsg arbostypes.L1IncomingMessage
+		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
 
 		log.Info("About to validate merkle and namespace proofs for msg count with batch relevant to l1 height", "msg count", b.building.msgCount, "l1 height", msg.Message.Header.BlockNumber)
 
@@ -626,12 +661,12 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		}
 
 		valid_proof := espressocrypto.VerifyMerkleProof(proof.Proof, json_header, *jst.BlockMerkleJustification.BlockMerkleComm, snapshot.Root)
-		valid_namespace := espressocrypto.VerifyNamespace(arbOSConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.Header.GetPayloadCommitment(), *jst.Header.Header.GetNsTable(), txs, *jst.VidCommon)
+		valid_namespace := espressocrypto.VerifyNamespace(arbOSConfig.ChainID.Uint64(), *jst.Proof, *jst.Header.PayloadCommitment, *jst.Header.NsTable, txs, *jst.VidCommon)
 		if !(valid_proof && valid_namespace) {
 			return fmt.Errorf("Cannot add Espresso block merkle proof as it is not valid")
 		}
 
-		log.Info("Espresso proofs have been validated!", "msg count", b.building.msgCount, "l1 height", msg.Message.Header.BlockNumber)
+    log.Info("Espresso proofs have been validated!", "msg count", b.building.msgCount, "l1 height", msg.Message.Header.BlockNumber)
 
 		if arbos.IsEspressoSovereignMsg(msg.Message) {
 			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
@@ -644,6 +679,26 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			if err != nil {
 				return err
 			}
+||||||| base
+			return fmt.Errorf("error fetching the block merkle proof for validated height %v and leaf height %v. Request failed with error %w", snapshot.Height, jst.Header.Height, err)
+		}
+		var newMsg arbostypes.L1IncomingMessage
+		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
+
+		if arbos.IsEspressoSovereignMsg(msg.Message) {
+			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
+			newMsg, err = arbos.MessageFromEspressoSovereignTx(txs[0], jst, []byte{}, msg.Message.Header)
+			if err != nil {
+				return err
+			}
+		} else {
+			newMsg, err = arbos.MessageFromEspresso(msg.Message.Header, txs, jst)
+			if err != nil {
+				return err
+			}
+=======
+			return err
+>>>>>>> right
 		}
 	}
 	msg.Message = &newMsg
@@ -1119,15 +1174,10 @@ func (b *BatchPoster) encodeAddBatch(
 	var calldata []byte
 	var kzgBlobs []kzg4844.Blob
 	var err error
-	var userData []byte
 	if use4844 {
 		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
-		}
-		_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to compute blob hashes: %w", err)
 		}
 		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
 		calldata, err = method.Inputs.Pack(
@@ -1137,19 +1187,6 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
-		// userData has blobHashes along with other calldata for EIP-4844 transactions
-		userData, err = method.Inputs.Pack(
-			seqNum,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			blobHashes,
-		)
-		_, err = getAttestationQuote(userData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
-		}
 	} else {
 		calldata, err = method.Inputs.Pack(
 			seqNum,
@@ -1159,35 +1196,13 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
-
-		_, err = getAttestationQuote(calldata)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
-		}
 	}
-	// TODO: when contract is updated add attestationQuote to the calldata
+	if err != nil {
+		return nil, nil, err
+	}
 	fullCalldata := append([]byte{}, method.ID...)
 	fullCalldata = append(fullCalldata, calldata...)
 	return fullCalldata, kzgBlobs, nil
-}
-
-func getAttestationQuote(userData []byte) ([]byte, error) {
-	// keccak256 hash of userData
-	userDataHash := crypto.Keccak256(userData)
-	// Write the message to "/dev/attestation/user_report_data"
-	err := os.WriteFile("/dev/attestation/user_report_data", userDataHash, 0644)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
-	}
-
-	// Read the quote from "/dev/attestation/quote"
-	attestationQuote, err := os.ReadFile("/dev/attestation/quote")
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
-	}
-
-	log.Info("Attestation quote generated", "quote", attestationQuote)
-	return attestationQuote, nil
 }
 
 var ErrNormalGasEstimationFailed = errors.New("normal gas estimation failed")
