@@ -2,8 +2,8 @@
 // For license information, see https://github.com/nitro/blob/master/LICENSE
 
 use crate::{
-    arbcompress, caller_env::GoRuntimeState, program, socket,
-    stylus_backend::CothreadHandler, wasip1_stub, wavmio, Opts,
+    arbcompress, caller_env::GoRuntimeState, program, socket, stylus_backend::CothreadHandler,
+    wasip1_stub, wavmio, Opts,
 };
 use arbutil::{Bytes32, Color, PreimageType};
 use eyre::{bail, ErrReport, Result, WrapErr};
