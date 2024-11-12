@@ -596,7 +596,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 		var newMsg arbostypes.L1IncomingMessage
 		jst.BlockMerkleJustification = &arbostypes.BlockMerkleJustification{BlockMerkleProof: &proof, BlockMerkleComm: nextHeader.BlockMerkleTreeRoot}
 
-		log.Info("About to validate merkle and namespace proofs")
+		log.Info("About to validate merkle and namespace proofs for msg count with batch relevant to l1 height", "msg count", b.building.msgCount, "l1 height", msg.Message.Header.BlockNumber)
 
 		// Validate espresso proofs.
 		json_header, err := json.Marshal(jst.Header)
@@ -610,7 +610,7 @@ func (b *BatchPoster) addEspressoBlockMerkleProof(
 			return fmt.Errorf("Cannot add Espresso block merkle proof as it is not valid")
 		}
 
-		log.Info("Espresso proofs have been validated!")
+    log.Info("Espresso proofs have been validated!", "msg count", b.building.msgCount, "l1 height", msg.Message.Header.BlockNumber)
 
 		if arbos.IsEspressoSovereignMsg(msg.Message) {
 			// Passing an empty byte slice as payloadSignature because txs[0] already contains the payloadSignature here
