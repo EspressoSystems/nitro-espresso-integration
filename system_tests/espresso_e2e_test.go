@@ -225,6 +225,8 @@ func TestEspressoE2E(t *testing.T) {
 		if err != nil {
 			return false
 		}
+		// Wait for the hotshot to generate some blocks to better simulate the real-world environment.
+		// Chosen based on intuition; no empirical data supports this value.
 		return h > 10
 	})
 	Require(t, err)

@@ -1487,7 +1487,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	}
 
 	if pos == submitted {
-		return fmt.Errorf("Submitting the same position messages")
+		return fmt.Errorf("Submitting the same position messages %v", pos)
 	}
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil && !dbutil.IsErrNotFound(err) {
@@ -1499,7 +1499,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 		// if the key doesn't exist, create a new array with the pos
 		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
 	} else if pendingTxnsPos[len(pendingTxnsPos)-1] == &pos {
-		return fmt.Errorf("Submitting the same position messages")
+		return fmt.Errorf("Submitting the same position messages %v", pos)
 	} else {
 		pendingTxnsPos = append(pendingTxnsPos, &pos)
 	}
