@@ -9,9 +9,6 @@ import (
 	"fmt"
 	"testing"
 
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/rpcclient"
 
@@ -44,7 +41,6 @@ type StatelessBlockValidator struct {
 	streamer     TransactionStreamerInterface
 	db           ethdb.Database
 	dapReaders   []daprovider.Reader
-
 }
 
 type BlockValidatorRegistrer interface {
@@ -143,7 +139,6 @@ type validationEntry struct {
 	Preimages  map[arbutil.PreimageType]map[common.Hash][]byte
 	UserWasms  state.UserWasms
 	DelayedMsg []byte
-
 }
 
 func (e *validationEntry) ToInput(stylusArchs []ethdb.WasmTarget) (*validator.ValidationInput, error) {
@@ -151,15 +146,15 @@ func (e *validationEntry) ToInput(stylusArchs []ethdb.WasmTarget) (*validator.Va
 		return nil, errors.New("cannot create input from non-ready entry")
 	}
 	res := validator.ValidationInput{
-		Id:                uint64(e.Pos),
-		HasDelayedMsg:     e.HasDelayedMsg,
-		DelayedMsgNr:      e.DelayedMsgNr,
-		Preimages:         e.Preimages,
-		UserWasms:         make(map[ethdb.WasmTarget]map[common.Hash][]byte, len(e.UserWasms)),
-		BatchInfo:         e.BatchInfo,
-		DelayedMsg:        e.DelayedMsg,
-		StartState:        e.Start,
-		DebugChain:        e.ChainConfig.DebugMode(),
+		Id:            uint64(e.Pos),
+		HasDelayedMsg: e.HasDelayedMsg,
+		DelayedMsgNr:  e.DelayedMsgNr,
+		Preimages:     e.Preimages,
+		UserWasms:     make(map[ethdb.WasmTarget]map[common.Hash][]byte, len(e.UserWasms)),
+		BatchInfo:     e.BatchInfo,
+		DelayedMsg:    e.DelayedMsg,
+		StartState:    e.Start,
+		DebugChain:    e.ChainConfig.DebugMode(),
 	}
 	if len(stylusArchs) == 0 && len(e.UserWasms) > 0 {
 		return nil, fmt.Errorf("stylus support is required")
@@ -216,16 +211,16 @@ func newValidationEntry(
 	}
 
 	return &validationEntry{
-		Stage:             ReadyForRecord,
-		Pos:               pos,
-		Start:             start,
-		End:               end,
-		HasDelayedMsg:     hasDelayed,
-		DelayedMsgNr:      delayedNum,
-		msg:               msg,
-		BatchInfo:         valBatches,
-		ChainConfig:       chainConfig,
-		Preimages:         preimages,
+		Stage:         ReadyForRecord,
+		Pos:           pos,
+		Start:         start,
+		End:           end,
+		HasDelayedMsg: hasDelayed,
+		DelayedMsgNr:  delayedNum,
+		msg:           msg,
+		BatchInfo:     valBatches,
+		ChainConfig:   chainConfig,
+		Preimages:     preimages,
 	}, nil
 }
 
@@ -239,10 +234,6 @@ func NewStatelessBlockValidator(
 	config func() *BlockValidatorConfig,
 	stack *node.Node,
 ) (*StatelessBlockValidator, error) {
-	// Sanity check, also used to surpress the unused koanf field lint error
-	if config().Espresso && config().LightClientAddress == "" {
-		return nil, errors.New("cannot create a new stateless block validator in espresso mode without a hotshot reader")
-	}
 	var executionSpawners []validator.ExecutionSpawner
 	var redisValClient *redis.ValidationClient
 
@@ -265,15 +256,15 @@ func NewStatelessBlockValidator(
 	}
 
 	return &StatelessBlockValidator{
-		config:            config(),
-		recorder:          recorder,
-		redisValidator:    redisValClient,
-		inboxReader:       inboxReader,
-		inboxTracker:      inbox,
-		streamer:          streamer,
-		db:                arbdb,
-		dapReaders:        dapReaders,
-		execSpawners:      executionSpawners,
+		config:         config(),
+		recorder:       recorder,
+		redisValidator: redisValClient,
+		inboxReader:    inboxReader,
+		inboxTracker:   inbox,
+		streamer:       streamer,
+		db:             arbdb,
+		dapReaders:     dapReaders,
+		execSpawners:   executionSpawners,
 	}, nil
 }
 
@@ -559,9 +550,4 @@ func (v *StatelessBlockValidator) Stop() {
 	if v.redisValidator != nil {
 		v.redisValidator.Stop()
 	}
-}
-
-// This method should be only used in tests.
-func (s *StatelessBlockValidator) DebugEspresso_SetLightClientReader(reader lightclient.LightClientReaderInterface, t *testing.T) {
-	s.lightClientReader = reader
 }
