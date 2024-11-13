@@ -1185,36 +1185,34 @@ func (b *BatchPoster) encodeAddBatch(
 	return fullCalldata, kzgBlobs, nil
 }
 
+/**
+ * This function generates the attestation quote for the user data.
+ * The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
+ * The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
+ * The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
+ */
 func (b *BatchPoster) getAttestationQuote(userData []byte) ([]byte, error) {
 	if (b.config().UserDataAttestationFile == "") || (b.config().QuoteFile == "") {
 		return []byte{}, nil
 	}
+
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
-	// Write the message to "/dev/attestation/user_report_data"
-	file, err := os.Create(b.config().UserDataAttestationFile)
+
+	// Add 32 bytes of padding to the user data hash
+	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
+	for i := 0; i < 32; i += 1 {
+		userDataHash = append(userData, 0)
+	}
+
+	// Write the message to "/dev/attestation/user_report_data" in SGX
+	err := os.WriteFile(b.config().UserDataAttestationFile, userDataHash, 0644)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
 
-	defer file.Close()
-
-	err = binary.Write(file, binary.LittleEndian, userDataHash)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to write user report data file: %w", err)
-	}
-
-	// Read the quote from "/dev/attestation/quote"
-	quoteFile, err := os.Open(b.config().QuoteFile)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
-	}
-
-	defer quoteFile.Close()
-
-	var attestationQuote []byte
-
-	err = binary.Read(quoteFile, binary.LittleEndian, &attestationQuote)
+	// Read the quote from "/dev/attestation/quote" in SGX
+	attestationQuote, err := os.ReadFile(b.config().QuoteFile)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
 	}
