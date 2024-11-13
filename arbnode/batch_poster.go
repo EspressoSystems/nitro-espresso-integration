@@ -185,10 +185,10 @@ type BatchPosterConfig struct {
 	Dangerous                      BatchPosterDangerousConfig  `koanf:"dangerous"`
 	ReorgResistanceMargin          time.Duration               `koanf:"reorg-resistance-margin" reload:"hot"`
 	CheckBatchCorrectness          bool                        `koanf:"check-batch-correctness"`
-
-	gasRefunder  common.Address
-	l1BlockBound l1BlockBound
-
+	UserDataAttestationFile        string                      `koanf:"user-data-attestation-file"`
+	QuoteFile                      string                      `koanf:"quote-file"`
+	gasRefunder                    common.Address
+	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
 	LightClientAddress string `koanf:"light-client-address"`
 	HotShotUrl         string `koanf:"hotshot-url"`
@@ -244,6 +244,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
+	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "specifies the file containing the user data attestation")
+	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "specifies the file containing the quote")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -275,6 +277,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	ReorgResistanceMargin:          10 * time.Minute,
 	CheckBatchCorrectness:          true,
+	UserDataAttestationFile:        "",
+	QuoteFile:                      "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -1137,6 +1141,9 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack calldata: %w", err)
+		}
 		// userData has blobHashes along with other calldata for EIP-4844 transactions
 		userData, err = method.Inputs.Pack(
 			seqNum,
@@ -1146,7 +1153,10 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 			blobHashes,
 		)
-		_, err = getAttestationQuote(userData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack user data: %w", err)
+		}
+		_, err = b.getAttestationQuote(userData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
@@ -1160,7 +1170,11 @@ func (b *BatchPoster) encodeAddBatch(
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 		)
 
-		_, err = getAttestationQuote(calldata)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack calldata: %w", err)
+		}
+
+		_, err = b.getAttestationQuote(calldata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
@@ -1171,22 +1185,41 @@ func (b *BatchPoster) encodeAddBatch(
 	return fullCalldata, kzgBlobs, nil
 }
 
-func getAttestationQuote(userData []byte) ([]byte, error) {
+func (b *BatchPoster) getAttestationQuote(userData []byte) ([]byte, error) {
+	if (b.config().UserDataAttestationFile == "") || (b.config().QuoteFile == "") {
+		return []byte{}, nil
+	}
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
 	// Write the message to "/dev/attestation/user_report_data"
-	err := os.WriteFile("/dev/attestation/user_report_data", userDataHash, 0644)
+	file, err := os.Create(b.config().UserDataAttestationFile)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
 
+	defer file.Close()
+
+	err = binary.Write(file, binary.LittleEndian, userDataHash)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to write user report data file: %w", err)
+	}
+
 	// Read the quote from "/dev/attestation/quote"
-	attestationQuote, err := os.ReadFile("/dev/attestation/quote")
+	quoteFile, err := os.Open(b.config().QuoteFile)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
 	}
 
-	log.Info("Attestation quote generated", "quote", attestationQuote)
+	defer quoteFile.Close()
+
+	var attestationQuote []byte
+
+	err = binary.Read(quoteFile, binary.LittleEndian, &attestationQuote)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
+	}
+
+	log.Info("Attestation quote generated", "quote", hex.EncodeToString(attestationQuote))
 	return attestationQuote, nil
 }
 
