@@ -569,6 +569,9 @@ func (b *BatchPoster) checkEspressoValidation(
 	}
 
 	lastConfirmed, err := b.streamer.getLastConfirmedPos()
+	if err != nil {
+		return err
+	}
 	if lastConfirmed < b.building.msgCount {
 		return fmt.Errorf("this msg has not been finalized on L1 or validated")
 	}
