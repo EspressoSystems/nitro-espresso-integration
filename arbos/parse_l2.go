@@ -212,14 +212,6 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			return segments, err
 		}
 
-		// Here we know for sure there will be 65 bytes of signature at the beginning of the transaction
-		sigBytes := make([]byte, 65)
-		_, err = rd.Read(sigBytes)
-
-		if err != nil {
-			return nil, err
-		}
-
 		result, err := parseL2Message(rd, poster, timestamp, requestId, chainId, depth)
 		if err != nil {
 			return nil, err
@@ -590,4 +582,20 @@ func IsL2Message(msg *arbostypes.L1IncomingMessage) bool {
 func IsEspressoSovereignMsg(msg *arbostypes.L1IncomingMessage) bool {
 	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
 		msg.L2msg[0] == L2MessageKind_EspressoSovereignTx
+}
+
+func BuildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage, sig *([]byte)) (espressoTypes.Bytes, error) {
+	payload := []byte{}
+	if sig != nil {
+		payload = append(payload, *sig...)
+	}
+
+	sizeBuf := make([]byte, 8)
+	for _, msg := range *msgs {
+		msgByte := msg.L2msg
+		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgByte)))
+		payload = append(payload, sizeBuf...)
+		payload = append(payload, msgByte...)
+	}
+	return payload, nil
 }
