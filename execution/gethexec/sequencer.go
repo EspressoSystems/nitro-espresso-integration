@@ -81,7 +81,6 @@ type SequencerConfig struct {
 
 	// Espresso specific flags
 	LightClientAddress         string                     `koanf:"light-client-address"`
-	SwitchDelayThreshold       uint64                     `koanf:"switch-delay-threshold"`
 	EspressoFinalityNodeConfig EspressoFinalityNodeConfig `koanf:"espresso-finality-node-config"`
 	// Espresso Finality Node creates blocks with finalized hotshot transactions
 	EnableEspressoFinalityNode bool `koanf:"enable-espresso-finality-node"`
@@ -939,33 +938,14 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 
 	start := time.Now()
 	var (
-		block                      *types.Block
-		err                        error
-		shouldSequenceWithEspresso bool
+		block *types.Block
+		err   error
 	)
 
-	arbOSconfig, err := s.execEngine.GetArbOSConfigAtHeight(0) // pass 0 to get the current ArbOS config.
-	if err != nil {
-		log.Warn("Error fetching ArbOS chainConfig in sequencer.")
-	}
-
-	// Initialize shouldSequenceWithEspresso to false and if we have a light client reader then give it a value based on hotshot liveness
-	// This is a side effect of the sequencer having the capability to run without an L1 reader. For the Espresso integration this is a necessary component of the sequencer.
-	// However, many tests use the case of having a nil l1 reader
-	if s.lightClientReader != nil && arbOSconfig != nil {
-		isHotShotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Block, s.config().SwitchDelayThreshold)
-		if err != nil {
-			log.Warn("An error occurred while attempting to determine if hotshot is live at l1 block, sequencing transactions without espresso", "l1Block", l1Block, "err", err)
-		}
-		shouldSequenceWithEspresso = isHotShotLive && arbOSconfig.ArbitrumChainParams.EnableEspresso
-
-		log.Info("After escape-hatch and chain config logic in sequencer", "ShouldSequenceWithEspresso", shouldSequenceWithEspresso, "EnableEspresso", arbOSconfig.ArbitrumChainParams.EnableEspresso, "isHotShotLive", isHotShotLive)
-	}
-
 	if config.EnableProfiling {
-		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, shouldSequenceWithEspresso)
+		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks)
 	} else {
-		block, err = s.execEngine.SequenceTransactions(header, txes, hooks, shouldSequenceWithEspresso)
+		block, err = s.execEngine.SequenceTransactions(header, txes, hooks)
 	}
 	elapsed := time.Since(start)
 	blockCreationTimer.Update(elapsed)
