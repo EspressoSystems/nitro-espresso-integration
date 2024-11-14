@@ -1202,7 +1202,7 @@ func (b *BatchPoster) getAttestationQuote(userData []byte) ([]byte, error) {
 	// Add 32 bytes of padding to the user data hash
 	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
 	for i := 0; i < 32; i += 1 {
-		userDataHash = append(userData, 0)
+		userDataHash = append(userDataHash, 0)
 	}
 
 	// Write the message to "/dev/attestation/user_report_data" in SGX
