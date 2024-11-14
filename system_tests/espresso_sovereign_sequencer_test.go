@@ -31,6 +31,7 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
+	builder.nodeConfig.BatchPoster.SwitchDelayThreshold = 5
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
@@ -46,7 +47,6 @@ func createL1AndL2Node(ctx context.Context, t *testing.T) (*NodeBuilder, func())
 	builder.execConfig.Sequencer.EnableEspressoSovereign = true
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Sequencer.LightClientAddress = lightClientAddress
-	builder.execConfig.Sequencer.SwitchDelayThreshold = 5
 	builder.execConfig.Caching.StateScheme = "hash"
 	builder.execConfig.Caching.Archive = true
 
