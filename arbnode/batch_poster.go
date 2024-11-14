@@ -1206,7 +1206,7 @@ func (b *BatchPoster) getAttestationQuote(userData []byte) ([]byte, error) {
 	}
 
 	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(b.config().UserDataAttestationFile, userDataHash, 0644)
+	err := os.WriteFile(b.config().UserDataAttestationFile, userDataHash, 0600)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
