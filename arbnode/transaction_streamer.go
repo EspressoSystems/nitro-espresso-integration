@@ -1332,7 +1332,11 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	}
 
 	// Rebuild the hotshot payload with messages to check if it is finalizied
-	payload := arbos.BuildHotShotPayload(&msgs)
+	payload, length := arbos.BuildHotShotPayload(&msgs)
+	if length != len(msgs) {
+		log.Error("failed to rebuild the hotshot payload, it is expected rebuild the transaction within all messages")
+		return s.config().EspressoTxnsPollingInterval
+	}
 
 	namespaceOk := espressocrypto.VerifyNamespace(s.chainConfig.ChainID.Uint64(), resp.Proof, *header.Header.GetPayloadCommitment(), *header.Header.GetNsTable(), []espressoTypes.Bytes{payload}, resp.VidCommon)
 	if !namespaceOk {
@@ -1629,8 +1633,11 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 				msgs = append(msgs, *msg.Message)
 			}
 		}
-		// msgs must not be empty
-		payload := arbos.BuildHotShotPayload(&msgs)
+		payload, msgCnt := arbos.BuildHotShotPayload(&msgs)
+		if msgCnt == 0 {
+			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit")
+			return s.config().EspressoTxnsPollingInterval
+		}
 
 		log.Info("submitting transaction to espresso using sovereign sequencer")
 
@@ -1647,6 +1654,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 
 		s.espressoTxnsStateInsertionMutex.Lock()
 		defer s.espressoTxnsStateInsertionMutex.Unlock()
+		pendingTxnsPos = pendingTxnsPos[msgCnt-1:]
 
 		batch := s.db.NewBatch()
 		err = s.setEspressoSubmittedPos(batch, pendingTxnsPos)
@@ -1654,7 +1662,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			log.Error("failed to set the submitted txn pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		err = s.setEspressoPendingTxnsPos(batch, nil)
+		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 		if err != nil {
 			log.Error("failed to set the pending txns", "err", err)
 			return s.config().EspressoTxnsPollingInterval
