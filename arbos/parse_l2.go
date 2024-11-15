@@ -584,7 +584,7 @@ func IsEspressoSovereignMsg(msg *arbostypes.L1IncomingMessage) bool {
 		msg.L2msg[0] == L2MessageKind_EspressoSovereignTx
 }
 
-func BuildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.Bytes, error) {
+func BuildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) espressoTypes.Bytes {
 	payload := []byte{}
 
 	sizeBuf := make([]byte, 8)
@@ -594,5 +594,5 @@ func BuildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.By
 		payload = append(payload, sizeBuf...)
 		payload = append(payload, msgByte...)
 	}
-	return payload, nil
+	return payload
 }

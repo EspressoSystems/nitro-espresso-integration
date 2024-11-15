@@ -1291,7 +1291,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return s.config().EspressoTxnsPollingInterval
 	}
 	if len(submittedTxnPos) == 0 {
-		log.Info("no submitted positions", "err", err)
+		log.Info("no submitted positions")
 		return s.config().EspressoTxnsPollingInterval
 	}
 	submittedTxHash, err := s.getEspressoSubmittedHash()
@@ -1328,11 +1328,13 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 			log.Error("failed to get the message in tx streamer", "pos", p)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		msgs = append(msgs, *msg.Message)
+		if msg.Message != nil {
+			msgs = append(msgs, *msg.Message)
+		}
 	}
 
 	// Rebuild the hotshot payload with messages to check if it is finalizied
-	payload, err := arbos.BuildHotShotPayload(&msgs)
+	payload := arbos.BuildHotShotPayload(&msgs)
 	if err != nil {
 		return s.config().EspressoTxnsPollingInterval
 	}
@@ -1628,13 +1630,12 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 				log.Error("failed to get espresso submitted pos", "err", err)
 				return s.config().EspressoTxnsPollingInterval
 			}
-			msgs = append(msgs, *msg.Message)
+			if msg.Message != nil {
+				msgs = append(msgs, *msg.Message)
+			}
 		}
-		payload, err := arbos.BuildHotShotPayload(&msgs)
-		if err != nil {
-			log.Error("failed to build hotshot transaction payload", "err", err)
-			return s.config().EspressoTxnsPollingInterval
-		}
+		// msgs must not be empty
+		payload := arbos.BuildHotShotPayload(&msgs)
 
 		log.Info("submitting transaction to espresso using sovereign sequencer")
 
