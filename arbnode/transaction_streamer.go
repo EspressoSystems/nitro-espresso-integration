@@ -19,7 +19,6 @@ import (
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
 	"github.com/offchainlabs/nitro/espressocrypto"
-	"github.com/offchainlabs/nitro/util/signature"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
@@ -79,7 +78,6 @@ type TransactionStreamer struct {
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
 	espressoClient  *espressoClient.Client
-	dataSigner      signature.DataSignerFunc
 
 	lightClientReader lightclient.LightClientReaderInterface
 }
@@ -1335,9 +1333,6 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 
 	// Rebuild the hotshot payload with messages to check if it is finalizied
 	payload := arbos.BuildHotShotPayload(&msgs)
-	if err != nil {
-		return s.config().EspressoTxnsPollingInterval
-	}
 
 	namespaceOk := espressocrypto.VerifyNamespace(s.chainConfig.ChainID.Uint64(), resp.Proof, *header.Header.GetPayloadCommitment(), *header.Header.GetNsTable(), []espressoTypes.Bytes{payload}, resp.VidCommon)
 	if !namespaceOk {
