@@ -1330,16 +1330,8 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		msgs = append(msgs, *msg.Message)
 	}
 
-	// Sovereign sequencer submits hotshot transactions one by one. It ensures that
-	// every hotshot block only contains 1 hotshot transaction.
-	tx := resp.Transactions[0]
-	// The first 65 bytes is the signature. Get the signature from the hotshot transaction.
-	//
-	// From an efficiency perspective, we don’t need to reconstruct the signature.
-	// In terms of purpose, we don’t care whether the signature is consistent;
-	// we only care about whether our messages have been confirmed.
-	sig := tx[0:65]
-	payload, err := arbos.BuildHotShotPayload(&msgs, (*[]byte)(&sig))
+	// Rebuild the hotshot payload with messages to check if it is finalizied
+	payload, err := arbos.BuildHotShotPayload(&msgs)
 	if err != nil {
 		return s.config().EspressoTxnsPollingInterval
 	}
@@ -1637,7 +1629,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			}
 			msgs = append(msgs, *msg.Message)
 		}
-		payload, err := arbos.BuildHotShotPayload(&msgs, nil)
+		payload, err := arbos.BuildHotShotPayload(&msgs)
 		if err != nil {
 			log.Error("failed to build hotshot transaction payload", "err", err)
 			return s.config().EspressoTxnsPollingInterval
