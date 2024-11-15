@@ -185,13 +185,13 @@ type BatchPosterConfig struct {
 	Dangerous                      BatchPosterDangerousConfig  `koanf:"dangerous"`
 	ReorgResistanceMargin          time.Duration               `koanf:"reorg-resistance-margin" reload:"hot"`
 	CheckBatchCorrectness          bool                        `koanf:"check-batch-correctness"`
-	UserDataAttestationFile        string                      `koanf:"user-data-attestation-file"`
-	QuoteFile                      string                      `koanf:"quote-file"`
 	gasRefunder                    common.Address
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
-	LightClientAddress string `koanf:"light-client-address"`
-	HotShotUrl         string `koanf:"hotshot-url"`
+	LightClientAddress      string `koanf:"light-client-address"`
+	HotShotUrl              string `koanf:"hotshot-url"`
+	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
+	QuoteFile               string `koanf:"quote-file"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
