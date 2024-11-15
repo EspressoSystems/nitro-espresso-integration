@@ -18,7 +18,6 @@ import (
 
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/util/signature"
 
@@ -135,7 +134,6 @@ func NewTransactionStreamer(
 	fatalErrChan chan<- error,
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
-	dataSigner signature.DataSignerFunc,
 ) (*TransactionStreamer, error) {
 	streamer := &TransactionStreamer{
 		exec:               exec,
@@ -146,7 +144,6 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
-		dataSigner:         dataSigner,
 	}
 
 	if config().SovereignSequencerEnabled {
@@ -1293,6 +1290,10 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		log.Warn("submitted pos not found", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
+	if len(submittedTxnPos) == 0 {
+		log.Info("no submitted positions", "err", err)
+		return s.config().EspressoTxnsPollingInterval
+	}
 	submittedTxHash, err := s.getEspressoSubmittedHash()
 	if err != nil {
 		log.Warn("submitted hash not found", "err", err)
@@ -1635,28 +1636,11 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 			return s.config().EspressoTxnsPollingInterval
 		}
 
-		if s.dataSigner == nil {
-			panic("data signer not initialized, needs to be initialized to sign the transaction before submitting it to espresso")
-		}
-
-		// Signing the transaction here before sending it to espresso so that external parties have a way to verify that a transaction belongs to a certain namespace
-		// Internally the signature doesn't need to verified because the batch poster receives the transactions from the sequencer.
-		payloadSignature, err := s.dataSigner(crypto.Keccak256Hash(payload).Bytes())
-		if err != nil {
-			log.Error("failed to sign transaction hash before submitting to espresso", "err", err)
-			return s.config().EspressoTxnsPollingInterval
-		}
-
-		var signedPayload []byte
-
-		signedPayload = append(signedPayload, payloadSignature...)
-		signedPayload = append(signedPayload, payload...)
-
 		log.Info("submitting transaction to espresso using sovereign sequencer")
 
 		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
-			Payload:   signedPayload,
+			Payload:   payload,
 			Namespace: s.config().EspressoNamespace,
 		})
 
