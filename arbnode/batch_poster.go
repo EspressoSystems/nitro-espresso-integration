@@ -43,7 +43,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
 	"github.com/offchainlabs/nitro/arbstate/daprovider"
@@ -129,6 +128,8 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	// Espresso light client reader
+	lightClientReader lightclient.LightClientReaderInterface
 }
 
 type l1BlockBound int
@@ -186,6 +187,7 @@ type BatchPosterConfig struct {
 	HotShotUrl              string `koanf:"hotshot-url"`
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
+	SwitchDelayThreshold uint64 `koanf:"switch-delay-threshold"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -240,6 +242,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "specifies the file containing the user data attestation")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "specifies the file containing the quote")
+	f.Uint64(prefix+".switch-delay-threshold", DefaultBatchPosterConfig.SwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -350,6 +353,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if err != nil {
 		return nil, err
 	}
+	var lightClientReader lightclient.LightClientReaderInterface
 
 	hotShotUrl := opts.Config().HotShotUrl
 	lightClientAddr := opts.Config().LightClientAddress
@@ -360,7 +364,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if lightClientAddr != "" {
-		lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddr), opts.L1Reader.Client())
+		lightClientReader, err = lightclient.NewLightClientReader(common.HexToAddress(lightClientAddr), opts.L1Reader.Client())
 		if err != nil {
 			return nil, err
 		}
@@ -383,6 +387,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		dapWriter:          opts.DAPWriter,
 		redisLock:          redisLock,
 		dapReaders:         opts.DAPReaders,
+		lightClientReader:  lightClientReader,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -540,23 +545,28 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 func (b *BatchPoster) checkEspressoValidation(
 	msg *arbostypes.MessageWithMetadata,
 ) error {
-
-	if !arbos.IsEspressoMsg(msg.Message) {
+	isHotshotLive, err := b.streamer.lightClientReader.IsHotShotLiveAtHeight(msg.Message.Header.BlockNumber, b.config().SwitchDelayThreshold)
+	if err != nil {
+		log.Error("Espresso validation error: failed to determine hotshot liveness, not including message in hotshot", "err", err)
 		return nil
 	}
-
+	if isHotshotLive {
+		log.Error("Hotshot is not live for this l1 block, skipping espresso validation")
+		return nil
+	}
 	arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
 	if err != nil {
-		return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+    log.Error("Failed call to GetArbOSConfigAtHeight", "err", err)
+    return nil
 	}
 	if arbOSConfig == nil {
-		return fmt.Errorf("Cannot use a nil ArbOSConfig")
+		log.Error("Cannot use a nil ArbOSConfig", "err", err)
+    return nil
 	}
 	if !arbOSConfig.ArbitrumChainParams.EnableEspresso {
-		// This case should be highly unlikely, as espresso messages are not produced while ArbitrumChainParams.EnableEspresso is false
-		// However, in the event that an espresso message was created, and then Enable Espresso was set to false, we should ensure
-		// the transaction streamer doesn't send any more messages to the espresso network.
-		return fmt.Errorf("Cannot process Espresso messages when Espresso is not enabled in the ArbOS chain config")
+		// If we are not in espresso mode, we should still process messages normally, just return nil here.
+		log.Warn("Cannot process Espresso messages when Espresso is not enabled in the ArbOS chain config")
+		return nil
 	}
 
 	hasNotSubmitted, err := b.streamer.HasNotSubmitted(b.building.msgCount)
@@ -1439,11 +1449,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			)
 			break
 		}
-
 		err = b.checkEspressoValidation(msg)
 		if err != nil {
 			return false, fmt.Errorf("error checking espresso valdiation: %w", err)
 		}
+
 		isDelayed := msg.DelayedMessagesRead > b.building.segments.delayedMsg
 		success, err := b.building.segments.AddMessage(msg)
 		if err != nil {
