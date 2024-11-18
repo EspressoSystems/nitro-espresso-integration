@@ -27,4 +27,4 @@ jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/
 jf-rescue = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "std",
 ], default-features = false}
-hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81" }
+hotshot-types = { git = "https://github.com/EspressoSystems/hotshot", tag = "0.5.81", default-features = false }
