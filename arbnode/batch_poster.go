@@ -55,6 +55,7 @@ import (
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
+	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -576,6 +577,9 @@ func (b *BatchPoster) checkEspressoValidation(
 	}
 
 	lastConfirmed, err := b.streamer.getLastConfirmedPos()
+	if dbutil.IsErrNotFound(err) {
+		return fmt.Errorf("no confirmed message has been found")
+	}
 	if err != nil {
 		return err
 	}

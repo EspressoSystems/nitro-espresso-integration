@@ -382,16 +382,9 @@ func (s *ExecutionEngine) NextDelayedMessageNumber() (uint64, error) {
 
 func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, txErrors []error, espressoSovereignSequencer bool) (*arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
-	// Set a special type if the Espresso Sovereign Sequencer is running.
 	if espressoSovereignSequencer {
+		// Add a specific l2 message kind in front of the bytes.
 		l2Message = append(l2Message, arbos.L2MessageKind_EspressoSovereignTx)
-		// Set a block justification placeholder here. That would help us easily parse
-		// our messages from `ParseEspressoMessage`.
-		jstBytes, err := arbos.GetEspressoJstBytes(&arbostypes.EspressoBlockJustification{})
-		if err != nil {
-			return nil, err
-		}
-		l2Message = append(l2Message, jstBytes...)
 	}
 
 	if len(txes) == 1 && txErrors[0] == nil {
