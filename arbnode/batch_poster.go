@@ -55,7 +55,6 @@ import (
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -554,14 +553,36 @@ func (b *BatchPoster) checkEspressoValidation(
 		return nil
 	}
 
-	arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
+	lastConfirmed, err := b.streamer.getLastConfirmedPos()
 	if err != nil {
-		return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+		log.Error("failed call to get skip verification pos", "err", err)
+		return err
 	}
-	if arbOSConfig == nil {
-		return fmt.Errorf("Cannot use a nil ArbOSConfig")
+
+	// This message has passed the espresso verification
+	if lastConfirmed != nil && b.building.msgCount <= *lastConfirmed {
+		return nil
 	}
-	if !arbOSConfig.ArbitrumChainParams.EnableEspresso {
+
+	log.Warn("this message has not been finalized on L1 or validated")
+	skip, err := b.streamer.getSkipVerificationPos()
+	if err != nil {
+		log.Error("failed call to get skip verification pos", "err", err)
+		return err
+	}
+
+	// Skip checking espresso validation due to hotshot failure
+	if skip != nil {
+		if b.building.msgCount <= *skip {
+			log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
+			return nil
+		}
+		// TODO: if current position is greater than the `skip`, should set the
+		// the skip value to nil. This should contribute to better efficiency.
+	}
+
+	if b.streamer.escapheHatchOn {
+		log.Info("escape hatch is on. Skip the submission to HotShot")
 		return nil
 	}
 
@@ -581,16 +602,6 @@ func (b *BatchPoster) checkEspressoValidation(
 		return fmt.Errorf("this msg has not been included in hotshot")
 	}
 
-	lastConfirmed, err := b.streamer.getLastConfirmedPos()
-	if dbutil.IsErrNotFound(err) {
-		return fmt.Errorf("no confirmed message has been found")
-	}
-	if err != nil {
-		return err
-	}
-	if lastConfirmed < b.building.msgCount {
-		return fmt.Errorf("this msg has not been finalized on L1 or validated")
-	}
 	return nil
 }
 

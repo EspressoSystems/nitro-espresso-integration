@@ -80,6 +80,7 @@ type TransactionStreamer struct {
 	espressoClient  *espressoClient.Client
 
 	lightClientReader lightclient.LightClientReaderInterface
+	escapheHatchOn    bool
 }
 
 type TransactionStreamerConfig struct {
@@ -88,30 +89,33 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 
 	// Espresso specific fields
-	SovereignSequencerEnabled   bool          `koanf:"sovereign-sequencer-enabled"`
-	HotShotUrl                  string        `koanf:"hotshot-url"`
-	EspressoNamespace           uint64        `koanf:"espresso-namespace"`
-	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
+	SovereignSequencerEnabled    bool          `koanf:"sovereign-sequencer-enabled"`
+	HotShotUrl                   string        `koanf:"hotshot-url"`
+	EspressoNamespace            uint64        `koanf:"espresso-namespace"`
+	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
+	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-thresold"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
 
 var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize:     50_000,
-	MaxReorgResequenceDepth:     1024,
-	ExecuteMessageLoopDelay:     time.Millisecond * 100,
-	SovereignSequencerEnabled:   false,
-	HotShotUrl:                  "",
-	EspressoTxnsPollingInterval: time.Millisecond * 100,
+	MaxBroadcasterQueueSize:      50_000,
+	MaxReorgResequenceDepth:      1024,
+	ExecuteMessageLoopDelay:      time.Millisecond * 100,
+	SovereignSequencerEnabled:    false,
+	HotShotUrl:                   "",
+	EspressoTxnsPollingInterval:  time.Millisecond * 100,
+	EspressoSwitchDelayThreshold: 20,
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
-	MaxBroadcasterQueueSize:     10_000,
-	MaxReorgResequenceDepth:     128 * 1024,
-	ExecuteMessageLoopDelay:     time.Millisecond,
-	SovereignSequencerEnabled:   false,
-	HotShotUrl:                  "",
-	EspressoTxnsPollingInterval: time.Millisecond * 100,
+	MaxBroadcasterQueueSize:      10_000,
+	MaxReorgResequenceDepth:      128 * 1024,
+	ExecuteMessageLoopDelay:      time.Millisecond,
+	SovereignSequencerEnabled:    false,
+	HotShotUrl:                   "",
+	EspressoTxnsPollingInterval:  time.Millisecond * 100,
+	EspressoSwitchDelayThreshold: 10,
 }
 
 func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -122,6 +126,7 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Uint64(prefix+".espresso-switch-delay-thresold", DefaultTransactionStreamerConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
 }
 
 func NewTransactionStreamer(
@@ -1253,14 +1258,15 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 }
 
 // Check if the latest submitted transaction has been finalized on L1 and verify it.
+// Return a bool indicating whether a new transaction can be submitted to HotShot
 func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context) bool {
 	submittedTxnPos, err := s.getEspressoSubmittedPos()
 	if err != nil {
 		log.Warn("submitted pos not found", "err", err)
 		return false
 	}
-	if len(submittedTxnPos) == 0 {
-		return false
+	if submittedTxnPos == nil || len(submittedTxnPos) == 0 {
+		return true // no submitted transaction
 	}
 	submittedTxHash, err := s.getEspressoSubmittedHash()
 	if err != nil {
@@ -1268,7 +1274,13 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return false
 	}
 
-	data, err := s.espressoClient.FetchTransactionByHash(ctx, &submittedTxHash)
+	if submittedTxHash == nil {
+		// this should not happen
+		log.Warn("missing the tx hash while the submitted txn position exists")
+		return false
+	}
+
+	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
 		log.Warn("failed to fetch the submitted transaction hash", "err", err, "hash", submittedTxHash.String())
 		return false
@@ -1360,13 +1372,13 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		log.Warn("failed to set the submitted pos to nil", "err", err)
 		return false
 	}
-	err = s.setEspressoSubmittedHash(batch, tagged_base64.TaggedBase64{})
+	err = s.setEspressoSubmittedHash(batch, nil)
 	if err != nil {
 		log.Warn("failed to set the submitted hash to nil", "err", err)
 		return false
 	}
 	lastConfirmedPos := submittedTxnPos[len(submittedTxnPos)-1]
-	err = s.setEspressoLastConfirmedPos(batch, lastConfirmedPos)
+	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
 	if err != nil {
 		log.Warn("failed to set the last confirmed position", "err", err, "pos", lastConfirmedPos)
 		return false
@@ -1384,6 +1396,9 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 func (s *TransactionStreamer) getEspressoSubmittedPos() ([]arbutil.MessageIndex, error) {
 	posBytes, err := s.db.Get(espressoSubmittedPos)
 	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
@@ -1397,34 +1412,56 @@ func (s *TransactionStreamer) getEspressoSubmittedPos() ([]arbutil.MessageIndex,
 	return pos, nil
 }
 
-func (s *TransactionStreamer) getEspressoSubmittedHash() (espressoTypes.TaggedBase64, error) {
+func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedBase64, error) {
 	posBytes, err := s.db.Get(espressoSubmittedHash)
 	if err != nil {
-		return espressoTypes.TaggedBase64{}, err
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	var hash string
 	err = rlp.DecodeBytes(posBytes, &hash)
 	if err != nil {
-		return espressoTypes.TaggedBase64{}, err
+		return nil, err
 	}
 	hashParsed, err := tagged_base64.Parse(hash)
 	if hashParsed == nil {
-		return espressoTypes.TaggedBase64{}, err
+		return nil, err
 	}
-	return espressoTypes.TaggedBase64(*hashParsed), nil
+	return nil, nil
 }
 
-func (s *TransactionStreamer) getLastConfirmedPos() (arbutil.MessageIndex, error) {
+func (s *TransactionStreamer) getLastConfirmedPos() (*arbutil.MessageIndex, error) {
 	lastConfirmedBytes, err := s.db.Get(espressoLastConfirmedPos)
 	if err != nil {
-		return 0, err
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	var lastConfirmed arbutil.MessageIndex
 	err = rlp.DecodeBytes(lastConfirmedBytes, &lastConfirmed)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return lastConfirmed, nil
+	return &lastConfirmed, nil
+}
+
+func (s *TransactionStreamer) getSkipVerificationPos() (*arbutil.MessageIndex, error) {
+	lastConfirmedBytes, err := s.db.Get(espressoSkipVerificationPos)
+	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var skipPos arbutil.MessageIndex
+	err = rlp.DecodeBytes(lastConfirmedBytes, &skipPos)
+	if err != nil {
+		return nil, err
+	}
+	return &skipPos, nil
 }
 
 func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageIndex, error) {
@@ -1460,7 +1497,7 @@ func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter
 	return nil
 }
 
-func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWriter, pos arbutil.MessageIndex) error {
+func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
 	posBytes, err := rlp.EncodeToBytes(pos)
 	if err != nil {
 		return err
@@ -1473,9 +1510,22 @@ func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWr
 	return nil
 }
 
-func (s *TransactionStreamer) setEspressoSubmittedHash(batch ethdb.KeyValueWriter, hash espressoTypes.TaggedBase64) error {
+func (s *TransactionStreamer) setSkipVerifiactionPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
+	posBytes, err := rlp.EncodeToBytes(pos)
+	if err != nil {
+		return err
+	}
+	err = batch.Put(espressoSkipVerificationPos, posBytes)
+	if err != nil {
+		return err
+
+	}
+	return nil
+}
+
+func (s *TransactionStreamer) setEspressoSubmittedHash(batch ethdb.KeyValueWriter, hash *espressoTypes.TaggedBase64) error {
 	// if hash is nil, delete the key
-	if hash.Value() == nil {
+	if hash == nil {
 		err := batch.Delete(espressoSubmittedHash)
 		return err
 	}
@@ -1512,20 +1562,20 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 
 func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, error) {
 	submitted, err := s.getEspressoSubmittedPos()
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil {
 		return false, err
 	}
 
-	if len(submitted) > 0 && pos <= submitted[len(submitted)-1] {
+	if submitted != nil && len(submitted) > 0 && pos <= submitted[len(submitted)-1] {
 		return false, nil
 	}
 
 	lastConfirmed, err := s.getLastConfirmedPos()
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil {
 		return false, err
 	}
 
-	if pos <= lastConfirmed {
+	if lastConfirmed != nil && pos <= *lastConfirmed {
 		return false, nil
 	}
 
@@ -1544,12 +1594,8 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		log.Error("failed to get the pending txns position", "err", err)
-		return err
-	}
 
-	if err != nil && dbutil.IsErrNotFound(err) {
+	if pendingTxnsPos == nil {
 		// if the key doesn't exist, create a new array with the pos
 		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
 	} else {
@@ -1571,24 +1617,12 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) time.Duration {
 
-	_, err := s.getEspressoSubmittedPos()
-
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		log.Warn("error getting submitted pos", "err", err)
-		return s.config().EspressoTxnsPollingInterval
-	}
-
-	if err == nil && !s.pollSubmittedTransactionForFinality(ctx) {
-		return s.config().EspressoTxnsPollingInterval
-	}
-
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		log.Warn("error getting pending pos", "err", err)
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	if len(pendingTxnsPos) > 0 {
+	if pendingTxnsPos != nil && len(pendingTxnsPos) > 0 {
 		// get the message at the pending txn position
 		msgs := []arbostypes.L1IncomingMessage{}
 		for _, pos := range pendingTxnsPos {
@@ -1636,7 +1670,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 			log.Error("failed to set the pending txns", "err", err)
 			return s.config().EspressoTxnsPollingInterval
 		}
-		err = s.setEspressoSubmittedHash(batch, *hash)
+		err = s.setEspressoSubmittedHash(batch, hash)
 		if err != nil {
 			log.Error("failed to set the submitted hash", "err", err)
 			return s.config().EspressoTxnsPollingInterval
@@ -1652,6 +1686,96 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 	return s.config().EspressoTxnsPollingInterval
 }
 
+func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
+	live, err := s.lightClientReader.IsHotShotLive(s.config().EspressoSwitchDelayThreshold)
+	if err != nil {
+		return err
+	}
+	// If hotshot is down, escape hatch is activated, the only thing is to check if hotshot is live again
+	if s.escapheHatchOn {
+		if live {
+			log.Info("HotShot is up, disabling the escape hatch")
+			s.escapheHatchOn = false
+		}
+		return nil
+	}
+
+	// If hotshot is up, escape hatch is disabled
+	// - check if escape hatch should be activated
+	// - check if the submitted transaction should be skipped from espresso verification
+	if !live {
+		log.Warn("enabling the escape hatch, hotshot is down")
+		s.escapheHatchOn = true
+	}
+
+	submittedHash, err := s.getEspressoSubmittedHash()
+	if err != nil {
+		return err
+	}
+
+	if submittedHash == nil {
+		return nil
+	}
+
+	// If a submitted transaction is waiting for being finalized, check if hotshot is live at
+	// the corresponding L1 height. If not, write down the position.
+	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedHash)
+	if err != nil {
+		return err
+	}
+
+	header, err := s.espressoClient.FetchHeaderByHeight(ctx, data.BlockHeight)
+	if err != nil {
+		return err
+	}
+
+	l1Height := header.Header.GetL1Head()
+	hotshotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Height, s.config().EspressoSwitchDelayThreshold)
+	if err != nil {
+		return err
+	}
+	if hotshotLive {
+		return nil
+	}
+	submitted, err := s.getEspressoSubmittedPos()
+	if err != nil {
+		return err
+	}
+	if submitted == nil || len(submitted) == 0 {
+		return fmt.Errorf("submitted messages should not have the length of 0")
+	}
+
+	last := submitted[len(submitted)-1]
+
+	s.espressoTxnsStateInsertionMutex.Lock()
+	defer s.espressoTxnsStateInsertionMutex.Unlock()
+
+	// Set the relevant data
+	batch := s.db.NewBatch()
+	err = s.setEspressoSubmittedHash(batch, nil)
+	if err != nil {
+		return err
+	}
+	err = s.setEspressoPendingTxnsPos(batch, nil)
+	if err != nil {
+		return err
+	}
+	err = s.setEspressoSubmittedPos(batch, nil)
+	if err != nil {
+		return err
+	}
+	err = s.setSkipVerifiactionPos(batch, &last)
+	if err != nil {
+		return err
+	}
+	err = batch.Write()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.config().EspressoTxnsPollingInterval * 50
 	config, err := s.exec.GetArbOSConfigAtHeight(0) // Pass 0 to get the ArbOS config at current block height.
@@ -1664,7 +1788,18 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 		return retryRate
 	}
 	if config.ArbitrumChainParams.EnableEspresso {
-		return s.submitEspressoTransactions(ctx)
+		err := s.toggleEscapeHatch(ctx)
+		if err != nil {
+			log.Error("error checking escape hatch", "err", err)
+			return retryRate
+		}
+
+		canSubmit := s.pollSubmittedTransactionForFinality(ctx)
+		if canSubmit {
+			return s.submitEspressoTransactions(ctx)
+		}
+
+		return s.config().EspressoTxnsPollingInterval
 	} else {
 		return retryRate
 	}
