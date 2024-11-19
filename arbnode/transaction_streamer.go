@@ -93,7 +93,7 @@ type TransactionStreamerConfig struct {
 	HotShotUrl                   string        `koanf:"hotshot-url"`
 	EspressoNamespace            uint64        `koanf:"espresso-namespace"`
 	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
-	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-thresold"`
+	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-threshold"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -126,7 +126,7 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
 	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
-	f.Uint64(prefix+".espresso-switch-delay-thresold", DefaultTransactionStreamerConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
+	f.Uint64(prefix+".espresso-switch-delay-threshold", DefaultTransactionStreamerConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
 }
 
 func NewTransactionStreamer(
@@ -1429,7 +1429,7 @@ func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedB
 	if hashParsed == nil {
 		return nil, err
 	}
-	return nil, nil
+	return hashParsed, nil
 }
 
 func (s *TransactionStreamer) getLastConfirmedPos() (*arbutil.MessageIndex, error) {
@@ -1468,6 +1468,9 @@ func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageInd
 
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
 	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	var pendingTxnsPos []*arbutil.MessageIndex
@@ -1790,13 +1793,12 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 		log.Error("ArbOS Config is nil")
 		return retryRate
 	}
-	if config.ArbitrumChainParams.EnableEspresso {
+	if config.ArbitrumChainParams.EnableEspresso && s.config().SovereignSequencerEnabled {
 		err := s.toggleEscapeHatch(ctx)
 		if err != nil {
 			log.Error("error checking escape hatch", "err", err)
 			return retryRate
 		}
-
 		canSubmit := s.pollSubmittedTransactionForFinality(ctx)
 		if canSubmit {
 			return s.submitEspressoTransactions(ctx)
