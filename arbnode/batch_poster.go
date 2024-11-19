@@ -1063,16 +1063,12 @@ func (b *BatchPoster) encodeAddBatch(
 	var calldata []byte
 	var kzgBlobs []kzg4844.Blob
 	var err error
-	var userData []byte
 	if use4844 {
 		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
 		}
-		_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to compute blob hashes: %w", err)
-		}
+
 		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
 		calldata, err = method.Inputs.Pack(
 			seqNum,
@@ -1084,22 +1080,7 @@ func (b *BatchPoster) encodeAddBatch(
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata: %w", err)
 		}
-		// userData has blobHashes along with other calldata for EIP-4844 transactions
-		userData, err = method.Inputs.Pack(
-			seqNum,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			blobHashes,
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack user data: %w", err)
-		}
-		_, err = b.getAttestationQuote(userData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
-		}
+
 	} else {
 		calldata, err = method.Inputs.Pack(
 			seqNum,
@@ -1114,12 +1095,27 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to pack calldata: %w", err)
 		}
 
-		_, err = b.getAttestationQuote(calldata)
+		attestationQuote, err := b.getAttestationQuote(calldata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
+
+		//  Update calldata to include attestation quote
+		calldata, err = method.Inputs.Pack(
+			seqNum,
+			l2MessageData,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			attestationQuote,
+		)
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack calldata: %w", err)
+		}
+
 	}
-	// TODO: when contract is updated add attestationQuote to the calldata
 	fullCalldata := append([]byte{}, method.ID...)
 	fullCalldata = append(fullCalldata, calldata...)
 	return fullCalldata, kzgBlobs, nil
