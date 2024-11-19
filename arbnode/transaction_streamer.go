@@ -1625,7 +1625,8 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context, ig
 		defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 		batch := s.db.NewBatch()
-		err = s.setEspressoSubmittedPos(batch, pendingTxnsPos)
+		submittedPos := pendingTxnsPos[:msgCnt]
+		err = s.setEspressoSubmittedPos(batch, submittedPos)
 		if err != nil {
 			log.Error("failed to set the submitted txn pos", "err", err)
 			return s.config().EspressoTxnsPollingInterval
