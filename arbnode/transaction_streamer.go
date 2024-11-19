@@ -1265,7 +1265,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		log.Warn("submitted pos not found", "err", err)
 		return false
 	}
-	if submittedTxnPos == nil || len(submittedTxnPos) == 0 {
+	if len(submittedTxnPos) == 0 {
 		return true // no submitted transaction
 	}
 	submittedTxHash, err := s.getEspressoSubmittedHash()
@@ -1566,7 +1566,7 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 		return false, err
 	}
 
-	if submitted != nil && len(submitted) > 0 && pos <= submitted[len(submitted)-1] {
+	if len(submitted) > 0 && pos <= submitted[len(submitted)-1] {
 		return false, nil
 	}
 
@@ -1594,6 +1594,9 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
+	if err != nil {
+		return err
+	}
 
 	if pendingTxnsPos == nil {
 		// if the key doesn't exist, create a new array with the pos
@@ -1622,7 +1625,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 		return s.config().EspressoTxnsPollingInterval
 	}
 
-	if pendingTxnsPos != nil && len(pendingTxnsPos) > 0 {
+	if len(pendingTxnsPos) > 0 {
 		// get the message at the pending txn position
 		msgs := []arbostypes.L1IncomingMessage{}
 		for _, pos := range pendingTxnsPos {
@@ -1741,7 +1744,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if submitted == nil || len(submitted) == 0 {
+	if len(submitted) == 0 {
 		return fmt.Errorf("submitted messages should not have the length of 0")
 	}
 
