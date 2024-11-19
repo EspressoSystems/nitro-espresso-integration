@@ -20,7 +20,7 @@ committable = {version = "0.2", features = ["ark-serialize"]}
 serde = "1"
 tagged-base64 = "0.4"
 jf-crhf = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5" }
-espresso-types = { git = "https://github.com/espressosystems/espresso-sequencer", branch = "main", features = ["testing"] }
+espresso-types = { git = "https://github.com/espressosystems/espresso-sequencer", branch = "main" }
 jf-merkle-tree = { version = "0.1.0", git = "https://github.com/EspressoSystems/jellyfish", tag = "0.4.5", features = [
   "std",
 ], default-features = false}

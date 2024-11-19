@@ -1785,7 +1785,7 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 [[package]]
 name = "contract-bindings"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#187f337f7e73e077f68a43166353e822b782800b"
+source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#5795d5a02678e4307f0cce79293a686f32b7abd9"
 dependencies = [
  "ethers",
  "serde",
@@ -2661,16 +2661,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "espresso-macros"
-version = "0.1.0"
-source = "git+https://github.com/EspressoSystems/espresso-macros.git?tag=0.1.0#9e0b0258c99757c567676c4dd92f1501db0cf580"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "espresso-systems-common"
 version = "0.4.0"
 source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4.0#5abd890f79014a86db31286e1f3a529f161e69de"
@@ -2683,7 +2673,7 @@ source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4
 [[package]]
 name = "espresso-types"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#187f337f7e73e077f68a43166353e822b782800b"
+source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#5795d5a02678e4307f0cce79293a686f32b7abd9"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -2705,7 +2695,6 @@ dependencies = [
  "hotshot",
  "hotshot-orchestrator",
  "hotshot-query-service",
- "hotshot-testing",
  "hotshot-types",
  "itertools 0.12.1",
  "jf-merkle-tree",
@@ -3909,7 +3898,7 @@ dependencies = [
 [[package]]
 name = "hotshot-contract-adapter"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#187f337f7e73e077f68a43166353e822b782800b"
+source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#5795d5a02678e4307f0cce79293a686f32b7abd9"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -4024,7 +4013,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.62"
-source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.69#1335419bd0a451fe129185c849c8790f26c59547"
+source = "git+https://github.com/EspressoSystems/hotshot-query-service?tag=0.1.71#5411200c73e25b56f5a87fd67465ad596c6d649d"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -4039,10 +4028,8 @@ dependencies = [
  "derivative",
  "derive_more 0.99.18",
  "either",
- "espresso-macros",
  "futures",
  "hotshot",
- "hotshot-example-types",
  "hotshot-testing",
  "hotshot-types",
  "include_dir",
@@ -4050,19 +4037,15 @@ dependencies = [
  "jf-merkle-tree",
  "jf-vid",
  "log",
- "portpicker",
  "prometheus",
- "rand 0.8.5",
  "refinery",
  "refinery-core",
  "serde",
  "serde_json",
  "snafu 0.8.5",
- "spin_sleep",
  "sqlx",
  "surf-disco",
  "tagged-base64",
- "tempfile",
  "tide-disco",
  "time 0.3.36",
  "tokio",
@@ -8165,7 +8148,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 [[package]]
 name = "sequencer-utils"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#187f337f7e73e077f68a43166353e822b782800b"
+source = "git+https://github.com/espressosystems/espresso-sequencer?branch=main#5795d5a02678e4307f0cce79293a686f32b7abd9"
 dependencies = [
  "anyhow",
  "ark-serialize",
@@ -8621,15 +8604,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 dependencies = [
  "lock_api",
-]
-
-[[package]]
-name = "spin_sleep"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64bd7227d85bfd1b8df51e0d83da36d9baaee85eb75730386ef8e3ab6f2a2ea3"
-dependencies = [
- "windows-sys 0.59.0",
 ]
 
 [[package]]
