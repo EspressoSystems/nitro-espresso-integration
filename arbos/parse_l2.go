@@ -97,7 +97,6 @@ const (
 	L2MessageKind_Heartbeat          = 6 // deprecated
 	L2MessageKind_SignedCompressedTx = 7
 	// 8 is reserved for BLS signed batch
-	L2MessageKind_EspressoSovereignTx = 11
 )
 
 // Warning: this does not validate the day of the week or if DST is being observed
@@ -174,12 +173,6 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 			return nil, types.ErrTxTypeNotSupported
 		}
 		return types.Transactions{newTx}, nil
-	case L2MessageKind_EspressoSovereignTx:
-		result, err := parseL2Message(rd, poster, timestamp, requestId, chainId, depth)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
 	case L2MessageKind_Heartbeat:
 		if timestamp >= HeartbeatsDisabledAt {
 			return nil, errors.New("heartbeat messages have been disabled")
@@ -403,16 +396,6 @@ func parseBatchPostingReportMessage(rd io.Reader, chainId *big.Int, msgBatchGasC
 		Data:    data,
 		// don't need to fill in the other fields, since they exist only to ensure uniqueness, and batchNum is already unique
 	}), nil
-}
-
-func IsEspressoMsg(msg *arbostypes.L1IncomingMessage) bool {
-	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
-		msg.L2msg[0] == L2MessageKind_EspressoSovereignTx
-}
-
-func IsEspressoSovereignMsg(msg *arbostypes.L1IncomingMessage) bool {
-	return msg.Header.Kind == arbostypes.L1MessageType_L2Message &&
-		msg.L2msg[0] == L2MessageKind_EspressoSovereignTx
 }
 
 func BuildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.Bytes, int) {
