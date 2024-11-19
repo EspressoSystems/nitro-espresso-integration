@@ -14,8 +14,10 @@ import (
 )
 
 type CelestiaConfig struct {
-	Enable bool   `koanf:"enable"`
-	URL    string `koanf:"url"`
+	//nolint:all
+	Enable bool `koanf:"enable"`
+	//nolint:all
+	URL string `koanf:"url"`
 }
 
 type CelestiaDASClient struct {

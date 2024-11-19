@@ -95,8 +95,9 @@ type Config struct {
 	TransactionStreamer TransactionStreamerConfig   `koanf:"transaction-streamer" reload:"hot"`
 	Maintenance         MaintenanceConfig           `koanf:"maintenance" reload:"hot"`
 	ResourceMgmt        resourcemanager.Config      `koanf:"resource-mgmt" reload:"hot"`
-	Celestia            celestia.CelestiaConfig     `koanf:"celestia-cfg"`
-	DAPreference        []string                    `koanf:"da-preference"`
+	//nolint:all
+	Celestia     celestia.CelestiaConfig `koanf:"celestia-cfg"`
+	DAPreference []string                `koanf:"da-preference"`
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 }
