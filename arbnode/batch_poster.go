@@ -186,6 +186,7 @@ type BatchPosterConfig struct {
 	HotShotUrl              string `koanf:"hotshot-url"`
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
+	UseEscapeHatch          bool   `koanf:"use-escape-hatch"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -240,6 +241,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "specifies the file containing the user data attestation")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "specifies the file containing the quote")
+	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, batches will be posted without doing the espresso verification when hotshot is down. If false, wait for hotshot being up")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -273,6 +275,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	UserDataAttestationFile:        "",
 	QuoteFile:                      "",
+	UseEscapeHatch:                 false,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -304,6 +307,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	UseAccessLists:                 true,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	CheckBatchCorrectness:          true,
+	UseEscapeHatch:                 false,
 }
 
 type BatchPosterOpts struct {
@@ -366,6 +370,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		opts.Streamer.lightClientReader = lightClientReader
 	}
+
+	opts.Streamer.useEscapeHatch = opts.Config().UseEscapeHatch
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
@@ -555,7 +561,7 @@ func (b *BatchPoster) checkEspressoValidation(
 
 	lastConfirmed, err := b.streamer.getLastConfirmedPos()
 	if err != nil {
-		log.Error("failed call to get skip verification pos", "err", err)
+		log.Error("failed call to get last confirmed pos", "err", err)
 		return err
 	}
 
@@ -581,25 +587,25 @@ func (b *BatchPoster) checkEspressoValidation(
 		// the skip value to nil. This should contribute to better efficiency.
 	}
 
-	if b.streamer.escapheHatchOn {
-		log.Info("escape hatch is on. Skip the submission to HotShot")
-		return nil
-	}
+	return fmt.Errorf("waiting for espresso finalization")
+}
 
-	hasNotSubmitted, err := b.streamer.HasNotSubmitted(b.building.msgCount)
+func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) error {
+	hasNotSubmitted, err := b.streamer.HasNotSubmitted(pos)
 	if err != nil {
 		return err
 	}
-	if hasNotSubmitted {
-		// Store the pos in the database to be used later to submit the message
-		// to hotshot for finalization.
-		log.Info("submitting pos", "pos", b.building.msgCount)
-		err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
-		if err != nil {
-			log.Error("failed to submit espresso transaction pos", "pos", b.building.msgCount, "err", err)
-			return err
-		}
-		return fmt.Errorf("this msg has not been included in hotshot")
+	if !hasNotSubmitted {
+		return nil
+	}
+
+	// Store the pos in the database to be used later to submit the message
+	// to hotshot for finalization.
+	log.Info("submitting pos", "pos", b.building.msgCount)
+	err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
+	if err != nil {
+		log.Error("failed to submit espresso transaction pos", "pos", b.building.msgCount, "err", err)
+		return err
 	}
 
 	return nil
@@ -1427,6 +1433,31 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
 			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+		}
+	}
+
+	// Submit message positions to pending queue first
+	if b.streamer.config().SovereignSequencerEnabled {
+		for p := b.building.msgCount; p < msgCount; p += 1 {
+			msg, err := b.streamer.GetMessage(p)
+			if err != nil {
+				log.Error("error getting message from streamer", "error", err)
+				break
+			}
+			// We only submit the user transactions to hotshot.
+			if msg.Message.Header.Kind != arbostypes.L1MessageType_L2Message {
+				continue
+			}
+			kind := msg.Message.L2msg[0]
+			if kind != arbos.L2MessageKind_Batch && kind != arbos.L2MessageKind_SignedTx {
+				continue
+			}
+			// TODO: instead of appending `p` one by one, pushing them to the queue at 1 time
+			err = b.submitEspressoTransactionPos(p)
+			if err != nil {
+				log.Error("error submitting position", "error", err, "pos", p)
+				break
+			}
 		}
 	}
 

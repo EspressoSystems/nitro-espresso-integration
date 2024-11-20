@@ -80,7 +80,8 @@ type TransactionStreamer struct {
 	espressoClient  *espressoClient.Client
 
 	lightClientReader lightclient.LightClientReaderInterface
-	escapheHatchOn    bool
+	hotshotDown       bool
+	useEscapeHatch    bool
 }
 
 type TransactionStreamerConfig struct {
@@ -1464,7 +1465,7 @@ func (s *TransactionStreamer) getSkipVerificationPos() (*arbutil.MessageIndex, e
 	return &skipPos, nil
 }
 
-func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageIndex, error) {
+func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]arbutil.MessageIndex, error) {
 
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
 	if err != nil {
@@ -1473,15 +1474,15 @@ func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]*arbutil.MessageInd
 		}
 		return nil, err
 	}
-	var pendingTxnsPos []*arbutil.MessageIndex
-	err = rlp.DecodeBytes(pendingTxnsBytes, &pendingTxnsPos)
+	var pendingTxnsPos []arbutil.MessageIndex
+	err = rlp.DecodeBytes(pendingTxnsBytes, pendingTxnsPos)
 	if err != nil {
 		return nil, err
 	}
 	return pendingTxnsPos, nil
 }
 
-func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos []*arbutil.MessageIndex) error {
+func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter, pos []arbutil.MessageIndex) error {
 	// if pos is nil, delete the key
 	if pos == nil {
 		err := batch.Delete(espressoSubmittedPos)
@@ -1545,7 +1546,7 @@ func (s *TransactionStreamer) setEspressoSubmittedHash(batch ethdb.KeyValueWrite
 	return nil
 }
 
-func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWriter, pos []*arbutil.MessageIndex) error {
+func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWriter, pos []arbutil.MessageIndex) error {
 	if pos == nil {
 		err := batch.Delete(espressoPendingTxnsPositions)
 		return err
@@ -1587,7 +1588,7 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 		return false, err
 	}
 
-	if len(pendingTxnsPos) > 0 && pos <= *pendingTxnsPos[len(pendingTxnsPos)-1] {
+	if len(pendingTxnsPos) > 0 && pos <= pendingTxnsPos[len(pendingTxnsPos)-1] {
 		return false, nil
 	}
 
@@ -1603,9 +1604,9 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 
 	if pendingTxnsPos == nil {
 		// if the key doesn't exist, create a new array with the pos
-		pendingTxnsPos = []*arbutil.MessageIndex{&pos}
+		pendingTxnsPos = []arbutil.MessageIndex{pos}
 	} else {
-		pendingTxnsPos = append(pendingTxnsPos, &pos)
+		pendingTxnsPos = append(pendingTxnsPos, pos)
 	}
 	err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 	if err != nil {
@@ -1632,7 +1633,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 		// get the message at the pending txn position
 		msgs := []arbostypes.L1IncomingMessage{}
 		for _, pos := range pendingTxnsPos {
-			msg, err := s.GetMessage(*pos)
+			msg, err := s.GetMessage(pos)
 			if err != nil {
 				log.Error("failed to get espresso submitted pos", "err", err)
 				return s.config().EspressoTxnsPollingInterval
@@ -1698,10 +1699,10 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 		return err
 	}
 	// If hotshot is down, escape hatch is activated, the only thing is to check if hotshot is live again
-	if s.escapheHatchOn {
+	if s.hotshotDown {
 		if live {
 			log.Info("HotShot is up, disabling the escape hatch")
-			s.escapheHatchOn = false
+			s.hotshotDown = false
 		}
 		return nil
 	}
@@ -1711,7 +1712,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	// - check if the submitted transaction should be skipped from espresso verification
 	if !live {
 		log.Warn("enabling the escape hatch, hotshot is down")
-		s.escapheHatchOn = true
+		s.hotshotDown = true
 	}
 
 	submittedHash, err := s.getEspressoSubmittedHash()
@@ -1724,7 +1725,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	}
 
 	// If a submitted transaction is waiting for being finalized, check if hotshot is live at
-	// the corresponding L1 height. If not, write down the position.
+	// the corresponding L1 height.
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedHash)
 	if err != nil {
 		return err
@@ -1756,13 +1757,8 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
-	// Set the relevant data
 	batch := s.db.NewBatch()
 	err = s.setEspressoSubmittedHash(batch, nil)
-	if err != nil {
-		return err
-	}
-	err = s.setEspressoPendingTxnsPos(batch, nil)
 	if err != nil {
 		return err
 	}
@@ -1770,9 +1766,26 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	err = s.setSkipVerifiactionPos(batch, &last)
-	if err != nil {
-		return err
+	if s.useEscapeHatch {
+		// If escape hatch is used, write down the allowed skip position
+		// to the database. Batch poster will read this and circumvent the espresso validation
+		// for certain messages
+		err = s.setEspressoPendingTxnsPos(batch, nil)
+		if err != nil {
+			return err
+		}
+		err = s.setSkipVerifiactionPos(batch, &last)
+		if err != nil {
+			return err
+		}
+	} else {
+		// If escape hatch is not used, wait for the hotshot is up again and re-send this transaction
+		pending, err := s.getEspressoPendingTxnsPos()
+		if err != nil {
+			return nil
+		}
+		newPending := append(submitted, pending...)
+		s.setEspressoPendingTxnsPos(batch, newPending)
 	}
 	err = batch.Write()
 	if err != nil {
@@ -1793,6 +1806,8 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 		log.Error("ArbOS Config is nil")
 		return retryRate
 	}
+	// TODO: `SovereignSequencerEnabled` should be removed as it is only the sovereign sequencer
+	// will use this function.
 	if config.ArbitrumChainParams.EnableEspresso && s.config().SovereignSequencerEnabled {
 		err := s.toggleEscapeHatch(ctx)
 		if err != nil {
