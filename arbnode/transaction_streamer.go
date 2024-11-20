@@ -80,8 +80,9 @@ type TransactionStreamer struct {
 	espressoClient  *espressoClient.Client
 
 	lightClientReader lightclient.LightClientReaderInterface
-	hotshotDown       bool
-	useEscapeHatch    bool
+	// Public these fields for testing
+	HotshotDown    bool
+	UseEscapeHatch bool
 }
 
 type TransactionStreamerConfig struct {
@@ -1346,7 +1347,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 
 	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
 	if err != nil {
-		log.Warn("error fetching the block merkle proof", "height", height, "root height", snapshot.Height)
+		log.Warn("error fetching the block merkle proof", "height", height, "root height", snapshot.Height, "err", err)
 		return false
 	}
 
@@ -1475,7 +1476,7 @@ func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]arbutil.MessageInde
 		return nil, err
 	}
 	var pendingTxnsPos []arbutil.MessageIndex
-	err = rlp.DecodeBytes(pendingTxnsBytes, pendingTxnsPos)
+	err = rlp.DecodeBytes(pendingTxnsBytes, &pendingTxnsPos)
 	if err != nil {
 		return nil, err
 	}
@@ -1699,10 +1700,10 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 		return err
 	}
 	// If hotshot is down, escape hatch is activated, the only thing is to check if hotshot is live again
-	if s.hotshotDown {
+	if s.HotshotDown {
 		if live {
 			log.Info("HotShot is up, disabling the escape hatch")
-			s.hotshotDown = false
+			s.HotshotDown = false
 		}
 		return nil
 	}
@@ -1712,7 +1713,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	// - check if the submitted transaction should be skipped from espresso verification
 	if !live {
 		log.Warn("enabling the escape hatch, hotshot is down")
-		s.hotshotDown = true
+		s.HotshotDown = true
 	}
 
 	submittedHash, err := s.getEspressoSubmittedHash()
@@ -1766,7 +1767,8 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if s.useEscapeHatch {
+	if s.UseEscapeHatch {
+		log.Warn("removing pending tx positions")
 		// If escape hatch is used, write down the allowed skip position
 		// to the database. Batch poster will read this and circumvent the espresso validation
 		// for certain messages
@@ -1774,6 +1776,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		log.Warn("setting last skip verification position", "pos", last)
 		err = s.setSkipVerifiactionPos(batch, &last)
 		if err != nil {
 			return err
@@ -1818,7 +1821,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 			return retryRate
 		}
 		canSubmit := s.pollSubmittedTransactionForFinality(ctx)
-		if canSubmit {
+		if canSubmit && s.shouldSubmitEspressoTransaction() {
 			return s.submitEspressoTransactions(ctx)
 		}
 
@@ -1826,6 +1829,17 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	} else {
 		return retryRate
 	}
+}
+
+func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
+	if !s.config().SovereignSequencerEnabled {
+		// Not using hotshot as finality layer
+		return false
+	}
+	if s.HotshotDown {
+		return false
+	}
+	return true
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {

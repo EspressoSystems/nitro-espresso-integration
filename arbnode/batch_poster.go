@@ -371,7 +371,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.lightClientReader = lightClientReader
 	}
 
-	opts.Streamer.useEscapeHatch = opts.Config().UseEscapeHatch
+	opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
@@ -587,6 +587,11 @@ func (b *BatchPoster) checkEspressoValidation(
 		// the skip value to nil. This should contribute to better efficiency.
 	}
 
+	if b.streamer.HotshotDown && b.streamer.UseEscapeHatch {
+		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
+		return nil
+	}
+
 	return fmt.Errorf("waiting for espresso finalization")
 }
 
@@ -601,10 +606,10 @@ func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) err
 
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
-	log.Info("submitting pos", "pos", b.building.msgCount)
-	err = b.streamer.SubmitEspressoTransactionPos(b.building.msgCount, b.streamer.db.NewBatch())
+	log.Info("submitting pos", "pos", pos)
+	err = b.streamer.SubmitEspressoTransactionPos(pos, b.streamer.db.NewBatch())
 	if err != nil {
-		log.Error("failed to submit espresso transaction pos", "pos", b.building.msgCount, "err", err)
+		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
 		return err
 	}
 
@@ -1436,8 +1441,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	// Submit message positions to pending queue first
-	if b.streamer.config().SovereignSequencerEnabled {
+	// Submit message positions to pending queue
+	if b.streamer.shouldSubmitEspressoTransaction() || !b.streamer.UseEscapeHatch {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
 			msg, err := b.streamer.GetMessage(p)
 			if err != nil {
@@ -1452,7 +1457,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			if kind != arbos.L2MessageKind_Batch && kind != arbos.L2MessageKind_SignedTx {
 				continue
 			}
-			// TODO: instead of appending `p` one by one, pushing them to the queue at 1 time
 			err = b.submitEspressoTransactionPos(p)
 			if err != nil {
 				log.Error("error submitting position", "error", err, "pos", p)
