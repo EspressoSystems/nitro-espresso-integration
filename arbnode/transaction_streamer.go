@@ -1759,19 +1759,18 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	batch := s.db.NewBatch()
-	err = s.setEspressoSubmittedHash(batch, nil)
-	if err != nil {
-		return err
-	}
-	err = s.setEspressoSubmittedPos(batch, nil)
-	if err != nil {
-		return err
-	}
 	if s.UseEscapeHatch {
-		log.Warn("removing pending tx positions")
 		// If escape hatch is used, write down the allowed skip position
 		// to the database. Batch poster will read this and circumvent the espresso validation
 		// for certain messages
+		err = s.setEspressoSubmittedHash(batch, nil)
+		if err != nil {
+			return err
+		}
+		err = s.setEspressoSubmittedPos(batch, nil)
+		if err != nil {
+			return err
+		}
 		err = s.setEspressoPendingTxnsPos(batch, nil)
 		if err != nil {
 			return err
@@ -1780,17 +1779,6 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 		err = s.setSkipVerifiactionPos(batch, &last)
 		if err != nil {
 			return err
-		}
-	} else {
-		// If escape hatch is not used, wait for the hotshot is up again and re-send this transaction
-		pending, err := s.getEspressoPendingTxnsPos()
-		if err != nil {
-			return nil
-		}
-		newPending := append(submitted, pending...)
-		err = s.setEspressoPendingTxnsPos(batch, newPending)
-		if err != nil {
-			return nil
 		}
 	}
 	err = batch.Write()

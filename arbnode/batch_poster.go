@@ -571,20 +571,23 @@ func (b *BatchPoster) checkEspressoValidation(
 	}
 
 	log.Warn("this message has not been finalized on L1 or validated")
-	skip, err := b.streamer.getSkipVerificationPos()
-	if err != nil {
-		log.Error("failed call to get skip verification pos", "err", err)
-		return err
-	}
 
-	// Skip checking espresso validation due to hotshot failure
-	if skip != nil {
-		if b.building.msgCount <= *skip {
-			log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
-			return nil
+	if b.streamer.UseEscapeHatch {
+		skip, err := b.streamer.getSkipVerificationPos()
+		if err != nil {
+			log.Error("failed call to get skip verification pos", "err", err)
+			return err
 		}
-		// TODO: if current position is greater than the `skip`, should set the
-		// the skip value to nil. This should contribute to better efficiency.
+
+		// Skip checking espresso validation due to hotshot failure
+		if skip != nil {
+			if b.building.msgCount <= *skip {
+				log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
+				return nil
+			}
+			// TODO: if current position is greater than the `skip`, should set the
+			// the skip value to nil. This should contribute to better efficiency.
+		}
 	}
 
 	if b.streamer.HotshotDown && b.streamer.UseEscapeHatch {
@@ -592,7 +595,7 @@ func (b *BatchPoster) checkEspressoValidation(
 		return nil
 	}
 
-	return fmt.Errorf("waiting for espresso finalization")
+	return fmt.Errorf("waiting for espresso finalization, pos: %d", b.building.msgCount)
 }
 
 func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) error {
@@ -1442,7 +1445,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	// Submit message positions to pending queue
-	if b.streamer.shouldSubmitEspressoTransaction() || !b.streamer.UseEscapeHatch {
+	if !b.streamer.UseEscapeHatch || b.streamer.shouldSubmitEspressoTransaction() {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
 			msg, err := b.streamer.GetMessage(p)
 			if err != nil {
