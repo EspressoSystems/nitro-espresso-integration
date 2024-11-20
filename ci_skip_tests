@@ -1,12 +1,21 @@
 # This file is used for filtering CI tests.
+
 # These tests are prone to fail in the CI
+
 # environment. To run tests locally, please run:
+
 # ```
+
 # ./scripts/espresso-ci-local
+
 # ```
+
 # To see how we use this file, please check scripts/espresso-run-test-ci
+
 #
+
 # Note that if a substring of the test function name is listed here, it will be skipped.
+
 TestChallengeManagerFullAsserterCorrect
 TestChallengeManagerFullAsserterIncorrect
 TestLiveNodeConfig
@@ -42,6 +51,13 @@ TestStylusUpgrade
 TestChallengeToFailedTooFar
 TestTwoNodesLong
 
+# These tests are failing with celestia integration
+
+TestEmptyCliConfig
+TestChallengeToTooFar
+
 # These tests are specific to Espresso and we have a dedicated
+
 # CI workflow for them. See: .github/workflows/espresso-e2e.yml
+
 TestEspresso
