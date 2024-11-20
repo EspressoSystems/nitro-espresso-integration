@@ -1785,7 +1785,10 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 			return nil
 		}
 		newPending := append(submitted, pending...)
-		s.setEspressoPendingTxnsPos(batch, newPending)
+		err = s.setEspressoPendingTxnsPos(batch, newPending)
+		if err != nil {
+			return nil
+		}
 	}
 	err = batch.Write()
 	if err != nil {
