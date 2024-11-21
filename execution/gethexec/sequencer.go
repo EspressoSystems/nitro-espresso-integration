@@ -7,13 +7,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	"math"
 	"math/big"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/execution"
@@ -959,7 +960,6 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		}
 		shouldSequenceWithEspresso = isHotShotLive && arbOSconfig.ArbitrumChainParams.EnableEspresso
 
-		log.Info("After escape-hatch and chain config logic in sequencer", "ShouldSequenceWithEspresso", shouldSequenceWithEspresso, "EnableEspresso", arbOSconfig.ArbitrumChainParams.EnableEspresso, "isHotShotLive", isHotShotLive)
 	}
 
 	if config.EnableProfiling {
