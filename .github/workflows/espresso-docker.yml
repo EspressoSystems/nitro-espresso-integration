@@ -39,7 +39,7 @@ jobs:
         # Don't run arm build on PRs, "exclude:" is processed before "include:",
         # so we avoid using `include:`.
         exclude:
-          platform: ${{ github.event_name == 'pull_request' && linux/arm64 }}
+          - platform: ${{ github.event_name == 'pull_request' && linux/arm64 }}
 
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'buildjet-4vcpu-ubuntu-2204-arm' }}
 
