@@ -17,6 +17,7 @@ on:
   workflow_dispatch:
   merge_group:
   push:
+    pull_request:
     branches:
       - master
       - develop
@@ -35,20 +36,19 @@ jobs:
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
-        include:
-          - platform: linux/amd64
-            runs-on: ubuntu-latest
-          - platform: linux/arm64
-            runs-on: buildjet-4vcpu-ubuntu-2204-arm
+        # Don't run arm build on PRs, "exclude:" is processed before "include:",
+        # so we avoid using `include:`.
+        exclude:
+          platform: ${{ github.event_name == 'pull_request' && linux/arm64 }}
 
-    runs-on: ${{ matrix.runs-on }}
+    runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'buildjet-4vcpu-ubuntu-2204-arm' }}
 
     steps:
       - uses: cargo-bins/cargo-binstall@main
-        if: matrix.runs-on == 'ubuntu-latest'
+        if: ${{ runner.arch == 'ARM64' }}
 
       - name: Make more disk space available on public runner
-        if: matrix.runs-on == 'ubuntu-latest'
+        if: ${{ runner.arch == 'ARM64' }}
         run: |
           # rmz seems to be faster at deleting files than rm
           cargo binstall -y rmz
