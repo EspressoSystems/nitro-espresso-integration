@@ -77,8 +77,8 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
-	espressoClient  *espressoClient.Client
 
+	espressoClient    *espressoClient.Client
 	lightClientReader lightclient.LightClientReaderInterface
 	// Public these fields for testing
 	HotshotDown    bool
@@ -91,9 +91,6 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 
 	// Espresso specific fields
-	SovereignSequencerEnabled    bool          `koanf:"sovereign-sequencer-enabled"`
-	HotShotUrl                   string        `koanf:"hotshot-url"`
-	EspressoNamespace            uint64        `koanf:"espresso-namespace"`
 	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
 	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-threshold"`
 }
@@ -104,8 +101,6 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize:      50_000,
 	MaxReorgResequenceDepth:      1024,
 	ExecuteMessageLoopDelay:      time.Millisecond * 100,
-	SovereignSequencerEnabled:    false,
-	HotShotUrl:                   "",
 	EspressoTxnsPollingInterval:  time.Millisecond * 100,
 	EspressoSwitchDelayThreshold: 20,
 }
@@ -114,8 +109,6 @@ var TestTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize:      10_000,
 	MaxReorgResequenceDepth:      128 * 1024,
 	ExecuteMessageLoopDelay:      time.Millisecond,
-	SovereignSequencerEnabled:    false,
-	HotShotUrl:                   "",
 	EspressoTxnsPollingInterval:  time.Millisecond * 100,
 	EspressoSwitchDelayThreshold: 10,
 }
@@ -124,9 +117,6 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-broadcaster-queue-size", DefaultTransactionStreamerConfig.MaxBroadcasterQueueSize, "maximum cache of pending broadcaster messages")
 	f.Int64(prefix+".max-reorg-resequence-depth", DefaultTransactionStreamerConfig.MaxReorgResequenceDepth, "maximum number of messages to attempt to resequence on reorg (0 = never resequence, -1 = always resequence)")
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
-	f.Bool(prefix+".sovereign-sequencer-enabled", DefaultTransactionStreamerConfig.SovereignSequencerEnabled, "if true, transactions will be sent to espresso's sovereign sequencer to be notarized by espresso network")
-	f.String(prefix+".hotshot-url", DefaultTransactionStreamerConfig.HotShotUrl, "url of the hotshot sequencer")
-	f.Uint64(prefix+".espresso-namespace", DefaultTransactionStreamerConfig.EspressoNamespace, "espresso namespace that corresponds the L2 chain")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultTransactionStreamerConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Uint64(prefix+".espresso-switch-delay-threshold", DefaultTransactionStreamerConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
 }
@@ -149,12 +139,6 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
-	}
-
-	if config().SovereignSequencerEnabled {
-		espressoClient := espressoClient.NewClient(config().HotShotUrl)
-		streamer.espressoClient = espressoClient
-
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -691,6 +675,10 @@ func (s *TransactionStreamer) AddFakeInitMessage() error {
 		},
 		DelayedMessagesRead: 1,
 	}})
+}
+
+func (s *TransactionStreamer) isEspressoMode() bool {
+	return s.lightClientReader != nil && s.espressoClient != nil
 }
 
 // Used in redis tests
@@ -1297,7 +1285,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	}
 
 	// Verify the namespace proof
-	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.config().EspressoNamespace)
+	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 	if err != nil {
 		log.Warn("failed to fetch the transactions in block, will retry", "err", err)
 		return false
@@ -1654,7 +1642,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   payload,
-			Namespace: s.config().EspressoNamespace,
+			Namespace: s.chainConfig.ChainID.Uint64(),
 		})
 
 		if err != nil {
@@ -1802,7 +1790,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	}
 	// TODO: `SovereignSequencerEnabled` should be removed as it is only the sovereign sequencer
 	// will use this function.
-	if config.ArbitrumChainParams.EnableEspresso && s.config().SovereignSequencerEnabled {
+	if config.ArbitrumChainParams.EnableEspresso && s.isEspressoMode() {
 		err := s.toggleEscapeHatch(ctx)
 		if err != nil {
 			log.Error("error checking escape hatch", "err", err)
@@ -1820,7 +1808,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	if !s.config().SovereignSequencerEnabled {
+	if !s.isEspressoMode() {
 		// Not using hotshot as finality layer
 		return false
 	}

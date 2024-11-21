@@ -188,6 +188,10 @@ type BatchPosterConfig struct {
 }
 
 func (c *BatchPosterConfig) Validate() error {
+	if (c.LightClientAddress == "") != (c.HotShotUrl == "") {
+		return errors.New("light client address and hotshot URL must both be set together, or both left unset")
+
+	}
 	if len(c.GasRefunderAddress) > 0 && !common.IsHexAddress(c.GasRefunderAddress) {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}

@@ -55,9 +55,6 @@ func createL1AndL2Node(
 	builder.execConfig.Caching.Archive = true
 
 	// transaction stream config
-	builder.nodeConfig.TransactionStreamer.SovereignSequencerEnabled = true
-	builder.nodeConfig.TransactionStreamer.EspressoNamespace = builder.chainConfig.ChainID.Uint64()
-	builder.nodeConfig.TransactionStreamer.HotShotUrl = hotShotUrl
 	builder.nodeConfig.TransactionStreamer.EspressoSwitchDelayThreshold = 5
 
 	cleanup := builder.Build(t)
