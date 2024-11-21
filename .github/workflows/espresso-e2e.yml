@@ -124,7 +124,7 @@ jobs:
         if: steps.cache-cbrotli.outputs.cache-hit != 'true'
         run: ./scripts/build-brotli.sh -w -d
 
-       - name: Install solidty dependencies 
+      - name: Install solidty dependencies
         run: cd contracts && yarn install && forge install
 
       - name: Build
