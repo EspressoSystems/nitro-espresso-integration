@@ -102,6 +102,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y make clang wabt && \
     cargo install --force cbindgen
+# `make build-espresso-crypto-lib` requires this line
+RUN apt install pkg-config
 COPY arbitrator/Cargo.* arbitrator/
 COPY ./Makefile ./
 COPY arbitrator/arbutil arbitrator/arbutil
