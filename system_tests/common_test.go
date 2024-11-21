@@ -1273,7 +1273,6 @@ func deployOnParentChain(
 	espressoTEEVerifierAddress, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
 
-	log.Info("espressoTEEVerifierAddress: ", "address", espressoTEEVerifierAddress)
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
 	addresses, err := deploy.DeployOnParentChain(
@@ -1291,11 +1290,6 @@ func deployOnParentChain(
 	Require(t, err)
 	parentChainInfo.SetContract("Bridge", addresses.Bridge)
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
-	sequencerInbox, err := bridgegen.NewSequencerInbox(addresses.SequencerInbox, parentChainClient)
-	Require(t, err)
-	espressoTeeVerifierInSequencerInbox, err := sequencerInbox.EspressoTEEVerifier(nil)
-	Require(t, err)
-	log.Info("espressoTeeVerifierInSequencerInbox: ", "address", espressoTeeVerifierInSequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)

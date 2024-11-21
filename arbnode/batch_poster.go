@@ -1211,7 +1211,6 @@ func (b *BatchPoster) estimateGas(ctx context.Context, sequencerMessage []byte, 
 	rpcClient := b.l1Reader.Client()
 	rawRpcClient := rpcClient.Client()
 	useNormalEstimation := b.dataPoster.MaxMempoolTransactions() == 1
-	log.Info("estimateGas: ", "useNormalEstimation", useNormalEstimation)
 	if !useNormalEstimation {
 		// Check if we can use normal estimation anyways because we're at the latest nonce
 		latestNonce, err := rpcClient.NonceAt(ctx, b.dataPoster.Sender(), nil)
@@ -1694,7 +1693,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		log.Debug("Successfully checked that the batch produces correct messages when ran through inbox multiplexer", "sequenceNumber", batchPosition.NextSeqNum)
 	}
 
-	log.Info("dataPoster.PostTransaction")
 	tx, err := b.dataPoster.PostTransaction(ctx,
 		firstMsgTime,
 		nonce,
