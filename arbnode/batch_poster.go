@@ -379,11 +379,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		opts.Streamer.lightClientReader = lightClientReader
+		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
+		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
+		opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
 	}
-
-	opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
-	opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
-	opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
