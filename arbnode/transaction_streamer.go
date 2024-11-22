@@ -670,8 +670,23 @@ func (s *TransactionStreamer) AddFakeInitMessage() error {
 	}})
 }
 
-func (s *TransactionStreamer) isEspressoMode() bool {
-	return s.lightClientReader != nil && s.espressoClient != nil
+func (s *TransactionStreamer) isEspressoMode() (bool, error) {
+	config, err := s.exec.GetArbOSConfigAtHeight(0) // Pass 0 to get the ArbOS config at current block height.
+	if err != nil {
+		return false, fmt.Errorf("error obtaining arbos config: %w", err)
+	}
+	if config == nil {
+		return false, fmt.Errorf("arbos is nill")
+	}
+	isSetInConfig := config.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
+	if !isSetInConfig {
+		return false, nil
+	}
+	if s.lightClientReader != nil && s.espressoClient != nil {
+		return true, nil
+	}
+	log.Error("espresso verifier contract address has been set, no light client reader or espresoo client")
+	return false, nil
 }
 
 // Used in redis tests
@@ -1772,25 +1787,23 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsPollingInterval * 50
-	config, err := s.exec.GetArbOSConfigAtHeight(0) // Pass 0 to get the ArbOS config at current block height.
+	enabledEspresso, err := s.isEspressoMode()
 	if err != nil {
-		log.Error("Error Obtaining ArbOS Config ", "err", err)
 		return retryRate
 	}
-	if config == nil {
-		log.Error("ArbOS Config is nil")
-		return retryRate
-	}
-	// TODO: `SovereignSequencerEnabled` should be removed as it is only the sovereign sequencer
-	// will use this function.
-	if config.ArbitrumChainParams.EnableEspresso && s.isEspressoMode() {
+	if enabledEspresso {
 		err := s.toggleEscapeHatch(ctx)
 		if err != nil {
 			log.Error("error checking escape hatch", "err", err)
 			return retryRate
 		}
 		canSubmit := s.pollSubmittedTransactionForFinality(ctx)
-		if canSubmit && s.shouldSubmitEspressoTransaction() {
+		shouldSubmit, err := s.shouldSubmitEspressoTransaction()
+		if err != nil {
+			log.Error("error checking if transaction should be submitted to espresso", "err", err)
+			return retryRate
+		}
+		if canSubmit && shouldSubmit {
 			return s.submitEspressoTransactions(ctx)
 		}
 
@@ -1800,15 +1813,23 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	}
 }
 
-func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	if !s.isEspressoMode() {
+func (s *TransactionStreamer) shouldSubmitEspressoTransaction() (bool, error) {
+	espressoMode, err := s.isEspressoMode()
+	if err != nil {
+		return false, err
+	}
+
+	if !espressoMode {
 		// Not using hotshot as finality layer
-		return false
+		return false, nil
 	}
 	if s.HotshotDown {
-		return false
+		// Literally `HotShotDown` means hotshot haven't committed to L1 for a certain of time,
+		// and it HotShot network is still working normally. We can still submit our transactions
+		// to HotShot, but it should be safer to consider the network is also down.
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {

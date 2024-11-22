@@ -557,7 +557,15 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 func (b *BatchPoster) checkEspressoValidation(
 	msg *arbostypes.MessageWithMetadata,
 ) error {
-	if !b.streamer.chainConfig.ArbitrumChainParams.EnableEspresso {
+	arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
+	if err != nil {
+		return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+	}
+	if arbOSConfig == nil {
+		return fmt.Errorf("Cannot use a nil ArbOSConfig")
+	}
+	enabledEspresso := arbOSConfig.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
+	if !enabledEspresso {
 		return nil
 	}
 	// We only submit the user transactions to hotshot. Only those messages created by
@@ -1456,7 +1464,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	// Submit message positions to pending queue
-	if !b.streamer.UseEscapeHatch || b.streamer.shouldSubmitEspressoTransaction() {
+	shouldSubmit, err := b.streamer.shouldSubmitEspressoTransaction()
+	if err != nil {
+		return false, err
+	}
+	if !b.streamer.UseEscapeHatch || shouldSubmit {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
 			msg, err := b.streamer.GetMessage(p)
 			if err != nil {
