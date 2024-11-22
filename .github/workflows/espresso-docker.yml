@@ -123,9 +123,8 @@ jobs:
 
       # The module root is not identical for the ARM build so we upload
       # the binary only for AMD64.
-
       - name: Extract WAVM machine from container and print its root
-        if: matrix.platform == 'linux/amd64'
+        if: ${{ matrix.platform == 'linux/amd64' && github.event_name != 'pull_request' }}
         id: module-root
         run: |
           # Unfortunately, `docker cp` seems to always result in a "permission denied"
@@ -140,7 +139,7 @@ jobs:
 
       - name: Upload WAVM machine as artifact
         uses: actions/upload-artifact@v3
-        if: matrix.platform == 'linux/amd64'
+        if: ${{ matrix.platform == 'linux/amd64' && github.event_name != 'pull_request' }}
         with:
           name: wavm-machine-${{ steps.module-root.outputs.module-root }}
           path: target/machines/latest/*
