@@ -910,15 +910,14 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 
 	start := time.Now()
 	var (
-		block                      *types.Block
-		err                        error
-		shouldSequenceWithEspresso bool
+		block *types.Block
+		err   error
 	)
 
 	if config.EnableProfiling {
-		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, shouldSequenceWithEspresso)
+		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks)
 	} else {
-		block, err = s.execEngine.SequenceTransactions(header, txes, hooks, shouldSequenceWithEspresso)
+		block, err = s.execEngine.SequenceTransactions(header, txes, hooks)
 	}
 	elapsed := time.Since(start)
 	blockCreationTimer.Update(elapsed)
