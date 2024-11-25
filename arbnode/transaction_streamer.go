@@ -676,7 +676,7 @@ func (s *TransactionStreamer) isEspressoMode() (bool, error) {
 		return false, fmt.Errorf("error obtaining arbos config: %w", err)
 	}
 	if config == nil {
-		return false, fmt.Errorf("arbos is nill")
+		return false, fmt.Errorf("arbos config is not defined")
 	}
 	isSetInConfig := config.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
 	if !isSetInConfig {
@@ -685,7 +685,7 @@ func (s *TransactionStreamer) isEspressoMode() (bool, error) {
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		return true, nil
 	}
-	log.Error("espresso verifier contract address has been set, no light client reader or espresoo client")
+	log.Error("espresso verifier contract address has been set, no light client reader or espresso client")
 	return false, nil
 }
 
