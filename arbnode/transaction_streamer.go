@@ -1825,7 +1825,7 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction() (bool, error) {
 	}
 	if s.HotshotDown {
 		// Literally `HotShotDown` means hotshot haven't committed to L1 for a certain of time,
-		// and it HotShot network is still working normally. We can still submit our transactions
+		// and HotShot network may be working normally. We can still submit our transactions
 		// to HotShot, but it should be safer to consider the network is also down.
 		return false, nil
 	}

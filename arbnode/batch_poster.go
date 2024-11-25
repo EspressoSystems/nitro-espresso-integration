@@ -284,7 +284,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	QuoteFile:                      "",
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Millisecond * 500,
-	EspressoSwitchDelayThreshold:   20,
+	EspressoSwitchDelayThreshold:   350,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
