@@ -283,7 +283,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	UserDataAttestationFile:        "",
 	QuoteFile:                      "",
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 100,
+	EspressoTxnsPollingInterval:    time.Millisecond * 500,
 	EspressoSwitchDelayThreshold:   20,
 }
 
@@ -317,7 +317,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 100,
+	EspressoTxnsPollingInterval:    time.Millisecond * 500,
 	EspressoSwitchDelayThreshold:   10,
 }
 
