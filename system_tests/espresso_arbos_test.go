@@ -44,7 +44,7 @@ func EspressoTestChainParams() params.ArbitrumChainParams {
 		DataAvailabilityCommittee:  false,
 		InitialArbOSVersion:        31,
 		InitialChainOwner:          common.Address{},
-		EspressoTEEVerifierAddress: common.HexToAddress(verifierAddress),
+		EspressoTEEVerifierAddress: common.Address{},
 	}
 }
 
@@ -99,9 +99,8 @@ func TestEspressoArbOSConfig(t *testing.T) {
 	Require(t, err)
 
 	// assert that espresso is initially enabled
-	emptyAddress := common.Address{}
-	if initialArbOSConfig.ArbitrumChainParams.EspressoTEEVerifierAddress != emptyAddress {
-		err = fmt.Errorf("Initial config should have EspressoTEEVerifierAddress == common.Address{}!")
+	if initialArbOSConfig.ArbitrumChainParams.EspressoTEEVerifierAddress != common.HexToAddress(verifierAddress) {
+		err = fmt.Errorf("Initial config should have EspressoTEEVerifierAddress == common.HexToAddress(verifierAddress)!")
 
 	}
 	Require(t, err)
