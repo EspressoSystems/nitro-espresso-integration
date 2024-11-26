@@ -558,17 +558,6 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 func (b *BatchPoster) checkEspressoValidation(
 	msg *arbostypes.MessageWithMetadata,
 ) error {
-	arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
-	if err != nil {
-		return fmt.Errorf("failed call to GetArbOSConfigAtHeight: %w", err)
-	}
-	if arbOSConfig == nil {
-		return fmt.Errorf("cannot use a nil ArbOSConfig")
-	}
-	enabledEspresso := arbOSConfig.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
-	if !enabledEspresso {
-		return fmt.Errorf("no espresso TEE verifier address is found, stop processing")
-	}
 	// We only submit the user transactions to hotshot. Only those messages created by
 	// sequencer should wait for the finality
 	if msg.Message.Header.Kind != arbostypes.L1MessageType_L2Message {
@@ -1829,7 +1818,12 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		var err error
 		espresso, _ := b.streamer.isEspressoMode()
 		if !espresso {
-			return b.config().PollInterval
+			if b.streamer.lightClientReader != nil && b.streamer.espressoClient != nil {
+				// This mostly happens when a non-espresso nitro is upgrading to espresso nitro.
+				// The batch poster is set a espresso client and a light client reader, but waiting
+				// for the upgrade action
+				return b.config().PollInterval
+			}
 		}
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
 			gasRefunderBalance, err := b.l1Reader.Client().BalanceAt(ctx, common.HexToAddress(b.config().GasRefunderAddress), nil)
