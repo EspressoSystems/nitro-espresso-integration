@@ -1469,10 +1469,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	// Submit message positions to pending queue
-	shouldSubmit, err := b.streamer.shouldSubmitEspressoTransaction()
-	if err != nil {
-		return false, err
-	}
+	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
 	if !b.streamer.UseEscapeHatch || shouldSubmit {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
 			msg, err := b.streamer.GetMessage(p)
@@ -1830,6 +1827,10 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 	}
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
+		espresso, _ := b.streamer.isEspressoMode()
+		if !espresso {
+			return b.config().PollInterval
+		}
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
 			gasRefunderBalance, err := b.l1Reader.Client().BalanceAt(ctx, common.HexToAddress(b.config().GasRefunderAddress), nil)
 			if err != nil {

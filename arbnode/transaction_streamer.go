@@ -1798,11 +1798,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 			return retryRate
 		}
 		canSubmit := s.pollSubmittedTransactionForFinality(ctx)
-		shouldSubmit, err := s.shouldSubmitEspressoTransaction()
-		if err != nil {
-			log.Error("error checking if transaction should be submitted to espresso", "err", err)
-			return retryRate
-		}
+		shouldSubmit := s.shouldSubmitEspressoTransaction()
 		if canSubmit && shouldSubmit {
 			return s.submitEspressoTransactions(ctx)
 		}
@@ -1813,23 +1809,14 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	}
 }
 
-func (s *TransactionStreamer) shouldSubmitEspressoTransaction() (bool, error) {
-	espressoMode, err := s.isEspressoMode()
-	if err != nil {
-		return false, err
-	}
-
-	if !espressoMode {
-		// Not using hotshot as finality layer
-		return false, nil
-	}
+func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
 	if s.HotshotDown {
 		// Literally `HotShotDown` means hotshot haven't committed to L1 for a certain of time,
 		// and HotShot network may be working normally. We can still submit our transactions
 		// to HotShot, but it should be safer to consider the network is also down.
-		return false, nil
+		return false
 	}
-	return true, nil
+	return true
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
