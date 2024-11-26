@@ -1810,13 +1810,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	if s.HotshotDown {
-		// Literally `HotShotDown` means hotshot haven't committed to L1 for a certain of time,
-		// and HotShot network may be working normally. We can still submit our transactions
-		// to HotShot, but it should be safer to consider the network is also down.
-		return false
-	}
-	return true
+	return !s.HotshotDown
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
