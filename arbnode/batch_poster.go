@@ -285,6 +285,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Millisecond * 500,
 	EspressoSwitchDelayThreshold:   350,
+	LightClientAddress:             "",
+	HotShotUrl:                     "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -319,6 +321,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Millisecond * 500,
 	EspressoSwitchDelayThreshold:   10,
+	LightClientAddress:             "",
+	HotShotUrl:                     "",
 }
 
 type BatchPosterOpts struct {
@@ -558,6 +562,10 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 func (b *BatchPoster) checkEspressoValidation(
 	msg *arbostypes.MessageWithMetadata,
 ) error {
+	if b.streamer.espressoClient == nil && b.streamer.lightClientReader == nil {
+		// We are not using espresso mode since these haven't been set
+		return nil
+	}
 	// We only submit the user transactions to hotshot. Only those messages created by
 	// sequencer should wait for the finality
 	if msg.Message.Header.Kind != arbostypes.L1MessageType_L2Message {
