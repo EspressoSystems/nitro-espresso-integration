@@ -560,14 +560,14 @@ func (b *BatchPoster) checkEspressoValidation(
 ) error {
 	arbOSConfig, err := b.arbOSVersionGetter.GetArbOSConfigAtHeight(0)
 	if err != nil {
-		return fmt.Errorf("Failed call to GetArbOSConfigAtHeight: %w", err)
+		return fmt.Errorf("failed call to GetArbOSConfigAtHeight: %w", err)
 	}
 	if arbOSConfig == nil {
-		return fmt.Errorf("Cannot use a nil ArbOSConfig")
+		return fmt.Errorf("cannot use a nil ArbOSConfig")
 	}
 	enabledEspresso := arbOSConfig.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
 	if !enabledEspresso {
-		return nil
+		return fmt.Errorf("no espresso TEE verifier address is found, stop processing")
 	}
 	// We only submit the user transactions to hotshot. Only those messages created by
 	// sequencer should wait for the finality
