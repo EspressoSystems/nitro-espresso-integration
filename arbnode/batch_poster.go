@@ -558,6 +558,7 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 }
 
 var EspressoFetchMerkleRootErr = errors.New("failed to fetch the espresso merkle roof")
+var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso transaction")
 
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.

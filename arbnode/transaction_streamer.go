@@ -1629,7 +1629,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 			return s.espressoTxnsPollingInterval
 		}
 
-		log.Info("submitting transaction to espresso using sovereign sequencer")
+		log.Info("submitting transaction to hotshot for finalization")
 
 		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
@@ -1769,7 +1769,15 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 	return nil
 }
 
-var espressoEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoFetchMerkleRootErr.Error(), time.Hour)
+var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoFetchMerkleRootErr.Error(), time.Hour)
+var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), time.Minute)
+
+func getLogLevel(err error) func(string, ...interface{}) {
+	logLevel := log.Error
+	logLevel = espressoMerkleProofEphemeralErrorHandler.LogLevel(err, logLevel)
+	logLevel = espressoTransactionEphemeralErrorHandler.LogLevel(err, logLevel)
+	return logLevel
+}
 
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsPollingInterval * 50
@@ -1780,7 +1788,11 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	if enabledEspresso {
 		err := s.toggleEscapeHatch(ctx)
 		if err != nil {
-			log.Error("error checking escape hatch", "err", err)
+			if ctx.Err() != nil {
+				return 0
+			}
+			logLevel := getLogLevel(err)
+			logLevel("error checking escape hatch", "err", err)
 			return retryRate
 		}
 		err = s.pollSubmittedTransactionForFinality(ctx)
@@ -1788,12 +1800,11 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 			if ctx.Err() != nil {
 				return 0
 			}
-			logLevel := log.Error
-			logLevel = espressoEphemeralErrorHandler.LogLevel(err, logLevel)
+			logLevel := getLogLevel(err)
 			logLevel("error polling finality", "err", err)
 			return retryRate
 		} else {
-			espressoEphemeralErrorHandler.Reset()
+			espressoMerkleProofEphemeralErrorHandler.Reset()
 		}
 
 		shouldSubmit := s.shouldSubmitEspressoTransaction()
