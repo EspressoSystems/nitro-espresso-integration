@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	flag "github.com/spf13/pflag"
 
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
@@ -1306,7 +1305,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		}
 	}
 
-	payload, length := arbos.BuildHotShotPayload(&msgs)
+	payload, length := buildHotShotPayload(&msgs)
 	if length != len(msgs) {
 		return errors.New("failed to rebuild the hotshot payload; the number of messages does not match the expected length")
 	}
@@ -1624,7 +1623,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 				msgs = append(msgs, *msg.Message)
 			}
 		}
-		payload, msgCnt := arbos.BuildHotShotPayload(&msgs)
+		payload, msgCnt := buildHotShotPayload(&msgs)
 		if msgCnt == 0 {
 			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit")
 			return s.espressoTxnsPollingInterval
@@ -1821,4 +1820,24 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	}
 
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
+}
+
+const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 10 * 1024
+
+func buildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.Bytes, int) {
+	payload := []byte{}
+	msgCnt := 0
+
+	sizeBuf := make([]byte, 8)
+	for _, msg := range *msgs {
+		if len(payload) >= ESPRESSO_TRANSACTION_SIZE_LIMIT {
+			break
+		}
+		msgByte := msg.L2msg
+		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgByte)))
+		payload = append(payload, sizeBuf...)
+		payload = append(payload, msgByte...)
+		msgCnt += 1
+	}
+	return payload, msgCnt
 }
