@@ -1792,7 +1792,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 				return 0
 			}
 			logLevel := getLogLevel(err)
-			logLevel("error checking escape hatch", "err", err)
+			logLevel("error checking escape hatch, will retry", "err", err)
 			return retryRate
 		}
 		err = s.pollSubmittedTransactionForFinality(ctx)

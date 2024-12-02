@@ -1204,7 +1204,6 @@ func (b *BatchPoster) getAttestationQuote(userData []byte) ([]byte, error) {
 		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
 	}
 
-	log.Info("Attestation quote generated", "quote", hex.EncodeToString(attestationQuote))
 	return attestationQuote, nil
 }
 
