@@ -682,7 +682,7 @@ func (s *TransactionStreamer) isEspressoMode() (bool, error) {
 	if !isSetInConfig {
 		return false, nil
 	}
-	return false, nil
+	return true, nil
 }
 
 // Used in redis tests
