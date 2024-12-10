@@ -137,4 +137,5 @@ jobs:
 
       - name: Run Espresso tests
         run: |
+          docker system prune --volumes
           scripts/run-espresso-ci-job
