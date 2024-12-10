@@ -4,8 +4,8 @@ RUN apt-get update && \
     apt-get install -y cmake make git lbzip2 python3 xz-utils && \
     git clone https://github.com/emscripten-core/emsdk.git && \
     cd emsdk && \
-    ./emsdk install 3.1.7 && \
-    ./emsdk activate 3.1.7
+    ./emsdk install 3.1.8 && \
+    ./emsdk activate 3.1.8
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
 RUN cd emsdk && . ./emsdk_env.sh && cd .. && ./scripts/build-brotli.sh -w -t /workspace/install/
