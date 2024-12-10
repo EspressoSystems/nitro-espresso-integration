@@ -1,4 +1,4 @@
-version: '3.9'
+version: "3.9"
 services:
   espresso-dev-node:
     image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:main
@@ -17,10 +17,5 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=/data/espresso
       - RUST_LOG=info
       - RUST_LOG_FORMAT
-    volumes:
-      - espresso_storage:/data/espresso
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-volumes:
-  espresso_storage:
