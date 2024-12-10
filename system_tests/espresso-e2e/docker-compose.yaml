@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.9'
 services:
   espresso-dev-node:
     image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:latest
@@ -14,7 +14,6 @@ services:
       - ESPRESSO_SEQUENCER_ETH_MNEMONIC
       - ESPRESSO_SEQUENCER_L1_PROVIDER
       - ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS=25
-      - ESPRESSO_SEQUENCER_STORAGE_PATH=/tmp/data/espresso
       - RUST_LOG=info
       - RUST_LOG_FORMAT
     extra_hosts:
