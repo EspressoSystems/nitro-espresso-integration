@@ -111,7 +111,7 @@ pub extern "C" fn verify_namespace_helper(
     let txn_comm_str = handle_result!(std::str::from_utf8(tx_comm_bytes));
 
     let proof: NsProof = handle_result!(serde_json::from_slice(proof_bytes));
-    let ns_table: NsTable = unsafe { std::mem::transmute(ns_table_bytes.to_vec()) };
+    let ns_table: NsTable = NsTable::from_bytes_unchecked(ns_table_bytes);
     let tagged = handle_result!(TaggedBase64::parse(&commit_str));
     let commit: VidCommitment = handle_result!(tagged.try_into());
     let vid_common: VidCommon = handle_result!(serde_json::from_slice(common_data_bytes));
