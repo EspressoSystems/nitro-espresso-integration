@@ -1,0 +1,113 @@
+name: Cherry-pick commits from integration PR
+
+on:
+  pull_request:
+    branches:
+      - integration
+    types:
+      - closed
+  workflow_dispatch:
+
+jobs:
+  cherry-pick-commits:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check if PR was merged
+      id: check-merged
+      run: |
+        PR_NUMBER=${{ github.event.pull_request.number }}
+        PR_STATE=$(gh pr view $PR_NUMBER --json merged --jq ".merged")
+
+        if [ "$PR_STATE" == "false" ]; then
+          echo "PR was closed but not merged. Exiting.";
+          exit 0;
+        fi
+
+    - name: Set up Git
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Fetch all branches
+      run: git fetch --all
+
+    - name: Ensure celestia-integration branch exists
+      run: |
+        if ! git show-ref --verify --quiet refs/remotes/origin/celestia-integration; then
+          echo "celestia-integration branch not found. Exiting.";
+          exit 1;
+        fi
+
+    - name: Create new branch from celestia-integration
+      run: |
+        NEW_BRANCH="bot/celestia-sync"
+        git checkout -b $NEW_BRANCH origin/celestia-integration
+        echo "NEW_BRANCH=$NEW_BRANCH" >> $GITHUB_ENV
+
+    - name: Get PR merge information
+      id: get-pr-info
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const pr_number = context.payload.pull_request.number;
+          const pr = await github.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: pr_number
+          });
+
+          const mergeMethod = pr.data.merge_method; // "merge" or "squash"
+          core.setOutput('merge_type', mergeMethod);
+
+    - name: Get merged PR commits from integration branch
+      id: get_pr_commits
+      run: |
+        MERGED_PR_SHA=$(git log origin/integration --merges -n 1 --pretty=format:"%H")
+        echo "MERGED_PR_SHA=$MERGED_PR_SHA" >> $GITHUB_ENV
+
+        # If merge was squash, cherry-pick the squash commit (latest commit)
+        if [ "${{ steps.get-pr-info.outputs.merge_type }}" == "squash" ]; then
+          # Get the latest squash commit from integration
+          PR_COMMITS=$(git log origin/integration -n 1 --pretty=format:"%H")
+        else
+          # If it's a regular merge, get all commits after the merge
+          PR_COMMITS=$(git log --pretty=format:"%H" origin/integration --not $MERGED_PR_SHA)
+        fi
+
+        echo "PR_COMMITS=$PR_COMMITS" >> $GITHUB_ENV
+        echo "PR_COMMITS: $PR_COMMITS"
+
+    - name: Cherry-pick PR commits to new branch
+      run: |
+        for commit in $PR_COMMITS; do
+          echo "Cherry-picking commit $commit"
+          git cherry-pick $commit || {
+            echo "Conflict during cherry-pick on $commit. Please resolve manually.";
+            git status;
+            exit 1;
+          }
+        done
+
+    - name: Push new branch to origin
+      run: |
+        git push --force origin $NEW_BRANCH
+
+    - name: Create Pull Request to celestia-integration
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        branch: ${{ env.NEW_BRANCH }}
+        base: celestia-integration
+        title: "Cherry-pick commits from integration"
+        body: |
+          This PR cherry-picks all commits from the recently merged PR in integration into celestia-integration.
+
+    - name: Log PR creation
+      run: |
+        echo "Created PR with cherry-picked commits from integration."
