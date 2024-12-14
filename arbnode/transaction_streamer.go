@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -27,6 +28,7 @@ import (
 	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -92,6 +94,8 @@ type TransactionStreamerConfig struct {
 	MaxBroadcasterQueueSize int           `koanf:"max-broadcaster-queue-size"`
 	MaxReorgResequenceDepth int64         `koanf:"max-reorg-resequence-depth" reload:"hot"`
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
+	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
+	QuoteFile               string        `koanf:"quote-file"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -100,6 +104,8 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize: 50_000,
 	MaxReorgResequenceDepth: 1024,
 	ExecuteMessageLoopDelay: time.Millisecond * 100,
+	QuoteFile:               "",
+	UserDataAttestationFile: "",
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
@@ -112,6 +118,8 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-broadcaster-queue-size", DefaultTransactionStreamerConfig.MaxBroadcasterQueueSize, "maximum cache of pending broadcaster messages")
 	f.Int64(prefix+".max-reorg-resequence-depth", DefaultTransactionStreamerConfig.MaxReorgResequenceDepth, "maximum number of messages to attempt to resequence on reorg (0 = never resequence, -1 = always resequence)")
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
+	f.String(prefix+".user-data-attestation-file", DefaultTransactionStreamerConfig.UserDataAttestationFile, "specifies the file containing the user data attestation")
+	f.String(prefix+".quote-file", DefaultTransactionStreamerConfig.QuoteFile, "specifies the file containing the quote")
 }
 
 func NewTransactionStreamer(
@@ -1290,18 +1298,18 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
 	}
 
-	msgs := []arbostypes.L1IncomingMessage{}
+	msgs := []arbostypes.MessageWithMetadata{}
 	for _, p := range submittedTxnPos {
 		msg, err := s.GetMessage(p)
 		if err != nil {
 			return fmt.Errorf("failed to get the message in tx streamer (pos: %d): %w", p, err)
 		}
-		if msg.Message != nil {
-			msgs = append(msgs, *msg.Message)
+		if msg != nil {
+			msgs = append(msgs, *msg)
 		}
 	}
 
-	payload, length := buildHotShotPayload(&msgs)
+	payload, length := s.buildHotShotPayload(&msgs)
 	if length != len(msgs) {
 		return errors.New("failed to rebuild the hotshot payload; the number of messages does not match the expected length")
 	}
@@ -1608,18 +1616,18 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 
 	if len(pendingTxnsPos) > 0 {
 		// get the message at the pending txn position
-		msgs := []arbostypes.L1IncomingMessage{}
+		msgs := []arbostypes.MessageWithMetadata{}
 		for _, pos := range pendingTxnsPos {
 			msg, err := s.GetMessage(pos)
 			if err != nil {
 				log.Error("failed to get espresso submitted pos", "err", err)
 				return s.espressoTxnsPollingInterval
 			}
-			if msg.Message != nil {
-				msgs = append(msgs, *msg.Message)
+			if msg != nil {
+				msgs = append(msgs, *msg)
 			}
 		}
-		payload, msgCnt := buildHotShotPayload(&msgs)
+		payload, msgCnt := s.buildHotShotPayload(&msgs)
 		if msgCnt == 0 {
 			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit")
 			return s.espressoTxnsPollingInterval
@@ -1835,7 +1843,7 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 
 const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 10 * 1024
 
-func buildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.Bytes, int) {
+func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWithMetadata) (espressoTypes.Bytes, int) {
 	payload := []byte{}
 	msgCnt := 0
 
@@ -1844,11 +1852,59 @@ func buildHotShotPayload(msgs *[]arbostypes.L1IncomingMessage) (espressoTypes.By
 		if len(payload) >= ESPRESSO_TRANSACTION_SIZE_LIMIT {
 			break
 		}
-		msgByte := msg.L2msg
-		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgByte)))
+		msgBytes, err := rlp.EncodeToBytes(msg)
+		if err != nil {
+			return nil, 0
+		}
+		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgBytes)))
 		payload = append(payload, sizeBuf...)
-		payload = append(payload, msgByte...)
+		payload = append(payload, msgBytes...)
 		msgCnt += 1
 	}
+
+	// Also add the attestation quote
+	quote, err := t.getAttestationQuote(payload)
+	if err != nil {
+		return nil, 0
+	}
+
+	// append the quote to the payload, this is important for making sure that only payload sent by TEE is accepted as valid
+	payload = append(payload, quote...)
+
 	return payload, msgCnt
+}
+
+/**
+ * This function generates the attestation quote for the user data.
+ * The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
+ * The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
+ * The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
+ */
+func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, error) {
+	if (t.config().UserDataAttestationFile == "") || (t.config().QuoteFile == "") {
+		return []byte{}, nil
+	}
+
+	// keccak256 hash of userData
+	userDataHash := crypto.Keccak256(userData)
+
+	// Add 32 bytes of padding to the user data hash
+	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
+	for i := 0; i < 32; i += 1 {
+		userDataHash = append(userDataHash, 0)
+	}
+
+	// Write the message to "/dev/attestation/user_report_data" in SGX
+	err := os.WriteFile(t.config().UserDataAttestationFile, userDataHash, 0600)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
+	}
+
+	// Read the quote from "/dev/attestation/quote" in SGX
+	attestationQuote, err := os.ReadFile(t.config().QuoteFile)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
+	}
+
+	return attestationQuote, nil
 }
