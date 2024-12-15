@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -1499,7 +1500,7 @@ func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWr
 	return nil
 }
 
-func (s *TransactionStreamer) setSkipVerifiactionPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
+func (s *TransactionStreamer) setSkipVerificationPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
 	posBytes, err := rlp.EncodeToBytes(pos)
 	if err != nil {
 		return err
@@ -1760,7 +1761,7 @@ func (s *TransactionStreamer) toggleEscapeHatch(ctx context.Context) error {
 			return err
 		}
 		log.Warn("setting last skip verification position", "pos", last)
-		err = s.setSkipVerifiactionPos(batch, &last)
+		err = s.setSkipVerificationPos(batch, &last)
 		if err != nil {
 			return err
 		}
@@ -1842,6 +1843,7 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 }
 
 const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 10 * 1024
+const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 
 func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWithMetadata) (espressoTypes.Bytes, int) {
 	payload := []byte{}
@@ -1849,14 +1851,15 @@ func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWith
 
 	sizeBuf := make([]byte, 8)
 	for _, msg := range *msgs {
-		if len(payload) >= ESPRESSO_TRANSACTION_SIZE_LIMIT {
-			break
-		}
 		msgBytes, err := rlp.EncodeToBytes(msg)
 		if err != nil {
 			return nil, 0
 		}
 		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgBytes)))
+
+		if len(payload)+len(sizeBuf)+len(msgBytes)+MAX_ATTESTATION_QUOTE_SIZE > ESPRESSO_TRANSACTION_SIZE_LIMIT {
+			break
+		}
 		payload = append(payload, sizeBuf...)
 		payload = append(payload, msgBytes...)
 		msgCnt += 1
@@ -1867,6 +1870,8 @@ func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWith
 	if err != nil {
 		return nil, 0
 	}
+
+	log.Info("Quote for Hotshot Payload", "quote", hex.EncodeToString(quote))
 
 	// append the quote to the payload, this is important for making sure that only payload sent by TEE is accepted as valid
 	payload = append(payload, quote...)
@@ -1887,6 +1892,7 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
+	log.Info("User Data Hash", "hash", hex.EncodeToString(userDataHash))
 
 	// Add 32 bytes of padding to the user data hash
 	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data

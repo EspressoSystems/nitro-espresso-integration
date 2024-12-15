@@ -40,7 +40,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
-	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
 	"github.com/offchainlabs/nitro/arbstate/daprovider"
@@ -553,20 +552,9 @@ var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso trans
 
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
-func (b *BatchPoster) checkEspressoValidation(
-	msg *arbostypes.MessageWithMetadata,
-) error {
+func (b *BatchPoster) checkEspressoValidation() error {
 	if b.streamer.espressoClient == nil && b.streamer.lightClientReader == nil {
 		// We are not using espresso mode since these haven't been set
-		return nil
-	}
-	// We only submit the user transactions to hotshot. Only those messages created by
-	// sequencer should wait for the finality
-	if msg.Message.Header.Kind != arbostypes.L1MessageType_L2Message {
-		return nil
-	}
-	kind := msg.Message.L2msg[0]
-	if kind != arbos.L2MessageKind_Batch && kind != arbos.L2MessageKind_SignedTx {
 		return nil
 	}
 
@@ -594,8 +582,6 @@ func (b *BatchPoster) checkEspressoValidation(
 				log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
 				return nil
 			}
-			// TODO: if current position is greater than the `skip`, should set the
-			// the skip value to nil. This should contribute to better efficiency.
 		}
 	}
 
@@ -1137,6 +1123,8 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
 
+		log.Info("Attestation Quote", "quote", hex.EncodeToString(attestationQuote))
+
 		//  construct the calldata with attestation quote
 		method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
 		if !ok {
@@ -1430,14 +1418,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 				log.Error("error getting message from streamer", "error", err)
 				break
 			}
-			// We only submit the user transactions to hotshot.
-			if msg.Message.Header.Kind != arbostypes.L1MessageType_L2Message {
-				continue
-			}
-			kind := msg.Message.L2msg[0]
-			if kind != arbos.L2MessageKind_Batch && kind != arbos.L2MessageKind_SignedTx {
-				continue
-			}
 			err = b.submitEspressoTransactionPos(p)
 			if err != nil {
 				log.Error("error submitting position", "error", err, "pos", p)
@@ -1476,7 +1456,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 
-		err = b.checkEspressoValidation(msg)
+		err = b.checkEspressoValidation()
 		if err != nil {
 			return false, fmt.Errorf("error checking espresso valdiation: %w", err)
 		}
