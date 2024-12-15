@@ -1413,11 +1413,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
 	if !b.streamer.UseEscapeHatch || shouldSubmit {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
-			msg, err := b.streamer.GetMessage(p)
-			if err != nil {
-				log.Error("error getting message from streamer", "error", err)
-				break
-			}
 			err = b.submitEspressoTransactionPos(p)
 			if err != nil {
 				log.Error("error submitting position", "error", err, "pos", p)
