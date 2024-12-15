@@ -1310,7 +1310,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		}
 	}
 
-	payload, length := s.buildHotShotPayload(&msgs)
+	payload, length := s.buildHotShotPayload(&msgs, submittedTxnPos)
 	if length != len(msgs) {
 		return errors.New("failed to rebuild the hotshot payload; the number of messages does not match the expected length")
 	}
@@ -1628,7 +1628,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 				msgs = append(msgs, *msg)
 			}
 		}
-		payload, msgCnt := s.buildHotShotPayload(&msgs)
+		payload, msgCnt := s.buildHotShotPayload(&msgs, pendingTxnsPos)
 		if msgCnt == 0 {
 			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit")
 			return s.espressoTxnsPollingInterval
@@ -1845,21 +1845,25 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 10 * 1024
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 
-func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWithMetadata) (espressoTypes.Bytes, int) {
+func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWithMetadata, submittedTxnPos []arbutil.MessageIndex) (espressoTypes.Bytes, int) {
 	payload := []byte{}
 	msgCnt := 0
 
-	sizeBuf := make([]byte, 8)
-	for _, msg := range *msgs {
+	for i, msg := range *msgs {
+		sizeBuf := make([]byte, 8)
+		positionBuf := make([]byte, 8)
 		msgBytes, err := rlp.EncodeToBytes(msg)
 		if err != nil {
 			return nil, 0
 		}
 		binary.BigEndian.PutUint64(sizeBuf, uint64(len(msgBytes)))
+		binary.BigEndian.PutUint64(positionBuf, uint64(submittedTxnPos[i]))
 
-		if len(payload)+len(sizeBuf)+len(msgBytes)+MAX_ATTESTATION_QUOTE_SIZE > ESPRESSO_TRANSACTION_SIZE_LIMIT {
+		if len(payload)+len(sizeBuf)+len(msgBytes)+len(positionBuf)+MAX_ATTESTATION_QUOTE_SIZE > ESPRESSO_TRANSACTION_SIZE_LIMIT {
 			break
 		}
+		// Add the submitted txn position and the size of the message along with the message
+		payload = append(payload, positionBuf...)
 		payload = append(payload, sizeBuf...)
 		payload = append(payload, msgBytes...)
 		msgCnt += 1
