@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -1299,30 +1298,15 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
 	}
 
-	msgs := []arbostypes.MessageWithMetadata{}
-	for _, p := range submittedTxnPos {
-		msg, err := s.GetMessage(p)
-		if err != nil {
-			return fmt.Errorf("failed to get the message in tx streamer (pos: %d): %w", p, err)
-		}
-		if msg != nil {
-			msgs = append(msgs, *msg)
-		}
-	}
-
-	payload, length := s.buildHotShotPayload(&msgs, submittedTxnPos)
-	if length != len(msgs) {
-		return errors.New("failed to rebuild the hotshot payload; the number of messages does not match the expected length")
-	}
-
 	namespaceOk := espressocrypto.VerifyNamespace(
 		s.chainConfig.ChainID.Uint64(),
 		resp.Proof,
 		*header.Header.GetPayloadCommitment(),
 		*header.Header.GetNsTable(),
-		[]espressoTypes.Bytes{payload},
+		resp.Transactions,
 		resp.VidCommon,
 	)
+
 	if !namespaceOk {
 		return fmt.Errorf("error validating namespace proof (height: %d)", height)
 	}
@@ -1618,6 +1602,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 	if len(pendingTxnsPos) > 0 {
 		// get the message at the pending txn position
 		msgs := []arbostypes.MessageWithMetadata{}
+		pendingTxnsPosToBeSubmitted := []arbutil.MessageIndex{}
 		for _, pos := range pendingTxnsPos {
 			msg, err := s.GetMessage(pos)
 			if err != nil {
@@ -1626,9 +1611,11 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 			}
 			if msg != nil {
 				msgs = append(msgs, *msg)
+				pendingTxnsPosToBeSubmitted = append(pendingTxnsPosToBeSubmitted, pos)
 			}
 		}
-		payload, msgCnt := s.buildHotShotPayload(&msgs, pendingTxnsPos)
+
+		payload, msgCnt := s.buildHotShotPayload(&msgs, pendingTxnsPosToBeSubmitted)
 		if msgCnt == 0 {
 			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit")
 			return s.espressoTxnsPollingInterval
@@ -1875,8 +1862,6 @@ func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWith
 		return nil, 0
 	}
 
-	log.Info("Quote for Hotshot Payload", "quote", hex.EncodeToString(quote))
-
 	// append the quote to the payload, this is important for making sure that only payload sent by TEE is accepted as valid
 	payload = append(payload, quote...)
 
@@ -1896,7 +1881,6 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
-	log.Info("User Data Hash", "hash", hex.EncodeToString(userDataHash))
 
 	// Add 32 bytes of padding to the user data hash
 	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
