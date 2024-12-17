@@ -1829,7 +1829,7 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
 }
 
-const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 10 * 1024
+const ESPRESSO_TRANSACTION_SIZE_LIMIT int = 900 * 1024
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 
 func (t *TransactionStreamer) buildHotShotPayload(msgs *[]arbostypes.MessageWithMetadata, submittedTxnPos []arbutil.MessageIndex) (espressoTypes.Bytes, int) {
