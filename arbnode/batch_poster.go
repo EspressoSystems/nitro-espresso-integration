@@ -181,14 +181,14 @@ type BatchPosterConfig struct {
 	gasRefunder                    common.Address
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
-	LightClientAddress           string         `koanf:"light-client-address"`
-	HotShotUrl                   string         `koanf:"hotshot-url"`
-	UserDataAttestationFile      string         `koanf:"user-data-attestation-file"`
-	QuoteFile                    string         `koanf:"quote-file"`
-	UseEscapeHatch               bool           `koanf:"use-escape-hatch"`
-	EspressoTxnsPollingInterval  time.Duration  `koanf:"espresso-txns-polling-interval"`
-	EspressoSwitchDelayThreshold uint64         `koanf:"espresso-switch-delay-threshold"`
-   EspressoTEEVerifierAdddress  string `koanf:"espresso-tee-verifier-address"`
+	LightClientAddress           string        `koanf:"light-client-address"`
+	HotShotUrl                   string        `koanf:"hotshot-url"`
+	UserDataAttestationFile      string        `koanf:"user-data-attestation-file"`
+	QuoteFile                    string        `koanf:"quote-file"`
+	UseEscapeHatch               bool          `koanf:"use-escape-hatch"`
+	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
+	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-threshold"`
+	EspressoTEEVerifierAddress   string        `koanf:"espresso-tee-verifier-address"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -250,7 +250,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, batches will be posted without doing the espresso verification when hotshot is down. If false, wait for hotshot being up")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Uint64(prefix+".espresso-switch-delay-threshold", DefaultBatchPosterConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
-  f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTEEVerifierAdddress, "")
+	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTEEVerifierAddress, "")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -289,7 +289,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoSwitchDelayThreshold:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
-  EspressoTEEVerifierAdddress:    "",
+	EspressoTEEVerifierAddress:     "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -390,7 +390,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
-       opts.Streamer.espressoTEEVerifierAddress = common.HexToAddress(opts.Config().EspressoTEEVerifierAdddress)
+		opts.Streamer.espressoTEEVerifierAddress = common.HexToAddress(opts.Config().EspressoTEEVerifierAddress)
 	}
 
 	b := &BatchPoster{
@@ -1830,7 +1830,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		espressoEphemeralErrorHandler.Reset()
 	}
 	b.CallIteratively(func(ctx context.Context) time.Duration {
-		var err error	
+		var err error
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
 			gasRefunderBalance, err := b.l1Reader.Client().BalanceAt(ctx, common.HexToAddress(b.config().GasRefunderAddress), nil)
 			if err != nil {

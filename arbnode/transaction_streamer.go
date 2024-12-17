@@ -84,16 +84,15 @@ type TransactionStreamer struct {
 	espressoTxnsPollingInterval  time.Duration
 	espressoSwitchDelayThreshold uint64
 	// Public these fields for testing
-	HotshotDown    bool
-	UseEscapeHatch bool
-   espressoTEEVerifierAddress common.Address
+	HotshotDown                bool
+	UseEscapeHatch             bool
+	espressoTEEVerifierAddress common.Address
 }
 
 type TransactionStreamerConfig struct {
 	MaxBroadcasterQueueSize int           `koanf:"max-broadcaster-queue-size"`
 	MaxReorgResequenceDepth int64         `koanf:"max-reorg-resequence-depth" reload:"hot"`
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
-
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
