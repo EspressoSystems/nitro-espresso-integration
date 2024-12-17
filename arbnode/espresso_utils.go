@@ -78,21 +78,21 @@ func validateIfPayloadIsInBlock(p []byte, payloads []espressoTypes.Bytes) bool {
 	return validated
 }
 
-func ParsePayload(rawPayload []byte) (signature []byte, indices []uint64, messages [][]byte, err error) {
-	if len(rawPayload) < LEN_SIZE {
+func ParseHotShotPayload(payload []byte) (signature []byte, indices []uint64, messages [][]byte, err error) {
+	if len(payload) < LEN_SIZE {
 		return nil, nil, nil, errors.New("payload too short to parse signature size")
 	}
 
 	// Extract the signature size
-	signatureSize := binary.BigEndian.Uint64(rawPayload[:LEN_SIZE])
+	signatureSize := binary.BigEndian.Uint64(payload[:LEN_SIZE])
 	currentPos := LEN_SIZE
 
-	if len(rawPayload[currentPos:]) < int(signatureSize) {
+	if len(payload[currentPos:]) < int(signatureSize) {
 		return nil, nil, nil, errors.New("payload too short for signature")
 	}
 
 	// Extract the signature
-	signature = rawPayload[currentPos : currentPos+int(signatureSize)]
+	signature = payload[currentPos : currentPos+int(signatureSize)]
 	currentPos += int(signatureSize)
 
 	indices = []uint64{}
@@ -100,24 +100,27 @@ func ParsePayload(rawPayload []byte) (signature []byte, indices []uint64, messag
 
 	// Parse messages
 	for {
-		if len(rawPayload[currentPos:]) < LEN_SIZE+INDEX_SIZE {
-			break // No more messages to parse
+		if currentPos == len(payload) {
+			break
+		}
+		if len(payload[currentPos:]) < LEN_SIZE+INDEX_SIZE {
+			return nil, nil, nil, errors.New("remaining bytes")
 		}
 
 		// Extract the index
-		index := binary.BigEndian.Uint64(rawPayload[currentPos : currentPos+INDEX_SIZE])
+		index := binary.BigEndian.Uint64(payload[currentPos : currentPos+INDEX_SIZE])
 		currentPos += INDEX_SIZE
 
 		// Extract the message size
-		messageSize := binary.BigEndian.Uint64(rawPayload[currentPos : currentPos+LEN_SIZE])
+		messageSize := binary.BigEndian.Uint64(payload[currentPos : currentPos+LEN_SIZE])
 		currentPos += LEN_SIZE
 
-		if len(rawPayload[currentPos:]) < int(messageSize) {
+		if len(payload[currentPos:]) < int(messageSize) {
 			return nil, nil, nil, errors.New("message size mismatch")
 		}
 
 		// Extract the message
-		message := rawPayload[currentPos : currentPos+int(messageSize)]
+		message := payload[currentPos : currentPos+int(messageSize)]
 		currentPos += int(messageSize)
 
 		indices = append(indices, index)

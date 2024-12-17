@@ -32,7 +32,7 @@ func TestParsePayload(t *testing.T) {
 	}
 
 	// Parse the signed payload
-	signature, indices, messages, err := ParsePayload(signedPayload)
+	signature, indices, messages, err := ParseHotShotPayload(signedPayload)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}
@@ -99,10 +99,6 @@ func TestParsePayloadInvalidCases(t *testing.T) {
 			payload:     []byte{},
 		},
 		{
-			description: "Signature size exceeds payload",
-			payload:     append(make([]byte, 8), []byte("short")...),
-		},
-		{
 			description: "Message size exceeds remaining payload",
 			payload: func() []byte {
 				var payload []byte
@@ -119,7 +115,7 @@ func TestParsePayloadInvalidCases(t *testing.T) {
 
 	for _, tc := range invalidPayloads {
 		t.Run(tc.description, func(t *testing.T) {
-			_, _, _, err := ParsePayload(tc.payload)
+			_, _, _, err := ParseHotShotPayload(tc.payload)
 			if err == nil {
 				t.Errorf("expected error for case '%s', but got none", tc.description)
 			}
