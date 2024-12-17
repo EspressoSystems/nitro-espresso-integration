@@ -87,8 +87,9 @@ type TransactionStreamer struct {
 	espressoSwitchDelayThreshold uint64
 	espressoMaxTransactionSize   uint64
 	// Public these fields for testing
-	HotshotDown    bool
-	UseEscapeHatch bool
+	HotshotDown                bool
+	UseEscapeHatch             bool
+	espressoTEEVerifierAddress common.Address
 }
 
 type TransactionStreamerConfig struct {
@@ -677,21 +678,6 @@ func (s *TransactionStreamer) AddFakeInitMessage() error {
 		},
 		DelayedMessagesRead: 1,
 	}})
-}
-
-func (s *TransactionStreamer) isEspressoMode() (bool, error) {
-	config, err := s.exec.GetArbOSConfigAtHeight(0) // Pass 0 to get the ArbOS config at current block height.
-	if err != nil {
-		return false, fmt.Errorf("error obtaining arbos config: %w", err)
-	}
-	if config == nil {
-		return false, fmt.Errorf("arbos config is not defined")
-	}
-	isSetInConfig := config.ArbitrumChainParams.EspressoTEEVerifierAddress != common.Address{}
-	if !isSetInConfig {
-		return false, nil
-	}
-	return true, nil
 }
 
 // Used in redis tests
@@ -1822,10 +1808,7 @@ func getLogLevel(err error) func(string, ...interface{}) {
 
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsPollingInterval * 50
-	enabledEspresso, err := s.isEspressoMode()
-	if err != nil {
-		return retryRate
-	}
+	enabledEspresso := s.espressoTEEVerifierAddress != common.Address{}
 	if enabledEspresso {
 		err := s.checkEspressoLiveness(ctx)
 		if err != nil {
