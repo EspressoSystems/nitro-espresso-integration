@@ -1293,35 +1293,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return fmt.Errorf("could not get the header (height: %d): %w", height, err)
 	}
 
-	// Verify the namespace proof
-	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
-	if err != nil {
-		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
-	}
-
-	namespaceOk := espressocrypto.VerifyNamespace(
-		s.chainConfig.ChainID.Uint64(),
-		resp.Proof,
-		*header.Header.GetPayloadCommitment(),
-		*header.Header.GetNsTable(),
-		resp.Transactions,
-		resp.VidCommon,
-	)
-
-	if !namespaceOk {
-		return fmt.Errorf("error validating namespace proof (height: %d)", height)
-	}
-
-	submittedPayload, err := s.getEspressoSubmittedPayload()
-	if err != nil {
-		return fmt.Errorf("submitted payload not found: %w", err)
-	}
-
-	validated := validateIfPayloadIsInBlock(submittedPayload, resp.Transactions)
-	if !validated {
-		return fmt.Errorf("transactions fetched from HotShot doesn't contain the submitted payload")
-	}
-
+	// Verify the merkle proof
 	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
 	if err != nil {
 		return fmt.Errorf("%w (height: %d): %w", EspressoFetchMerkleRootErr, height, err)
@@ -1350,6 +1322,35 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jstHeader, *blockMerkleTreeRoot, snapshot.Root)
 	if !ok {
 		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshot.Height)
+	}
+
+	// Verify the namespace proof
+	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
+	if err != nil {
+		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
+	}
+
+	namespaceOk := espressocrypto.VerifyNamespace(
+		s.chainConfig.ChainID.Uint64(),
+		resp.Proof,
+		*header.Header.GetPayloadCommitment(),
+		*header.Header.GetNsTable(),
+		resp.Transactions,
+		resp.VidCommon,
+	)
+
+	if !namespaceOk {
+		return fmt.Errorf("error validating namespace proof (height: %d)", height)
+	}
+
+	submittedPayload, err := s.getEspressoSubmittedPayload()
+	if err != nil {
+		return fmt.Errorf("submitted payload not found: %w", err)
+	}
+
+	validated := validateIfPayloadIsInBlock(submittedPayload, resp.Transactions)
+	if !validated {
+		return fmt.Errorf("transactions fetched from HotShot doesn't contain the submitted payload")
 	}
 
 	// Validation completed. Update the database
