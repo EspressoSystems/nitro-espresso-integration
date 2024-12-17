@@ -34,7 +34,7 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
-   builder.nodeConfig.BatchPoster.EspressoTEEVerifierAdddress = common.HexToAddress(verifierAddress)
+   builder.nodeConfig.BatchPoster.EspressoTEEVerifierAdddress = verifierAddress
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
