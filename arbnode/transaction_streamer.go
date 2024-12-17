@@ -1842,7 +1842,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 				return 0
 			}
 			logLevel := getLogLevel(err)
-			logLevel("error polling finality", "err", err)
+			logLevel("error polling finality, will retry", "err", err)
 			return retryRate
 		} else {
 			espressoMerkleProofEphemeralErrorHandler.Reset()
