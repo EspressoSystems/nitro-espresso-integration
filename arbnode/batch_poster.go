@@ -289,7 +289,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoSwitchDelayThreshold:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
-  EspressoTEEVerifierAdddress:    ""
+  EspressoTEEVerifierAdddress:    "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
