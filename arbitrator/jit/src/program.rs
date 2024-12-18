@@ -220,7 +220,7 @@ pub fn set_response(
     thread.set_response(id, result, raw_data, gas)
 }
 
-/// sends previos response
+/// sends previous response
 /// MUST be called right after set_response to the same id
 /// returns request_id for the next request
 pub fn send_response(mut env: WasmEnvMut, req_id: u32) -> Result<u32, Escape> {
