@@ -89,8 +89,6 @@ type TransactionStreamer struct {
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
-
-	espressoTEEVerifierAddress common.Address
 }
 
 type TransactionStreamerConfig struct {
