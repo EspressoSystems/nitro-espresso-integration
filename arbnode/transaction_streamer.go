@@ -1729,7 +1729,7 @@ func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 		s.HotshotDown = true
 	}
 
-	if !s.EnableEscapeHatch {
+	if s.UseEscapeHatch && !s.EnableEscapeHatch {
 		return nil
 	}
 
@@ -1813,16 +1813,14 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	enabledEspresso := s.espressoTEEVerifierAddress != common.Address{}
 	if enabledEspresso {
 		var err error
-		if s.UseEscapeHatch {
-			err = s.checkEspressoLiveness(ctx)
-			if err != nil {
-				if ctx.Err() != nil {
-					return 0
-				}
-				logLevel := getLogLevel(err)
-				logLevel("error checking escape hatch, will retry", "err", err)
-				return retryRate
+		err = s.checkEspressoLiveness(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return 0
 			}
+			logLevel := getLogLevel(err)
+			logLevel("error checking escape hatch, will retry", "err", err)
+			return retryRate
 		}
 		err = s.pollSubmittedTransactionForFinality(ctx)
 		if err != nil {
