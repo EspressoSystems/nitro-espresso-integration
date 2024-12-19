@@ -1423,7 +1423,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	// Submit message positions to pending queue
 	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
-	if (b.streamer.UseEscapeHatch && !b.streamer.EnableEscapeHatch) || shouldSubmit {
+	if shouldSubmit {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
 			err = b.submitEspressoTransactionPos(p)
 			if err != nil {

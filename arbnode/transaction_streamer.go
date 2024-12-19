@@ -1709,7 +1709,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 }
 
 // Make sure useEscapeHatch is true
-func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
+func (s *TransactionStreamer) checkEspressoLiveness() error {
 	live, err := s.lightClientReader.IsHotShotLive(s.espressoSwitchDelayThreshold)
 	if err != nil {
 		return err
@@ -1723,50 +1723,22 @@ func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 		return nil
 	}
 
-	// If hotshot was previously up, now it is down
-	if !live {
-		log.Warn("enabling the escape hatch, hotshot is down")
-		s.EnableEscapeHatch = true
-	}
-
-	// Check if the submitted transaction should skip the espresso verification
-	submittedHash, err := s.getEspressoSubmittedHash()
-	if err != nil {
-		return err
-	}
-
-	// No transaction is waiting for espresso finalization
-	if submittedHash == nil {
+	// If escape hatch is disabled, hotshot is live, everything is fine
+	if live {
 		return nil
 	}
 
-	// If a submitted transaction is waiting for being finalized, check if hotshot is live at
-	// the corresponding L1 height.
-	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedHash)
-	if err != nil {
-		return err
-	}
+	// If escape hatch is on, and hotshot is down
+	log.Warn("enabling the escape hatch, hotshot is down")
+	s.EnableEscapeHatch = true
 
-	header, err := s.espressoClient.FetchHeaderByHeight(ctx, data.BlockHeight)
-	if err != nil {
-		return err
-	}
-
-	l1Height := header.Header.GetL1Head()
-	hotshotLive, err := s.lightClientReader.IsHotShotLiveAtHeight(l1Height, s.espressoSwitchDelayThreshold)
-	if err != nil {
-		return err
-	}
-	if hotshotLive {
-		// This transaction will be still finalized
-		return nil
-	}
+	// Skip the espresso verification for the submitted messages
 	submitted, err := s.getEspressoSubmittedPos()
 	if err != nil {
 		return err
 	}
 	if len(submitted) == 0 {
-		return fmt.Errorf("submitted messages should not have the length of 0")
+		return nil
 	}
 
 	last := submitted[len(submitted)-1]
@@ -1809,7 +1781,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	retryRate := s.espressoTxnsPollingInterval * 50
 	var err error
 	if s.UseEscapeHatch {
-		err = s.checkEspressoLiveness(ctx)
+		err = s.checkEspressoLiveness()
 		if err != nil {
 			if ctx.Err() != nil {
 				return 0
@@ -1840,7 +1812,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	return !(s.UseEscapeHatch && s.EnableEscapeHatch)
+	return !s.EnableEscapeHatch
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
