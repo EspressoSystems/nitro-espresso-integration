@@ -55,7 +55,7 @@ func TestEspressoEscapeHatch(t *testing.T) {
 	address := common.HexToAddress(lightClientAddress)
 	txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
 
-	if builder.L2.ConsensusNode.TxStreamer.UseEscapeHatch {
+	if builder.L2.ConsensusNode.TxStreamer.EnableEscapeHatch {
 		t.Fatal("testing not using escape hatch first")
 	}
 	log.Info("Checking turning off the escape hatch")
@@ -115,7 +115,7 @@ func TestEspressoEscapeHatch(t *testing.T) {
 
 	log.Info("testing escape hatch")
 	// Modify it manually
-	builder.L2.ConsensusNode.TxStreamer.UseEscapeHatch = true
+	builder.L2.ConsensusNode.TxStreamer.EnableEscapeHatch = true
 
 	err = lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
 	Require(t, err)

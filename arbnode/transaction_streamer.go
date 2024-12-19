@@ -87,8 +87,10 @@ type TransactionStreamer struct {
 	espressoSwitchDelayThreshold uint64
 	espressoMaxTransactionSize   uint64
 	// Public these fields for testing
-	HotshotDown                bool
-	UseEscapeHatch             bool
+	HotshotDown       bool
+	EnableEscapeHatch bool
+	UseEscapeHatch    bool
+
 	espressoTEEVerifierAddress common.Address
 }
 
@@ -1727,7 +1729,7 @@ func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 		s.HotshotDown = true
 	}
 
-	if !s.UseEscapeHatch {
+	if !s.EnableEscapeHatch {
 		return nil
 	}
 
@@ -1810,14 +1812,17 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	retryRate := s.espressoTxnsPollingInterval * 50
 	enabledEspresso := s.espressoTEEVerifierAddress != common.Address{}
 	if enabledEspresso {
-		err := s.checkEspressoLiveness(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0
+		var err error
+		if s.UseEscapeHatch {
+			err = s.checkEspressoLiveness(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return 0
+				}
+				logLevel := getLogLevel(err)
+				logLevel("error checking escape hatch, will retry", "err", err)
+				return retryRate
 			}
-			logLevel := getLogLevel(err)
-			logLevel("error checking escape hatch, will retry", "err", err)
-			return retryRate
 		}
 		err = s.pollSubmittedTransactionForFinality(ctx)
 		if err != nil {
