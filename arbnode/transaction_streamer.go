@@ -1283,7 +1283,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	// Verify the merkle proof
 	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
 	if err != nil {
-		return fmt.Errorf("%w (height: %d): %w", EspressoFetchMerkleRootErr, height, err)
+		return fmt.Errorf("%w (height: %d): %w", EspressoValidationErr, height, err)
 	}
 
 	if snapshot.Height <= height {
@@ -1795,7 +1795,7 @@ func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 	return nil
 }
 
-var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoFetchMerkleRootErr.Error(), time.Hour)
+var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), time.Hour)
 var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), time.Minute)
 
 func getLogLevel(err error) func(string, ...interface{}) {

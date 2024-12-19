@@ -561,7 +561,7 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 	return l
 }
 
-var EspressoFetchMerkleRootErr = errors.New("failed to fetch the espresso merkle roof")
+var EspressoValidationErr = errors.New("failed to check espresso validation")
 var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso transaction")
 
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
@@ -604,7 +604,7 @@ func (b *BatchPoster) checkEspressoValidation() error {
 		return nil
 	}
 
-	return fmt.Errorf("%w (height: %d)", EspressoFetchMerkleRootErr, b.building.msgCount)
+	return fmt.Errorf("%w (height: %d)", EspressoValidationErr, b.building.msgCount)
 }
 
 func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) error {
@@ -1759,7 +1759,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 	storageRaceEphemeralErrorHandler := util.NewEphemeralErrorHandler(5*time.Minute, storage.ErrStorageRace.Error(), time.Minute)
 	normalGasEstimationFailedEphemeralErrorHandler := util.NewEphemeralErrorHandler(5*time.Minute, ErrNormalGasEstimationFailed.Error(), time.Minute)
 	accumulatorNotFoundEphemeralErrorHandler := util.NewEphemeralErrorHandler(5*time.Minute, AccumulatorNotFoundErr.Error(), time.Minute)
-	espressoEphemeralErrorHandler := util.NewEphemeralErrorHandler(80*time.Minute, EspressoFetchMerkleRootErr.Error(), time.Hour)
+	espressoEphemeralErrorHandler := util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), time.Hour)
 	resetAllEphemeralErrs := func() {
 		commonEphemeralErrorHandler.Reset()
 		exceedMaxMempoolSizeEphemeralErrorHandler.Reset()
