@@ -87,8 +87,8 @@ type TransactionStreamer struct {
 	espressoSwitchDelayThreshold uint64
 	espressoMaxTransactionSize   uint64
 	// Public these fields for testing
-	EnableEscapeHatch bool
-	UseEscapeHatch    bool
+	EscapeHatchEnabled bool
+	UseEscapeHatch     bool
 
 	espressoTEEVerifierAddress common.Address
 }
@@ -143,6 +143,7 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
+		EscapeHatchEnabled: false,
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1715,10 +1716,10 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 		return err
 	}
 	// If escape hatch is acitivated, the only thing is to check if hotshot is live again
-	if s.EnableEscapeHatch {
+	if s.EscapeHatchEnabled {
 		if live {
 			log.Info("HotShot is up, disabling the escape hatch")
-			s.EnableEscapeHatch = false
+			s.EscapeHatchEnabled = false
 		}
 		return nil
 	}
@@ -1730,7 +1731,7 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 
 	// If escape hatch is on, and hotshot is down
 	log.Warn("enabling the escape hatch, hotshot is down")
-	s.EnableEscapeHatch = true
+	s.EscapeHatchEnabled = true
 
 	// Skip the espresso verification for the submitted messages
 	submitted, err := s.getEspressoSubmittedPos()
@@ -1812,7 +1813,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	return !s.EnableEscapeHatch
+	return !s.EscapeHatchEnabled
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
