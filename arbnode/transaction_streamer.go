@@ -1715,7 +1715,7 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 	if err != nil {
 		return err
 	}
-	// If escape hatch is acitivated, the only thing is to check if hotshot is live again
+	// If escape hatch is activated, the only thing is to check if hotshot is live again
 	if s.EscapeHatchEnabled {
 		if live {
 			log.Info("HotShot is up, disabling the escape hatch")
