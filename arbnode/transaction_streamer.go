@@ -1271,7 +1271,6 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	if err != nil {
 		return fmt.Errorf("failed to fetch the submitted transaction hash (hash: %s): %w", submittedTxHash.String(), err)
 	}
-
 	height := data.BlockHeight
 
 	header, err := s.espressoClient.FetchHeaderByHeight(ctx, height)
@@ -1279,6 +1278,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return fmt.Errorf("could not get the header (height: %d): %w", height, err)
 	}
 
+	log.Info("Fetching Merkle Root at hotshot height: ", height)
 	// Verify the merkle proof
 	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
 	if err != nil {
