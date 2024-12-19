@@ -46,7 +46,7 @@ import (
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-const UserDataAttestationFile = "//dev/attestation/user_report_data"
+const UserDataAttestationFile = "/dev/attestation/user_report_data"
 const QuoteFile = "/dev/attestation/quote"
 // TransactionStreamer produces blocks from a node's L1 messages, storing the results in the blockchain and recording their positions
 // The streamer is notified when there's new batches to process
