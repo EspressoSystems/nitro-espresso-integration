@@ -583,7 +583,7 @@ func (b *BatchPoster) checkEspressoValidation() error {
 		return nil
 	}
 
-	if b.streamer.UseEscapeHatch && b.streamer.EnableEscapeHatch {
+	if b.streamer.UseEscapeHatch {
 		skip, err := b.streamer.getSkipVerificationPos()
 		if err != nil {
 			log.Error("failed call to get skip verification pos", "err", err)
@@ -599,7 +599,7 @@ func (b *BatchPoster) checkEspressoValidation() error {
 		}
 	}
 
-	if b.streamer.UseEscapeHatch && b.streamer.HotshotDown && b.streamer.EnableEscapeHatch {
+	if b.streamer.EnableEscapeHatch {
 		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
 		return nil
 	}

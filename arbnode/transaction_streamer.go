@@ -87,7 +87,6 @@ type TransactionStreamer struct {
 	espressoSwitchDelayThreshold uint64
 	espressoMaxTransactionSize   uint64
 	// Public these fields for testing
-	HotshotDown       bool
 	EnableEscapeHatch bool
 	UseEscapeHatch    bool
 
@@ -1347,7 +1346,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 
 	batch := s.db.NewBatch()
 	if err := s.cleanEspressoSubmittedData(batch); err != nil {
-		return nil
+		return err
 	}
 	lastConfirmedPos := submittedTxnPos[len(submittedTxnPos)-1]
 	if err := s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos); err != nil {
@@ -1709,16 +1708,17 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 	return s.espressoTxnsPollingInterval
 }
 
+// Make sure useEscapeHatch is true
 func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 	live, err := s.lightClientReader.IsHotShotLive(s.espressoSwitchDelayThreshold)
 	if err != nil {
 		return err
 	}
-	// If hotshot is down, escape hatch is activated, the only thing is to check if hotshot is live again
-	if s.HotshotDown {
+	// If escape hatch is acitivated, the only thing is to check if hotshot is live again
+	if s.EnableEscapeHatch {
 		if live {
 			log.Info("HotShot is up, disabling the escape hatch")
-			s.HotshotDown = false
+			s.EnableEscapeHatch = false
 		}
 		return nil
 	}
@@ -1726,13 +1726,10 @@ func (s *TransactionStreamer) checkEspressoLiveness(ctx context.Context) error {
 	// If hotshot was previously up, now it is down
 	if !live {
 		log.Warn("enabling the escape hatch, hotshot is down")
-		s.HotshotDown = true
+		s.EnableEscapeHatch = true
 	}
 
-	if s.UseEscapeHatch && !s.EnableEscapeHatch {
-		return nil
-	}
-
+	// Check if the submitted transaction should skip the espresso verification
 	submittedHash, err := s.getEspressoSubmittedHash()
 	if err != nil {
 		return err
@@ -1810,9 +1807,8 @@ func getLogLevel(err error) func(string, ...interface{}) {
 
 func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsPollingInterval * 50
-	enabledEspresso := s.espressoTEEVerifierAddress != common.Address{}
-	if enabledEspresso {
-		var err error
+	var err error
+	if s.UseEscapeHatch {
 		err = s.checkEspressoLiveness(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -1822,31 +1818,29 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 			logLevel("error checking escape hatch, will retry", "err", err)
 			return retryRate
 		}
-		err = s.pollSubmittedTransactionForFinality(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0
-			}
-			logLevel := getLogLevel(err)
-			logLevel("error polling finality, will retry", "err", err)
-			return retryRate
-		} else {
-			espressoMerkleProofEphemeralErrorHandler.Reset()
+		espressoTransactionEphemeralErrorHandler.Reset()
+	}
+	err = s.pollSubmittedTransactionForFinality(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0
 		}
-
-		shouldSubmit := s.shouldSubmitEspressoTransaction()
-		if shouldSubmit {
-			return s.submitEspressoTransactions(ctx)
-		}
-
-		return s.espressoTxnsPollingInterval
-	} else {
+		logLevel := getLogLevel(err)
+		logLevel("error polling finality, will retry", "err", err)
 		return retryRate
 	}
+	espressoMerkleProofEphemeralErrorHandler.Reset()
+
+	shouldSubmit := s.shouldSubmitEspressoTransaction()
+	if shouldSubmit {
+		return s.submitEspressoTransactions(ctx)
+	}
+
+	return s.espressoTxnsPollingInterval
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	return !s.HotshotDown
+	return !(s.UseEscapeHatch && s.EnableEscapeHatch)
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {

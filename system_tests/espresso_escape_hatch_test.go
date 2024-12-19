@@ -68,7 +68,7 @@ func TestEspressoEscapeHatch(t *testing.T) {
 	log.Info("waiting for light client to report hotshot is down")
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		log.Info("waiting for hotshot down")
-		return builder.L2.ConsensusNode.TxStreamer.HotshotDown
+		return builder.L2.ConsensusNode.TxStreamer.EnableEscapeHatch
 	})
 	Require(t, err)
 
@@ -122,7 +122,7 @@ func TestEspressoEscapeHatch(t *testing.T) {
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		log.Info("waiting for hotshot down")
-		return builder.L2.ConsensusNode.TxStreamer.HotshotDown
+		return builder.L2.ConsensusNode.TxStreamer.EnableEscapeHatch
 	})
 	Require(t, err)
 
