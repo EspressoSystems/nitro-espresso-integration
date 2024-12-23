@@ -1848,6 +1848,9 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
  */
 func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, error) {
 
+	if (t.config().UserDataAttestationFile == "") || (t.config().QuoteFile == "") {
+		return []byte{}, nil
+	}
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
 
