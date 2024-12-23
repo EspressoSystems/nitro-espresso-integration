@@ -84,7 +84,7 @@ const (
 	oldSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin"
 	sequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
-	espressoTransactionSize               = 900 * 1024
+	espressoTransactionSizeLimit          = 900 * 1024
 )
 
 type batchPosterPosition struct {
@@ -378,7 +378,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
-		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSize
+		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 	}
 
 	b := &BatchPoster{
