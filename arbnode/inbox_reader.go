@@ -119,6 +119,7 @@ func NewInboxReader(tracker *InboxTracker, client arbutil.L1Interface, l1Reader 
 }
 
 func (r *InboxReader) Start(ctxIn context.Context) error {
+  arbutil.AddToCallstackContext(ctxIn, "InboxReaderStart/")
 	r.StopWaiter.Start(ctxIn, r)
 	hadError := false
 	r.CallIteratively(func(ctx context.Context) time.Duration {
@@ -229,7 +230,11 @@ func (r *InboxReader) CaughtUp() chan struct{} {
 }
 
 func (r *InboxReader) run(ctx context.Context, hadError bool) error {
-	readMode := r.config().ReadMode
+	ctx, _ = arbutil.AddToCallstackContext(ctx, "InboxReaderRun/")
+  header_reader_ctx, _ := arbutil.AddToCallstackContext(ctx, "header-reader-call")
+  seq_inbox_ctx, _ := arbutil.AddToCallstackContext(ctx, "seq-inbox-call")
+  bridge_ctx, _ := arbutil.AddToCallstackContext(ctx, "bridge-call")
+  readMode := r.config().ReadMode
 	from, err := r.getNextBlockToRead(ctx)
 	if err != nil {
 		return err
@@ -256,9 +261,9 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			var blockNum uint64
 			fetchLatestSafeOrFinalized := func() {
 				if readMode == "safe" {
-					blockNum, err = r.l1Reader.LatestSafeBlockNr(ctx)
+					blockNum, err = r.l1Reader.LatestSafeBlockNr(header_reader_ctx)
 				} else {
-					blockNum, err = r.l1Reader.LatestFinalizedBlockNr(ctx)
+					blockNum, err = r.l1Reader.LatestFinalizedBlockNr(header_reader_ctx)
 				}
 			}
 			fetchLatestSafeOrFinalized()
@@ -284,7 +289,7 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			}
 		} else {
 
-			latestHeader, err := r.l1Reader.LastHeader(ctx)
+			latestHeader, err := r.l1Reader.LastHeader(header_reader_ctx)
 			if err != nil {
 				return err
 			}
@@ -324,7 +329,7 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 		missingSequencer := false
 
 		{
-			checkingDelayedCount, err := r.delayedBridge.GetMessageCount(ctx, currentHeight)
+			checkingDelayedCount, err := r.delayedBridge.GetMessageCount(bridge_ctx, currentHeight)
 			if err != nil {
 				return err
 			}
@@ -344,7 +349,7 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			}
 			if checkingDelayedCount > 0 {
 				checkingDelayedSeqNum := checkingDelayedCount - 1
-				l1DelayedAcc, err := r.delayedBridge.GetAccumulator(ctx, checkingDelayedSeqNum, currentHeight, common.Hash{})
+				l1DelayedAcc, err := r.delayedBridge.GetAccumulator(bridge_ctx, checkingDelayedSeqNum, currentHeight, common.Hash{})
 				if err != nil {
 					return err
 				}
@@ -358,7 +363,7 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			}
 		}
 
-		seenBatchCount, err = r.sequencerInbox.GetBatchCount(ctx, currentHeight)
+		seenBatchCount, err = r.sequencerInbox.GetBatchCount(seq_inbox_ctx, currentHeight)
 		if err != nil {
 			seenBatchCount = 0
 			return err
@@ -380,7 +385,7 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			}
 			if checkingBatchCount > 0 {
 				checkingBatchSeqNum := checkingBatchCount - 1
-				l1BatchAcc, err := r.sequencerInbox.GetAccumulator(ctx, checkingBatchSeqNum, currentHeight)
+				l1BatchAcc, err := r.sequencerInbox.GetAccumulator(seq_inbox_ctx, checkingBatchSeqNum, currentHeight)
 				if err != nil {
 					return err
 				}
@@ -431,11 +436,11 @@ func (r *InboxReader) run(ctx context.Context, hadError bool) error {
 			if to.Cmp(currentHeight) > 0 {
 				to.Set(currentHeight)
 			}
-			sequencerBatches, err := r.sequencerInbox.LookupBatchesInRange(ctx, from, to)
+			sequencerBatches, err := r.sequencerInbox.LookupBatchesInRange(seq_inbox_ctx, from, to)
 			if err != nil {
 				return err
 			}
-			delayedMessages, err := r.delayedBridge.LookupMessagesInRange(ctx, from, to, func(batchNum uint64) ([]byte, error) {
+			delayedMessages, err := r.delayedBridge.LookupMessagesInRange(bridge_ctx, from, to, func(batchNum uint64) ([]byte, error) {
 				if len(sequencerBatches) > 0 && batchNum >= sequencerBatches[0].SequenceNumber {
 					idx := batchNum - sequencerBatches[0].SequenceNumber
 					if idx < uint64(len(sequencerBatches)) {
@@ -609,6 +614,9 @@ func (r *InboxReader) getNextBlockToRead(ctx context.Context) (*big.Int, error) 
 }
 
 func (r *InboxReader) GetSequencerMessageBytes(ctx context.Context, seqNum uint64) ([]byte, common.Hash, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "GetSequencerMessageBytes")
+  ctx.Value(arbutil.RpcKey)
+  log.Info("inbox reader call with context", "call stack", "")
 	metadata, err := r.tracker.GetBatchMetadata(seqNum)
 	if err != nil {
 		return nil, common.Hash{}, err

@@ -180,6 +180,10 @@ func waitForL1Node(ctx context.Context) error {
 
 func TestEspressoE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+  log.Info("Attempting to initialize context with key")
+  ctx = context.WithValue(ctx, arbutil.RpcKey, "mainImpl()/")
+  log.Info("Context object", "object", "")
+  arbutil.LogCallstack(ctx)
 	defer cancel()
 
 	builder, cleanup := createL1AndL2Node(ctx, t, true)

@@ -333,9 +333,9 @@ type BatchPosterOpts struct {
 	ParentChainID *big.Int
 	DAPReaders    []daprovider.Reader
 }
-
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
-	seqInbox, err := bridgegen.NewSequencerInbox(opts.DeployInfo.SequencerInbox, opts.L1Reader.Client())
+  arbutil.AddToCallstackContext(ctx,"batch-poster/")// add a value to the context for use in sub components.
+  seqInbox, err := bridgegen.NewSequencerInbox(opts.DeployInfo.SequencerInbox, opts.L1Reader.Client())
 	if err != nil {
 		return nil, err
 	}
@@ -1740,6 +1740,7 @@ func (b *BatchPoster) GetBacklogEstimate() uint64 {
 }
 
 func (b *BatchPoster) Start(ctxIn context.Context) {
+  ctxIn, _ = arbutil.AddToCallstackContext(ctxIn, "BatchPosterStart/")
 	b.dataPoster.Start(ctxIn)
 	b.redisLock.Start(ctxIn)
 	b.StopWaiter.Start(ctxIn, b)

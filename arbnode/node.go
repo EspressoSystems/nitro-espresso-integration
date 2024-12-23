@@ -861,6 +861,7 @@ func CreateNode(
 }
 
 func (n *Node) Start(ctx context.Context) error {
+  arbutil.AddToCallstackContext(ctx, "NodeStart")
 	execClient, ok := n.Execution.(*gethexec.ExecutionNode)
 	if !ok {
 		execClient = nil

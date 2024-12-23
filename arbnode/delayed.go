@@ -82,6 +82,8 @@ func (b *DelayedBridge) FirstBlock() *big.Int {
 }
 
 func (b *DelayedBridge) GetMessageCount(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/delayedbridge/GetMessageCount/")
+  arbutil.LogCallstack(ctx)
 	if (blockNumber != nil) && blockNumber.Cmp(new(big.Int).SetUint64(b.fromBlock)) < 0 {
 		return 0, nil
 	}
@@ -101,6 +103,8 @@ func (b *DelayedBridge) GetMessageCount(ctx context.Context, blockNumber *big.In
 
 // Uses blockHash if nonzero, otherwise uses blockNumber
 func (b *DelayedBridge) GetAccumulator(ctx context.Context, sequenceNumber uint64, blockNumber *big.Int, blockHash common.Hash) (common.Hash, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/delayedbridge/GetAccumulator/")
+  arbutil.LogCallstack(ctx)
 	calldata := append([]byte{}, delayedInboxAccsCallABI.ID...)
 	inputs, err := delayedInboxAccsCallABI.Inputs.Pack(arbmath.UintToBig(sequenceNumber))
 	if err != nil {
@@ -154,7 +158,10 @@ func (m *DelayedInboxMessage) AfterInboxAcc() common.Hash {
 	return crypto.Keccak256Hash(m.BeforeInboxAcc[:], hash)
 }
 
+
 func (b *DelayedBridge) LookupMessagesInRange(ctx context.Context, from, to *big.Int, batchFetcher arbostypes.FallibleBatchFetcher) ([]*DelayedInboxMessage, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/delayedbridge/LookupMessagesInRange/")
+  arbutil.LogCallstack(ctx)
 	query := ethereum.FilterQuery{
 		BlockHash: nil,
 		FromBlock: from,

@@ -264,6 +264,8 @@ func (s *HeaderReader) setError(err error) {
 }
 
 func (s *HeaderReader) broadcastLoop(ctx context.Context) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/broadcastLoop/")
+  arbutil.LogCallstack(ctx)
 	var clientSubscription ethereum.Subscription = nil
 	defer func() {
 		if clientSubscription != nil {
@@ -353,6 +355,8 @@ func (s *HeaderReader) logIfHeaderIsOld() {
 }
 
 func (s *HeaderReader) WaitForTxApproval(ctxIn context.Context, tx *types.Transaction) (*types.Receipt, error) {
+  ctxIn, _ = arbutil.AddToCallstackContext(ctxIn, "/headerreader/WaitForTxApproval/")
+  arbutil.LogCallstack(ctxIn)
 	headerchan, unsubscribe := s.Subscribe(true)
 	defer unsubscribe()
 	ctx, cancel := context.WithTimeout(ctxIn, s.config().TxTimeout)
@@ -464,6 +468,8 @@ func HeadersEqual(ha, hb *types.Header) bool {
 }
 
 func (s *HeaderReader) getCached(ctx context.Context, c *cachedHeader) (*types.Header, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/getCached/")
+  arbutil.LogCallstack(ctx)
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	currentHead, err := s.LastHeader(ctx)
@@ -491,6 +497,8 @@ func (s *HeaderReader) getCached(ctx context.Context, c *cachedHeader) (*types.H
 }
 
 func (s *HeaderReader) LatestSafeBlockHeader(ctx context.Context) (*types.Header, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/LatestSafeBlockHeader/")
+  arbutil.LogCallstack(ctx)
 	header, err := s.getCached(ctx, &s.safe)
 	if errors.Is(err, ErrBlockNumberNotSupported) {
 		return nil, fmt.Errorf("%w: safe block not found", ErrBlockNumberNotSupported)
@@ -499,6 +507,8 @@ func (s *HeaderReader) LatestSafeBlockHeader(ctx context.Context) (*types.Header
 }
 
 func (s *HeaderReader) LatestSafeBlockNr(ctx context.Context) (uint64, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/LatestSafeBlockNr/")
+  arbutil.LogCallstack(ctx)
 	header, err := s.LatestSafeBlockHeader(ctx)
 	if err != nil {
 		return 0, err
@@ -507,6 +517,8 @@ func (s *HeaderReader) LatestSafeBlockNr(ctx context.Context) (uint64, error) {
 }
 
 func (s *HeaderReader) LatestFinalizedBlockHeader(ctx context.Context) (*types.Header, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/LatestFinalizedBlockHeader/")
+  arbutil.LogCallstack(ctx)
 	header, err := s.getCached(ctx, &s.finalized)
 	if errors.Is(err, ErrBlockNumberNotSupported) {
 		return nil, fmt.Errorf("%w: finalized block not found", ErrBlockNumberNotSupported)
@@ -515,6 +527,8 @@ func (s *HeaderReader) LatestFinalizedBlockHeader(ctx context.Context) (*types.H
 }
 
 func (s *HeaderReader) LatestFinalizedBlockNr(ctx context.Context) (uint64, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/headerreader/LatestFinalizedBlockNr/")
+  arbutil.LogCallstack(ctx)
 	header, err := s.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
 		return 0, err

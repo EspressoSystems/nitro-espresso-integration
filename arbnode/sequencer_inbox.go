@@ -70,6 +70,8 @@ func NewSequencerInbox(client arbutil.L1Interface, addr common.Address, fromBloc
 }
 
 func (i *SequencerInbox) GetBatchCount(ctx context.Context, blockNumber *big.Int) (uint64, error) {
+    ctx, _ = arbutil.AddToCallstackContext(ctx, "/seqinbox/GetBatchCount/")
+  arbutil.LogCallstack(ctx)
 	if blockNumber.IsInt64() && blockNumber.Int64() < i.fromBlock {
 		return 0, nil
 	}
@@ -88,6 +90,8 @@ func (i *SequencerInbox) GetBatchCount(ctx context.Context, blockNumber *big.Int
 }
 
 func (i *SequencerInbox) GetAccumulator(ctx context.Context, sequenceNumber uint64, blockNumber *big.Int) (common.Hash, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "/seqinbox/GetAccumulator/")
+  arbutil.LogCallstack(ctx)
 	opts := &bind.CallOpts{
 		Context:     ctx,
 		BlockNumber: blockNumber,
@@ -112,7 +116,9 @@ type SequencerInboxBatch struct {
 }
 
 func (m *SequencerInboxBatch) getSequencerData(ctx context.Context, client arbutil.L1Interface) ([]byte, error) {
-	switch m.dataLocation {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "getSequencerData")
+  arbutil.LogCallstack(ctx)
+  switch m.dataLocation {
 	case batchDataTxInput:
 		data, err := arbutil.GetLogEmitterTxData(ctx, client, m.rawLog)
 		if err != nil {
@@ -202,6 +208,8 @@ func (m *SequencerInboxBatch) Serialize(ctx context.Context, client arbutil.L1In
 }
 
 func (i *SequencerInbox) LookupBatchesInRange(ctx context.Context, from, to *big.Int) ([]*SequencerInboxBatch, error) {
+  ctx, _ = arbutil.AddToCallstackContext(ctx, "LookupBatchesInRange")
+  arbutil.LogCallstack(ctx)
 	query := ethereum.FilterQuery{
 		FromBlock: from,
 		ToBlock:   to,
