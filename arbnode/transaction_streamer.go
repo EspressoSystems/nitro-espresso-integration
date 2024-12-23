@@ -1285,7 +1285,8 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return fmt.Errorf("could not get the header (height: %d): %w", height, err)
 	}
 
-	log.Info("Fetching Merkle Root at hotshot height: ", height)
+	log.Info("Fetching Merkle Root at hotshot", "height", height)
+
 	// Verify the merkle proof
 	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
 	if err != nil {
@@ -1399,7 +1400,7 @@ func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedB
 		return nil, err
 	}
 	hashParsed, err := tagged_base64.Parse(hash)
-	if hashParsed == nil {
+	if err != nil || hashParsed == nil {
 		return nil, err
 	}
 	return hashParsed, nil
