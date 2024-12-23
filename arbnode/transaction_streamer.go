@@ -46,8 +46,7 @@ import (
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-const UserDataAttestationFile = "/dev/attestation/user_report_data"
-const QuoteFile = "/dev/attestation/quote"
+
 // TransactionStreamer produces blocks from a node's L1 messages, storing the results in the blockchain and recording their positions
 // The streamer is notified when there's new batches to process
 type TransactionStreamer struct {
@@ -1601,8 +1600,8 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
-  s.espressoTxnsStateInsertionMutex.Lock()
-  defer s.espressoTxnsStateInsertionMutex.Unlock()
+	s.espressoTxnsStateInsertionMutex.Lock()
+	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
@@ -1851,13 +1850,13 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 	}
 
 	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(UserDataAttestationFile, userDataHash, 0600)
+	err := os.WriteFile(t.config().UserDataAttestationFile, userDataHash, 0600)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
 
 	// Read the quote from "/dev/attestation/quote" in SGX
-	attestationQuote, err := os.ReadFile(QuoteFile)
+	attestationQuote, err := os.ReadFile(t.config().QuoteFile)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
 	}
