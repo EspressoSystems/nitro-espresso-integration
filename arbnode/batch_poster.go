@@ -84,6 +84,7 @@ const (
 	oldSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin"
 	sequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	espressoTransactionSize               = 900 * 1024
 )
 
 type batchPosterPosition struct {
@@ -182,7 +183,6 @@ type BatchPosterConfig struct {
 	UseEscapeHatch               bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
 	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-threshold"`
-	EspressoMaxTransactionSize   uint64        `koanf:"espresso-max-transaction-size"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -245,7 +245,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
-	f.Uint64(prefix+".espresso-max-transaction-size", DefaultBatchPosterConfig.EspressoMaxTransactionSize, "specifies the max size of a espresso transasction")
 }
 
 var DefaultBatchPosterConfig = BatchPosterConfig{
@@ -279,7 +278,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoSwitchDelayThreshold:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
-	EspressoMaxTransactionSize:     900 * 1024,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -316,7 +314,6 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	EspressoSwitchDelayThreshold:   10,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
-	EspressoMaxTransactionSize:     900 * 1024,
 }
 
 type BatchPosterOpts struct {
@@ -381,7 +378,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
-		opts.Streamer.espressoMaxTransactionSize = opts.Config().EspressoMaxTransactionSize
+		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSize
 	}
 
 	b := &BatchPoster{
@@ -609,7 +606,7 @@ func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) err
 
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
-	err = b.streamer.SubmitEspressoTransactionPos(pos, b.streamer.db.NewBatch())
+	err = b.streamer.SubmitEspressoTransactionPos(pos)
 	if err != nil {
 		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
 		return err

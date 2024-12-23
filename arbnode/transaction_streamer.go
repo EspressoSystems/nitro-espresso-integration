@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"math"
 	"math/big"
 	"os"
 	"reflect"
@@ -132,6 +133,12 @@ func NewTransactionStreamer(
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
 ) (*TransactionStreamer, error) {
+
+	// Check that chainId is within u32 range
+	if chainConfig.ChainID.Uint64() > math.MaxUint32 {
+		return nil, fmt.Errorf("chainId %d is out of range for u32", chainConfig.ChainID.Uint64())
+	}
+
 	streamer := &TransactionStreamer{
 		exec:               exec,
 		chainConfig:        chainConfig,
@@ -1599,10 +1606,11 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 }
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
-func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex, batch ethdb.Batch) error {
+func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
+	batch := s.db.NewBatch()
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
 		return err
