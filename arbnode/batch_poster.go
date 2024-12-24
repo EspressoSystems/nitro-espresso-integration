@@ -1428,7 +1428,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
-			log.Error(
+			log.Warn(
 				"disabling L1 bound as batch posting message is close to the maximum delay",
 				"blockNumber", msg.Message.Header.BlockNumber,
 				"l1BoundMinBlockNumberWithBypass", l1BoundMinBlockNumberWithBypass,
