@@ -17,6 +17,15 @@ use tagged_base64::TaggedBase64;
 pub type Proof = Vec<MerkleNode<Commitment<Header>, u64, Sha3Node>>;
 pub type CircuitField = ark_ed_on_bn254::Fq;
 
+macro_rules! handle_result {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(_) => return false,
+        }
+    };
+}
+
 // Helper function to verify a block merkle proof.
 // proof_bytes: Byte representation of a block merkle proof.
 // root_bytes: Byte representation of a Sha3Node merkle root.
@@ -39,25 +48,29 @@ pub extern "C" fn verify_merkle_proof_helper(
     let circuit_block_bytes =
         unsafe { std::slice::from_raw_parts(circuit_block_ptr, circuit_block_len) };
 
-    let block_comm_str = std::str::from_utf8(block_comm_bytes).unwrap();
-    let tagged = TaggedBase64::parse(&block_comm_str).unwrap();
-    let block_comm: BlockMerkleCommitment = tagged.try_into().unwrap();
+    let block_comm_str = handle_result!(std::str::from_utf8(block_comm_bytes));
+    let tagged = handle_result!(TaggedBase64::parse(&block_comm_str));
+    let block_comm: BlockMerkleCommitment = handle_result!(tagged.try_into());
 
-    let proof: Proof = serde_json::from_slice(proof_bytes).unwrap();
-    let header: Header = serde_json::from_slice(header_bytes).unwrap();
+    let proof: Proof = handle_result!(serde_json::from_slice(proof_bytes));
+    let header: Header = handle_result!(serde_json::from_slice(header_bytes));
     let header_comm: Commitment<Header> = header.commit();
 
     let proof = MerkleProof::new(header.height(), proof.to_vec());
-    let proved_comm = proof.elem().unwrap().clone();
-    BlockMerkleTree::verify(block_comm.digest(), header.height(), proof)
-        .unwrap()
-        .unwrap();
+    let proved_comm = if let Some(p) = proof.elem() {
+        p.clone()
+    } else {
+        return false;
+    };
+    handle_result!(handle_result!(BlockMerkleTree::verify(
+        block_comm.digest(),
+        header.height(),
+        proof
+    )));
 
     let mut block_comm_root_bytes = vec![];
-    block_comm
-        .serialize_compressed(&mut block_comm_root_bytes)
-        .unwrap();
-    let field_bytes = hash_bytes_to_field(&block_comm_root_bytes).unwrap();
+    handle_result!(block_comm.serialize_compressed(&mut block_comm_root_bytes));
+    let field_bytes = handle_result!(hash_bytes_to_field(&block_comm_root_bytes));
     let local_block_comm_u256 = field_to_u256(field_bytes);
     let circuit_block_comm_u256 = U256::from_little_endian(circuit_block_bytes);
 
@@ -94,18 +107,18 @@ pub extern "C" fn verify_namespace_helper(
     let tx_comm_bytes = unsafe { std::slice::from_raw_parts(tx_comm_ptr, tx_comm_len) };
     let common_data_bytes = unsafe { std::slice::from_raw_parts(common_data_ptr, common_data_len) };
 
-    let commit_str = std::str::from_utf8(commit_bytes).unwrap();
-    let txn_comm_str = std::str::from_utf8(tx_comm_bytes).unwrap();
+    let commit_str = handle_result!(std::str::from_utf8(commit_bytes));
+    let txn_comm_str = handle_result!(std::str::from_utf8(tx_comm_bytes));
 
-    let proof: NsProof = serde_json::from_slice(proof_bytes).unwrap();
+    let proof: NsProof = handle_result!(serde_json::from_slice(proof_bytes));
     let ns_table: NsTable = unsafe { std::mem::transmute(ns_table_bytes.to_vec()) };
-    let tagged = TaggedBase64::parse(&commit_str).unwrap();
-    let commit: VidCommitment = tagged.try_into().unwrap();
-    let vid_common: VidCommon = serde_json::from_slice(common_data_bytes).unwrap();
+    let tagged = handle_result!(TaggedBase64::parse(&commit_str));
+    let commit: VidCommitment = handle_result!(tagged.try_into());
+    let vid_common: VidCommon = handle_result!(serde_json::from_slice(common_data_bytes));
 
-    let (txns, ns) = proof.verify(&ns_table, &commit, &vid_common).unwrap();
+    let (txns, ns) = handle_result!(proof.verify(&ns_table, &commit, &vid_common).ok_or(()));
 
-    let namespace: u32 = namespace.try_into().unwrap();
+    let namespace: u32 = handle_result!(namespace.try_into());
     let txns_comm = hash_txns(namespace, &txns);
 
     if (ns == namespace.into()) && (txns_comm == txn_comm_str) {
