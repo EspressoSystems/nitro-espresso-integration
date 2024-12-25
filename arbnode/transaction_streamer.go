@@ -1433,22 +1433,6 @@ func (s *TransactionStreamer) getLastConfirmedPos() (*arbutil.MessageIndex, erro
 	return &lastConfirmed, nil
 }
 
-func (s *TransactionStreamer) getSkipVerificationPos() (*arbutil.MessageIndex, error) {
-	lastConfirmedBytes, err := s.db.Get(espressoSkipVerificationPos)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var skipPos arbutil.MessageIndex
-	err = rlp.DecodeBytes(lastConfirmedBytes, &skipPos)
-	if err != nil {
-		return nil, err
-	}
-	return &skipPos, nil
-}
-
 func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]arbutil.MessageIndex, error) {
 
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
@@ -1518,19 +1502,6 @@ func (s *TransactionStreamer) setEspressoSubmittedPayload(batch ethdb.KeyValueWr
 		return err
 	}
 	err := batch.Put(espressoSubmittedPayload, payload)
-	if err != nil {
-		return err
-
-	}
-	return nil
-}
-
-func (s *TransactionStreamer) setSkipVerificationPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
-	posBytes, err := rlp.EncodeToBytes(pos)
-	if err != nil {
-		return err
-	}
-	err = batch.Put(espressoSkipVerificationPos, posBytes)
 	if err != nil {
 		return err
 
@@ -1752,21 +1723,11 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 		return nil
 	}
 
-	last := submitted[len(submitted)-1]
-
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	batch := s.db.NewBatch()
-	// If escape hatch is used, write down the allowed skip position
-	// to the database. Batch poster will read this and circumvent the espresso validation
-	// for certain messages
 	err = s.cleanEspressoSubmittedData(batch)
-	if err != nil {
-		return err
-	}
-	log.Warn("setting last skip verification position", "pos", last)
-	err = s.setSkipVerificationPos(batch, &last)
 	if err != nil {
 		return err
 	}

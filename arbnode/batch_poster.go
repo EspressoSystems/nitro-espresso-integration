@@ -571,22 +571,6 @@ func (b *BatchPoster) checkEspressoValidation() error {
 		return nil
 	}
 
-	if b.streamer.UseEscapeHatch {
-		skip, err := b.streamer.getSkipVerificationPos()
-		if err != nil {
-			log.Error("failed call to get skip verification pos", "err", err)
-			return err
-		}
-
-		// Skip checking espresso validation due to hotshot failure
-		if skip != nil {
-			if b.building.msgCount <= *skip {
-				log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
-				return nil
-			}
-		}
-	}
-
 	if b.streamer.EscapeHatchEnabled {
 		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
 		return nil
