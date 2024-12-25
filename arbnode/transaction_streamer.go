@@ -86,7 +86,7 @@ type TransactionStreamer struct {
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
 	espressoSwitchDelayThreshold uint64
-	espressoMaxTransactionSize   uint64
+	espressoMaxTransactionSize   int64
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
@@ -1687,7 +1687,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 		}
 	}
 
-	return
 }
 
 // Make sure useEscapeHatch is true
