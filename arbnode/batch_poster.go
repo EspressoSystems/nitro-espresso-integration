@@ -179,11 +179,16 @@ type BatchPosterConfig struct {
 	gasRefunder                    common.Address
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
-	LightClientAddress           string        `koanf:"light-client-address"`
-	HotShotUrl                   string        `koanf:"hotshot-url"`
-	UseEscapeHatch               bool          `koanf:"use-escape-hatch"`
-	EspressoTxnsPollingInterval  time.Duration `koanf:"espresso-txns-polling-interval"`
-	EspressoSwitchDelayThreshold uint64        `koanf:"espresso-switch-delay-threshold"`
+	LightClientAddress          string        `koanf:"light-client-address"`
+	HotShotUrl                  string        `koanf:"hotshot-url"`
+	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
+	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
+	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
+	// state updates can lag behind before triggering the escape hatch. If the difference
+	// between the current L1 block number and the latest state update's block number
+	// exceeds this value, the escape hatch will be activated.
+	// Default: 350 blocks (~1 hour at 12s block time)
+	MaxBlockLagBeforeEscapeHatch uint64 `koanf:"max-block-lag-before-escape-hatch"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -242,7 +247,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
-	f.Uint64(prefix+".espresso-switch-delay-threshold", DefaultBatchPosterConfig.EspressoSwitchDelayThreshold, "specifies the switch delay threshold used to determine hotshot liveness")
+	f.Uint64(prefix+".espresso-switch-delay-threshold", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -276,7 +281,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Millisecond * 500,
-	EspressoSwitchDelayThreshold:   350,
+	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
 }
@@ -312,7 +317,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Millisecond * 500,
-	EspressoSwitchDelayThreshold:   10,
+	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
 }
@@ -378,7 +383,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.lightClientReader = lightClientReader
 		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
-		opts.Streamer.espressoSwitchDelayThreshold = opts.Config().EspressoSwitchDelayThreshold
+		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 	}
 
