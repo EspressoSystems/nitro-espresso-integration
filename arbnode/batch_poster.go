@@ -1740,7 +1740,6 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		normalGasEstimationFailedEphemeralErrorHandler.Reset()
 		accumulatorNotFoundEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
-		espressoMerkleProofEphemeralErrorHandler.Reset()
 	}
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
