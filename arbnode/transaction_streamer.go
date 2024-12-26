@@ -86,7 +86,7 @@ type TransactionStreamer struct {
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
 	espressoSwitchDelayThreshold uint64
-	espressoMaxTransactionSize   uint64
+	espressoMaxTransactionSize   int64
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
@@ -1610,11 +1610,11 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	return nil
 }
 
-func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) time.Duration {
+func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		return s.espressoTxnsPollingInterval
+		return
 	}
 
 	if len(pendingTxnsPos) > 0 {
@@ -1633,13 +1633,13 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 		payload, msgCnt := buildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		if msgCnt == 0 {
 			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage", "size", s.espressoMaxTransactionSize)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 
 		payload, err = signHotShotPayload(payload, s.getAttestationQuote)
 		if err != nil {
 			log.Error("failed to sign the hotshot payload", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 
 		log.Info("submitting transaction to hotshot for finalization")
@@ -1652,7 +1652,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 
 		if err != nil {
 			log.Error("failed to submit transaction to espresso", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 
 		s.espressoTxnsStateInsertionMutex.Lock()
@@ -1663,33 +1663,32 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) ti
 		err = s.setEspressoSubmittedPos(batch, submittedPos)
 		if err != nil {
 			log.Error("failed to set the submitted txn pos", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 		if err != nil {
 			log.Error("failed to set the pending txns", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 		err = s.setEspressoSubmittedHash(batch, hash)
 		if err != nil {
 			log.Error("failed to set the submitted hash", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 		err = s.setEspressoSubmittedPayload(batch, payload)
 		if err != nil {
 			log.Error("failed to set the espresso payload", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 
 		err = batch.Write()
 		if err != nil {
 			log.Error("failed to write to db", "err", err)
-			return s.espressoTxnsPollingInterval
+			return
 		}
 	}
 
-	return s.espressoTxnsPollingInterval
 }
 
 // Make sure useEscapeHatch is true
@@ -1779,7 +1778,8 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 
 	shouldSubmit := s.shouldSubmitEspressoTransaction()
 	if shouldSubmit {
-		return s.submitEspressoTransactions(ctx)
+		s.submitEspressoTransactions(ctx)
+		return s.espressoTxnsPollingInterval
 	}
 
 	return s.espressoTxnsPollingInterval

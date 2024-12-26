@@ -80,7 +80,8 @@ var (
 
 const (
 	batchPosterSimpleRedisLockKey = "node.batch-poster.redis-lock.simple-lock-key"
-
+	// oldSequencerBatchPostMethodName uses automatically generated solidity function
+	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
 	oldSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName       = "addSequencerL2BatchFromOrigin"
 	sequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
@@ -579,7 +580,7 @@ func (b *BatchPoster) checkEspressoValidation() error {
 	return fmt.Errorf("%w (height: %d)", EspressoValidationErr, b.building.msgCount)
 }
 
-func (b *BatchPoster) submitEspressoTransactionPos(pos arbutil.MessageIndex) error {
+func (b *BatchPoster) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
 	hasNotSubmitted, err := b.streamer.HasNotSubmitted(pos)
 	if err != nil {
 		return err
@@ -1397,7 +1398,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
 	if shouldSubmit {
 		for p := b.building.msgCount; p < msgCount; p += 1 {
-			err = b.submitEspressoTransactionPos(p)
+			err = b.enqueuePendingTransaction(p)
 			if err != nil {
 				log.Error("error submitting position", "error", err, "pos", p)
 				break
@@ -1409,7 +1410,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
 			log.Error("error getting message from streamer", "error", err)
-			break
+			return false, fmt.Errorf("error getting message from streamer: %w", err)
 		}
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
@@ -1739,6 +1740,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		normalGasEstimationFailedEphemeralErrorHandler.Reset()
 		accumulatorNotFoundEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
+		espressoMerkleProofEphemeralErrorHandler.Reset()
 	}
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
