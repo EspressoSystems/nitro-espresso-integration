@@ -62,7 +62,7 @@ var DefaultInboxReaderConfig = InboxReaderConfig{
 	DelayBlocks:         0,
 	CheckDelay:          time.Minute,
 	HardReorg:           false,
-	MinBlocksToRead:     1,
+	MinBlocksToRead:     240,
 	DefaultBlocksToRead: 100,
 	TargetMessagesRead:  500,
 	MaxBlocksToRead:     2000,
