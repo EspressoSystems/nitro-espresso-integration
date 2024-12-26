@@ -167,7 +167,7 @@ func (r *InboxReader) Start(ctxIn context.Context) error {
 			}
 			break
 		}
-		if i == 30*10 {
+		if i == 60*11 {
 			return errors.New("failed to read init message")
 		}
 		time.Sleep(time.Millisecond * 100)
