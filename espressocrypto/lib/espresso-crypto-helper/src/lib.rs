@@ -42,7 +42,7 @@ pub extern "C" fn verify_merkle_proof_helper(
     circuit_block_ptr: *const u8,
     circuit_block_len: usize,
 ) -> bool {
-    let proof_bytes = handle_result!(slice_from_raw_parts(proof_str, proof_len));
+    let proof_bytes = handle_result!(slice_from_raw_parts(proof_ptr, proof_len));
     let header_bytes = handle_result!(slice_from_raw_parts(header_ptr, header_len));
     let block_comm_bytes = handle_result!(slice_from_raw_parts(block_comm_ptr, block_comm_len));
     let circuit_block_bytes =
@@ -101,12 +101,11 @@ pub extern "C" fn verify_namespace_helper(
     common_data_ptr: *const u8,
     common_data_len: usize,
 ) -> bool {
-    let ns_table_bytes = handle_result!(std::slice::from_raw_parts(ns_table_ptr, ns_table_len));
-    let proof_bytes = handle_result!(std::slice::from_raw_parts(proof_ptr, proof_len));
-    let commit_bytes = handle_result!(std::slice::from_raw_parts(commit_ptr, commit_len));
-    let tx_comm_bytes = handle_result!(std::slice::from_raw_parts(tx_comm_ptr, tx_comm_len));
-    let common_data_bytes =
-        handle_result!(std::slice::from_raw_parts(common_data_ptr, common_data_len));
+    let ns_table_bytes = handle_result!(slice_from_raw_parts(ns_table_ptr, ns_table_len));
+    let proof_bytes = handle_result!(slice_from_raw_parts(proof_ptr, proof_len));
+    let commit_bytes = handle_result!(slice_from_raw_parts(commit_ptr, commit_len));
+    let tx_comm_bytes = handle_result!(slice_from_raw_parts(tx_comm_ptr, tx_comm_len));
+    let common_data_bytes = handle_result!(slice_from_raw_parts(common_data_ptr, common_data_len));
 
     let commit_str = handle_result!(std::str::from_utf8(commit_bytes));
     let txn_comm_str = handle_result!(std::str::from_utf8(tx_comm_bytes));
