@@ -85,7 +85,7 @@ type TransactionStreamer struct {
 	espressoClient               *espressoClient.Client
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
-	espressoSwitchDelayThreshold uint64
+	maxBlockLagBeforeEscapeHatch uint64
 	espressoMaxTransactionSize   int64
 	// Public these fields for testing
 	EscapeHatchEnabled bool
@@ -1693,7 +1693,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 
 // Make sure useEscapeHatch is true
 func (s *TransactionStreamer) checkEspressoLiveness() error {
-	live, err := s.lightClientReader.IsHotShotLive(s.espressoSwitchDelayThreshold)
+	live, err := s.lightClientReader.IsHotShotLive(s.maxBlockLagBeforeEscapeHatch)
 	if err != nil {
 		return err
 	}
