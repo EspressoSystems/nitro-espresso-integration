@@ -215,7 +215,7 @@ pub fn decompress(input: &[u8], dictionary: Dictionary) -> Result<Vec<u8>, Brotl
         // TODO: consider window and quality check?
         // TODO: fuzz
         if let Some(dict) = dictionary.slice() {
-            let attatched = BrotliDecoderAttachDictionary(
+            let attached = BrotliDecoderAttachDictionary(
                 state,
                 BrotliSharedDictionaryType::Raw,
                 dict.len(),
