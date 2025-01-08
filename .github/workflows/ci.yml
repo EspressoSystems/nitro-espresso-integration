@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: buildjet-4vcpu-ubuntu-2204-arm
+    runs-on: ubuntu-latest
 
     # Creates a redis container for redis tests
     services:
@@ -133,7 +133,7 @@ jobs:
         run: cargo install cbindgen
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
+        uses: foundry-rs/foundry-toolchain@latest
         with:
           version: nightly
 
