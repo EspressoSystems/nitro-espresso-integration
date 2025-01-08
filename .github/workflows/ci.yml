@@ -121,7 +121,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         id: install-rust-nightly
         with:
-          toolchain: "nightly-2023-01-08"
+          toolchain: "nightly-2025-01-08"
           targets: "wasm32-wasi, wasm32-unknown-unknown"
           components: "rust-src, rustfmt, clippy"
 
@@ -129,7 +129,7 @@ jobs:
         run: echo "STYLUS_NIGHTLY_VER=+$(rustup toolchain list | grep '^nightly' | head -n1 | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
       - name: Install cbindgen
-        run: cargo install cbindgen -Z sparse-registry
+        run: cargo install cbindgen
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
