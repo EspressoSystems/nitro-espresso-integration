@@ -133,9 +133,7 @@ jobs:
         run: cargo install cbindgen
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@latest
-        with:
-          version: nightly
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Cache Build Products
         uses: actions/cache@v3

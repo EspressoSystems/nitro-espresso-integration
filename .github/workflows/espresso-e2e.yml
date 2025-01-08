@@ -69,9 +69,7 @@ jobs:
           targets: "wasm32-unknown-unknown, wasm32-wasi"
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@latest
-        with:
-          version: nightly
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install rust nightly
         uses: dtolnay/rust-toolchain@nightly
