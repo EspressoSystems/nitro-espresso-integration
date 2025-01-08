@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: ubuntu-latest
+    runs-on: buildjet-4vcpu-ubuntu-2204-arm
 
     # Creates a redis container for redis tests
     services:
