@@ -129,7 +129,7 @@ jobs:
         run: echo "STYLUS_NIGHTLY_VER=+$(rustup toolchain list | grep '^nightly' | head -n1 | cut -d' ' -f1)" >> "$GITHUB_ENV"
 
       - name: Install cbindgen
-        run: cargo install cbindgen
+        run: cargo install cbindgen -Z sparse-registry
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
