@@ -78,7 +78,7 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         id: install-rust-nightly
         with:
-          toolchain: 'nightly-2025-01-08'
+          toolchain: 'nightly-2024-08-06'
           targets: 'wasm32-wasi, wasm32-unknown-unknown'
           components: 'rust-src, rustfmt, clippy'
 
@@ -121,6 +121,8 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
 
       - name: Cache cbrotli
         uses: actions/cache@v3
