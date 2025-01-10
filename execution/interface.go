@@ -5,8 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/params"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 
@@ -60,7 +58,6 @@ type ExecutionSequencer interface {
 	MarkFeedStart(to arbutil.MessageIndex)
 	Synced() bool
 	FullSyncProgressMap() map[string]interface{}
-	GetArbOSConfigAtHeight(height uint64) (*params.ChainConfig, error)
 }
 
 type FullExecutionClient interface {

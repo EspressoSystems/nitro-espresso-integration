@@ -257,6 +257,7 @@ type NodeBuilder struct {
 	initMessage                 *arbostypes.ParsedInitMessage
 	l3InitMessage               *arbostypes.ParsedInitMessage
 	withProdConfirmPeriodBlocks bool
+	useL1StackConfig            bool // don't overwrite the L1 stack config when building
 	wasmCacheTag                uint32
 
 	// Created nodes

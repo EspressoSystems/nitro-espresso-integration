@@ -9,8 +9,8 @@ replace github.com/ethereum/go-ethereum => ./go-ethereum
 replace github.com/offchainlabs/bold => ./bold
 
 require (
-	github.com/EspressoSystems/espresso-sequencer-go v0.0.29
 	cloud.google.com/go/storage v1.43.0
+	github.com/EspressoSystems/espresso-sequencer-go v0.0.29
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/alicebob/miniredis/v2 v2.32.1
@@ -61,7 +61,7 @@ require (
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
 	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	cloud.google.com/go/iam v1.1.8 // indirect
-	github.com/ccoveille/go-safecast v1.1.0 // indirect
+	github.com/ccoveille/go-safecast v1.1.0
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -203,8 +203,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/rs/cors v1.7.0 // indirect
-	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
-	github.com/status-im/keycard-go v0.2.0 // indirect
+	github.com/sigurn/crc8 v0.0.0-20220107193325-2243fe600f9f // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
