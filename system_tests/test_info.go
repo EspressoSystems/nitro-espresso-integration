@@ -23,6 +23,7 @@ import (
 	"github.com/offchainlabs/nitro/statetransfer"
 
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+	"github.com/offchainlabs/nitro/util"
 )
 
 var simulatedChainID = big.NewInt(1337)

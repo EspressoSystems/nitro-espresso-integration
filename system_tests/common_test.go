@@ -257,11 +257,8 @@ type NodeBuilder struct {
 	initMessage                 *arbostypes.ParsedInitMessage
 	l3InitMessage               *arbostypes.ParsedInitMessage
 	withProdConfirmPeriodBlocks bool
-<<<<<<< HEAD
 	useL1StackConfig            bool // don't overwrite the L1 stack config when building
-=======
 	wasmCacheTag                uint32
->>>>>>> edff8997a6257f1019a80d4491ab6f223189dceb
 
 	// Created nodes
 	L1 *TestClient
@@ -1311,7 +1308,6 @@ func deployOnParentChain(
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
 
-
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := boldMocksgen.DeployTestWETH9(
@@ -1382,13 +1378,13 @@ func deployOnParentChain(
 		}
 	} else {
 
-	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-	Require(t, err)
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-	Require(t, err)
+		//  Deploy a espressoTEEVerifierMock contract
+		espressoTEEVerifierAddress, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+		Require(t, err)
+		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+		Require(t, err)
 
-	addresses, err = deploy.DeployOnParentChain(
+		addresses, err = deploy.DeployOnParentChain(
 			ctx,
 			parentChainReader,
 			&parentChainTransactionOpts,
