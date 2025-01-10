@@ -12,6 +12,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -19,7 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 
-	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 	"github.com/offchainlabs/nitro/arbos/l2pricing"
 	"github.com/offchainlabs/nitro/statetransfer"
 	"github.com/offchainlabs/nitro/util"

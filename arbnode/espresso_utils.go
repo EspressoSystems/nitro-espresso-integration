@@ -6,7 +6,9 @@ import (
 	"errors"
 
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/arbutil"
 )
 
