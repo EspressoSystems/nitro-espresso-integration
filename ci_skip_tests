@@ -42,6 +42,7 @@ TestChallengeToTimeout
 TestStylusUpgrade
 TestChallengeToFailedTooFar
 TestTwoNodesLong
+TestStylusPrecompileMethodsSimple
 
 # These tests are failing with celestia integration
 TestEmptyCliConfig

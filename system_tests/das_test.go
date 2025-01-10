@@ -380,7 +380,7 @@ func TestDASBatchPosterFallback(t *testing.T) {
 
 	// Send 2nd transaction and check it doesn't arrive on second node
 	tx, _ := TransferBalanceTo(t, "Owner", l2info.GetAddress("User2"), big.NewInt(1e12), l2info, l2client, ctx)
-	_, err = WaitForTx(ctx, l2B.Client, tx.Hash(), time.Second*3)
+	_, err = WaitForTx(ctx, l2B.Client, tx.Hash(), time.Millisecond*2)
 	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
 		Fatal(t, "expected context-deadline exceeded error, but got:", err)
 	}
