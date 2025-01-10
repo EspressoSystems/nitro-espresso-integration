@@ -1322,8 +1322,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
-	log.Info("First message time", "time", firstMsgTime, "firstMsg", firstMsg)
-
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 		return false, err
@@ -1331,8 +1329,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	config := b.config()
 	forcePostBatch := config.MaxDelay <= 0
-
-	log.Info("Force post batch", "forcePostBatch", forcePostBatch, "MaxDelay", config.MaxDelay, "timeSinceFirstMsg", time.Since(firstMsgTime), "Wait for max delay", config.WaitForMaxDelay)
 
 	var l1BoundMaxBlockNumber uint64 = math.MaxUint64
 	var l1BoundMaxTimestamp uint64 = math.MaxUint64
@@ -1517,7 +1513,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	log.Info("Should post batch or not", "forcePostBatch", forcePostBatch, "haveUsefulMessage", b.building.haveUsefulMessage)
 	if !forcePostBatch || !b.building.haveUsefulMessage {
 		// the batch isn't full yet and we've posted a batch recently
 		// don't post anything for now
