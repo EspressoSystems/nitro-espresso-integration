@@ -189,7 +189,7 @@ jobs:
       - name: Build all lint dependencies
         run: make -j build-node-deps
 
-      # TODO: celestia has lint errors, fix later
+      # TODO: celestia has lint errors, fix in later PRs
       # - name: Lint
       #   if: matrix.test-mode == 'defaults'
       #   uses: golangci/golangci-lint-action@v3
