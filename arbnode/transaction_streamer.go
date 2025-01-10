@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -27,6 +28,8 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 
 	"errors"
+
+	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -1176,7 +1179,7 @@ func (s *TransactionStreamer) storeResult(
 
 // exposed for testing
 // return value: true if should be called again immediately
-func (s *TransactionStreamer) ExecuteNextMsg(ctx context.Context, exec execution.ExecutionSequencer) bool {
+func (s *TransactionStreamer) ExecuteNextMsg(ctx context.Context) bool {
 	if ctx.Err() != nil {
 		return false
 	}
@@ -1247,7 +1250,7 @@ func (s *TransactionStreamer) ExecuteNextMsg(ctx context.Context, exec execution
 }
 
 func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struct{}) time.Duration {
-	if s.ExecuteNextMsg(ctx, s.exec) {
+	if s.ExecuteNextMsg(ctx) {
 		return 0
 	}
 	return s.config().ExecuteMessageLoopDelay
