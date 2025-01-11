@@ -56,6 +56,7 @@ TestStylusOpcodeTraceEquivalence
 TestChallengeProtocolBOLDNearLastVirtualBlock
 TestChallengeProtocolBOLDFirstVirtualBlock
 TestChallengeProtocolBOLDReadInboxChallenge
+TestChallengeProtocolBOLDStartStepChallenge
 # These tests are specific to Espresso and we have a dedicated
 # CI workflow for them. See: .github/workflows/espresso-e2e.yml
 TestEspresso
