@@ -9,7 +9,9 @@ import (
 
 	lightclientmock "github.com/EspressoSystems/espresso-sequencer-go/light-client-mock"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
@@ -146,4 +148,113 @@ func TestEspressoEscapeHatch(t *testing.T) {
 	Require(t, err)
 	// TODO: Find a way to check if any hotshot transaction is submitted,
 	// then set the hotshot live again.
+}
+
+func TestEspressoEscapeHatchShouldNotHaltTheChain(t *testing.T) {
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Disabling the delayed sequencer helps up check the
+	// message count easily
+	builder, cleanup := createL1AndL2Node(ctx, t, false)
+	defer cleanup()
+
+	err := waitForL1Node(ctx)
+	Require(t, err)
+
+	cleanEspresso := runEspresso()
+	defer cleanEspresso()
+
+	// wait for the builder
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	// wait for the latest hotshot block
+	err = waitFor(ctx, func() bool {
+		out, err := exec.Command("curl", "http://127.0.0.1:41000/status/block-height", "-L").Output()
+		if err != nil {
+			return false
+		}
+		h := 0
+		err = json.Unmarshal(out, &h)
+		if err != nil {
+			return false
+		}
+		// Wait for the hotshot to generate some blocks to better simulate the real-world environment.
+		// Chosen based on intuition; no empirical data supports this value.
+		return h > 10
+	})
+	Require(t, err)
+
+	// Modify it manually
+	builder.L2.ConsensusNode.TxStreamer.UseEscapeHatch = true
+
+	txInterval := time.Second * 4
+	totalTx := 40
+	go keepL2ChainMoving(t, ctx, builder.L2Info, builder.L2.Client, txInterval, totalTx)
+
+	address := common.HexToAddress(lightClientAddress)
+	txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+
+	go keepEscapeHatchToggling(t, ctx, address, txOpts, builder)
+
+	err = waitForWith(ctx, time.Second*200, time.Second*5, func() bool {
+		msgCnt, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
+		Require(t, err)
+		return msgCnt >= arbutil.MessageIndex(totalTx)
+	})
+
+	Require(t, err)
+}
+
+func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.Address, txOpts bind.TransactOpts, builder *NodeBuilder) {
+	delay := time.Second * 12
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			err := lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
+			Require(t, err)
+
+			err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+				log.Info("waiting for hotshot down")
+				return builder.L2.ConsensusNode.TxStreamer.EscapeHatchEnabled
+			})
+			Require(t, err)
+
+			time.Sleep(delay)
+
+			err = lightclientmock.UnfreezeL1Height(t, builder.L1.Client, address, &txOpts)
+			Require(t, err)
+
+			time.Sleep(delay)
+		}
+	}
+}
+
+// Every 3 seconds, send an L2 transaction to keep the chain moving.
+func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTestInfo, l2Client *ethclient.Client, delay time.Duration, total int) {
+	txCnt := 0
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			if txCnt >= total {
+				break
+			}
+			time.Sleep(delay)
+			if ctx.Err() != nil {
+				break
+			}
+
+			tx := l2Info.PrepareTx("Faucet", "Faucet", 3e7, common.Big1, nil)
+			err := l2Client.SendTransaction(ctx, tx)
+			Require(t, err)
+			txCnt += 1
+		}
+	}
 }
