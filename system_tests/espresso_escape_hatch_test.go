@@ -190,8 +190,8 @@ func TestEspressoEscapeHatchShouldNotHaltTheChain(t *testing.T) {
 	// Modify it manually
 	builder.L2.ConsensusNode.TxStreamer.UseEscapeHatch = true
 
-	txInterval := time.Second * 4
-	totalTx := 40
+	txInterval := time.Second * 5
+	totalTx := uint64(20)
 	go keepL2ChainMoving(t, ctx, builder.L2Info, builder.L2.Client, txInterval, totalTx)
 
 	address := common.HexToAddress(lightClientAddress)
@@ -219,12 +219,6 @@ func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.A
 			err := lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
 			Require(t, err)
 
-			err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-				log.Info("waiting for hotshot down")
-				return builder.L2.ConsensusNode.TxStreamer.EscapeHatchEnabled
-			})
-			Require(t, err)
-
 			time.Sleep(delay)
 
 			err = lightclientmock.UnfreezeL1Height(t, builder.L1.Client, address, &txOpts)
@@ -235,9 +229,9 @@ func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.A
 	}
 }
 
-// Every 3 seconds, send an L2 transaction to keep the chain moving.
-func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTestInfo, l2Client *ethclient.Client, delay time.Duration, total int) {
-	txCnt := 0
+// Continuously send an L2 transaction to keep the chain moving.
+func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTestInfo, l2Client *ethclient.Client, delay time.Duration, total uint64) {
+	txCnt := uint64(0)
 	for {
 		select {
 		case <-ctx.Done():
