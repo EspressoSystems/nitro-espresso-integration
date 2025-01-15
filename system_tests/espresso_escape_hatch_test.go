@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
 
@@ -151,6 +152,7 @@ func TestEspressoEscapeHatch(t *testing.T) {
 }
 
 func TestEspressoEscapeHatchShouldNotHaltTheChain(t *testing.T) {
+	var wg sync.WaitGroup
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -192,12 +194,15 @@ func TestEspressoEscapeHatchShouldNotHaltTheChain(t *testing.T) {
 
 	txInterval := time.Second * 5
 	totalTx := uint64(20)
-	go keepL2ChainMoving(t, ctx, builder.L2Info, builder.L2.Client, txInterval, totalTx)
+
+	wg.Add(1)
+	go keepL2ChainMoving(t, ctx, builder.L2Info, builder.L2.Client, txInterval, totalTx, &wg)
 
 	address := common.HexToAddress(lightClientAddress)
 	txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
 
-	go keepEscapeHatchToggling(t, ctx, address, txOpts, builder)
+	wg.Add(1)
+	go keepEscapeHatchToggling(t, ctx, address, txOpts, builder, &wg)
 
 	err = waitForWith(ctx, time.Second*200, time.Second*5, func() bool {
 		msgCnt, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
@@ -206,9 +211,14 @@ func TestEspressoEscapeHatchShouldNotHaltTheChain(t *testing.T) {
 	})
 
 	Require(t, err)
+
+	t.Cleanup(func() {
+		cancel()
+	})
 }
 
-func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.Address, txOpts bind.TransactOpts, builder *NodeBuilder) {
+func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.Address, txOpts bind.TransactOpts, builder *NodeBuilder, wg *sync.WaitGroup) {
+	defer wg.Done()
 	delay := time.Second * 12
 
 	for {
@@ -216,33 +226,46 @@ func keepEscapeHatchToggling(t *testing.T, ctx context.Context, address common.A
 		case <-ctx.Done():
 			return
 		default:
+			if ctx.Err() != nil {
+				break
+			}
 			err := lightclientmock.FreezeL1Height(t, builder.L1.Client, address, &txOpts)
 			Require(t, err)
 
-			time.Sleep(delay)
+			if err := sleepWithContext(ctx, delay); err != nil {
+				return
+			}
 
 			err = lightclientmock.UnfreezeL1Height(t, builder.L1.Client, address, &txOpts)
 			Require(t, err)
 
-			time.Sleep(delay)
+			if err := sleepWithContext(ctx, delay); err != nil {
+				return
+			}
 		}
 	}
 }
 
 // Continuously send an L2 transaction to keep the chain moving.
-func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTestInfo, l2Client *ethclient.Client, delay time.Duration, total uint64) {
+func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTestInfo, l2Client *ethclient.Client, delay time.Duration, total uint64, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	txCnt := uint64(0)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
+			if ctx.Err() != nil {
+				break
+			}
+
 			if txCnt >= total {
 				break
 			}
-			time.Sleep(delay)
-			if ctx.Err() != nil {
-				break
+
+			if err := sleepWithContext(ctx, delay); err != nil {
+				return
 			}
 
 			tx := l2Info.PrepareTx("Faucet", "Faucet", 3e7, common.Big1, nil)
@@ -250,5 +273,17 @@ func keepL2ChainMoving(t *testing.T, ctx context.Context, l2Info *BlockchainTest
 			Require(t, err)
 			txCnt += 1
 		}
+	}
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }
