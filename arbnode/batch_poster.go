@@ -1758,7 +1758,7 @@ func (b *BatchPoster) GetBacklogEstimate() uint64 {
 /**
 * Get the last potential msg in batch and its position
 * if there is no last potential msg in batch, set the last potential msg in batch to the last msg in the database
-* and set the last potential msg in batch position to the last msg in the database position
+* and set the last potential msg in batch position to the last msg in the database position.
  */
 func (b *BatchPoster) getLastPotentialMsgInBatch(msgCount arbutil.MessageIndex) (*arbostypes.MessageWithMetadata, *arbutil.MessageIndex, error) {
 	// Check if there is a last potential msg & last potential msg position in the batch
