@@ -1322,9 +1322,13 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
-	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
+	lastPotentialMsg, lastPotentialMsgInBatchPos, err := b.getLastPotentialMsgInBatch(msgCount)
 	if err != nil {
 		return false, err
+	}
+
+	if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
+		return false, fmt.Errorf("last potential msg or pos not found")
 	}
 
 	config := b.config()
@@ -1398,19 +1402,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	// Submit message positions to pending queue
-	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
-	if shouldSubmit {
-		for p := b.building.msgCount; p < msgCount; p += 1 {
-			err = b.enqueuePendingTransaction(p)
-			if err != nil {
-				log.Error("error submitting position", "error", err, "pos", p)
-				break
-			}
-		}
-	}
-
-	for b.building.msgCount < msgCount {
+	log.Info("lastpotentialmsg and lastpotentialmsginbatch is", "lastpotentialmsg", lastPotentialMsg, "lastpotentialmsginbatch", lastPotentialMsgInBatchPos, "b.building.msgCount", b.building.msgCount)
+	for b.building.msgCount < *lastPotentialMsgInBatchPos {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
 			log.Error("error getting message from streamer", "error", err)
@@ -1679,6 +1672,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		"numBlobs", len(kzgBlobs),
 	)
 
+	// Delete the last potential message in the batch after the batch is sent
+	err = b.deleteLastPotentialMsgInBatch()
+	if err != nil {
+		return false, err
+	}
+
 	recentlyHitL1Bounds := time.Since(b.lastHitL1Bounds) < config.PollInterval*3
 	postedMessages := b.building.msgCount - batchPosition.MessageCount
 	b.messagesPerBatch.Update(uint64(postedMessages))
@@ -1743,6 +1742,66 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()
+}
+
+/**
+* Get the last potential msg in batch and its position
+* if there is no last potential msg in batch, set the last potential msg in batch to the last msg in the database
+* and set the last potential msg in batch position to the last msg in the database position
+ */
+func (b *BatchPoster) getLastPotentialMsgInBatch(msgCount arbutil.MessageIndex) (*arbostypes.MessageWithMetadata, *arbutil.MessageIndex, error) {
+	// Check if there is a last potential msg & last potential msg position in the batch
+	lastPotentialMsg, err := b.streamer.getLastPotentialMsg()
+	if err != nil {
+		return nil, nil, err
+	}
+	lastPotentialMsgInBatchPos, err := b.streamer.getLastPotentialMsgPos()
+	if err != nil {
+		return nil, nil, err
+	}
+	// If there is no last potential msg in batch, set the last potential msg in batch to the last msg in the database
+	// and set the last potential msg in batch position to the last msg in the database position
+	if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
+		potentialMsg, err := b.streamer.GetMessage(msgCount - 1)
+		if err != nil {
+			return nil, nil, err
+		}
+		batch := b.streamer.db.NewBatch()
+		err = b.streamer.setLastPotentialMsg(batch, potentialMsg)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		potentialPos := arbutil.MessageIndex(msgCount - 1)
+		err = b.streamer.setLastPotentialMsgPos(batch, &potentialPos)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = batch.Write()
+		if err != nil {
+			return nil, nil, err
+		}
+		lastPotentialMsgInBatchPos = &potentialPos
+		lastPotentialMsg = potentialMsg
+	}
+	log.Info("lastpotentialmsg and lastpotentialmsginbatch is", "lastpotentialmsg", lastPotentialMsg, "lastpotentialmsginbatch", lastPotentialMsgInBatchPos)
+	return lastPotentialMsg, lastPotentialMsgInBatchPos, nil
+}
+
+/*
+* Deletes the last potential msg in batch and its position
+ */
+func (b *BatchPoster) deleteLastPotentialMsgInBatch() error {
+	batch := b.streamer.db.NewBatch()
+	err := b.streamer.setLastPotentialMsg(batch, nil)
+	if err != nil {
+		return err
+	}
+	err = b.streamer.setLastPotentialMsgPos(batch, nil)
+	if err != nil {
+		return err
+	}
+	return batch.Write()
 }
 
 func (b *BatchPoster) Start(ctxIn context.Context) {

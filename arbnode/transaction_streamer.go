@@ -1388,6 +1388,24 @@ func (s *TransactionStreamer) getEspressoSubmittedPos() ([]arbutil.MessageIndex,
 	return pos, nil
 }
 
+func (s *TransactionStreamer) getLastPotentialMsg() (*arbostypes.MessageWithMetadata, error) {
+	lastPotentialMsgBytes, err := s.db.Get(lastPotentialMsgInBatch)
+	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			log.Info("last potential msg is empty, is trying to post a new batch")
+			return nil, nil
+		}
+	}
+
+	var msgWithMetadata arbostypes.MessageWithMetadata
+	err = rlp.DecodeBytes(lastPotentialMsgBytes, &msgWithMetadata)
+
+	if err != nil {
+		return nil, err
+	}
+	return &msgWithMetadata, nil
+}
+
 func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedBase64, error) {
 	posBytes, err := s.db.Get(espressoSubmittedHash)
 	if err != nil {
@@ -1435,6 +1453,24 @@ func (s *TransactionStreamer) getLastConfirmedPos() (*arbutil.MessageIndex, erro
 	return &lastConfirmed, nil
 }
 
+func (s *TransactionStreamer) getLastPotentialMsgPos() (*arbutil.MessageIndex, error) {
+	lastPotentialMsgPosBytes, err := s.db.Get(lastPotentialMsgInBatchPos)
+	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var lastPotentialMsgInBatchPos arbutil.MessageIndex
+	err = rlp.DecodeBytes(lastPotentialMsgPosBytes, &lastPotentialMsgInBatchPos)
+	if err != nil {
+		return nil, err
+	}
+
+	return &lastPotentialMsgInBatchPos, nil
+}
+
 func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]arbutil.MessageIndex, error) {
 
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
@@ -1471,12 +1507,54 @@ func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter
 	return nil
 }
 
+func (s *TransactionStreamer) setLastPotentialMsg(batch ethdb.KeyValueWriter, msg *arbostypes.MessageWithMetadata) error {
+	if msg == nil {
+		err := batch.Delete(lastPotentialMsgInBatch)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	msgBytes, err := rlp.EncodeToBytes(msg)
+	if err != nil {
+		return err
+	}
+	err = batch.Put(lastPotentialMsgInBatch, msgBytes)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
+	// if pos is nil, delete the key
+	if pos == nil {
+		err := batch.Delete(espressoLastConfirmedPos)
+		return err
+	}
 	posBytes, err := rlp.EncodeToBytes(pos)
 	if err != nil {
 		return err
 	}
 	err = batch.Put(espressoLastConfirmedPos, posBytes)
+	if err != nil {
+		return err
+
+	}
+	return nil
+}
+
+func (s *TransactionStreamer) setLastPotentialMsgPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
+	// if pos is nil, delete the key
+	if pos == nil {
+		err := batch.Delete(lastPotentialMsgInBatchPos)
+		return err
+	}
+	posBytes, err := rlp.EncodeToBytes(pos)
+	if err != nil {
+		return err
+	}
+	err = batch.Put(lastPotentialMsgInBatchPos, posBytes)
 	if err != nil {
 		return err
 
@@ -1740,8 +1818,8 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 	return nil
 }
 
-var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), time.Hour)
-var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), time.Minute)
+var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), 30*time.Minute)
+var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), 30*time.Minute)
 
 func getLogLevel(err error) func(string, ...interface{}) {
 	logLevel := log.Error
@@ -1776,6 +1854,11 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
 
+/**
+ * Submits the transactions to espresso in a loop if the escape hatch is not enabled
+ */
+func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
+	retryRate := s.espressoTxnsPollingInterval * 50
 	shouldSubmit := s.shouldSubmitEspressoTransaction()
 	if shouldSubmit {
 		s.submitEspressoTransactions(ctx)
