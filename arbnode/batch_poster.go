@@ -1402,7 +1402,18 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	log.Info("lastpotentialmsg and lastpotentialmsginbatch is", "lastpotentialmsg", lastPotentialMsg, "lastpotentialmsginbatch", lastPotentialMsgInBatchPos, "b.building.msgCount", b.building.msgCount)
+	// Submit message positions to pending queue
+	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
+	if shouldSubmit {
+		for p := b.building.msgCount; p < msgCount; p += 1 {
+			err = b.enqueuePendingTransaction(p)
+			if err != nil {
+				log.Error("error submitting position", "error", err, "pos", p)
+				break
+			}
+		}
+	}
+
 	for b.building.msgCount < *lastPotentialMsgInBatchPos {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
