@@ -1322,7 +1322,22 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
+
 	lastPotentialMsg, lastPotentialMsgInBatchPos, err := b.getLastPotentialMsgInBatch(msgCount)
+  atEspressoBatchLimit := b.building.msgCount >= *lastPotentialMsgInBatchPos
+  if !b.building.haveUsefulMessage{ // If we don't have a useful message we need to check if we are at the batch limit for this iteration and delete the upper bound
+                                    // and allow at least 1 useful message to flow through.  
+      if atEspressoBatchLimit{
+        // if we are at our msg limit for the batch and we don't have a useful message, we have a 1 message batch with just the batch posting report
+        // if this is the case, we should delete the upper bound and process some more messages, otherwise we don't have a useful batch and forcePostBatch = true is useless
+        err = b.deleteLastPotentialMsgInBatch()
+        if err != nil{
+          return false, err
+        }
+        log.Info("This current batch was full, but did not have a useful message. We should delete the espresso upper bound on the batch")
+        return false, nil
+      } 
+    }
 	if err != nil {
 		return false, err
 	}
@@ -1401,7 +1416,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
 		}
 	}
-
 	// Submit message positions to pending queue
 	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
 	if shouldSubmit {
@@ -1783,7 +1797,7 @@ func (b *BatchPoster) getLastPotentialMsgInBatch(msgCount arbutil.MessageIndex) 
 			return nil, nil, err
 		}
 
-		potentialPos := arbutil.MessageIndex(msgCount - 1)
+		potentialPos := msgCount
 		err = b.streamer.setLastPotentialMsgPos(batch, &potentialPos)
 		if err != nil {
 			return nil, nil, err
@@ -1795,7 +1809,6 @@ func (b *BatchPoster) getLastPotentialMsgInBatch(msgCount arbutil.MessageIndex) 
 		lastPotentialMsgInBatchPos = &potentialPos
 		lastPotentialMsg = potentialMsg
 	}
-	log.Info("lastpotentialmsg and lastpotentialmsginbatch is", "lastpotentialmsg", lastPotentialMsg, "lastpotentialmsginbatch", lastPotentialMsgInBatchPos)
 	return lastPotentialMsg, lastPotentialMsgInBatchPos, nil
 }
 
