@@ -289,7 +289,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ReorgResistanceMargin:          10 * time.Minute,
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 500,
+	EspressoTxnsPollingInterval:    time.Second,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
@@ -326,7 +326,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 500,
+	EspressoTxnsPollingInterval:    time.Second,
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
@@ -589,26 +589,6 @@ func (b *BatchPoster) checkEspressoValidation() error {
 	}
 
 	return fmt.Errorf("%w (height: %d)", EspressoValidationErr, b.building.msgCount)
-}
-
-func (b *BatchPoster) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
-	hasNotSubmitted, err := b.streamer.HasNotSubmitted(pos)
-	if err != nil {
-		return err
-	}
-	if !hasNotSubmitted {
-		return nil
-	}
-
-	// Store the pos in the database to be used later to submit the message
-	// to hotshot for finalization.
-	err = b.streamer.SubmitEspressoTransactionPos(pos)
-	if err != nil {
-		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
-		return err
-	}
-
-	return nil
 }
 
 type txInfo struct {
@@ -1262,6 +1242,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	dbBatchCount, err := b.inbox.GetBatchCount()
 	if err != nil {
+		log.Error("Error getting batch count", "err", err)
 		return false, err
 	}
 	if dbBatchCount > batchPosition.NextSeqNum {
@@ -1318,6 +1299,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	msgCount, err := b.streamer.GetMessageCount()
 	if err != nil {
+		log.Error("Error getting message count", "err", err)
 		return false, err
 	}
 	if msgCount <= batchPosition.MessageCount {
@@ -1327,6 +1309,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
+
 		return false, err
 	}
 
@@ -1401,22 +1384,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	// Submit message positions to pending queue
-	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
-	if shouldSubmit {
-		for p := b.building.msgCount; p < msgCount; p += 1 {
-			err = b.enqueuePendingTransaction(p)
-			if err != nil {
-				log.Error("error submitting position", "error", err, "pos", p)
-				break
-			}
-		}
-	}
-
 	for b.building.msgCount < msgCount {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
-			log.Error("error getting message from streamer", "error", err)
 			return false, fmt.Errorf("error getting message from streamer: %w", err)
 		}
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
