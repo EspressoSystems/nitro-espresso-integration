@@ -1023,6 +1023,15 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	}
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
+
+	//  If light client reader and espresso client are set, then we need to store the pos in the database
+	//  to be used later to submit the message to hotshot for finalization.
+	if s.lightClientReader != nil && s.espressoClient != nil {
+		//  Only submit the transaction if escape hatch is not enabled
+		if s.shouldSubmitEspressoTransaction() {
+			return s.enqueuePendingTransaction(pos)
+		}
+	}
 	return nil
 }
 
@@ -1103,6 +1112,26 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	select {
 	case s.newMessageNotifier <- struct{}{}:
 	default:
+	}
+
+	return nil
+}
+
+func (s *TransactionStreamer) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
+	hasNotSubmitted, err := s.HasNotSubmitted(pos)
+	if err != nil {
+		return err
+	}
+	if !hasNotSubmitted {
+		return nil
+	}
+
+	// Store the pos in the database to be used later to submit the message
+	// to hotshot for finalization.
+	err = s.SubmitEspressoTransactionPos(pos)
+	if err != nil {
+		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
+		return err
 	}
 
 	return nil
@@ -1255,7 +1284,7 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 
 // Check if the latest submitted transaction has been finalized on L1 and verify it.
 // Return a bool indicating whether a new transaction can be submitted to HotShot
-func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context) error {
+func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
 	submittedTxnPos, err := s.getEspressoSubmittedPos()
 	if err != nil {
 		return fmt.Errorf("submitted pos not found: %w", err)
@@ -1549,15 +1578,18 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 }
 
 func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, error) {
+	//
 	submitted, err := s.getEspressoSubmittedPos()
 	if err != nil {
 		return false, err
 	}
 
 	if len(submitted) > 0 && pos <= submitted[len(submitted)-1] {
+		// Already submitted
 		return false, nil
 	}
 
+	// Finalized transactions
 	lastConfirmed, err := s.getLastConfirmedPos()
 	if err != nil {
 		return false, err
@@ -1567,6 +1599,7 @@ func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, e
 		return false, nil
 	}
 
+	// Has not submitted to espresso but pending submission to hotshot
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil && !dbutil.IsErrNotFound(err) {
 		return false, err
@@ -1610,11 +1643,11 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	return nil
 }
 
-func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
+func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		return
+		return err
 	}
 
 	if len(pendingTxnsPos) > 0 {
@@ -1632,14 +1665,12 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 
 		payload, msgCnt := buildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		if msgCnt == 0 {
-			log.Error("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage", "size", s.espressoMaxTransactionSize)
-			return
+			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
 
 		payload, err = signHotShotPayload(payload, s.getAttestationQuote)
 		if err != nil {
-			log.Error("failed to sign the hotshot payload", "err", err)
-			return
+			return fmt.Errorf("failed to sign the hotshot payload %v", err)
 		}
 
 		log.Info("submitting transaction to hotshot for finalization")
@@ -1651,8 +1682,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 		})
 
 		if err != nil {
-			log.Error("failed to submit transaction to espresso", "err", err)
-			return
+			return fmt.Errorf("failed to submit transaction to espresso: %v", err)
 		}
 
 		s.espressoTxnsStateInsertionMutex.Lock()
@@ -1662,33 +1692,28 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) {
 		submittedPos := pendingTxnsPos[:msgCnt]
 		err = s.setEspressoSubmittedPos(batch, submittedPos)
 		if err != nil {
-			log.Error("failed to set the submitted txn pos", "err", err)
-			return
+			return fmt.Errorf("failed to set the submitted txn pos: %v", err)
 		}
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 		if err != nil {
-			log.Error("failed to set the pending txns", "err", err)
-			return
+			return fmt.Errorf("failed to set the pending txn: %v", err)
 		}
 		err = s.setEspressoSubmittedHash(batch, hash)
 		if err != nil {
-			log.Error("failed to set the submitted hash", "err", err)
-			return
+			return fmt.Errorf("failed to set the submitted hash: %v", err)
 		}
 		err = s.setEspressoSubmittedPayload(batch, payload)
 		if err != nil {
-			log.Error("failed to set the espresso payload", "err", err)
-			return
+			return fmt.Errorf("failed to set the espresso payload: %v", err)
 		}
 
 		err = batch.Write()
 		if err != nil {
-			log.Error("failed to write to db", "err", err)
-			return
+			return fmt.Errorf("failed to write to db: %v", err)
 		}
 	}
-
+	return nil
 }
 
 // Make sure useEscapeHatch is true
@@ -1740,8 +1765,8 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 	return nil
 }
 
-var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), time.Hour)
-var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), time.Minute)
+var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), 15*time.Minute)
+var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), 15*time.Minute)
 
 func getLogLevel(err error) func(string, ...interface{}) {
 	logLevel := log.Error
@@ -1750,7 +1775,10 @@ func getLogLevel(err error) func(string, ...interface{}) {
 	return logLevel
 }
 
-func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct{}) time.Duration {
+/**
+* Checks if the submitted transaction has been finalized by Espresso  and verifies it.
+ */
+func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsPollingInterval * 50
 	var err error
 	if s.UseEscapeHatch {
@@ -1765,7 +1793,7 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 		}
 		espressoTransactionEphemeralErrorHandler.Reset()
 	}
-	err = s.pollSubmittedTransactionForFinality(ctx)
+	err = s.checkSubmittedTransactionForFinality(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
 			return 0
@@ -1775,13 +1803,23 @@ func (s *TransactionStreamer) espressoSwitch(ctx context.Context, ignored struct
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
+	return s.espressoTxnsPollingInterval
+}
 
+/**
+ * Submits the transactions to espresso if the escape hatch is not enabled
+ */
+func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
+	retryRate := s.espressoTxnsPollingInterval * 50
 	shouldSubmit := s.shouldSubmitEspressoTransaction()
+	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
-		s.submitEspressoTransactions(ctx)
-		return s.espressoTxnsPollingInterval
+		err := s.submitEspressoTransactions(ctx)
+		if err != nil {
+			log.Error("failed to submit espresso transactions", "err", err)
+			return retryRate
+		}
 	}
-
 	return s.espressoTxnsPollingInterval
 }
 
@@ -1793,7 +1831,11 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.espressoSwitch, s.newSovereignTxNotifier)
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
+		if err != nil {
+			return err
+		}
+		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
