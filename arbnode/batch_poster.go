@@ -1325,6 +1325,18 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
+	// Submit message positions to pending queue
+	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
+	if shouldSubmit {
+		for p := b.building.msgCount; p < msgCount; p += 1 {
+			err = b.enqueuePendingTransaction(p)
+			if err != nil {
+				log.Error("error submitting position", "error", err, "pos", p)
+				break
+			}
+		}
+	}
+
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 		return false, err
@@ -1398,18 +1410,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
 			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
-		}
-	}
-
-	// Submit message positions to pending queue
-	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
-	if shouldSubmit {
-		for p := b.building.msgCount; p < msgCount; p += 1 {
-			err = b.enqueuePendingTransaction(p)
-			if err != nil {
-				log.Error("error submitting position", "error", err, "pos", p)
-				break
-			}
 		}
 	}
 
