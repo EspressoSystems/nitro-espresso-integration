@@ -1586,6 +1586,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 }
 
 func (s *TransactionStreamer) resubmitEspressoTransactions(ctx context.Context, tx SubmittedEspressoTx) error {
+	log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
 	_, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 		Payload:   tx.Payload,
 		Namespace: s.chainConfig.ChainID.Uint64(),
