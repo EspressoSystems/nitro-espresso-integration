@@ -19,14 +19,10 @@ import (
 	"testing"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-sequencer-go/tagged-base64"
-	"github.com/offchainlabs/nitro/espressocrypto"
-	"github.com/offchainlabs/nitro/util"
-
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
-
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -40,8 +36,10 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
+	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
@@ -1388,42 +1386,6 @@ func (s *TransactionStreamer) getEspressoSubmittedPos() ([]arbutil.MessageIndex,
 	return pos, nil
 }
 
-func (s *TransactionStreamer) getLastPotentialMsg() (*arbostypes.MessageWithMetadata, error) {
-	lastPotentialMsgBytes, err := s.db.Get(lastPotentialMsgInBatch)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			log.Info("last potential msg is empty, is trying to post a new batch")
-			return nil, nil
-		}
-	}
-
-	var msgWithMetadata arbostypes.MessageWithMetadata
-	err = rlp.DecodeBytes(lastPotentialMsgBytes, &msgWithMetadata)
-
-	if err != nil {
-		return nil, err
-	}
-	return &msgWithMetadata, nil
-}
-
-func (s *TransactionStreamer) getLastPotentialMsgPos() (*arbutil.MessageIndex, error) {
-	lastPotentialMsgPosBytes, err := s.db.Get(lastPotentialMsgInBatchPos)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	var lastPotentialMsgInBatchPos arbutil.MessageIndex
-	err = rlp.DecodeBytes(lastPotentialMsgPosBytes, &lastPotentialMsgInBatchPos)
-	if err != nil {
-		return nil, err
-	}
-
-	return &lastPotentialMsgInBatchPos, nil
-}
-
 func (s *TransactionStreamer) getEspressoSubmittedHash() (*espressoTypes.TaggedBase64, error) {
 	posBytes, err := s.db.Get(espressoSubmittedHash)
 	if err != nil {
@@ -1504,43 +1466,6 @@ func (s *TransactionStreamer) setEspressoSubmittedPos(batch ethdb.KeyValueWriter
 		return err
 	}
 
-	return nil
-}
-
-func (s *TransactionStreamer) setLastPotentialMsg(batch ethdb.KeyValueWriter, msg *arbostypes.MessageWithMetadata) error {
-	if msg == nil {
-		err := batch.Delete(lastPotentialMsgInBatch)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-	msgBytes, err := rlp.EncodeToBytes(msg)
-	if err != nil {
-		return err
-	}
-	err = batch.Put(lastPotentialMsgInBatch, msgBytes)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *TransactionStreamer) setLastPotentialMsgPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
-	// if pos is nil, delete the key
-	if pos == nil {
-		err := batch.Delete(lastPotentialMsgInBatchPos)
-		return err
-	}
-	posBytes, err := rlp.EncodeToBytes(pos)
-	if err != nil {
-		return err
-	}
-	err = batch.Put(lastPotentialMsgInBatchPos, posBytes)
-	if err != nil {
-		return err
-
-	}
 	return nil
 }
 

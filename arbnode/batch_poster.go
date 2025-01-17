@@ -563,29 +563,29 @@ var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso trans
 
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
-func (b *BatchPoster) checkEspressoValidation() error {
+func (b *BatchPoster) checkEspressoValidation() bool {
+	b.building.segments.SetWaitingForValidation()
 	if b.streamer.espressoClient == nil && b.streamer.lightClientReader == nil {
-		// We are not using espresso mode since these haven't been set
-		return nil
+		// We are not using espresso mode since these haven't been set, return true to advance batch posting
+		return true
 	}
-
+	if b.streamer.EscapeHatchEnabled {
+		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
+		return true // return true to skip verification of batch
+	}
 	lastConfirmed, err := b.streamer.getLastConfirmedPos()
 	if err != nil {
 		log.Error("failed call to get last confirmed pos", "err", err)
-		return err
+		return false // if we get an error we can't validate
 	}
 
 	// This message has passed the espresso verification
-	if lastConfirmed != nil && b.building.msgCount <= *lastConfirmed {
-		return nil
-	}
 
-	if b.streamer.EscapeHatchEnabled {
-		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
-		return nil
+	if lastConfirmed != nil && b.building.msgCount-1 <= *lastConfirmed {
+		return true
 	}
-
-	return fmt.Errorf("%w (height: %d)", EspressoValidationErr, b.building.msgCount)
+  // If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry. 
+	return false
 }
 
 func (b *BatchPoster) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
@@ -807,19 +807,20 @@ func (b *BatchPoster) getBatchPosterPosition(ctx context.Context, blockNum *big.
 var errBatchAlreadyClosed = errors.New("batch segments already closed")
 
 type batchSegments struct {
-	compressedBuffer      *bytes.Buffer
-	compressedWriter      *brotli.Writer
-	rawSegments           [][]byte
-	timestamp             uint64
-	blockNum              uint64
-	delayedMsg            uint64
-	sizeLimit             int
-	recompressionLevel    int
-	newUncompressedSize   int
-	totalUncompressedSize int
-	lastCompressedSize    int
-	trailingHeaders       int // how many trailing segments are headers
-	isDone                bool
+	compressedBuffer               *bytes.Buffer
+	compressedWriter               *brotli.Writer
+	rawSegments                    [][]byte
+	timestamp                      uint64
+	blockNum                       uint64
+	delayedMsg                     uint64
+	sizeLimit                      int
+	recompressionLevel             int
+	newUncompressedSize            int
+	totalUncompressedSize          int
+	lastCompressedSize             int
+	trailingHeaders                int // how many trailing segments are headers
+	isDone                         bool
+	isWaitingForEspressoValidation bool // We are waiting for the entirety of the batch to be validated by espresso. Should be false by default
 }
 
 type buildingBatch struct {
@@ -1017,6 +1018,10 @@ func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, e
 	if s.isDone {
 		return false, errBatchAlreadyClosed
 	}
+	if s.isWaitingForEspressoValidation {
+		//if we are waiting for espresso validation return that the batch is full with no error
+		return false, nil
+	}
 	if msg.DelayedMessagesRead > s.delayedMsg {
 		if msg.DelayedMessagesRead != s.delayedMsg+1 {
 			return false, fmt.Errorf("attempted to add delayed msg %d after %d", msg.DelayedMessagesRead, s.delayedMsg)
@@ -1060,6 +1065,13 @@ func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 	return fullMsg, nil
 }
 
+// Make the batch wait for validation Add this so we don't need to export the structs state to set it as we shouldn't need to set it to false again.
+func (s *batchSegments) SetWaitingForValidation() {
+	log.Info("Set current batch segments to waiting for validation")
+	if !s.isWaitingForEspressoValidation {
+		s.isWaitingForEspressoValidation = true
+	}
+}
 func (b *BatchPoster) encodeAddBatch(
 	seqNum *big.Int,
 	prevMsgNum arbutil.MessageIndex,
@@ -1415,23 +1427,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			log.Error("error getting message from streamer", "error", err)
 			return false, fmt.Errorf("error getting message from streamer: %w", err)
 		}
-		// #nosec G115
-		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
-		if timeSinceMsg >= config.MaxDelay {
-			// If we are past the max time delay, set an upper bound on the message count to be included in this batch
-			lastPotentialMsg, lastPotentialMsgInBatchPos, err := b.getLastPotentialMsgInBatch(msgCount)
-			if err != nil {
-				return false, err
-			}
-			if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
-				return false, fmt.Errorf("last potential msg or pos not found")
-			}
-			if b.building.msgCount >= *lastPotentialMsgInBatchPos {
-				// if we have reached the upper bound established after the max delay, then we should break from this loop and attempt to post
-				// At this point all messages will have been validated by espresso and put in the batch, so we are safe to skip the rest of this iteration
-				break
-			}
-		}
+
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
 				"disabling L1 bound as batch posting message is close to the maximum delay",
@@ -1456,10 +1452,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 
-		err = b.checkEspressoValidation()
-		if err != nil {
-			return false, fmt.Errorf("error checking espresso valdiation: %w", err)
-		}
 		isDelayed := msg.DelayedMessagesRead > b.building.segments.delayedMsg
 		success, err := b.building.segments.AddMessage(msg)
 		if err != nil {
@@ -1484,6 +1476,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 				b.building.muxBackend.delayedInbox = append(b.building.muxBackend.delayedInbox, msg)
 			}
 		}
+		// #nosec G115
+		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
 		if (msg.Message.Header.Kind != arbostypes.L1MessageType_BatchPostingReport) || (timeSinceMsg >= config.MaxEmptyBatchDelay) {
 			b.building.haveUsefulMessage = true
 			if b.building.firstUsefulMsg == nil {
@@ -1530,7 +1524,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// don't post anything for now
 		return false, nil
 	}
-
+	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
+  hasBatchBeenValidated:= b.checkEspressoValidation()
+	if !hasBatchBeenValidated {
+		return false, nil // We want to return false nil because we if we propegate this error we clear the batch cache for no reason.
+	}
+	log.Info("Espresso Validation has succeeded for current batch")
 	sequencerMsg, err := b.building.segments.CloseAndGetBytes()
 	if err != nil {
 		return false, err
@@ -1693,12 +1692,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		"numBlobs", len(kzgBlobs),
 	)
 
-	// Delete the last potential message in the batch after the batch is sent
-	err = b.deleteLastPotentialMsgInBatch()
-	if err != nil {
-		return false, err
-	}
-
 	recentlyHitL1Bounds := time.Since(b.lastHitL1Bounds) < config.PollInterval*3
 	postedMessages := b.building.msgCount - batchPosition.MessageCount
 	b.messagesPerBatch.Update(uint64(postedMessages))
@@ -1763,65 +1756,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()
-}
-
-/**
-* Get the last potential msg in batch and its position
-* if there is no last potential msg in batch, set the last potential msg in batch to the last msg in the database
-* and set the last potential msg in batch position to the last msg in the database position.
- */
-func (b *BatchPoster) getLastPotentialMsgInBatch(msgCount arbutil.MessageIndex) (*arbostypes.MessageWithMetadata, *arbutil.MessageIndex, error) {
-	// Check if there is a last potential msg & last potential msg position in the batch
-	lastPotentialMsg, err := b.streamer.getLastPotentialMsg()
-	if err != nil {
-		return nil, nil, err
-	}
-	lastPotentialMsgInBatchPos, err := b.streamer.getLastPotentialMsgPos()
-	if err != nil {
-		return nil, nil, err
-	}
-	// If there is no last potential msg in batch, set the last potential msg in batch to the last msg in the database
-	// and set the last potential msg in batch position to the last msg in the database position
-	if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
-		potentialMsg, err := b.streamer.GetMessage(msgCount - 1)
-		if err != nil {
-			return nil, nil, err
-		}
-		batch := b.streamer.db.NewBatch()
-		err = b.streamer.setLastPotentialMsg(batch, potentialMsg)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		potentialPos := msgCount
-		err = b.streamer.setLastPotentialMsgPos(batch, &potentialPos)
-		if err != nil {
-			return nil, nil, err
-		}
-		err = batch.Write()
-		if err != nil {
-			return nil, nil, err
-		}
-		lastPotentialMsgInBatchPos = &potentialPos
-		lastPotentialMsg = potentialMsg
-	}
-	return lastPotentialMsg, lastPotentialMsgInBatchPos, nil
-}
-
-/*
-* Deletes the last potential msg in batch and its position
- */
-func (b *BatchPoster) deleteLastPotentialMsgInBatch() error {
-	batch := b.streamer.db.NewBatch()
-	err := b.streamer.setLastPotentialMsg(batch, nil)
-	if err != nil {
-		return err
-	}
-	err = b.streamer.setLastPotentialMsgPos(batch, nil)
-	if err != nil {
-		return err
-	}
-	return batch.Write()
 }
 
 func (b *BatchPoster) Start(ctxIn context.Context) {
