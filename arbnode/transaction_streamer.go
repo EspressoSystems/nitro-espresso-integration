@@ -1309,11 +1309,10 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
-		// tryResubmittingEspressoTransactions will return an error EVEN IF
-		// the transaction is successfully resubmitted
-		// so that the current function (checkSubmittedTransactionForFinality)
-		// is re-polled and attempts to fetch the new transaction hash from espresso
-		return s.tryResubmittingEspressoTransactions(ctx, firstSubmitted, submittedTxHash, err)
+		if err := s.tryResubmittingEspressoTransactions(ctx, firstSubmitted, submittedTxHash, err); err != nil {
+			return fmt.Errorf("transaction is not finalized and failed to resubmit")
+		}
+		return fmt.Errorf("transaction resubmitted but not finalized; will retry polling")
 	}
 	height := data.BlockHeight
 
@@ -1327,9 +1326,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	if err != nil {
 		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
 	}
-
-	// Reset the last submit failure time if we successfully fetch the transaction
-	s.lastSubmitFailureAt = nil
 
 	log.Info("Fetching Merkle Root at hotshot", "height", height)
 	// Verify the merkle proof
@@ -1383,6 +1379,9 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	if !validated {
 		return fmt.Errorf("transactions fetched from HotShot doesn't contain the submitted payload")
 	}
+
+	// Reset the last submit failure time if we successfully fetch the transaction and verify its inclusion/namespace proof
+	s.lastSubmitFailureAt = nil
 
 	// Validation completed. Update the database
 	s.espressoTxnsStateInsertionMutex.Lock()
@@ -1550,7 +1549,7 @@ func (s *TransactionStreamer) tryResubmittingEspressoTransactions(ctx context.Co
 	if s.lastSubmitFailureAt == nil {
 		now := time.Now()
 		s.lastSubmitFailureAt = &now
-		return fmt.Errorf("trying to resubmit transaction (hash: %s): %w, will retry", submittedTxHash.String(), err)
+		return fmt.Errorf("not enough time to attempt resubmission of transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
 	}
 
 	duration := time.Since(*s.lastSubmitFailureAt)
@@ -1561,32 +1560,9 @@ func (s *TransactionStreamer) tryResubmittingEspressoTransactions(ctx context.Co
 	if err != nil {
 		return fmt.Errorf("failed to resubmit transaction (hash: %s): %w", submittedTxHash.String(), err)
 	}
-	// The first submitted tx should be updated to the resubmitted tx
-	submittedTxns, err := s.getEspressoSubmittedTxns()
-	if err != nil {
-		return fmt.Errorf("trying to resubmit transaction: failed to get the submitted txns: %w", err)
-	}
-	tx := SubmittedEspressoTx{
-		Hash:    txHash.String(),
-		Pos:     firstSubmitted.Pos,
-		Payload: firstSubmitted.Payload,
-	}
-	submittedTxns[0] = tx
-	batch := s.db.NewBatch()
-	err = s.setEspressoSubmittedTxns(batch, submittedTxns)
-	if err != nil {
-		return fmt.Errorf("trying to resubmit transaction: failed to set the submitted txns: %w", err)
-	}
-	err = batch.Write()
-	if err != nil {
-		return fmt.Errorf("failed to write to db: %w", err)
-	}
-	s.lastSubmitFailureAt = nil
 
-	// we return an error even in the successful case
-	// so the caller site can be re-polled
-	// see comments in checkSubmittedTransactionForFinality at callsite
-	return fmt.Errorf("trying to resubmit transaction succeeded: new tx hash: %s", submittedTxHash.String())
+	log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
+	return nil
 }
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.

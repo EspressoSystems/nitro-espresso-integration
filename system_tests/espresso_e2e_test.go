@@ -276,18 +276,6 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
-	//  Test that if espresso node is down, the transaction is resubmitted
-	newAccount3 := "User12"
-	l2Info.GenerateAccount(newAccount3)
-	addr3 := l2Info.GetAddress(newAccount3)
-	tx3 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
-	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
-		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
-	})
-
-	//  Wait for 4 seconds before shutting down the espresso node
-	time.Sleep(4 * time.Second)
-
 	// Shutdown the espresso node
 	shutdownEspressoWithoutRemovingVolumes := func() {
 		p := exec.Command("docker", "compose", "down")
@@ -297,8 +285,17 @@ func TestEspressoE2E(t *testing.T) {
 			panic(err)
 		}
 	}
-	// Note: This is important because otherwise namespace proof validations will fail
+	// Note: It's important not to remove the volumes because otherwise namespace proof validations will fail
 	shutdownEspressoWithoutRemovingVolumes()
+
+	// Test that if espresso node is down, the transaction will be resubmitted once it is back online
+	newAccount3 := "User12"
+	l2Info.GenerateAccount(newAccount3)
+	addr3 := l2Info.GetAddress(newAccount3)
+	tx3 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
+	})
 
 	// Wait for a 1 minute before restarting the espresso node
 	time.Sleep(1 * time.Minute)
