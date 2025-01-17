@@ -330,6 +330,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
+	ResubmitEspressoTxDeadline:     10 * time.Second,
 }
 
 type BatchPosterOpts struct {
