@@ -87,6 +87,8 @@ type TransactionStreamer struct {
 	espressoTxnsPollingInterval  time.Duration
 	maxBlockLagBeforeEscapeHatch uint64
 	espressoMaxTransactionSize   int64
+	resubmitEspressoTxDeadline   time.Duration
+	lastSubmitFailureAt          *time.Time
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
@@ -1303,7 +1305,22 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
-		return fmt.Errorf("failed to fetch the submitted transaction hash (hash: %s): %w", submittedTxHash.String(), err)
+		if s.lastSubmitFailureAt == nil {
+			now := time.Now()
+			s.lastSubmitFailureAt = &now
+			return fmt.Errorf("failed to fetch the submitted transaction hash (hash: %s): %w, will retry", submittedTxHash.String(), err)
+		}
+
+		duration := time.Since(*s.lastSubmitFailureAt)
+		if duration < s.resubmitEspressoTxDeadline {
+			return fmt.Errorf("failed to fetch the submitted transaction hash (hash: %s): %w, will retry", submittedTxHash.String(), err)
+		}
+		err = s.resubmitEspressoTransactions(ctx, firstSubmitted)
+		if err != nil {
+			return fmt.Errorf("faiiled to resubmit trasnaction (hash: %s): %w", submittedTxHash.String(), err)
+		}
+		s.lastSubmitFailureAt = nil
+		return fmt.Errorf("resubmitted tx: %s", submittedTxHash.String())
 	}
 	height := data.BlockHeight
 
@@ -1568,6 +1585,17 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	return nil
 }
 
+func (s *TransactionStreamer) resubmitEspressoTransactions(ctx context.Context, tx SubmittedEspressoTx) error {
+	_, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
+		Payload:   tx.Payload,
+		Namespace: s.chainConfig.ChainID.Uint64(),
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
@@ -1672,28 +1700,6 @@ func (s *TransactionStreamer) checkEspressoLiveness() error {
 	// If escape hatch is on, and hotshot is down
 	log.Warn("enabling the escape hatch, hotshot is down")
 	s.EscapeHatchEnabled = true
-
-	// Skip the espresso verification for the submitted messages
-	submitted, err := s.getEspressoSubmittedTxns()
-	if err != nil {
-		return err
-	}
-	if len(submitted) == 0 {
-		return nil
-	}
-
-	s.espressoTxnsStateInsertionMutex.Lock()
-	defer s.espressoTxnsStateInsertionMutex.Unlock()
-
-	batch := s.db.NewBatch()
-	err = s.cleanEspressoSubmittedData(batch)
-	if err != nil {
-		return err
-	}
-	err = batch.Write()
-	if err != nil {
-		return err
-	}
 
 	return nil
 }
