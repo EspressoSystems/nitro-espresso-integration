@@ -1310,7 +1310,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
 		if err := s.tryResubmittingEspressoTransactions(ctx, firstSubmitted, submittedTxHash, err); err != nil {
-			return fmt.Errorf("transaction is not finalized and failed to resubmit")
+			return fmt.Errorf("transaction is not finalized and failed to resubmit %w", err)
 		}
 		return fmt.Errorf("transaction resubmitted but not finalized; will retry polling")
 	}

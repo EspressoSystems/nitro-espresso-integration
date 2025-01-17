@@ -276,6 +276,19 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
+	// Test that if espresso node is down, the transaction will be resubmitted once it is back online
+	newAccount3 := "User12"
+	l2Info.GenerateAccount(newAccount3)
+	addr3 := l2Info.GetAddress(newAccount3)
+	tx3 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
+	})
+
+	// Wait for 1 second to make sure txn is submitted to Espresso
+	// but shut down before it can be finalized
+	time.Sleep(1 * time.Second)
+
 	// Shutdown the espresso node
 	shutdownEspressoWithoutRemovingVolumes := func() {
 		p := exec.Command("docker", "compose", "down")
@@ -288,15 +301,6 @@ func TestEspressoE2E(t *testing.T) {
 	// Note: It's important not to remove the volumes because otherwise namespace proof validations will fail
 	shutdownEspressoWithoutRemovingVolumes()
 
-	// Test that if espresso node is down, the transaction will be resubmitted once it is back online
-	newAccount3 := "User12"
-	l2Info.GenerateAccount(newAccount3)
-	addr3 := l2Info.GetAddress(newAccount3)
-	tx3 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
-	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
-		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
-	})
-
 	// Wait for a 1 minute before restarting the espresso node
 	time.Sleep(1 * time.Minute)
 
@@ -307,10 +311,10 @@ func TestEspressoE2E(t *testing.T) {
 	err = waitForEspressoNode(ctx)
 	Require(t, err)
 
-	// Wait for the L2 chain to catch up
+	// Wait for the L2 chain to catch up.
 	err = waitForWith(ctx, 180*time.Second, 2*time.Second, func() bool {
 		balance3 := l2Node.GetBalance(t, addr3)
-		log.Info("waiting for balance", "account", newAccount3, "addr", addr3, "balance", balance3)
+		log.Info("waiting for balance in", "account", newAccount3, "addr", addr3, "balance", balance3)
 		return balance3.Cmp(transferAmount) >= 0
 	})
 	Require(t, err)
