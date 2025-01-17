@@ -1067,8 +1067,8 @@ func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 
 // Make the batch wait for validation Add this so we don't need to export the structs state to set it as we shouldn't need to set it to false again.
 func (s *batchSegments) SetWaitingForValidation() {
-	log.Info("Set current batch segments to waiting for validation")
 	if !s.isWaitingForEspressoValidation {
+    log.Info("Set current batch segments to waiting for validation")
 		s.isWaitingForEspressoValidation = true
 	}
 }
