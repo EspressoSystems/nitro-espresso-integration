@@ -564,6 +564,7 @@ func (s *TransactionStreamer) FeedPendingMessageCount() arbutil.MessageIndex {
 }
 
 func (s *TransactionStreamer) AddBroadcastMessages(feedMessages []*m.BroadcastFeedMessage) error {
+	log.Info("Adding Feed Messages from Sequencer", "len", len(feedMessages))
 	if len(feedMessages) == 0 {
 		return nil
 	}
@@ -661,6 +662,18 @@ func (s *TransactionStreamer) AddBroadcastMessages(feedMessages []*m.BroadcastFe
 	err = s.addMessagesAndEndBatchImpl(broadcastStartPos, false, nil, nil)
 	if err != nil {
 		return fmt.Errorf("error adding pending broadcaster messages: %w", err)
+	}
+
+	//  If light client reader and espresso client are set, then we need to store the pos in the database
+	//  to be used later to submit the message to hotshot for finalization.
+	if s.lightClientReader != nil && s.espressoClient != nil {
+		//  Only submit the transaction if escape hatch is not enabled
+		if s.shouldSubmitEspressoTransaction() {
+			for i, msg := range messages {
+				log.Info("Enquequing message to Espresso", "pos", broadcastStartPos+arbutil.MessageIndex(i), "msg", msg)
+				return s.enqueuePendingTransaction(broadcastStartPos + arbutil.MessageIndex(i))
+			}
+		}
 	}
 
 	return nil
@@ -1032,6 +1045,7 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 			return s.enqueuePendingTransaction(pos)
 		}
 	}
+
 	return nil
 }
 
@@ -1377,7 +1391,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	batch := s.db.NewBatch()
-	if err := s.setEspressoSubmittedTxns(batch, submittedTxns[0:]); err != nil {
+	if err := s.setEspressoSubmittedTxns(batch, submittedTxns[1:]); err != nil {
 		return fmt.Errorf("failed to set the espresso submitted txns: %w", err)
 	}
 	lastConfirmedPos := firstSubmitted.Pos[len(firstSubmitted.Pos)-1]
@@ -1736,7 +1750,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return s.espressoTxnsPollingInterval
+	return 0
 }
 
 /**
@@ -1772,17 +1786,6 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 			return err
 		}
 		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, func(ctx context.Context, ignored struct{}) time.Duration {
-			shouldSubmit := s.shouldSubmitEspressoTransaction()
-			if shouldSubmit {
-				s.submitEspressoTransactions(ctx)
-			}
-			return s.espressoTxnsPollingInterval
-		}, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
