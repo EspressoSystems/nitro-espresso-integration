@@ -1107,6 +1107,7 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 		//  Only submit the transaction if escape hatch is not enabled
 		if s.shouldSubmitEspressoTransaction() {
 			for i := range messages {
+				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(i))
 				return s.enqueuePendingTransaction(pos + arbutil.MessageIndex(i))
 			}
 		}
