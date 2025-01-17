@@ -1309,6 +1309,10 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
+		// tryResubmittingEspressoTransactions will return an error EVEN IF
+		// the transaction is successfully resubmitted
+		// so that the current function (checkSubmittedTransactionForFinality)
+		// is re-polled and attempts to fetch the new transaction hash from espresso
 		return s.tryResubmittingEspressoTransactions(ctx, firstSubmitted, submittedTxHash, err)
 	}
 	height := data.BlockHeight
@@ -1551,11 +1555,11 @@ func (s *TransactionStreamer) tryResubmittingEspressoTransactions(ctx context.Co
 
 	duration := time.Since(*s.lastSubmitFailureAt)
 	if duration < s.resubmitEspressoTxDeadline {
-		return fmt.Errorf("trying to resubmit transaction (hash: %s): %w, will retry", submittedTxHash.String(), err)
+		return fmt.Errorf("not enough time to attempt resubmission of transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
 	}
 	txHash, err := s.resubmitEspressoTransactions(ctx, firstSubmitted)
 	if err != nil {
-		return fmt.Errorf("faiiled to resubmit trasnaction (hash: %s): %w", submittedTxHash.String(), err)
+		return fmt.Errorf("failed to resubmit transaction (hash: %s): %w", submittedTxHash.String(), err)
 	}
 	// The first submitted tx should be updated to the resubmitted tx
 	submittedTxns, err := s.getEspressoSubmittedTxns()
@@ -1578,7 +1582,11 @@ func (s *TransactionStreamer) tryResubmittingEspressoTransactions(ctx context.Co
 		return fmt.Errorf("failed to write to db: %w", err)
 	}
 	s.lastSubmitFailureAt = nil
-	return fmt.Errorf("trying to resubmit transaction: resubmitted tx: %s", submittedTxHash.String())
+
+	// we return an error even in the successful case
+	// so the caller site can be re-polled
+	// see comments in checkSubmittedTransactionForFinality at callsite
+	return fmt.Errorf("trying to resubmit transaction succeeded: new tx hash: %s", submittedTxHash.String())
 }
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.

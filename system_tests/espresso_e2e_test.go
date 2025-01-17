@@ -285,7 +285,7 @@ func TestEspressoE2E(t *testing.T) {
 		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
 	})
 
-	//  Wait for 2 seconds before shutting down the espresso node
+	//  Wait for 4 seconds before shutting down the espresso node
 	time.Sleep(4 * time.Second)
 
 	// Shutdown the espresso node
