@@ -1527,7 +1527,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
   hasBatchBeenValidated:= b.checkEspressoValidation()
 	if !hasBatchBeenValidated {
-		return false, nil // We want to return false nil because we if we propegate this error we clear the batch cache for no reason.
+		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
 	}
 	sequencerMsg, err := b.building.segments.CloseAndGetBytes()
 	if err != nil {
