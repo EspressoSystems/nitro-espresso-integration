@@ -1321,29 +1321,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// There's nothing after the newest batch, therefore batch posting was not required
 		return false, nil
 	}
-
-
-	lastPotentialMsg, lastPotentialMsgInBatchPos, err := b.getLastPotentialMsgInBatch(msgCount)
-  atEspressoBatchLimit := b.building.msgCount >= *lastPotentialMsgInBatchPos
-  if !b.building.haveUsefulMessage{ // If we don't have a useful message we need to check if we are at the batch limit for this iteration and delete the upper bound
-                                    // and allow at least 1 useful message to flow through.  
-      if atEspressoBatchLimit{
-        // if we are at our msg limit for the batch and we don't have a useful message, we have a 1 message batch with just the batch posting report
-        // if this is the case, we should delete the upper bound and process some more messages, otherwise we don't have a useful batch and forcePostBatch = true is useless
-        err = b.deleteLastPotentialMsgInBatch()
-        if err != nil{
-          return false, err
-        }
-        log.Info("This current batch was full, but did not have a useful message. We should delete the espresso upper bound on the batch")
-        return false, nil
-      } 
-    }
+	// This will be overwritten when we establish an upper bound on the messages if we take longer than the max delay to post a batch
+	// If the batch fills up prior to the delay, this is the appropriate last potential message for the code that uses it later in the function
+	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 		return false, err
-	}
-
-	if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
-		return false, fmt.Errorf("last potential msg or pos not found")
 	}
 
 	config := b.config()
@@ -1427,12 +1409,28 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 		}
 	}
-
-	for b.building.msgCount < *lastPotentialMsgInBatchPos {
+	for b.building.msgCount < msgCount {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
 			log.Error("error getting message from streamer", "error", err)
 			return false, fmt.Errorf("error getting message from streamer: %w", err)
+		}
+		// #nosec G115
+		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
+		if timeSinceMsg >= config.MaxDelay {
+			// If we are past the max time delay, set an upper bound on the message count to be included in this batch
+			lastPotentialMsg, lastPotentialMsgInBatchPos, err := b.getLastPotentialMsgInBatch(msgCount)
+			if err != nil {
+				return false, err
+			}
+			if lastPotentialMsg == nil || lastPotentialMsgInBatchPos == nil {
+				return false, fmt.Errorf("last potential msg or pos not found")
+			}
+			if b.building.msgCount >= *lastPotentialMsgInBatchPos {
+				// if we have reached the upper bound established after the max delay, then we should break from this loop and attempt to post
+				// At this point all messages will have been validated by espresso and put in the batch, so we are safe to skip the rest of this iteration
+				break
+			}
 		}
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
@@ -1486,8 +1484,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 				b.building.muxBackend.delayedInbox = append(b.building.muxBackend.delayedInbox, msg)
 			}
 		}
-		// #nosec G115
-		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
 		if (msg.Message.Header.Kind != arbostypes.L1MessageType_BatchPostingReport) || (timeSinceMsg >= config.MaxEmptyBatchDelay) {
 			b.building.haveUsefulMessage = true
 			if b.building.firstUsefulMsg == nil {
