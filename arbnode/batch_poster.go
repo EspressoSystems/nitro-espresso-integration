@@ -289,7 +289,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Second,
-	ResubmitEspressoTxDeadline:     time.Minute,
+	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",

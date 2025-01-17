@@ -1026,14 +1026,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockHash{msgWithBlockHash}, pos)
 
-	//  If light client reader and espresso client are set, then we need to store the pos in the database
-	//  to be used later to submit the message to hotshot for finalization.
-	if s.lightClientReader != nil && s.espressoClient != nil {
-		//  Only submit the transaction if escape hatch is not enabled
-		if s.shouldSubmitEspressoTransaction() {
-			return s.enqueuePendingTransaction(pos)
-		}
-	}
 	return nil
 }
 
@@ -1109,6 +1101,18 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	err = batch.Write()
 	if err != nil {
 		return err
+	}
+
+	//  If light client reader and espresso client are set, then we need to store the pos in the database
+	//  to be used later to submit the message to hotshot for finalization.
+	if s.lightClientReader != nil && s.espressoClient != nil {
+		//  Only submit the transaction if escape hatch is not enabled
+		if s.shouldSubmitEspressoTransaction() {
+			for i := range messages {
+				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(i))
+				return s.enqueuePendingTransaction(pos + arbutil.MessageIndex(i))
+			}
+		}
 	}
 
 	select {
