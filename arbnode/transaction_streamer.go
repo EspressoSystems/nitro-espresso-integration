@@ -1377,7 +1377,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
 	batch := s.db.NewBatch()
-	if err := s.setEspressoSubmittedTxns(batch, submittedTxns[0:]); err != nil {
+	if err := s.setEspressoSubmittedTxns(batch, submittedTxns[1:]); err != nil {
 		return fmt.Errorf("failed to set the espresso submitted txns: %w", err)
 	}
 	lastConfirmedPos := firstSubmitted.Pos[len(firstSubmitted.Pos)-1]
@@ -1736,7 +1736,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return s.espressoTxnsPollingInterval
+	return 0
 }
 
 /**
@@ -1772,17 +1772,6 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 			return err
 		}
 		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, func(ctx context.Context, ignored struct{}) time.Duration {
-			shouldSubmit := s.shouldSubmitEspressoTransaction()
-			if shouldSubmit {
-				s.submitEspressoTransactions(ctx)
-			}
-			return s.espressoTxnsPollingInterval
-		}, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
