@@ -183,6 +183,7 @@ type BatchPosterConfig struct {
 	HotShotUrl                  string        `koanf:"hotshot-url"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
+	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
 	// state updates can lag behind before triggering the escape hatch. If the difference
 	// between the current L1 block number and the latest state update's block number
@@ -251,6 +252,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
@@ -286,7 +288,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ReorgResistanceMargin:          10 * time.Minute,
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 500,
+	EspressoTxnsPollingInterval:    time.Second,
+	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
@@ -323,10 +326,11 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	CheckBatchCorrectness:          true,
 	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Millisecond * 500,
+	EspressoTxnsPollingInterval:    time.Second,
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	HotShotUrl:                     "",
+	ResubmitEspressoTxDeadline:     10 * time.Second,
 }
 
 type BatchPosterOpts struct {
@@ -389,6 +393,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
+		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
 
 	b := &BatchPoster{
@@ -586,26 +591,6 @@ func (b *BatchPoster) checkEspressoValidation() bool {
 	}
   // If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry. 
 	return false
-}
-
-func (b *BatchPoster) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
-	hasNotSubmitted, err := b.streamer.HasNotSubmitted(pos)
-	if err != nil {
-		return err
-	}
-	if !hasNotSubmitted {
-		return nil
-	}
-
-	// Store the pos in the database to be used later to submit the message
-	// to hotshot for finalization.
-	err = b.streamer.SubmitEspressoTransactionPos(pos)
-	if err != nil {
-		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
-		return err
-	}
-
-	return nil
 }
 
 type txInfo struct {
@@ -1271,6 +1256,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	dbBatchCount, err := b.inbox.GetBatchCount()
 	if err != nil {
+		log.Error("Error getting batch count", "err", err)
 		return false, err
 	}
 	if dbBatchCount > batchPosition.NextSeqNum {
@@ -1327,6 +1313,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	msgCount, err := b.streamer.GetMessageCount()
 	if err != nil {
+		log.Error("Error getting message count", "err", err)
 		return false, err
 	}
 	if msgCount <= batchPosition.MessageCount {
@@ -1337,6 +1324,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	// If the batch fills up prior to the delay, this is the appropriate last potential message for the code that uses it later in the function
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
+
 		return false, err
 	}
 
@@ -1410,21 +1398,10 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
 		}
 	}
-	// Submit message positions to pending queue
-	shouldSubmit := b.streamer.shouldSubmitEspressoTransaction()
-	if shouldSubmit {
-		for p := b.building.msgCount; p < msgCount; p += 1 {
-			err = b.enqueuePendingTransaction(p)
-			if err != nil {
-				log.Error("error submitting position", "error", err, "pos", p)
-				break
-			}
-		}
-	}
+
 	for b.building.msgCount < msgCount {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
-			log.Error("error getting message from streamer", "error", err)
 			return false, fmt.Errorf("error getting message from streamer: %w", err)
 		}
 
