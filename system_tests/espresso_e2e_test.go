@@ -297,7 +297,7 @@ func TestEspressoE2E(t *testing.T) {
 			panic(err)
 		}
 	}
-	// Note: This is important because other namespace proof validations fail
+	// Note: This is important because otherwise namespace proof validations will fail
 	shutdownEspressoWithoutRemovingVolumes()
 
 	// Wait for a 1 minute before restarting the espresso node
@@ -318,7 +318,8 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
-	// Try submitting the transaction another transaction to make sure the submissions work as normal now
+	// Try submitting the another transaction to make sure the transaction is submitted
+	// after espresso processes the resubmitted transaction
 	tx4 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
 
 	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
