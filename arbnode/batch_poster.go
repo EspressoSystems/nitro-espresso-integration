@@ -1004,6 +1004,7 @@ func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, e
 		return false, errBatchAlreadyClosed
 	}
 	if s.isWaitingForEspressoValidation {
+    log.Info("Current batch is waiting for espresso validation, we won't add more messages")
 		//if we are waiting for espresso validation return that the batch is full with no error
 		return false, nil
 	}
@@ -1320,8 +1321,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// There's nothing after the newest batch, therefore batch posting was not required
 		return false, nil
 	}
-	// This will be overwritten when we establish an upper bound on the messages if we take longer than the max delay to post a batch
-	// If the batch fills up prior to the delay, this is the appropriate last potential message for the code that uses it later in the function
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 
@@ -1503,6 +1502,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
   hasBatchBeenValidated:= b.checkEspressoValidation()
+  log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated)
 	if !hasBatchBeenValidated {
 		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
 	}
