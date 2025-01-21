@@ -1128,17 +1128,9 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 }
 
 func (s *TransactionStreamer) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
-	hasNotSubmitted, err := s.HasNotSubmitted(pos)
-	if err != nil {
-		return err
-	}
-	if !hasNotSubmitted {
-		return nil
-	}
-
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
-	err = s.SubmitEspressoTransactionPos(pos)
+	err := s.SubmitEspressoTransactionPos(pos)
 	if err != nil {
 		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
 		return err
