@@ -589,7 +589,7 @@ func (b *BatchPoster) checkEspressoValidation() bool {
 	if lastConfirmed != nil && b.building.msgCount-1 <= *lastConfirmed {
 		return true
 	}
-  // If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry. 
+	// If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry.
 	return false
 }
 
@@ -1000,14 +1000,17 @@ func (s *batchSegments) addDelayedMessage() (bool, error) {
 }
 
 func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, error) {
-	if s.isDone {
-		return false, errBatchAlreadyClosed
-	}
 	if s.isWaitingForEspressoValidation {
-    log.Info("Current batch is waiting for espresso validation, we won't add more messages")
+		log.Info("Current batch is waiting for espresso validation, we won't add more messages")
 		//if we are waiting for espresso validation return that the batch is full with no error
 		return false, nil
 	}
+
+	// We should do this check here because the batch could be potentially closed when we are waiting for espreso validation
+	if s.isDone {
+		return false, errBatchAlreadyClosed
+	}
+
 	if msg.DelayedMessagesRead > s.delayedMsg {
 		if msg.DelayedMessagesRead != s.delayedMsg+1 {
 			return false, fmt.Errorf("attempted to add delayed msg %d after %d", msg.DelayedMessagesRead, s.delayedMsg)
@@ -1054,7 +1057,7 @@ func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 // Make the batch wait for validation Add this so we don't need to export the structs state to set it as we shouldn't need to set it to false again.
 func (s *batchSegments) SetWaitingForValidation() {
 	if !s.isWaitingForEspressoValidation {
-    log.Info("Set current batch segments to waiting for validation")
+		log.Info("Set current batch segments to waiting for validation")
 		s.isWaitingForEspressoValidation = true
 	}
 }
@@ -1471,7 +1474,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// #nosec G115
 		firstUsefulMsgTime = time.Unix(int64(b.building.firstUsefulMsg.Message.Header.Timestamp), 0)
 		if time.Since(firstUsefulMsgTime) >= config.MaxDelay {
-      log.Info("attempting to post batch due to max delay", "firstUsefulMsgTime", firstUsefulMsgTime, "first useful msg timestamp", b.building.firstUsefulMsg.Message.Header.Timestamp)
+			log.Info("attempting to post batch due to max delay", "firstUsefulMsgTime", firstUsefulMsgTime, "first useful msg timestamp", b.building.firstUsefulMsg.Message.Header.Timestamp)
 			forcePostBatch = true
 		}
 	}
@@ -1502,8 +1505,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
-  hasBatchBeenValidated:= b.checkEspressoValidation()
-  log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated, "b.building.msgCount", b.building.msgCount, "b.building.startMsgCount", b.building.startMsgCount)
+	hasBatchBeenValidated := b.checkEspressoValidation()
+	log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated, "b.building.msgCount", b.building.msgCount, "b.building.startMsgCount", b.building.startMsgCount)
+
 	if !hasBatchBeenValidated {
 		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
 	}
@@ -1730,6 +1734,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	return true, nil
 }
+
+// if we return an error, it resets the batch
+// so what we do is if we are waiting for espresso validation, we dont return an error so we dont reset the batch
+// the thing is we are getting the error, batch segments already closed.
+// which means we somehow got the espresso validation to pass and then we closed the bacth segment and were not able to reset the batch segment somehow.
 
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()

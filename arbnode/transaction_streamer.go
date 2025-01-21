@@ -1327,30 +1327,30 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	log.Info("Fetching Merkle Root at hotshot", "height", height)
 	// Verify the merkle proof
-	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
+	snapshotHeight, err := s.espressoClient.FetchLatestBlockHeight(ctx)
 	if err != nil {
 		return fmt.Errorf("%w (height: %d): %w", EspressoValidationErr, height, err)
 	}
 
-	if snapshot.Height <= height {
+	if snapshotHeight <= height {
 		return errors.New("snapshot height is less than or equal to transaction height")
 	}
 
-	nextHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, snapshot.Height)
+	nextHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, snapshotHeight)
 	if err != nil {
-		return fmt.Errorf("error fetching the snapshot header (height: %d): %w", snapshot.Height, err)
+		return fmt.Errorf("error fetching the snapshot header (height: %d): %w", snapshotHeight, err)
 	}
 
-	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
+	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshotHeight, height)
 	if err != nil {
-		return fmt.Errorf("error fetching the block merkle proof (height: %d, root height: %d): %w", height, snapshot.Height, err)
+		return fmt.Errorf("error fetching the block merkle proof (height: %d, root height: %d): %w", height, snapshotHeight, err)
 	}
 
 	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
 
-	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
+	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, nextHeader.Header.Commit())
 	if !ok {
-		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshot.Height)
+		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshotHeight)
 	}
 
 	// Verify the namespace proof
