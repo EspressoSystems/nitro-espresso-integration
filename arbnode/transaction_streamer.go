@@ -1096,10 +1096,6 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	if err != nil {
 		return err
 	}
-	err = batch.Write()
-	if err != nil {
-		return err
-	}
 
 	//  If light client reader and espresso client are set, then we need to store the pos in the database
 	//  to be used later to submit the message to hotshot for finalization.
@@ -1108,9 +1104,19 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 		if s.shouldSubmitEspressoTransaction() {
 			for i := range messages {
 				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(i))
-				return s.enqueuePendingTransaction(pos + arbutil.MessageIndex(i))
+				err := s.enqueuePendingTransaction(pos + arbutil.MessageIndex(i))
+				if err != nil {
+					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(i), "err", err)
+					return err
+				}
+				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(i))
 			}
 		}
+	}
+
+	err = batch.Write()
+	if err != nil {
+		return err
 	}
 
 	select {
