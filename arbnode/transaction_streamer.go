@@ -1750,7 +1750,7 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	retryRate := s.espressoTxnsPollingInterval * 50
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
-		log.Warn("resubmitting espresso transactions failed: unable to get submitted transaction, will retry: %w", err)
+		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
 		return retryRate
 	}
 
