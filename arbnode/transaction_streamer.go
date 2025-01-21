@@ -1498,45 +1498,6 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 	return nil
 }
 
-func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, error) {
-	submitted, err := s.getEspressoSubmittedTxns()
-	if err != nil {
-		return false, err
-	}
-
-	if len(submitted) > 0 {
-		// Already submitted
-		lastSubmittedTx := submitted[len(submitted)-1]
-		lastPos := lastSubmittedTx.Pos[len(lastSubmittedTx.Pos)-1]
-
-		if pos < lastPos {
-			return false, nil
-		}
-	}
-
-	// Finalized transactions
-	lastConfirmed, err := s.getLastConfirmedPos()
-	if err != nil {
-		return false, err
-	}
-
-	if lastConfirmed != nil && pos <= *lastConfirmed {
-		return false, nil
-	}
-
-	// Has not submitted to espresso but pending submission to hotshot
-	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return false, err
-	}
-
-	if len(pendingTxnsPos) > 0 && pos <= pendingTxnsPos[len(pendingTxnsPos)-1] {
-		return false, nil
-	}
-
-	return true, nil
-}
-
 /**
 * If the transaction fails to fetch, we will retry for a while before resubmitting
 * the transaction to the Espresso node.
