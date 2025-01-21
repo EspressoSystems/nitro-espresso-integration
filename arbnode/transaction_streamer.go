@@ -1758,7 +1758,6 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	log.Info("Attempting to resubmit transactions", "shouldResubmit", shouldResubmit)
 	if shouldResubmit {
 		for _, tx := range submittedTxns {
-			log.Info("resubmitting tx to Espresso", "tx", tx.Hash)
 			txHash, err := s.resubmitEspressoTransactions(ctx, tx)
 			if err != nil {
 				log.Warn("failed to resubmit espresso transactions", "err", err)
