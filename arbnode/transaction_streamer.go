@@ -1305,10 +1305,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
 	if err != nil {
-		if err := s.tryResubmittingEspressoTransactions(ctx, firstSubmitted, submittedTxHash, err); err != nil {
-			return fmt.Errorf("transaction is not finalized and failed to resubmit %w", err)
-		}
-		return fmt.Errorf("transaction resubmitted but not finalized; will retry polling")
+		return fmt.Errorf("unable to fetch transaction by hash: %w", err)
 	}
 	height := data.BlockHeight
 
@@ -1498,28 +1495,43 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 	return nil
 }
 
-/**
-* If the transaction fails to fetch, we will retry for a while before resubmitting
-* the transaction to the Espresso node.
- */
-func (s *TransactionStreamer) tryResubmittingEspressoTransactions(ctx context.Context, firstSubmitted SubmittedEspressoTx, submittedTxHash *tagged_base64.TaggedBase64, err error) error {
-	if s.lastSubmitFailureAt == nil {
-		now := time.Now()
-		s.lastSubmitFailureAt = &now
-		return fmt.Errorf("not enough time to attempt resubmission of transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
-	}
-
-	duration := time.Since(*s.lastSubmitFailureAt)
-	if duration < s.resubmitEspressoTxDeadline {
-		return fmt.Errorf("not enough time to attempt resubmission of transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
-	}
-	txHash, err := s.resubmitEspressoTransactions(ctx, firstSubmitted)
+func (s *TransactionStreamer) HasNotSubmitted(pos arbutil.MessageIndex) (bool, error) {
+	submitted, err := s.getEspressoSubmittedTxns()
 	if err != nil {
-		return fmt.Errorf("failed to resubmit transaction (hash: %s): %w", submittedTxHash.String(), err)
+		return false, err
 	}
 
-	log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
-	return nil
+	if len(submitted) > 0 {
+		// Already submitted
+		lastSubmittedTx := submitted[len(submitted)-1]
+		lastPos := lastSubmittedTx.Pos[len(lastSubmittedTx.Pos)-1]
+
+		if pos < lastPos {
+			return false, nil
+		}
+	}
+
+	// Finalized transactions
+	lastConfirmed, err := s.getLastConfirmedPos()
+	if err != nil {
+		return false, err
+	}
+
+	if lastConfirmed != nil && pos <= *lastConfirmed {
+		return false, nil
+	}
+
+	// Has not submitted to espresso but pending submission to hotshot
+	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return false, err
+	}
+
+	if len(pendingTxnsPos) > 0 && pos <= pendingTxnsPos[len(pendingTxnsPos)-1] {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
@@ -1732,11 +1744,71 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 	return s.espressoTxnsPollingInterval
 }
 
+func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
+	retryRate := s.espressoTxnsPollingInterval * 50
+	submittedTxns, err := s.getEspressoSubmittedTxns()
+	if err != nil {
+		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
+		return retryRate
+	}
+
+	shouldResubmit := s.shouldResubmitEspressoTransactions(ctx, submittedTxns)
+	log.Info("Attempting to resubmit transactions", "shouldResubmit", shouldResubmit)
+	if shouldResubmit {
+		for _, tx := range submittedTxns {
+			txHash, err := s.resubmitEspressoTransactions(ctx, tx)
+			if err != nil {
+				log.Warn("failed to resubmit espresso transactions", "err", err)
+				return retryRate
+			}
+			log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
+		}
+		// Reset the last submit failure time because we successfully resubmitted the transactions
+		s.lastSubmitFailureAt = nil
+	}
+	return s.espressoTxnsPollingInterval
+}
+
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
 	return !s.EscapeHatchEnabled
+}
+
+func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Context, submittedTxns []SubmittedEspressoTx) bool {
+	if len(submittedTxns) == 0 {
+		// If no submitted transactions, we dont need to resubmit
+		return false
+	}
+	firstSubmitted := submittedTxns[0]
+	hash := firstSubmitted.Hash
+
+	submittedTxHash, err := tagged_base64.Parse(hash)
+	if err != nil || submittedTxHash == nil {
+		log.Error("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
+		return false
+	}
+
+	_, err = s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
+	if err == nil {
+		// if we are able to fetch the transaction, we dont need to resubmit
+		return false
+	}
+
+	if s.lastSubmitFailureAt == nil {
+		now := time.Now()
+		s.lastSubmitFailureAt = &now
+		log.Warn("will wait for resubmission deadline before resubmitting transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		return false
+	}
+	duration := time.Since(*s.lastSubmitFailureAt)
+	if duration < s.resubmitEspressoTxDeadline {
+		log.Warn("resubmission deadline not reached (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		return false
+	}
+
+	return true
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
@@ -1748,6 +1820,10 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 			return err
 		}
 		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
+		if err != nil {
+			return err
+		}
+		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollToResubmitEspressoTransactions, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
