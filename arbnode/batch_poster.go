@@ -1006,7 +1006,6 @@ func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, e
 		return false, nil
 	}
 
-	// We should do this check here because the batch could be potentially closed when we are waiting for espreso validation
 	if s.isDone {
 		return false, errBatchAlreadyClosed
 	}
@@ -1507,7 +1506,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
 	hasBatchBeenValidated := b.checkEspressoValidation()
 	log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated, "b.building.msgCount", b.building.msgCount, "b.building.startMsgCount", b.building.startMsgCount)
-
 	if !hasBatchBeenValidated {
 		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
 	}
@@ -1734,11 +1732,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	return true, nil
 }
-
-// if we return an error, it resets the batch
-// so what we do is if we are waiting for espresso validation, we dont return an error so we dont reset the batch
-// the thing is we are getting the error, batch segments already closed.
-// which means we somehow got the espresso validation to pass and then we closed the bacth segment and were not able to reset the batch segment somehow.
 
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()
