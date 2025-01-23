@@ -64,7 +64,7 @@ runs:
     - name: Upload digest
       uses: actions/upload-artifact@v4
       with:
-        name: "${{ inputs.target }}-digests"
+        name: "${{ inputs.target }}--digest-${{ github.run_number }}-${{ matrix.platform }}"
         path: "${{ runner.temp }}/${{ inputs.target }}-${{ github.run_number }}-digests/*"
         if-no-files-found: error
         retention-days: 1

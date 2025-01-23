@@ -33,8 +33,8 @@ jobs:
         platform: [linux/amd64, linux/arm64]
         # Don't run arm build on PRs, "exclude:" is processed before "include:",
         # so we avoid using `include:`.
-        exclude:
-          - platform: ${{ github.event_name == 'pull_request' && 'linux/arm64' }}
+        # exclude:
+        #   - platform: ${{ github.event_name == 'pull_request' && 'linux/arm64' }}
 
     runs-on: ${{ matrix.platform == 'linux/amd64' && 'ubuntu-latest' || 'buildjet-8vcpu-ubuntu-2204-arm' }}
 
@@ -89,7 +89,7 @@ jobs:
 
       - name: Login to Github Container Repo
         uses: docker/login-action@v3
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner  }}
@@ -103,7 +103,7 @@ jobs:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event_name != 'pull_request' }}
+          # push: ${{ github.event_name != 'pull_request' }}
 
       - name: Build nitro-node-dev image
         uses: ./.github/actions/docker-image
@@ -114,7 +114,7 @@ jobs:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node-dev
           target: nitro-node-dev
           platforms: ${{ matrix.platform }}
-          push: ${{ github.event_name != 'pull_request' }}
+          # push: ${{ github.event_name != 'pull_request' }}
 
       - name: Check available space after CI run
         if: "!cancelled()"
@@ -128,7 +128,7 @@ jobs:
   # Only building for AMD64
   merge_into_multiplatform_images:
     # We only build the ARM images for non-PR builds, so skip this job if we're on PRs.
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
     needs:
       - docker_build
     strategy:
