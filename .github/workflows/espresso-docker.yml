@@ -127,7 +127,6 @@ jobs:
   # https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
   # Only building for AMD64
   merge_into_multiplatform_images:
-    # We only build the ARM images for non-PR builds, so skip this job if we're on PRs.
     if: github.event_name != 'pull_request'
     needs:
       - docker_build
@@ -149,18 +148,22 @@ jobs:
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner  }}
-          password: ${{ secrets.GITHUB_TOKEN  }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Remove digests dir
         run: |
           rm -rf "${{ runner.temp }}/digests"
+          mkdir -p "${{ runner.temp }}/digests"
 
-      - name: Download digests
-        uses: actions/download-artifact@v3
-        with:
-          name: "${{ matrix.target }}-digests"
-          path: "${{ runner.temp }}/digests"
+      - name: Download digests for all architectures
+        shell: bash
+        run: |
+          for arch in amd64 arm64; do
+            artifact_name="${{ matrix.target }}-digest-${{ github.run_number }}-${arch}"
+            echo "Downloading artifact: $artifact_name"
+            gh run download --artifact "$artifact_name" --dir "${{ runner.temp }}/digests/$arch"
+          done
 
       - name: Docker meta
         id: meta
@@ -171,17 +174,17 @@ jobs:
       - name: Create manifest list and push
         working-directory: "${{ runner.temp }}/digests"
         run: |
-          # Count the number of files in the directory
-          file_count=$(find . -type f | wc -l)
-
-          if [ "$file_count" -ne 2 ]; then
-            echo "Should have exactly 2 digests to combine, something went wrong"
-            ls -lah
-            exit 1
-          fi
+          # Ensure each architecture's digest file exists
+          for arch in amd64 arm64; do
+            if [ ! -f "$arch/sha256:*" ]; then
+              echo "Digest file for $arch is missing"
+              exit 1
+            fi
+          done
 
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ matrix.image }}@sha256:%s ' *)
+            $(for arch in amd64 arm64; do printf "${{ matrix.image }}@sha256:%s " "$(cat $arch/sha256:*)"; done)
+
       - name: Inspect image
         run: |
           docker buildx imagetools inspect ${{ matrix.image }}:${{ steps.meta.outputs.version }}
