@@ -31,7 +31,6 @@ jobs:
     strategy:
       matrix:
         platform: [linux/amd64, linux/arm64]
-        arch: [amd64, arm64]
         # Don't run arm build on PRs, "exclude:" is processed before "include:",
         # so we avoid using `include:`.
         # exclude:
@@ -104,7 +103,6 @@ jobs:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: ${{ matrix.platform }}
-          arch: ${{ matrix.arch }}
           # push: ${{ github.event_name != 'pull_request' }}
 
       - name: Build nitro-node-dev image
