@@ -58,10 +58,18 @@ runs:
         digest="${{ steps.build.outputs.digest }}"
         touch "${digest_dir}/${digest#sha256:}"
 
+    - name: Set name for the digest
+      id: set_name
+      run: |
+        platform="${{ matrix.platform }}"
+        new_platform="${platform//\//-}"
+        # Set the name variable with the updated platform
+        echo "name=${{ inputs.target }}-digest-${{ github.run_number }}-${new_platform}" >> $GITHUB_ENV
+
     - name: Upload digest
       uses: actions/upload-artifact@v4
       with:
-        name: "${{ inputs.target }}--digest-${{ github.run_number }}-${{ replace(matrix.platform, '/', '-') }}"
+        name: ${{ env.name }}
         path: "${{ runner.temp }}/${{ inputs.target }}-${{ github.run_number }}-digests/*"
         if-no-files-found: error
         retention-days: 1
