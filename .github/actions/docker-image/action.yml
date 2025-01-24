@@ -59,7 +59,7 @@ runs:
         touch "${digest_dir}/${digest#sha256:}"
 
     - name: Upload digest to arm64
-      if: ${{ matrix.platform == 'linux/amd64' }}
+      if: ${{ matrix.platform == 'linux/arm64' }}
       uses: actions/upload-artifact@v4
       with:
         name: "${{ inputs.target }}-digests-${{ github.run_number }}-arm64"
