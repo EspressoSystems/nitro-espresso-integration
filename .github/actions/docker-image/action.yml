@@ -68,7 +68,7 @@ runs:
         retention-days: 1
 
     - name: Upload digest to amd64
-      if: ${{ matrix.platform == 'linux/arm64' }}
+      if: ${{ matrix.platform == 'linux/amd64' }}
       uses: actions/upload-artifact@v4
       with:
         name: "${{ inputs.target }}-digests-${{ github.run_number }}-amd64"
