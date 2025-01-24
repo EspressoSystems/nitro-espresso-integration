@@ -58,10 +58,20 @@ runs:
         digest="${{ steps.build.outputs.digest }}"
         touch "${digest_dir}/${digest#sha256:}"
 
-    - name: Upload digest
+    - name: Upload digest to arm64
+      if: ${{ matrix.platform == 'linux/amd64' }}
       uses: actions/upload-artifact@v4
       with:
-        name: "${{ inputs.target }}-digests-$(date +'%Y%m%d%H%M%S')"
+        name: "${{ inputs.target }}-digests-${{ github.run_number }}-arm64"
+        path: "${{ runner.temp }}/${{ inputs.target }}-${{ github.run_number }}-digests/*"
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload digest to amd64
+      if: ${{ matrix.platform == 'linux/arm64' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: "${{ inputs.target }}-digests-${{ github.run_number }}-amd64"
         path: "${{ runner.temp }}/${{ inputs.target }}-${{ github.run_number }}-digests/*"
         if-no-files-found: error
         retention-days: 1
