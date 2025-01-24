@@ -3,6 +3,7 @@ package arbtest
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -12,13 +13,14 @@ import (
 	"github.com/offchainlabs/nitro/wsbroadcastserver"
 )
 
-var feedInputUrl = "ws://localhost:54220"
+var extraFeedInputPort = "54220"
 
 func TestEspressoBatchPosterShouldNotReorg(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, false, feedInputUrl)
+	extraFeedInput := fmt.Sprintf("ws://localhost:%s", extraFeedInputPort)
+	builder, cleanup := createL1AndL2Node(ctx, t, false, extraFeedInput)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
