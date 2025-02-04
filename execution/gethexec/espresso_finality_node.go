@@ -21,8 +21,7 @@ import (
 )
 
 var (
-	retryTime    = time.Second * 1
-	fatalErrChan = make(chan error, 10)
+	retryTime = time.Second * 1
 )
 
 /*
