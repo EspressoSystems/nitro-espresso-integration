@@ -56,6 +56,8 @@ func TestEspressoFinalityNode(t *testing.T) {
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
 	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
 
 	msgCnt, err := builder.L2.ConsensusNode.TxStreamer.GetMessageCount()
 	Require(t, err)
@@ -78,4 +80,7 @@ func TestEspressoFinalityNode(t *testing.T) {
 		return msgCntFinalityNode == msgCnt
 	})
 	Require(t, err)
+
+	// listen to sequencer feed from the finality node
+
 }
