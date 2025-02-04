@@ -115,11 +115,6 @@ func (n *EspressoFinalityNode) createBlock() (returnValue bool) {
 		return false
 	}
 
-	if err != nil {
-		log.Error("Failed to broadcast messages", "err", err)
-		return false
-	}
-
 	log.Info("Broadcasted messages", "message", messageWithMetadataPos)
 
 	// Only if we have sent the block to the sequencer feed, we can then write the block to the database
