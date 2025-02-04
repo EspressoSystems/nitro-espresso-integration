@@ -21,7 +21,8 @@ import (
 )
 
 var (
-	retryTime = time.Second * 1
+	retryTime    = time.Second * 1
+	fatalErrChan = make(chan error, 10)
 )
 
 /*
@@ -30,19 +31,20 @@ Espresso Finality Node creates blocks with finalized hotshot transactions
 type EspressoFinalityNode struct {
 	stopwaiter.StopWaiter
 
-	config               SequencerConfigFetcher
-	namespace            uint64
-	executionEngine      *ExecutionEngine
-	espressoClient       *espressoClient.Client
-	nextSeqBlockNum      uint64
-	messagesWithMetadata []*arbostypes.MessageWithMetadata
-	messagesStateMutex   sync.Mutex
+	config                  SequencerConfigFetcher
+	namespace               uint64
+	executionEngine         *ExecutionEngine
+	espressoClient          *espressoClient.Client
+	nextSeqBlockNum         uint64
+	messagesWithMetadata    []*arbostypes.MessageWithMetadata
+	messagesWithMetadataPos []uint64
+	messagesStateMutex      sync.Mutex
 }
 
 func NewEspressoFinalityNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *EspressoFinalityNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
-		panic(err)
+		log.Crit("Failed to validate espresso finality node config", "err", err)
 	}
 	return &EspressoFinalityNode{
 		config:          configFetcher,
@@ -59,17 +61,20 @@ func NewEspressoFinalityNode(configFetcher SequencerConfigFetcher, execEngine *E
 /**
  * This function will create a block with the finalized hotshot transactions
  */
-func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue bool) {
-	//  If we have no messages to process, return
-	if len(n.messagesWithMetadata) == 0 {
-		log.Info("No messages to process")
-		return false
-	}
+func (n *EspressoFinalityNode) createBlock() (returnValue bool) {
+
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
+	//  If we have no messages to process, return
+	if len(n.messagesWithMetadata) == 0 {
+		log.Warn("No messages to process")
+		return false
+	}
 	messageWithMetadata := n.messagesWithMetadata[0]
+	messageWithMetadataPos := n.messagesWithMetadataPos[0]
+
+	// Get the last block header stored in the database
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
-	// Get state
 	statedb, err := n.executionEngine.bc.StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
@@ -77,53 +82,62 @@ func (n *EspressoFinalityNode) createBlock(ctx context.Context) (returnValue boo
 	}
 	log.Info("Initial State", "lastBlockHash", lastBlockHeader.Hash(), "lastBlockStateRoot", lastBlockHeader.Root)
 	startTime := time.Now()
+
+	// Run the Produce block function in replay mode
+	// This is the core function that is used by replay.wasm to validate the block
 	block, receipts, err := arbos.ProduceBlock(messageWithMetadata.Message, messageWithMetadata.DelayedMessagesRead, lastBlockHeader, statedb, n.executionEngine.bc, n.executionEngine.bc.Config(), false, core.MessageReplayMode)
 	if err != nil {
 		log.Error("Failed to produce block", "err", err)
 		return false
 	}
+
+	// If block is nil or receipts is empty, return false
 	if len(receipts) == 0 || block == nil {
 		log.Error("Failed to produce block, no receipts or block")
 		return false
 	}
 	blockCalcTime := time.Since(startTime)
+
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	// Pop the message from the front of the queue
-	n.messagesWithMetadata = n.messagesWithMetadata[1:]
-
 	// add this transaction to the transacton streamer
-	// so that they can be read by inbox_tracker to be further sent to the sequencer feed using
+	// so that this can be read by inbox_tracker to be further sent to the sequencer feed using
 	// `PopulateFeedBacklog` function
+	// This implementation only works, if we are using a tamper resistant database
 	msgResult, err := n.executionEngine.resultFromHeader(block.Header())
 	if err != nil {
 		log.Error("Failed to get result from header", "err", err)
 		return false
 	}
-	pos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64() + 1)
-	if err != nil {
-		log.Error("Failed to get pos from last block header", "err", err)
-		return false
-	}
-	err = n.executionEngine.consensus.WriteMessageFromSequencer(pos, *messageWithMetadata, *msgResult)
+
+	err = n.executionEngine.consensus.WriteMessageFromSequencer(arbutil.MessageIndex(messageWithMetadataPos), *messageWithMetadata, *msgResult)
 	if err != nil {
 		log.Error("Failed to write message from sequencer", "err", err)
 		return false
 	}
 
-	// TODO: think about this? I am not sure if this is the right way to do it
-	// Only write the block after we've written the messages, so if the node dies in the middle of this,
-	// it will naturally recover on startup by regenerating the missing block.
+	if err != nil {
+		log.Error("Failed to broadcast messages", "err", err)
+		return false
+	}
+
+	log.Info("Broadcasted messages", "message", messageWithMetadataPos)
+
+	// Only if we have sent the block to the sequencer feed, we can then write the block to the database
 	err = n.executionEngine.appendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
 		return false
 	}
+
+	// Pop the message from the front of the queue at the end.
+	n.messagesWithMetadata = n.messagesWithMetadata[1:]
+	n.messagesWithMetadataPos = n.messagesWithMetadataPos[1:]
+
 	return true
 }
 
 func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) error {
-
 	if n.nextSeqBlockNum == 0 {
 		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil {
@@ -144,21 +158,21 @@ func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) err
 	height := header.Header.GetBlockHeight()
 	arbTxns, err := n.espressoClient.FetchTransactionsInBlock(ctx, height, n.namespace)
 	if err != nil {
-		arbos.LogFailedToFetchTransactions(height, err)
+		log.Warn("failed to fetch transactions", "err", err)
 		return err
 	}
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
 	for _, tx := range arbTxns.Transactions {
 		// Parse hotshot payload
-		_, _, messages, err := arbutil.ParseHotShotPayload(tx)
+		_, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 		if err != nil {
 			log.Warn("failed to parse hotshot payload, will retry", "err", err)
 			return err
 		}
 
 		// Parse the messages
-		for _, message := range messages {
+		for i, message := range messages {
 			var messageWithMetadata arbostypes.MessageWithMetadata
 			err = rlp.DecodeBytes(message, &messageWithMetadata)
 			if err != nil {
@@ -166,6 +180,7 @@ func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) err
 				return err
 			}
 			n.messagesWithMetadata = append(n.messagesWithMetadata, &messageWithMetadata)
+			n.messagesWithMetadataPos = append(n.messagesWithMetadataPos, indices[i])
 		}
 	}
 	return nil
@@ -186,7 +201,7 @@ func (n *EspressoFinalityNode) Start(ctx context.Context) error {
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock(ctx)
+		madeBlock := n.createBlock()
 		if madeBlock {
 			n.nextSeqBlockNum += 1
 			return 0
