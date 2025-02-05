@@ -70,7 +70,10 @@ func TestCaffNode(t *testing.T) {
 			// fail
 			t.Fatal("last block is nil")
 		}
-		number := lastBlock["number"].(string)
+		number, ok := lastBlock["number"].(string)
+		if !ok {
+			t.Fatal("number is not a string")
+		}
 		if number == "0x3" {
 			break
 		}

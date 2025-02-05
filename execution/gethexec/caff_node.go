@@ -21,7 +21,7 @@ import (
 )
 
 var (
-	retryTime = time.Second * 5
+	retryTime = time.Second * 1
 )
 
 /*
