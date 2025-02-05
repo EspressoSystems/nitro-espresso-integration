@@ -83,12 +83,6 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
-	currentMessageCount, err := n.executionEngine.consensus.GetCurrentMsgCount(ctx)
-	if err != nil {
-		log.Error("failed to get current message count", "err", err)
-		return false
-	}
-
 	currentPos := lastBlockHeader.Number.Uint64()
 
 	// Check for duplicates and remove them
@@ -101,7 +95,7 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Check if the message is in the correct order, it should be sequentially increasing
 	if messageWithMetadataPos != currentPos+1 {
-		log.Error("order of message is incorrect", "expectedPos", currentMessageCount, "messageWithMetadataPos", messageWithMetadataPos)
+		log.Error("order of message is incorrect", "expectedPos", currentPos, "messageWithMetadataPos", messageWithMetadataPos)
 		return false
 	}
 
@@ -215,8 +209,7 @@ func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 	sort.Slice(n.messagesWithMetadataPos, func(i, j int) bool {
 		return n.messagesWithMetadataPos[i] < n.messagesWithMetadataPos[j]
 	})
-	log.Info("messagesWithMetadata", "messagesWithMetadata", n.messagesWithMetadata)
-	log.Info("messagesWithMetadataPos", "messagesWithMetadataPos", n.messagesWithMetadataPos)
+
 	return nil
 }
 
