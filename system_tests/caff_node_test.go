@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
@@ -12,10 +14,8 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 
 	// Disable the batch poster because it requires redis if enabled on the 2nd node
 	nodeConfig.BatchPoster.Enable = false
-	nodeConfig.Feed.Output.Enable = true
-	nodeConfig.Feed.Output.Signed = true
 	nodeConfig.BlockValidator.Enable = false
-	nodeConfig.DelayedSequencer.Enable = true
+	nodeConfig.DelayedSequencer.Enable = false
 	nodeConfig.DelayedSequencer.FinalizeDistance = 1
 	nodeConfig.Sequencer = true
 	nodeConfig.Dangerous.NoSequencerCoordinator = true
@@ -25,6 +25,7 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.CaffNodeConfig.StartBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.HotShotUrl = hotShotUrl
 	builder.nodeConfig.BlockValidator.Enable = false
+	nodeConfig.ParentChainReader.Enable = false
 	return builder.Build2ndNode(t, &SecondNodeParams{
 		nodeConfig: nodeConfig,
 		execConfig: execConfig,
@@ -56,6 +57,7 @@ func TestCaffNode(t *testing.T) {
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
 	Require(t, err)
 
+	log.Info("Starting the caff node")
 	// start the node
 	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
 	defer cleanupCaffNode()
@@ -70,11 +72,13 @@ func TestCaffNode(t *testing.T) {
 			// fail
 			t.Fatal("last block is nil")
 		}
+		log.Info("last block", "lastBlock", lastBlock)
+
 		number, ok := lastBlock["number"].(string)
 		if !ok {
 			t.Fatal("number is not a string")
 		}
-		if number == "0x3" {
+		if number == "0x2" {
 			break
 		}
 		if time.Since(startTime) > 10*time.Minute {

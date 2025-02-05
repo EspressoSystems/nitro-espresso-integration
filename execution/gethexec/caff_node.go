@@ -3,6 +3,7 @@ package gethexec
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -34,7 +35,7 @@ type CaffNode struct {
 	namespace               uint64
 	executionEngine         *ExecutionEngine
 	espressoClient          *espressoClient.Client
-	nextSeqBlockNum         uint64
+	nextHotshotBlockNum     uint64
 	messagesWithMetadata    []*arbostypes.MessageWithMetadata
 	messagesWithMetadataPos []uint64
 	messagesStateMutex      sync.Mutex
@@ -46,21 +47,22 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
 	return &CaffNode{
-		config:          configFetcher,
-		namespace:       config.CaffNodeConfig.Namespace,
-		espressoClient:  espressoClient.NewClient(config.CaffNodeConfig.HotShotUrl),
-		nextSeqBlockNum: config.CaffNodeConfig.StartBlock,
-		executionEngine: execEngine,
+		config:              configFetcher,
+		namespace:           config.CaffNodeConfig.Namespace,
+		espressoClient:      espressoClient.NewClient(config.CaffNodeConfig.HotShotUrl),
+		nextHotshotBlockNum: config.CaffNodeConfig.StartBlock,
+		executionEngine:     execEngine,
 	}
 }
 
 // TODO: For future versions, we should check the attestation quote to check if its from a valid TEE
-// TODO: Check for duplicates to make sure we don't double process the same message
-
+// TODO: This machine should run in TEE and submit blocks to espresso only if the block is valid with an attestation
 /**
  * This function will create a block with the finalized hotshot transactions
+ * It will first remove duplicates and ensure the ordering of messages is correct
+ * Then it will run the STF using the `Produce Block`function and finally store the block in the database
  */
-func (n *CaffNode) createBlock() (returnValue bool) {
+func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
@@ -71,20 +73,59 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 		return false
 	}
 	messageWithMetadata := n.messagesWithMetadata[0]
+	messageWithMetadataPos := n.messagesWithMetadataPos[0]
 
 	// Get the last block header stored in the database
+	if n.executionEngine.bc == nil {
+		log.Error("execution engine bc not initialized")
+		return false
+	}
+
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
+
+	currentMessageCount, err := n.executionEngine.consensus.GetCurrentMsgCount(ctx)
+	if err != nil {
+		log.Error("failed to get current message count", "err", err)
+		return false
+	}
+
+	currentPos := lastBlockHeader.Number.Uint64()
+
+	// Check for duplicates and remove them
+	if messageWithMetadataPos <= currentPos {
+		log.Error("message has already been processed, removing duplicate", "messageWithMetadataPos", messageWithMetadataPos, "currentMessageCount", currentPos)
+		n.messagesWithMetadata = n.messagesWithMetadata[1:]
+		n.messagesWithMetadataPos = n.messagesWithMetadataPos[1:]
+		return false
+	}
+
+	// Check if the message is in the correct order, it should be sequentially increasing
+	if messageWithMetadataPos != currentPos+1 {
+		log.Error("order of message is incorrect", "expectedPos", currentMessageCount, "messageWithMetadataPos", messageWithMetadataPos)
+		return false
+	}
+
+	// Get the state of the database at the last block
 	statedb, err := n.executionEngine.bc.StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
 		return false
 	}
+
 	log.Info("Initial State", "lastBlockHash", lastBlockHeader.Hash(), "lastBlockStateRoot", lastBlockHeader.Root)
 	startTime := time.Now()
 
 	// Run the Produce block function in replay mode
 	// This is the core function that is used by replay.wasm to validate the block
-	block, receipts, err := arbos.ProduceBlock(messageWithMetadata.Message, messageWithMetadata.DelayedMessagesRead, lastBlockHeader, statedb, n.executionEngine.bc, n.executionEngine.bc.Config(), false, core.MessageReplayMode)
+	block, receipts, err := arbos.ProduceBlock(messageWithMetadata.Message,
+		messageWithMetadata.DelayedMessagesRead,
+		lastBlockHeader,
+		statedb,
+		n.executionEngine.bc,
+		n.executionEngine.bc.Config(),
+		false,
+		core.MessageReplayMode)
+
 	if err != nil {
 		log.Error("Failed to produce block", "err", err)
 		return false
@@ -113,18 +154,18 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 }
 
 func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
-	if n.nextSeqBlockNum == 0 {
+	if n.nextHotshotBlockNum == 0 {
 		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil {
 			log.Warn("unable to fetch latest hotshot block", "err", err)
 			return err
 		}
 		log.Info("Started node at the latest hotshot block", "block number", latestBlock)
-		n.nextSeqBlockNum = latestBlock
+		n.nextHotshotBlockNum = latestBlock
 	}
 
-	nextSeqBlockNum := n.nextSeqBlockNum
-	header, err := n.espressoClient.FetchHeaderByHeight(ctx, nextSeqBlockNum)
+	nextHotshotBlockNum := n.nextHotshotBlockNum
+	header, err := n.espressoClient.FetchHeaderByHeight(ctx, nextHotshotBlockNum)
 	if err != nil {
 		log.Warn("failed to fetch header", "err", err)
 		return err
@@ -156,10 +197,26 @@ func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 				log.Warn("failed to decode message, will retry", "err", err)
 				return err
 			}
-			n.messagesWithMetadata = append(n.messagesWithMetadata, &messageWithMetadata)
-			n.messagesWithMetadataPos = append(n.messagesWithMetadataPos, indices[i])
+			// We skip the initialize method because
+			// Otherwise ParseL2Transactions will throws error
+			// encounted initialize message (should've been handled explicitly at genesis)
+			if messageWithMetadata.Message.Header.Kind != arbostypes.L1MessageType_Initialize {
+				n.messagesWithMetadata = append(n.messagesWithMetadata, &messageWithMetadata)
+				n.messagesWithMetadataPos = append(n.messagesWithMetadataPos, indices[i])
+			}
+
 		}
 	}
+	// Sort the messagesWithMetadata and messagesWithMetadataPos based on ascending order
+	// This is to ensure that we process messages in the correct order
+	sort.Slice(n.messagesWithMetadata, func(i, j int) bool {
+		return n.messagesWithMetadataPos[i] < n.messagesWithMetadataPos[j]
+	})
+	sort.Slice(n.messagesWithMetadataPos, func(i, j int) bool {
+		return n.messagesWithMetadataPos[i] < n.messagesWithMetadataPos[j]
+	})
+	log.Info("messagesWithMetadata", "messagesWithMetadata", n.messagesWithMetadata)
+	log.Info("messagesWithMetadataPos", "messagesWithMetadataPos", n.messagesWithMetadataPos)
 	return nil
 }
 
@@ -171,7 +228,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 		if err != nil {
 			return retryTime
 		}
-		n.nextSeqBlockNum += 1
+		n.nextHotshotBlockNum += 1
 		return 0
 	})
 	if err != nil {
@@ -179,7 +236,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock()
+		madeBlock := n.createBlock(ctx)
 		if madeBlock {
 			return 0
 		}
