@@ -21,13 +21,13 @@ import (
 )
 
 var (
-	retryTime = time.Second * 1
+	retryTime = time.Second * 5
 )
 
 /*
-Espresso Finality Node creates blocks with finalized hotshot transactions
+Caff Node creates blocks with finalized hotshot transactions
 */
-type EspressoFinalityNode struct {
+type CaffNode struct {
 	stopwaiter.StopWaiter
 
 	config                  SequencerConfigFetcher
@@ -40,16 +40,16 @@ type EspressoFinalityNode struct {
 	messagesStateMutex      sync.Mutex
 }
 
-func NewEspressoFinalityNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *EspressoFinalityNode {
+func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
-		log.Crit("Failed to validate espresso finality node config", "err", err)
+		log.Crit("Failed to validate caff  node config", "err", err)
 	}
-	return &EspressoFinalityNode{
+	return &CaffNode{
 		config:          configFetcher,
-		namespace:       config.EspressoFinalityNodeConfig.Namespace,
-		espressoClient:  espressoClient.NewClient(config.EspressoFinalityNodeConfig.HotShotUrl),
-		nextSeqBlockNum: config.EspressoFinalityNodeConfig.StartBlock,
+		namespace:       config.CaffNodeConfig.Namespace,
+		espressoClient:  espressoClient.NewClient(config.CaffNodeConfig.HotShotUrl),
+		nextSeqBlockNum: config.CaffNodeConfig.StartBlock,
 		executionEngine: execEngine,
 	}
 }
@@ -60,17 +60,17 @@ func NewEspressoFinalityNode(configFetcher SequencerConfigFetcher, execEngine *E
 /**
  * This function will create a block with the finalized hotshot transactions
  */
-func (n *EspressoFinalityNode) createBlock() (returnValue bool) {
+func (n *CaffNode) createBlock() (returnValue bool) {
 
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
+
 	//  If we have no messages to process, return
 	if len(n.messagesWithMetadata) == 0 {
 		log.Warn("No messages to process")
 		return false
 	}
 	messageWithMetadata := n.messagesWithMetadata[0]
-	messageWithMetadataPos := n.messagesWithMetadataPos[0]
 
 	// Get the last block header stored in the database
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
@@ -99,25 +99,6 @@ func (n *EspressoFinalityNode) createBlock() (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	// add this transaction to the transacton streamer
-	// so that this can be read by inbox_tracker to be further sent to the sequencer feed using
-	// `PopulateFeedBacklog` function
-	// This implementation only works, if we are using a tamper resistant database
-	msgResult, err := n.executionEngine.resultFromHeader(block.Header())
-	if err != nil {
-		log.Error("Failed to get result from header", "err", err)
-		return false
-	}
-
-	err = n.executionEngine.consensus.WriteMessageFromSequencer(arbutil.MessageIndex(messageWithMetadataPos), *messageWithMetadata, *msgResult)
-	if err != nil {
-		log.Error("Failed to write message from sequencer", "err", err)
-		return false
-	}
-
-	log.Info("Broadcasted messages", "message", messageWithMetadataPos)
-
-	// Only if we have sent the block to the sequencer feed, we can then write the block to the database
 	err = n.executionEngine.appendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
@@ -131,14 +112,14 @@ func (n *EspressoFinalityNode) createBlock() (returnValue bool) {
 	return true
 }
 
-func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) error {
+func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 	if n.nextSeqBlockNum == 0 {
 		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil {
 			log.Warn("unable to fetch latest hotshot block", "err", err)
 			return err
 		}
-		log.Info("Started espresso finality node at the latest hotshot block", "block number", latestBlock)
+		log.Info("Started node at the latest hotshot block", "block number", latestBlock)
 		n.nextSeqBlockNum = latestBlock
 	}
 
@@ -148,13 +129,16 @@ func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) err
 		log.Warn("failed to fetch header", "err", err)
 		return err
 	}
-
 	height := header.Header.GetBlockHeight()
 	arbTxns, err := n.espressoClient.FetchTransactionsInBlock(ctx, height, n.namespace)
 	if err != nil {
 		log.Warn("failed to fetch transactions", "err", err)
 		return err
 	}
+	if len(arbTxns.Transactions) == 0 {
+		return nil
+	}
+
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
 	for _, tx := range arbTxns.Transactions {
@@ -164,7 +148,6 @@ func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) err
 			log.Warn("failed to parse hotshot payload, will retry", "err", err)
 			return err
 		}
-
 		// Parse the messages
 		for i, message := range messages {
 			var messageWithMetadata arbostypes.MessageWithMetadata
@@ -180,7 +163,7 @@ func (n *EspressoFinalityNode) queueMessagesFromHotshot(ctx context.Context) err
 	return nil
 }
 
-func (n *EspressoFinalityNode) Start(ctx context.Context) error {
+func (n *CaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
 
 	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
@@ -188,34 +171,34 @@ func (n *EspressoFinalityNode) Start(ctx context.Context) error {
 		if err != nil {
 			return retryTime
 		}
+		n.nextSeqBlockNum += 1
 		return 0
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start espresso finality node, error in queueMessagesFromHotshot: %w", err)
+		return fmt.Errorf("failed to start  node, error in queueMessagesFromHotshot: %w", err)
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
 		if madeBlock {
-			n.nextSeqBlockNum += 1
 			return 0
 		}
 		return retryTime
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start espresso finality node, error in createBlock: %w", err)
+		return fmt.Errorf("failed to start node, error in createBlock: %w", err)
 	}
 	return nil
 }
 
-func (n *EspressoFinalityNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
+func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
 	return nil
 }
 
-func (n *EspressoFinalityNode) CheckHealth(ctx context.Context) error {
+func (n *CaffNode) CheckHealth(ctx context.Context) error {
 	return nil
 }
 
-func (n *EspressoFinalityNode) Initialize(ctx context.Context) error {
+func (n *CaffNode) Initialize(ctx context.Context) error {
 	return nil
 }
