@@ -39,6 +39,7 @@ type CaffNode struct {
 	messagesWithMetadata    []*arbostypes.MessageWithMetadata
 	messagesWithMetadataPos []uint64
 	messagesStateMutex      sync.Mutex
+	skippedBlockPos         *uint64
 }
 
 func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
@@ -87,15 +88,24 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Check for duplicates and remove them
 	if messageWithMetadataPos <= currentPos {
-		log.Error("message has already been processed, removing duplicate", "messageWithMetadataPos", messageWithMetadataPos, "currentMessageCount", currentPos)
+		log.Error("message has already been processed, removing duplicate",
+			"messageWithMetadataPos", messageWithMetadataPos, "currentMessageCount", currentPos)
 		n.messagesWithMetadata = n.messagesWithMetadata[1:]
 		n.messagesWithMetadataPos = n.messagesWithMetadataPos[1:]
 		return false
 	}
 
 	// Check if the message is in the correct order, it should be sequentially increasing
-	if messageWithMetadataPos != currentPos+1 {
-		log.Error("order of message is incorrect", "expectedPos", currentPos, "messageWithMetadataPos", messageWithMetadataPos)
+	if (messageWithMetadataPos != currentPos+1) && n.skippedBlockPos == nil {
+		log.Error("order of message is incorrect", "currentPos", currentPos,
+			"messageWithMetadataPos", messageWithMetadataPos)
+		return false
+	}
+
+	// If a message was skipped, check if the message is in the correct order
+	if n.skippedBlockPos != nil && messageWithMetadataPos != *n.skippedBlockPos+1 {
+		log.Error("order of message is incorrect", "skippedBlockPos", *n.skippedBlockPos,
+			"messageWithMetadataPos", messageWithMetadataPos)
 		return false
 	}
 
@@ -122,14 +132,28 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	if err != nil {
 		log.Error("Failed to produce block", "err", err)
+		// if we fail to produce a block, we should remove this message from the queue
+		// and set skippedBlockPos to the current messageWithMetadataPos
+		n.skippedBlockPos = &messageWithMetadataPos
+		n.messagesWithMetadata = n.messagesWithMetadata[1:]
+		n.messagesWithMetadataPos = n.messagesWithMetadataPos[1:]
 		return false
 	}
 
 	// If block is nil or receipts is empty, return false
 	if len(receipts) == 0 || block == nil {
 		log.Error("Failed to produce block, no receipts or block")
+		// if we fail to produce a block, we should remove this message from the queue
+		// and set skippedBlockPos to the current messageWithMetadataPos
+		n.skippedBlockPos = &messageWithMetadataPos
+		n.messagesWithMetadata = n.messagesWithMetadata[1:]
+		n.messagesWithMetadataPos = n.messagesWithMetadataPos[1:]
 		return false
 	}
+
+	// Reset the skippedBlockPos
+	n.skippedBlockPos = nil
+
 	blockCalcTime := time.Since(startTime)
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
