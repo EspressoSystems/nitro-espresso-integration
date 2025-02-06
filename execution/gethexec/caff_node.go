@@ -56,7 +56,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 }
 
 // TODO: For future versions, we should check the attestation quote to check if its from a valid TEE
-// TODO: This machine should run in TEE and submit blocks to espresso only if the block is valid with an attestation
+// TODO: This machine should run in TEE and submit blocks to espresso only if the block is valid with an attestation.
 /**
  * This function will create a block with the finalized hotshot transactions
  * It will first remove duplicates and ensure the ordering of messages is correct
@@ -147,6 +147,11 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	return true
 }
 
+/**
+* This function will create a queue of messages from the hotshot to be processed by the node
+* It will sort the messages by the message index
+* and store the messages in `messagesWithMetadata` queue
+ */
 func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 	if n.nextHotshotBlockNum == 0 {
 		latestBlock, err := n.espressoClient.FetchLatestBlockHeight(ctx)
