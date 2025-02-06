@@ -64,6 +64,7 @@ func TestCaffNode(t *testing.T) {
 
 	rpcClient := builderCaffNode.Client.Client()
 	startTime := time.Now()
+	// Wait till we have two blocks created
 	for {
 		var lastBlock map[string]interface{}
 		err = rpcClient.CallContext(ctx, &lastBlock, "eth_getBlockByNumber", "latest", false)
