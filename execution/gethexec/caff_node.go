@@ -232,10 +232,10 @@ func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 	}
 	// Sort the messagesWithMetadata and messagesWithMetadataPos based on ascending order
 	// This is to ensure that we process messages in the correct order
-	sort.Slice(n.messagesWithMetadata, func(i, j int) bool {
+	sort.SliceStable(n.messagesWithMetadata, func(i, j int) bool {
 		return n.messagesWithMetadataPos[i] < n.messagesWithMetadataPos[j]
 	})
-	sort.Slice(n.messagesWithMetadataPos, func(i, j int) bool {
+	sort.SliceStable(n.messagesWithMetadataPos, func(i, j int) bool {
 		return n.messagesWithMetadataPos[i] < n.messagesWithMetadataPos[j]
 	})
 
