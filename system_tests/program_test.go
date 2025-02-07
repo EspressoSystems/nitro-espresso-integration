@@ -1942,7 +1942,7 @@ func testWasmRecreate(t *testing.T, builder *NodeBuilder, storeTx *types.Transac
 
 	// delete wasm dir of nodeB
 
-	wasmPath := filepath.Join(testDir, "system_tests.test", "wasm")
+	wasmPath := filepath.Join(testDir, "system_tests.test", "wasm2")
 	dirContents, err := os.ReadDir(wasmPath)
 	Require(t, err)
 	if len(dirContents) == 0 {

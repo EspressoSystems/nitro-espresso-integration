@@ -32,7 +32,7 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	})
 }
 
-func TestCaffNode(t *testing.T) {
+func TestEspressoCaffNode(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
