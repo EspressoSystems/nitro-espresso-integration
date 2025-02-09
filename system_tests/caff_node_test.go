@@ -22,8 +22,11 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.Enable = true
 	execConfig.Sequencer.EnableCaffNode = true
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
-	execConfig.Sequencer.CaffNodeConfig.StartBlock = 1
-	execConfig.Sequencer.CaffNodeConfig.HotShotUrl = hotShotUrl
+	execConfig.Sequencer.CaffNodeConfig.HotshotNextBlock = 1
+	// for testing, we can use the same hotshot url for both
+	execConfig.Sequencer.CaffNodeConfig.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
+	execConfig.Sequencer.CaffNodeConfig.RetryTime = time.Second * 1
+	execConfig.Sequencer.CaffNodeConfig.HotshotPollingInterval = time.Millisecond * 100
 	builder.nodeConfig.BlockValidator.Enable = false
 	nodeConfig.ParentChainReader.Enable = false
 	return builder.Build2ndNode(t, &SecondNodeParams{
@@ -57,7 +60,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
 	Require(t, err)
 
-	log.Info("Starting the caff node")
+	log.Info("Starting the caff node for testing")
 	// start the node
 	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
 	defer cleanupCaffNode()
