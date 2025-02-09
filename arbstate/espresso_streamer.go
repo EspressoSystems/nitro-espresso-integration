@@ -23,7 +23,7 @@ type MessageWithMetadataAndPos struct {
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
 
-	espressoClient                 []espressoClient.Client
+	espressoClients                []espressoClient.Client
 	nextHotshotBlockNum            uint64
 	namespace                      uint64
 	retryTime                      time.Duration
@@ -45,7 +45,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string, nextHotshotBloc
 		espressoClients = append(espressoClients, *client)
 	}
 	return &EspressoStreamer{
-		espressoClient:                espressoClients,
+		espressoClients:               espressoClients,
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
@@ -102,7 +102,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 	nextHotshotBlockNum := s.nextHotshotBlockNum
 
 	// TODO: should support multiple clients
-	arbTxns, err := s.espressoClient[0].FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
+	arbTxns, err := s.espressoClients[0].FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
 	if err != nil {
 		log.Warn("failed to fetch the transactions", "err", err)
 		return err
@@ -140,6 +140,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 					MessageWithMeta: messageWithMetadata,
 					Pos:             indices[i],
 				})
+				log.Info("Added message to queue", "message", indices[i])
 			}
 		}
 	}
@@ -160,7 +161,7 @@ Otherwise return 0
 */
 func (s *EspressoStreamer) fetchLatestBlockFromAllClients(ctx context.Context) (uint64, error) {
 	var latestBlockMap = make(map[uint64]int)
-	for _, client := range s.espressoClient {
+	for _, client := range s.espressoClients {
 		latestBlock, err := client.FetchLatestBlockHeight(ctx)
 		if err != nil {
 			log.Warn("unable to fetch latest hotshot block", "err", err)
@@ -177,7 +178,7 @@ func (s *EspressoStreamer) fetchLatestBlockFromAllClients(ctx context.Context) (
 
 	// Check if any latestBlock has a count greater than 50%
 	for latestBlock, count := range latestBlockMap {
-		if count > len(s.espressoClient)/2 {
+		if count > len(s.espressoClients)/2 {
 			return latestBlock, nil
 		}
 	}
