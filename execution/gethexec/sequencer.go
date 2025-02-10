@@ -118,9 +118,11 @@ func (c *SequencerConfig) Validate() error {
 type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
-	HotShotUrl string `koanf:"hotshot-url"`
-	StartBlock uint64 `koanf:"start-block"`
-	Namespace  uint64 `koanf:"namespace"`
+	HotShotUrl             string        `koanf:"hotshot-url"`
+	StartBlock             uint64        `koanf:"start-block"`
+	Namespace              uint64        `koanf:"namespace"`
+	RetryInterval          time.Duration `koanf:"retry-interval"`
+	HotshotPollingInterval time.Duration `koanf:"hotshot-polling-interval"`
 }
 
 var DefaultSequencerConfig = SequencerConfig{
@@ -143,6 +145,10 @@ var DefaultSequencerConfig = SequencerConfig{
 	EnableProfiling:              false,
 
 	EnableCaffNode: false,
+	CaffNodeConfig: CaffNodeConfig{
+		RetryInterval:          1 * time.Second,
+		HotshotPollingInterval: 250 * time.Millisecond,
+	},
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {

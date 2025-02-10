@@ -21,10 +21,6 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-var (
-	retryTime = time.Second * 1
-)
-
 /*
 Caff Node creates blocks with finalized hotshot transactions
 */
@@ -40,6 +36,8 @@ type CaffNode struct {
 	messagesWithMetadataPos []uint64
 	messagesStateMutex      sync.Mutex
 	skippedBlockPos         *uint64
+	retryInterval           time.Duration
+	hotshotPollingInterval  time.Duration
 }
 
 func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
@@ -48,11 +46,13 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
 	return &CaffNode{
-		config:              configFetcher,
-		namespace:           config.CaffNodeConfig.Namespace,
-		espressoClient:      espressoClient.NewClient(config.CaffNodeConfig.HotShotUrl),
-		nextHotshotBlockNum: config.CaffNodeConfig.StartBlock,
-		executionEngine:     execEngine,
+		config:                 configFetcher,
+		namespace:              config.CaffNodeConfig.Namespace,
+		espressoClient:         espressoClient.NewClient(config.CaffNodeConfig.HotShotUrl),
+		nextHotshotBlockNum:    config.CaffNodeConfig.StartBlock,
+		executionEngine:        execEngine,
+		retryInterval:          config.CaffNodeConfig.RetryInterval,
+		hotshotPollingInterval: config.CaffNodeConfig.HotshotPollingInterval,
 	}
 }
 
@@ -70,7 +70,6 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 	//  If we have no messages to process, return
 	if len(n.messagesWithMetadata) == 0 {
-		log.Warn("No messages to process")
 		return false
 	}
 	messageWithMetadata := n.messagesWithMetadata[0]
@@ -225,13 +224,8 @@ func (n *CaffNode) queueMessagesFromHotshot(ctx context.Context) error {
 				log.Warn("failed to decode message, will retry", "err", err)
 				return err
 			}
-			// We skip the initialize method because
-			// Otherwise ParseL2Transactions will throws error
-			// encounted initialize message (should've been handled explicitly at genesis)
-			if messageWithMetadata.Message.Header.Kind != arbostypes.L1MessageType_Initialize {
-				n.messagesWithMetadata = append(n.messagesWithMetadata, &messageWithMetadata)
-				n.messagesWithMetadataPos = append(n.messagesWithMetadataPos, indices[i])
-			}
+			n.messagesWithMetadata = append(n.messagesWithMetadata, &messageWithMetadata)
+			n.messagesWithMetadataPos = append(n.messagesWithMetadataPos, indices[i])
 
 		}
 	}
@@ -253,10 +247,11 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := n.queueMessagesFromHotshot(ctx)
 		if err != nil {
-			return retryTime
+			return n.retryInterval
 		}
 		n.nextHotshotBlockNum += 1
-		return 0
+		log.Info("Now processing hotshot block", "block", n.nextHotshotBlockNum)
+		return n.hotshotPollingInterval
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start  node, error in queueMessagesFromHotshot: %w", err)
@@ -265,9 +260,9 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
 		if madeBlock {
-			return 0
+			return n.hotshotPollingInterval
 		}
-		return retryTime
+		return n.retryInterval
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start node, error in createBlock: %w", err)

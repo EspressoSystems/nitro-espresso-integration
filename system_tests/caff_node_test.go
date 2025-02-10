@@ -25,6 +25,8 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
 	execConfig.Sequencer.CaffNodeConfig.StartBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.HotShotUrl = hotShotUrl
+	execConfig.Sequencer.CaffNodeConfig.RetryInterval = time.Second * 1
+	execConfig.Sequencer.CaffNodeConfig.HotshotPollingInterval = 250 * time.Millisecond
 	nodeConfig.ParentChainReader.Enable = false
 	return builder.Build2ndNode(t, &SecondNodeParams{
 		nodeConfig: nodeConfig,
@@ -80,7 +82,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
 	defer cleanupCaffNode()
 
-	err = waitForWith(ctx, 3*time.Minute, 10*time.Second, func() bool {
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User14"))
 		balance2 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User15"))
 		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
@@ -94,4 +96,28 @@ func TestEspressoCaffNode(t *testing.T) {
 	})
 	Require(t, err)
 
+	rpcClient := builderCaffNode.Client.Client()
+	startTime := time.Now()
+	// Wait till we have two blocks created
+	for {
+		var lastBlock map[string]interface{}
+		err = rpcClient.CallContext(ctx, &lastBlock, "eth_getBlockByNumber", "latest", false)
+		Require(t, err)
+		if lastBlock == nil {
+			// fail
+			t.Fatal("last block is nil")
+		}
+		log.Info("last block", "lastBlock", lastBlock)
+		number, ok := lastBlock["number"].(string)
+		if !ok {
+			t.Fatal("number is not a string")
+		}
+		if number == "0x2" || number == "0x3" {
+			break
+		}
+		if time.Since(startTime) > 10*time.Minute {
+			t.Fatal("timeout waiting for node to create blocks")
+		}
+		time.Sleep(time.Second * 5)
+	}
 }
