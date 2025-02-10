@@ -63,7 +63,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
  * It will first remove duplicates and ensure the ordering of messages is correct
  * Then it will run the STF using the `Produce Block`function and finally store the block in the database
  */
-func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
+func (n *CaffNode) createBlock() (returnValue bool) {
 
 	n.messagesStateMutex.Lock()
 	defer n.messagesStateMutex.Unlock()
@@ -84,7 +84,12 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
-	currentPos := lastBlockHeader.Number.Uint64()
+	currentMsgPos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64())
+	if err != nil {
+		log.Error("failed to convert block number to message index")
+		return false
+	}
+	currentPos := uint64(currentMsgPos)
 
 	// Check for duplicates and remove them
 	if messageWithMetadataPos <= currentPos {
@@ -258,7 +263,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock(ctx)
+		madeBlock := n.createBlock()
 		if madeBlock {
 			return 0
 		}

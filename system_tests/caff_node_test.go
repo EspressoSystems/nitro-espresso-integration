@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -24,7 +25,6 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
 	execConfig.Sequencer.CaffNodeConfig.StartBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.HotShotUrl = hotShotUrl
-	builder.nodeConfig.BlockValidator.Enable = false
 	nodeConfig.ParentChainReader.Enable = false
 	return builder.Build2ndNode(t, &SecondNodeParams{
 		nodeConfig: nodeConfig,
@@ -57,35 +57,41 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
 	Require(t, err)
 
+	newAccount := "User16"
+	l2Info := builder.L2Info
+	l2Info.GenerateAccount(newAccount)
+	addr := l2Info.GetAddress(newAccount)
+
+	// Transfer via the delayed inbox
+	delayedTx := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+	})
+
+	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+		balance := builder.L2.GetBalance(t, addr)
+		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+		return balance.Cmp(transferAmount) >= 0
+	})
+	Require(t, err)
+
 	log.Info("Starting the caff node")
 	// start the node
 	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
 	defer cleanupCaffNode()
 
-	rpcClient := builderCaffNode.Client.Client()
-	startTime := time.Now()
-	// Wait till we have two blocks created
-	for {
-		var lastBlock map[string]interface{}
-		err = rpcClient.CallContext(ctx, &lastBlock, "eth_getBlockByNumber", "latest", false)
-		Require(t, err)
-		if lastBlock == nil {
-			// fail
-			t.Fatal("last block is nil")
-		}
-		log.Info("last block", "lastBlock", lastBlock)
+	err = waitForWith(ctx, 3*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
 
-		number, ok := lastBlock["number"].(string)
-		if !ok {
-			t.Fatal("number is not a string")
-		}
-		if number == "0x2" {
-			break
-		}
-		if time.Since(startTime) > 10*time.Minute {
-			t.Fatal("timeout waiting for node to create blocks")
-		}
-		time.Sleep(time.Second * 5)
-	}
+	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+		balance := builderCaffNode.GetBalance(t, addr)
+		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+		return balance.Cmp(transferAmount) >= 0
+	})
+	Require(t, err)
 
 }
