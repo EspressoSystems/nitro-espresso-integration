@@ -15,10 +15,6 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-var (
-	retryTime = time.Second * 1
-)
-
 /*
 Caff Node creates blocks with finalized hotshot transactions
 */
@@ -70,7 +66,12 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
-	currentPos := lastBlockHeader.Number.Uint64()
+	currentMsgPos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64())
+	if err != nil {
+		log.Error("failed to convert block number to message index")
+		return false
+	}
+	currentPos := uint64(currentMsgPos)
 
 	messageWithMetadataAndPos := n.espressoStreamer.PeekMessageWithMetadataAndPos()
 	if messageWithMetadataAndPos == nil {
@@ -170,9 +171,9 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
 		if madeBlock {
-			return 0
+			return n.config().CaffNodeConfig.HotshotPollingInterval
 		}
-		return retryTime
+		return n.config().CaffNodeConfig.RetryTime
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start node, error in createBlock: %w", err)
