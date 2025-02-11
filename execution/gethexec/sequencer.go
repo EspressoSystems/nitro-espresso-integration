@@ -145,10 +145,6 @@ var DefaultSequencerConfig = SequencerConfig{
 	EnableProfiling:              false,
 
 	EnableCaffNode: false,
-	CaffNodeConfig: CaffNodeConfig{
-		RetryInterval:          1 * time.Second,
-		HotshotPollingInterval: 250 * time.Millisecond,
-	},
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
