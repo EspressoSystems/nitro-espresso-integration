@@ -60,9 +60,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
 	Require(t, err)
 
-<<<<<<< HEAD
-	log.Info("Starting the caff node for testing")
-=======
 	newAccount := "User16"
 	l2Info := builder.L2Info
 	l2Info.GenerateAccount(newAccount)
@@ -82,7 +79,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	log.Info("Starting the caff node")
->>>>>>> afe376c7131802cdcb6cc50da658f59b44a0bab5
 	// start the node
 	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
 	defer cleanupCaffNode()

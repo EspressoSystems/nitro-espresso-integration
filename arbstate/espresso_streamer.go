@@ -8,8 +8,10 @@ import (
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -37,9 +39,9 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string, nextHotshotBloc
 	for _, url := range hotshotUrls {
 		client := espressoClient.NewClient(url)
 		if client == nil {
-			log.Crit("Failed to create espresso client", "url", url)
 			// we should be able to initialize
 			// all the clients
+			log.Crit("Failed to create espresso client", "url", url)
 			return nil
 		}
 		espressoClients = append(espressoClients, *client)

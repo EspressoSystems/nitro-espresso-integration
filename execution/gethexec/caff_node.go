@@ -166,9 +166,12 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 func (n *CaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	n.espressoStreamer.Start(ctx)
+	err := n.espressoStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start espresso streamer: %w", err)
+	}
 
-	err := n.CallIterativelySafe(func(ctx context.Context) time.Duration {
+	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
 		if madeBlock {
 			return n.config().CaffNodeConfig.HotshotPollingInterval
