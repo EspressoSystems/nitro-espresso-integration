@@ -118,11 +118,14 @@ func (c *SequencerConfig) Validate() error {
 type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
-	HotShotUrls            []string      `koanf:"hot-shot-urls"`
-	HotshotNextBlock       uint64        `koanf:"start-block"`
-	Namespace              uint64        `koanf:"namespace"`
-	RetryTime              time.Duration `koanf:"retry-time"`
-	HotshotPollingInterval time.Duration `koanf:"hotshot-polling-interval"`
+	HotShotUrls            []string            `koanf:"hot-shot-urls"`
+	HotshotNextBlock       uint64              `koanf:"start-block"`
+	Namespace              uint64              `koanf:"namespace"`
+	RetryTime              time.Duration       `koanf:"retry-time"`
+	HotshotPollingInterval time.Duration       `koanf:"hotshot-polling-interval"`
+	BridgeAddr             common.Address      `koanf:"bridge-addr"`
+	ParentChainReader      headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
+	ParentChainNodeUrl     string              `koanf:"parent-chain-node-url"`
 }
 
 var DefaultSequencerConfig = SequencerConfig{
@@ -151,6 +154,9 @@ var DefaultSequencerConfig = SequencerConfig{
 		Namespace:              0,
 		RetryTime:              time.Second * 2,
 		HotshotPollingInterval: time.Millisecond * 100,
+		ParentChainReader:      headerreader.DefaultConfig,
+		BridgeAddr:             common.Address{},
+		ParentChainNodeUrl:     "",
 	},
 }
 
