@@ -41,6 +41,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		config.CaffNodeConfig.BridgeAddr,
 		config.CaffNodeConfig.ParentChainNodeUrl,
 		config.CaffNodeConfig.ParentChainReader,
+		config.CaffNodeConfig.EspressoTEEVerifierAddr,
 	)
 
 	if espressoStreamer == nil {

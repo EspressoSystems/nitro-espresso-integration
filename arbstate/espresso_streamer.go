@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"sync"
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
@@ -38,18 +37,17 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	l1Reader                       *headerreader.HeaderReader
-	espressoClients                []espressoClient.Client
-	nextHotshotBlockNum            uint64
-	namespace                      uint64
-	retryTime                      time.Duration
-	pollingHotshotPollingInterval  time.Duration
-	messageWithMetadataAndPos      []*MessageWithMetadataAndPos
-	messagesWithMetadatAndPosMutex sync.Mutex
-	bridgeABI                      *abi.ABI
-	bridgeAddr                     common.Address
-	espressoTEEVerifierABI         *abi.ABI
-	espressoTEEVerifierAddr        common.Address
+	l1Reader                      *headerreader.HeaderReader
+	espressoClients               []espressoClient.Client
+	nextHotshotBlockNum           uint64
+	namespace                     uint64
+	retryTime                     time.Duration
+	pollingHotshotPollingInterval time.Duration
+	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
+	bridgeABI                     *abi.ABI
+	bridgeAddr                    common.Address
+	espressoTEEVerifierABI        *abi.ABI
+	espressoTEEVerifierAddr       common.Address
 }
 
 func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
@@ -59,6 +57,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	bridgeAddr common.Address,
 	parentChainNodeUrl string,
 	headerReaderConfig headerreader.Config,
+	espressoTEEVerifierAddress common.Address,
 ) *EspressoStreamer {
 	var espressoClients []espressoClient.Client
 	for _, url := range hotshotUrls {
@@ -74,6 +73,11 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	bridgeAbi, err := bridgegen.IBridgeMetaData.GetAbi()
 	if err != nil {
 		log.Crit("Unable to find Bridge ABI")
+	}
+
+	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
+	if err != nil {
+		log.Crit("Unable to find EspressoTEEVerifier ABI")
 	}
 	l1Client, err := ethclient.Dial(parentChainNodeUrl)
 	if err != nil {
@@ -105,6 +109,8 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		bridgeABI:                     bridgeAbi,
 		l1Reader:                      l1Reader,
 		bridgeAddr:                    bridgeAddr,
+		espressoTEEVerifierABI:        espressoTEEVerifierAbi,
+		espressoTEEVerifierAddr:       espressoTEEVerifierAddress,
 	}
 }
 
@@ -113,8 +119,6 @@ Pop the first message from the queue
 It will return nil if the queue is empty
 */
 func (s *EspressoStreamer) PopMessageWithMetadataAndPos() *MessageWithMetadataAndPos {
-	s.messagesWithMetadatAndPosMutex.Lock()
-	defer s.messagesWithMetadatAndPosMutex.Unlock()
 	if len(s.messageWithMetadataAndPos) == 0 {
 		return nil
 	}
@@ -130,8 +134,6 @@ This will be used to check if the the EspressoStreamer has recieved
 the next expected message in sequence
 */
 func (s *EspressoStreamer) PeekMessageWithMetadataAndPos() *MessageWithMetadataAndPos {
-	s.messagesWithMetadatAndPosMutex.Lock()
-	defer s.messagesWithMetadatAndPosMutex.Unlock()
 	if len(s.messageWithMetadataAndPos) == 0 {
 		return nil
 	}
@@ -199,9 +201,9 @@ func (s *EspressoStreamer) checkDelayedMessageIsFinalized(ctx context.Context, m
 }
 
 /* Verify the attestation quote */
-func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestation []byte, userDataHash []byte) error {
+func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestation []byte, userDataHash [32]byte) error {
 
-	method, ok := s.espressoTEEVerifierABI.Methods[verifyQuote]
+	method, ok := s.espressoTEEVerifierABI.Methods["verify"]
 	if !ok {
 		return fmt.Errorf("verify method not found")
 	}
@@ -265,9 +267,6 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		return nil
 	}
 
-	s.messagesWithMetadatAndPosMutex.Lock()
-	defer s.messagesWithMetadatAndPosMutex.Unlock()
-
 	for _, tx := range arbTxns.Transactions {
 		// Parse hotshot payload
 		attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
@@ -277,7 +276,12 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		}
 		// if attestation verification fails, we should skip this message
 		// Parse the messages
-		err = s.verifyAttestationQuote(ctx, attestation, userDataHash)
+		if len(userDataHash) != 32 {
+			log.Warn("user data hash is not 32 bytes")
+			continue
+		}
+		userDataHashArr := [32]byte(userDataHash)
+		err = s.verifyAttestationQuote(ctx, attestation, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
 			continue

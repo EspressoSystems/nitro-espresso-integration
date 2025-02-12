@@ -2,13 +2,14 @@ package arbutil
 
 import (
 	"bytes"
+
 	"encoding/binary"
 	"errors"
 
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ccoveille/go-safecast"
-
 	"github.com/ethereum/go-ethereum/crypto"
+
 	"github.com/ethereum/go-ethereum/log"
 )
 
