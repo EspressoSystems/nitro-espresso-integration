@@ -127,6 +127,7 @@ type CaffNodeConfig struct {
 	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
 	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tev-verifier"`
+	SequncerUrl             string              `koanf:"sequencer-url"`
 }
 
 var DefaultSequencerConfig = SequencerConfig{
@@ -158,6 +159,7 @@ var DefaultSequencerConfig = SequencerConfig{
 		ParentChainReader:      headerreader.DefaultConfig,
 		BridgeAddr:             common.Address{},
 		ParentChainNodeUrl:     "",
+		SequncerUrl:            "",
 	},
 }
 

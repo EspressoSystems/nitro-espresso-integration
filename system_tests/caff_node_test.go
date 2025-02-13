@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -9,7 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
+func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*TestClient, func()) {
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
 
@@ -25,8 +27,9 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
 	execConfig.Sequencer.CaffNodeConfig.HotshotNextBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.ParentChainNodeUrl = "http://0.0.0.0:8545"
-	execConfig.Sequencer.CaffNodeConfig.EspressoTEEVerifierAddr = builder.L1Info.GetAddress("EspressoTEEVerifierMock")
-	execConfig.Sequencer.CaffNodeConfig.BridgeAddr = builder.L1Info.GetAddress("Bridge")
+	execConfig.Sequencer.CaffNodeConfig.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock")
+	execConfig.Sequencer.CaffNodeConfig.BridgeAddr = existing.L1Info.GetAddress("Bridge")
+	execConfig.Sequencer.CaffNodeConfig.SequncerUrl = fmt.Sprintf("http://localhost:%d", existing.l2StackConfig.HTTPPort)
 	execConfig.Sequencer.CaffNodeConfig.ParentChainReader.Enable = true
 	execConfig.Sequencer.CaffNodeConfig.ParentChainReader.UseFinalityData = true
 	// for testing, we can use the same hotshot url for both
@@ -35,10 +38,8 @@ func createCaffNode(t *testing.T, builder *NodeBuilder) (*TestClient, func()) {
 	execConfig.Sequencer.CaffNodeConfig.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = false
 
-	return builder.Build2ndNode(t, &SecondNodeParams{
-		nodeConfig: nodeConfig,
-		execConfig: execConfig,
-	})
+	cleanup := builder.BuildEspressoCaffNode(t)
+	return builder.L2, cleanup
 }
 
 func TestEspressoCaffNode(t *testing.T) {
@@ -86,7 +87,7 @@ func TestEspressoCaffNode(t *testing.T) {
 
 	log.Info("Starting the caff node")
 	// start the node
-	builderCaffNode, cleanupCaffNode := createCaffNode(t, builder)
+	builderCaffNode, cleanupCaffNode := createCaffNode(ctx, t, builder)
 	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
@@ -127,4 +128,8 @@ func TestEspressoCaffNode(t *testing.T) {
 		}
 		time.Sleep(time.Second * 5)
 	}
+
+	// Send transaction to CaffNode and it should works later
+	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
+	Require(t, err)
 }

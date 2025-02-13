@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbos"
@@ -25,6 +26,7 @@ type CaffNode struct {
 	executionEngine  *ExecutionEngine
 	espressoStreamer *arbstate.EspressoStreamer
 	skippedBlockPos  *uint64
+	l2Client         *ethclient.Client
 }
 
 func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
@@ -48,10 +50,20 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		log.Crit("Failed to create espresso streamer")
 	}
 
+	var l2Client *ethclient.Client
+	if config.CaffNodeConfig.SequncerUrl != "" {
+		ethClient, err := ethclient.Dial(config.CaffNodeConfig.SequncerUrl)
+		if err != nil {
+			log.Crit("Failed to connect to Ethereum client: %v", err)
+		}
+		l2Client = ethClient
+	}
+
 	return &CaffNode{
 		config:           configFetcher,
 		executionEngine:  execEngine,
 		espressoStreamer: espressoStreamer,
+		l2Client:         l2Client,
 	}
 }
 
@@ -189,6 +201,12 @@ func (n *CaffNode) Start(ctx context.Context) error {
 }
 
 func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
+	if n.l2Client != nil {
+		err := n.l2Client.SendTransaction(ctx, tx)
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
