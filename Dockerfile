@@ -68,7 +68,6 @@ FROM wasm-base AS wasm-bin-builder
 # pinned go version
 RUN curl -L https://golang.org/dl/go1.23.1.linux-`dpkg --print-architecture`.tar.gz | tar -C /usr/local -xzf -
 COPY ./Makefile ./go.mod ./go.sum ./
-COPY ./bold ./bold
 COPY ./arbcompress ./arbcompress
 COPY ./arbos ./arbos
 COPY ./arbstate ./arbstate
