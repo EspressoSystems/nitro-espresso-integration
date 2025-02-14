@@ -81,7 +81,7 @@ type SequencerConfig struct {
 	expectedSurplusHardThreshold int
 
 	// Espresso specific flags
-	CaffNodeConfig CaffNodeConfig `koanf:"caff-node-config"`
+	CaffNodeConfig CaffNodeConfig `koanf:"caff-node-config" reload:"hot"`
 	// Caff Node creates blocks with finalized hotshot transactions
 	EnableCaffNode bool `koanf:"enable-caff-node"`
 }
@@ -123,7 +123,7 @@ type CaffNodeConfig struct {
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
 	HotshotPollingInterval  time.Duration       `koanf:"hotshot-polling-interval"`
-	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader"`
+	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
 	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tee-verifier-addr"`
 	SequencerUrl            string              `koanf:"sequencer-url"`
