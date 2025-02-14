@@ -20,7 +20,6 @@ func createEspressoStreamer(builder *NodeBuilder) *arbstate.EspressoStreamer {
 		nextHotshotBlockNum,
 		1*time.Second,
 		250*time.Millisecond,
-		builder.L1Info.GetAddress("Bridge"),
 		"http://0.0.0.0:8545",
 		headerreader.DefaultConfig,
 		builder.L1Info.GetAddress("EspressoTEEVerifierMock"),
@@ -40,7 +39,7 @@ func TestEspressoStreamer(t *testing.T) {
 	espressoStreamer := createEspressoStreamer(builder)
 	// Test PopMessageWithMetadataAndPos
 
-	//Test PeekMessageWithMetadataAndPos returns nil if the queue is empty
+	// Test PeekMessageWithMetadataAndPos returns nil if the queue is empty
 	t.Run("Test PeekMessageWithMetadataAndPos returns nil if the queue is empty", func(t *testing.T) {
 		messageWithMetadataAndPos := espressoStreamer.PeekMessageWithMetadataAndPos()
 		if messageWithMetadataAndPos != nil {

@@ -40,7 +40,6 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		config.CaffNodeConfig.HotshotNextBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
-		config.CaffNodeConfig.BridgeAddr,
 		config.CaffNodeConfig.ParentChainNodeUrl,
 		config.CaffNodeConfig.ParentChainReader,
 		config.CaffNodeConfig.EspressoTEEVerifierAddr,

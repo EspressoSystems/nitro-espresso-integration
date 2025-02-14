@@ -3,7 +3,6 @@ package arbstate
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sort"
 	"time"
 
@@ -25,11 +24,6 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-const (
-	delayedMessageCountMethodName = "delayedMessageCount"
-	verifyQuote                   = "verify"
-)
-
 type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
 	Pos             uint64
@@ -44,8 +38,6 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	bridgeABI                     *abi.ABI
-	bridgeAddr                    common.Address
 	espressoTEEVerifierABI        *abi.ABI
 	espressoTEEVerifierAddr       common.Address
 }
@@ -54,7 +46,6 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	bridgeAddr common.Address,
 	parentChainNodeUrl string,
 	headerReaderConfig headerreader.Config,
 	espressoTEEVerifierAddress common.Address,
@@ -69,10 +60,6 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 			return nil
 		}
 		espressoClients = append(espressoClients, *client)
-	}
-	bridgeAbi, err := bridgegen.IBridgeMetaData.GetAbi()
-	if err != nil {
-		log.Crit("Unable to find Bridge ABI")
 	}
 
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
@@ -106,9 +93,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
-		bridgeABI:                     bridgeAbi,
 		l1Reader:                      l1Reader,
-		bridgeAddr:                    bridgeAddr,
 		espressoTEEVerifierABI:        espressoTEEVerifierAbi,
 		espressoTEEVerifierAddr:       espressoTEEVerifierAddress,
 	}
@@ -138,66 +123,6 @@ func (s *EspressoStreamer) PeekMessageWithMetadataAndPos() *MessageWithMetadataA
 		return nil
 	}
 	return s.messageWithMetadataAndPos[0]
-}
-
-/* Check if the delayed message is finalized and only then add it to the queue */
-func (s *EspressoStreamer) checkDelayedMessageIsFinalized(ctx context.Context, msg *arbostypes.MessageWithMetadata) (bool, error) {
-	// Get the latest finalized block header
-	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to get latest finalized block header: %w", err)
-	}
-	finalized := header.Number
-
-	// Get the delayedMessageCount method from the ABI
-	method, ok := s.bridgeABI.Methods[delayedMessageCountMethodName]
-	if !ok {
-		return false, fmt.Errorf("failed to find method %s in ABI", delayedMessageCountMethodName)
-	}
-
-	// Pack the method call (no arguments needed if delayedMessageCount doesn't take any)
-	calldata := method.ID
-
-	// Call the contract at the finalized block
-	result, err := s.l1Reader.Client().CallContract(ctx, ethereum.CallMsg{
-		To:   &s.bridgeAddr,
-		Data: calldata,
-	}, finalized)
-	if err != nil {
-		return false, fmt.Errorf("failed to call contract: %w", err)
-	}
-
-	// Unpack the result into a *big.Int
-	var delayedMessageCount *big.Int
-	delayedMessageCount = new(big.Int)
-
-	// Use method.Outputs.Unpack to decode the result
-	decodedResults, err := method.Outputs.Unpack(result)
-	if err != nil {
-		return false, fmt.Errorf("failed to unpack result: %w", err)
-	}
-
-	// Ensure the decoded result is of the expected type and length
-	if len(decodedResults) != 1 {
-		return false, fmt.Errorf("unexpected number of results: expected 1, got %d", len(decodedResults))
-	}
-
-	// Assert the type of the decoded result
-	delayedMessageCount, ok = decodedResults[0].(*big.Int)
-	if !ok {
-		return false, fmt.Errorf("failed to assert result as *big.Int")
-	}
-
-	// Log the delayed message count
-	log.Info("Delayed message count", "delayedMessageCount", delayedMessageCount)
-
-	// If the delayed message count is less than the finalized delayed message read count,
-	// the delayed message count is not finalized yet
-	if msg.DelayedMessagesRead < delayedMessageCount.Uint64() {
-		return false, fmt.Errorf("delayed message count is less than the finalized delayed message read count")
-	}
-
-	return true, nil
 }
 
 /* Verify the attestation quote */
@@ -243,7 +168,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		// We dont need to check majority here  because when we eventually go
 		// to fetch a block at a certain height,
 		// we will check that a quorum of nodes agree on the block at that height,
-		// which wouldn't be possible if we were somehow given a height
+		// which wouldn't be possible if we were somehow are given a height
 		// that wasn't finalized at all
 		latestBlock, err := s.espressoClients[0].FetchLatestBlockHeight(ctx)
 		if err != nil {
@@ -255,7 +180,6 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 	}
 
 	nextHotshotBlockNum := s.nextHotshotBlockNum
-
 	// TODO: should support multiple clients
 	arbTxns, err := s.espressoClients[0].FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
 	if err != nil {
@@ -295,18 +219,6 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 				continue
 			}
 
-			// Check if the delayed message count is finalized
-			shouldIncludeMessage, err := s.checkDelayedMessageIsFinalized(ctx, &messageWithMetadata)
-			if err != nil {
-				log.Warn("Error while checking if delayed message count is finalized : %w", err)
-				// We dont want to skip this message, so we will re-try once the delayed message count is finalized
-				return err
-			}
-			if !shouldIncludeMessage {
-				log.Warn("Delayed message count is not finalized yet")
-				return fmt.Errorf("delayed message count is not finalized yet")
-			}
-
 			// Only append to the slice if the message is not a duplicate
 			if !s.messageWithMetadataAndPosContains(indices[i]) {
 				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
@@ -341,7 +253,6 @@ func (s *EspressoStreamer) messageWithMetadataAndPosContains(pos uint64) bool {
 
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
-
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.queueMessagesFromHotshot(ctx)
 		if err != nil {
