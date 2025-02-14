@@ -25,7 +25,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	execConfig.Sequencer.Enable = true
 	execConfig.Sequencer.EnableCaffNode = true
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
-	execConfig.Sequencer.CaffNodeConfig.HotshotNextBlock = 1
+	execConfig.Sequencer.CaffNodeConfig.NextHotshotBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.ParentChainNodeUrl = "http://0.0.0.0:8545"
 	execConfig.Sequencer.CaffNodeConfig.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock")
 	execConfig.Sequencer.CaffNodeConfig.SequncerUrl = fmt.Sprintf("http://localhost:%d", existing.l2StackConfig.HTTPPort)

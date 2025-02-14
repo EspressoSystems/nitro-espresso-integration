@@ -119,13 +119,13 @@ type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
 	HotShotUrls             []string            `koanf:"hot-shot-urls"`
-	HotshotNextBlock        uint64              `koanf:"start-block"`
+	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
 	HotshotPollingInterval  time.Duration       `koanf:"hotshot-polling-interval"`
 	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
-	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tev-verifier"`
+	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tee-verifier"`
 	SequncerUrl             string              `koanf:"sequencer-url"`
 }
 
@@ -151,7 +151,7 @@ var DefaultSequencerConfig = SequencerConfig{
 	EnableCaffNode: false,
 	CaffNodeConfig: CaffNodeConfig{
 		HotShotUrls:            []string{},
-		HotshotNextBlock:       1,
+		NextHotshotBlock:       1,
 		Namespace:              0,
 		RetryTime:              time.Second * 2,
 		HotshotPollingInterval: time.Millisecond * 100,
