@@ -125,8 +125,8 @@ type CaffNodeConfig struct {
 	HotshotPollingInterval  time.Duration       `koanf:"hotshot-polling-interval"`
 	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
-	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tee-verifier"`
-	SequncerUrl             string              `koanf:"sequencer-url"`
+	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tee-verifier-addr"`
+	SequencerUrl            string              `koanf:"sequencer-url"`
 }
 
 var DefaultSequencerConfig = SequencerConfig{
@@ -157,7 +157,7 @@ var DefaultSequencerConfig = SequencerConfig{
 		HotshotPollingInterval: time.Millisecond * 100,
 		ParentChainReader:      headerreader.DefaultConfig,
 		ParentChainNodeUrl:     "",
-		SequncerUrl:            "",
+		SequencerUrl:           "",
 	},
 }
 

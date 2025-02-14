@@ -50,8 +50,8 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	}
 
 	var l2Client *ethclient.Client
-	if config.CaffNodeConfig.SequncerUrl != "" {
-		ethClient, err := ethclient.Dial(config.CaffNodeConfig.SequncerUrl)
+	if config.CaffNodeConfig.SequencerUrl != "" {
+		ethClient, err := ethclient.Dial(config.CaffNodeConfig.SequencerUrl)
 		if err != nil {
 			log.Crit("Failed to connect to Ethereum client: %v", err)
 		}
