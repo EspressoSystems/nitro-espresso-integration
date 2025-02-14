@@ -37,7 +37,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 
 	espressoStreamer := arbstate.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
 		config.CaffNodeConfig.HotShotUrls,
-		config.CaffNodeConfig.NextHotshotBlock,
+		config.CaffNodeConfig.HotshotNextBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
 		config.CaffNodeConfig.ParentChainNodeUrl,
