@@ -5,16 +5,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/offchainlabs/nitro/arbstate"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
-func createEspressoStreamer(builder *NodeBuilder) *arbstate.EspressoStreamer {
+func createEspressoStreamer(builder *NodeBuilder) *espressostreamer.EspressoStreamer {
 
 	namespace := builder.chainConfig.ChainID.Uint64()
 	hotshotUrl := "http://127.0.0.1:41000"
 	nextHotshotBlockNum := uint64(1)
-	return arbstate.NewEspressoStreamer(
+	return espressostreamer.NewEspressoStreamer(
 		namespace,
 		[]string{hotshotUrl, hotshotUrl},
 		nextHotshotBlockNum,

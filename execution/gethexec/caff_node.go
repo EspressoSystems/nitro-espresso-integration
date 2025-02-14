@@ -12,7 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbos"
-	"github.com/offchainlabs/nitro/arbstate"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -24,7 +24,7 @@ type CaffNode struct {
 
 	config           SequencerConfigFetcher
 	executionEngine  *ExecutionEngine
-	espressoStreamer *arbstate.EspressoStreamer
+	espressoStreamer *espressostreamer.EspressoStreamer
 	skippedBlockPos  *uint64
 	l2Client         *ethclient.Client
 }
@@ -35,7 +35,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
 
-	espressoStreamer := arbstate.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
+	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
 		config.CaffNodeConfig.HotShotUrls,
 		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,

@@ -1,4 +1,4 @@
-package arbstate
+package espressostreamer
 
 import (
 	"context"
