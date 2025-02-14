@@ -123,7 +123,7 @@ type CaffNodeConfig struct {
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
 	HotshotPollingInterval  time.Duration       `koanf:"hotshot-polling-interval"`
-	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
+	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
 	EspressoTEEVerifierAddr common.Address      `koanf:"espresso-tee-verifier-addr"`
 	SequencerUrl            string              `koanf:"sequencer-url"`
