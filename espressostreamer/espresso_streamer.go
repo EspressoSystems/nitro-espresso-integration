@@ -113,7 +113,7 @@ func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspre
 
 	log.Info("Refreshing espresso streamer", "lastMessagePos", lastMessagePos, "lastEspressoBlock", lastEspressoBlock, "confirmedMessagePos", s.confirmedMessagePos)
 	// If the last message pos only increase by 1, we dont need to refresh
-	// because this is expected behavior
+	// because this is expected behavior.
 	if lastMessagePos == s.confirmedMessagePos+1 {
 		s.confirmedMessagePos = lastMessagePos
 		s.currentMessagePos = lastMessagePos + 1
