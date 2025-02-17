@@ -111,7 +111,6 @@ func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspre
 		return false, err
 	}
 
-	log.Info("Refreshing espresso streamer", "lastMessagePos", lastMessagePos, "lastEspressoBlock", lastEspressoBlock, "confirmedMessagePos", s.confirmedMessagePos)
 	// If the last message pos only increase by 1, we dont need to refresh
 	// because this is expected behavior.
 	if lastMessagePos == s.confirmedMessagePos+1 {
@@ -128,6 +127,7 @@ func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspre
 		s.currentMessagePos = lastMessagePos + 1
 		s.nextHotshotBlockNum = lastEspressoBlock
 		s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
+		log.Info("Refreshing espresso streamer", "lastMessagePos", lastMessagePos, "lastEspressoBlock", lastEspressoBlock, "confirmedMessagePos", s.confirmedMessagePos)
 		return true, nil
 	}
 
@@ -295,7 +295,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.queueMessagesFromHotshot(ctx)
 		if err != nil {
-			log.Error("Erro while queueing messages from hotshot", "err", err)
+			log.Error("error while queueing messages from hotshot", "err", err)
 			return s.retryTime
 		}
 		s.nextHotshotBlockNum += 1
