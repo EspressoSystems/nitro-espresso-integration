@@ -22,11 +22,11 @@ Caff Node creates blocks with finalized hotshot transactions
 type CaffNode struct {
 	stopwaiter.StopWaiter
 
-	config           SequencerConfigFetcher
-	executionEngine  *ExecutionEngine
-	espressoStreamer *espressostreamer.EspressoStreamer
-	skippedBlockPos  *uint64
-	l2Client         *ethclient.Client
+	config              SequencerConfigFetcher
+	executionEngine     *ExecutionEngine
+	espressoStreamer    *espressostreamer.EspressoStreamer
+	l2Client            *ethclient.Client
+	prevHotshotBlockNum uint64
 }
 
 func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
@@ -59,10 +59,11 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	}
 
 	return &CaffNode{
-		config:           configFetcher,
-		executionEngine:  execEngine,
-		espressoStreamer: espressoStreamer,
-		l2Client:         l2Client,
+		config:              configFetcher,
+		executionEngine:     execEngine,
+		espressoStreamer:    espressoStreamer,
+		l2Client:            l2Client,
+		prevHotshotBlockNum: config.CaffNodeConfig.NextHotshotBlock,
 	}
 }
 
@@ -71,7 +72,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
  * It will first remove duplicates and ensure the ordering of messages is correct
  * Then it will run the STF using the `Produce Block`function and finally store the block in the database
  */
-func (n *CaffNode) createBlock() (returnValue bool) {
+func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Get the last block header stored in the database
 	if n.executionEngine.bc == nil {
@@ -81,43 +82,29 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
-	currentMsgPos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64())
-	if err != nil {
-		log.Error("failed to convert block number to message index")
-		return false
-	}
-	currentPos := uint64(currentMsgPos)
+	refreshed, err := n.espressoStreamer.Refresh(ctx, func() (uint64, uint64, error) {
+		currentMsgPos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64())
+		if err != nil {
+			log.Error("failed to convert block number to message index")
+			return 0, 0, err
+		}
+		currentPos := uint64(currentMsgPos)
+		return currentPos, n.prevHotshotBlockNum, nil
+	})
 
-	messageWithMetadataAndPos := n.espressoStreamer.PeekMessageWithMetadataAndPos()
-	if messageWithMetadataAndPos == nil {
-		log.Warn("No messages to process")
+	if err != nil || refreshed {
 		return false
 	}
+
+	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
+	if err != nil || messageWithMetadataAndPos == nil {
+		log.Warn("unable to get next message", "err", err)
+		return false
+	}
+	// Store the height of the last processed block
+	n.prevHotshotBlockNum = messageWithMetadataAndPos.HotshotHeight
 
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
-	messageWithMetadataPos := messageWithMetadataAndPos.Pos
-
-	// Check for duplicates and remove them
-	if messageWithMetadataAndPos.Pos <= currentPos {
-		log.Error("message has already been processed, removing duplicate",
-			"messageWithMetadataPos", messageWithMetadataPos, "currentMessageCount", currentPos)
-		n.espressoStreamer.PopMessageWithMetadataAndPos()
-		return false
-	}
-
-	// Check if the message is in the correct order, it should be sequentially increasing
-	if (messageWithMetadataPos != currentPos+1) && n.skippedBlockPos == nil {
-		log.Warn("order of message is incorrect", "currentPos", currentPos,
-			"messageWithMetadataPos", messageWithMetadataPos)
-		return false
-	}
-
-	// If a message was skipped, check if the message is in the correct order
-	if n.skippedBlockPos != nil && messageWithMetadataPos != *n.skippedBlockPos+1 {
-		log.Warn("order of message is incorrect", "skippedBlockPos", *n.skippedBlockPos,
-			"messageWithMetadataPos", messageWithMetadataPos)
-		return false
-	}
 
 	// Get the state of the database at the last block
 	statedb, err := n.executionEngine.bc.StateAt(lastBlockHeader.Root)
@@ -142,27 +129,14 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 	if err != nil {
 		log.Error("Failed to produce block", "err", err)
-		// if we fail to produce a block, we should remove this message from the queue
-		// and set skippedBlockPos to the current messageWithMetadataPos
-		n.skippedBlockPos = &messageWithMetadataPos
-		log.Warn("Removing message from queue", "messageWithMetadataPos", messageWithMetadataPos)
-		n.espressoStreamer.PopMessageWithMetadataAndPos()
 		return false
 	}
 
 	// If block is nil or receipts is empty, return false
 	if len(receipts) == 0 || block == nil {
 		log.Error("Failed to produce block, no receipts or block")
-		// if we fail to produce a block, we should remove this message from the queue
-		// and set skippedBlockPos to the current messageWithMetadataPos
-		n.skippedBlockPos = &messageWithMetadataPos
-		log.Warn("Removing message from queue", "messageWithMetadataPos", messageWithMetadataPos)
-		n.espressoStreamer.PopMessageWithMetadataAndPos()
 		return false
 	}
-
-	// Reset the skippedBlockPos
-	n.skippedBlockPos = nil
 
 	blockCalcTime := time.Since(startTime)
 
@@ -174,8 +148,6 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 		return false
 	}
 
-	// Pop the message from the front of the queue at the end.
-	n.espressoStreamer.PopMessageWithMetadataAndPos()
 	return true
 }
 
@@ -187,7 +159,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock()
+		madeBlock := n.createBlock(ctx)
 		if madeBlock {
 			return n.config().CaffNodeConfig.HotshotPollingInterval
 		}

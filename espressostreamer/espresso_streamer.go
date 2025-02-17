@@ -27,6 +27,7 @@ import (
 type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
 	Pos             uint64
+	HotshotHeight   uint64
 }
 
 type EspressoStreamer struct {
@@ -34,7 +35,9 @@ type EspressoStreamer struct {
 	l1Reader                      *headerreader.HeaderReader
 	espressoClients               []espressoClient.Client
 	nextHotshotBlockNum           uint64
+	currentMessagePos             uint64
 	namespace                     uint64
+	confirmedMessagePos           uint64
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
@@ -96,33 +99,62 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		l1Reader:                      l1Reader,
 		espressoTEEVerifierABI:        espressoTEEVerifierAbi,
 		espressoTEEVerifierAddr:       espressoTEEVerifierAddress,
+		// Initally, we set the confirmed message pos to max uint64
+		// because we dont know the confirmed message pos yet
+		confirmedMessagePos: abi.MaxUint256.Uint64(),
 	}
 }
 
-/*
-Pop the first message from the queue
-It will return nil if the queue is empty
-*/
-func (s *EspressoStreamer) PopMessageWithMetadataAndPos() *MessageWithMetadataAndPos {
-	if len(s.messageWithMetadataAndPos) == 0 {
-		return nil
+func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspressoBlock func() (uint64, uint64, error)) (bool, error) {
+	lastMessagePos, lastEspressoBlock, err := fetchLastMessageAndEspressoBlock()
+	if err != nil {
+		return false, err
 	}
-	messageWithMetadataAndPos := s.messageWithMetadataAndPos[0]
-	s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[1:]
-	return messageWithMetadataAndPos
+
+	log.Info("Refreshing espresso streamer", "lastMessagePos", lastMessagePos, "lastEspressoBlock", lastEspressoBlock, "confirmedMessagePos", s.confirmedMessagePos)
+	// If the last message pos only increase by 1, we dont need to refresh
+	// because this is expected behavior
+	if lastMessagePos == s.confirmedMessagePos+1 {
+		s.confirmedMessagePos = lastMessagePos
+		s.currentMessagePos = lastMessagePos + 1
+		return false, nil
+	}
+
+	// If last message pos didnt increase by and if not equal to the confirmed message pos
+	// something went wrong
+	// we reset the values to the values returned from the source of truth.
+	if lastMessagePos != s.confirmedMessagePos {
+		s.confirmedMessagePos = lastMessagePos
+		s.currentMessagePos = lastMessagePos + 1
+		s.nextHotshotBlockNum = lastEspressoBlock
+		s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
+		return true, nil
+	}
+
+	return false, nil
 }
 
-/*
-Peek the first message from the queue
-It will return nil if the queue is empty
-This will be used to check if the the EspressoStreamer has recieved
-the next expected message in sequence
-*/
-func (s *EspressoStreamer) PeekMessageWithMetadataAndPos() *MessageWithMetadataAndPos {
-	if len(s.messageWithMetadataAndPos) == 0 {
-		return nil
+func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
+
+	// Find if the current message pos is in the queue
+	// delete any messages before the current message pos
+	for i := 0; i < len(s.messageWithMetadataAndPos); i++ {
+		if s.messageWithMetadataAndPos[i].Pos < s.currentMessagePos {
+			s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[i+1:]
+			continue
+		}
+		break
 	}
-	return s.messageWithMetadataAndPos[0]
+
+	if len(s.messageWithMetadataAndPos) > 0 && s.messageWithMetadataAndPos[0].Pos == (s.currentMessagePos) {
+		// Remove the first element
+		msg := s.messageWithMetadataAndPos[0]
+		s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[1:]
+		s.currentMessagePos++
+		return msg, nil
+	}
+
+	return nil, fmt.Errorf("next message not found")
 }
 
 /* Verify the attestation quote */
@@ -164,6 +196,7 @@ func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestati
 * and store the messages in `messagesWithMetadata` queue
  */
 func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
+
 	if s.nextHotshotBlockNum == 0 {
 		// We dont need to check majority here  because when we eventually go
 		// to fetch a block at a certain height,
@@ -218,12 +251,17 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 				// Instead of returnning an error, we should just skip this message
 				continue
 			}
+			if indices[i] < s.currentMessagePos {
+				log.Warn("message index is less than current message pos, skipping", "messageIndex", indices[i], "currentMessagePos", s.currentMessagePos)
+				continue
+			}
 
 			// Only append to the slice if the message is not a duplicate
 			if !s.messageWithMetadataAndPosContains(indices[i]) {
 				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
 					MessageWithMeta: messageWithMetadata,
 					Pos:             indices[i],
+					HotshotHeight:   nextHotshotBlockNum,
 				})
 				log.Info("Added message to queue", "message", indices[i])
 			}
@@ -243,6 +281,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 Check if the message with metadata and pos is already in the queue
 */
 func (s *EspressoStreamer) messageWithMetadataAndPosContains(pos uint64) bool {
+
 	for _, messageWithMetadataAndPos := range s.messageWithMetadataAndPos {
 		if messageWithMetadataAndPos.Pos == pos {
 			return true
@@ -256,6 +295,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.queueMessagesFromHotshot(ctx)
 		if err != nil {
+			log.Error("Erro while queueing messages from hotshot", "err", err)
 			return s.retryTime
 		}
 		s.nextHotshotBlockNum += 1
