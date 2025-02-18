@@ -33,7 +33,7 @@ type MessageWithMetadataAndPos struct {
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
 	l1Reader                      *headerreader.HeaderReader
-	espressoClients               []espressoClient.Client
+	espressoClient                *espressoClient.MultipleNodesClient
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
 	namespace                     uint64
@@ -52,7 +52,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	headerReaderConfig headerreader.Config,
 	espressoTEEVerifierAddress common.Address,
 ) *EspressoStreamer {
-	var espressoClients []espressoClient.Client
+	var espressoClients []*espressoClient.Client
 	for _, url := range hotshotUrls {
 		client := espressoClient.NewClient(url)
 		if client == nil {
@@ -61,7 +61,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 			log.Crit("Failed to create espresso client", "url", url)
 			return nil
 		}
-		espressoClients = append(espressoClients, *client)
+		espressoClients = append(espressoClients, client)
 	}
 
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
@@ -90,7 +90,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		return nil
 	}
 	return &EspressoStreamer{
-		espressoClients:               espressoClients,
+		espressoClient:                espressoClient.NewMultipleNodesClient(hotshotUrls),
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
@@ -165,7 +165,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		// we will check that a quorum of nodes agree on the block at that height,
 		// which wouldn't be possible if we were somehow are given a height
 		// that wasn't finalized at all
-		latestBlock, err := s.espressoClients[0].FetchLatestBlockHeight(ctx)
+		latestBlock, err := s.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil {
 			log.Warn("unable to fetch latest hotshot block", "err", err)
 			return err
@@ -175,8 +175,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 	}
 
 	nextHotshotBlockNum := s.nextHotshotBlockNum
-	// TODO: should support multiple clients
-	arbTxns, err := s.espressoClients[0].FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
+	arbTxns, err := s.espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
 	if err != nil {
 		log.Warn("failed to fetch the transactions", "err", err)
 		return err
