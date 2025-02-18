@@ -22,11 +22,10 @@ Caff Node creates blocks with finalized hotshot transactions
 type CaffNode struct {
 	stopwaiter.StopWaiter
 
-	config              SequencerConfigFetcher
-	executionEngine     *ExecutionEngine
-	espressoStreamer    *espressostreamer.EspressoStreamer
-	l2Client            *ethclient.Client
-	prevHotshotBlockNum uint64
+	config           SequencerConfigFetcher
+	executionEngine  *ExecutionEngine
+	espressoStreamer *espressostreamer.EspressoStreamer
+	l2Client         *ethclient.Client
 }
 
 func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
@@ -59,11 +58,10 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	}
 
 	return &CaffNode{
-		config:              configFetcher,
-		executionEngine:     execEngine,
-		espressoStreamer:    espressoStreamer,
-		l2Client:            l2Client,
-		prevHotshotBlockNum: config.CaffNodeConfig.NextHotshotBlock,
+		config:           configFetcher,
+		executionEngine:  execEngine,
+		espressoStreamer: espressoStreamer,
+		l2Client:         l2Client,
 	}
 }
 
@@ -72,7 +70,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
  * It will first remove duplicates and ensure the ordering of messages is correct
  * Then it will run the STF using the `Produce Block`function and finally store the block in the database
  */
-func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
+func (n *CaffNode) createBlock() (returnValue bool) {
 
 	// Get the last block header stored in the database
 	if n.executionEngine.bc == nil {
@@ -82,27 +80,11 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
-	refreshed, err := n.espressoStreamer.Refresh(ctx, func() (uint64, uint64, error) {
-		currentMsgPos, err := n.executionEngine.BlockNumberToMessageIndex(lastBlockHeader.Number.Uint64())
-		if err != nil {
-			log.Error("failed to convert block number to message index")
-			return 0, 0, err
-		}
-		currentPos := uint64(currentMsgPos)
-		return currentPos, n.prevHotshotBlockNum, nil
-	})
-
-	if err != nil || refreshed {
-		return false
-	}
-
 	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
 	if err != nil || messageWithMetadataAndPos == nil {
 		log.Warn("unable to get next message", "err", err)
 		return false
 	}
-	// Store the height of the last processed block
-	n.prevHotshotBlockNum = messageWithMetadataAndPos.HotshotHeight
 
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
 
@@ -133,7 +115,7 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	}
 
 	// If block is nil or receipts is empty, return false
-	if len(receipts) == 0 || block == nil {
+	if block == nil {
 		log.Error("Failed to produce block, no receipts or block")
 		return false
 	}
@@ -145,6 +127,10 @@ func (n *CaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	err = n.executionEngine.appendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
+		log.Info("Refreshing espresso streamer", "currentMessagePos",
+			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+			messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.RefreshCaffNode(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
 
@@ -159,7 +145,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock(ctx)
+		madeBlock := n.createBlock()
 		if madeBlock {
 			return n.config().CaffNodeConfig.HotshotPollingInterval
 		}

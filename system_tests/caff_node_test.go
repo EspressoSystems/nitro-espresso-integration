@@ -3,6 +3,7 @@ package arbtest
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -115,11 +116,14 @@ func TestEspressoCaffNode(t *testing.T) {
 			t.Fatal("last block is nil")
 		}
 		log.Info("last block", "lastBlock", lastBlock)
-		number, ok := lastBlock["number"].(string)
+		numberString, ok := lastBlock["number"].(string)
 		if !ok {
 			t.Fatal("number is not a string")
 		}
-		if number == "0x2" || number == "0x3" {
+		// convert number to uint
+		number, err := strconv.ParseInt(numberString, 0, 64)
+		Require(t, err)
+		if number > 3 {
 			break
 		}
 		if time.Since(startTime) > 10*time.Minute {

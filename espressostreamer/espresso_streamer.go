@@ -37,7 +37,6 @@ type EspressoStreamer struct {
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
 	namespace                     uint64
-	confirmedMessagePos           uint64
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
@@ -99,39 +98,12 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		l1Reader:                      l1Reader,
 		espressoTEEVerifierABI:        espressoTEEVerifierAbi,
 		espressoTEEVerifierAddr:       espressoTEEVerifierAddress,
-		// Initally, we set the confirmed message pos to max uint64
-		// because we dont know the confirmed message pos yet
-		confirmedMessagePos: abi.MaxUint256.Uint64(),
 	}
 }
 
-func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspressoBlock func() (uint64, uint64, error)) (bool, error) {
-	lastMessagePos, lastEspressoBlock, err := fetchLastMessageAndEspressoBlock()
-	if err != nil {
-		return false, err
-	}
-
-	// If the last message pos only increase by 1, we dont need to refresh
-	// because this is expected behavior.
-	if lastMessagePos == s.confirmedMessagePos+1 {
-		s.confirmedMessagePos = lastMessagePos
-		s.currentMessagePos = lastMessagePos + 1
-		return false, nil
-	}
-
-	// If last message pos didnt increase by and if not equal to the confirmed message pos
-	// something went wrong
-	// we reset the values to the values returned from the source of truth.
-	if lastMessagePos != s.confirmedMessagePos {
-		s.confirmedMessagePos = lastMessagePos
-		s.currentMessagePos = lastMessagePos + 1
-		s.nextHotshotBlockNum = lastEspressoBlock
-		s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
-		log.Info("Refreshing espresso streamer", "lastMessagePos", lastMessagePos, "lastEspressoBlock", lastEspressoBlock, "confirmedMessagePos", s.confirmedMessagePos)
-		return true, nil
-	}
-
-	return false, nil
+func (s *EspressoStreamer) RefreshCaffNode(currentMessagePos uint64, currentHostshotBlock uint64) {
+	s.currentMessagePos = currentMessagePos
+	s.nextHotshotBlockNum = currentHostshotBlock
 }
 
 func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
