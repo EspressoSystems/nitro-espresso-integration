@@ -136,25 +136,15 @@ func (s *EspressoStreamer) Refresh(ctx context.Context, fetchLastMessageAndEspre
 
 func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 
-	// Find if the current message pos is in the queue
-	// delete any messages before the current message pos
-	for i := 0; i < len(s.messageWithMetadataAndPos); i++ {
-		if s.messageWithMetadataAndPos[i].Pos < s.currentMessagePos {
-			s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[i+1:]
-			continue
-		}
-		break
+	posIndex := s.findMessageIndexByPos(s.currentMessagePos)
+	if posIndex == -1 {
+		return nil, fmt.Errorf("next message not found")
 	}
-
-	if len(s.messageWithMetadataAndPos) > 0 && s.messageWithMetadataAndPos[0].Pos == (s.currentMessagePos) {
-		// Remove the first element
-		msg := s.messageWithMetadataAndPos[0]
-		s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[1:]
-		s.currentMessagePos++
-		return msg, nil
-	}
-
-	return nil, fmt.Errorf("next message not found")
+	// Remove any messages before the current message pos and return the current message
+	msg := s.messageWithMetadataAndPos[posIndex]
+	s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[posIndex+1:]
+	s.currentMessagePos++
+	return msg, nil
 }
 
 /* Verify the attestation quote */
@@ -255,9 +245,8 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 				log.Warn("message index is less than current message pos, skipping", "messageIndex", indices[i], "currentMessagePos", s.currentMessagePos)
 				continue
 			}
-
 			// Only append to the slice if the message is not a duplicate
-			if !s.messageWithMetadataAndPosContains(indices[i]) {
+			if s.findMessageIndexByPos(indices[i]) == -1 {
 				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
 					MessageWithMeta: messageWithMetadata,
 					Pos:             indices[i],
@@ -280,14 +269,13 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 /*
 Check if the message with metadata and pos is already in the queue
 */
-func (s *EspressoStreamer) messageWithMetadataAndPosContains(pos uint64) bool {
-
-	for _, messageWithMetadataAndPos := range s.messageWithMetadataAndPos {
-		if messageWithMetadataAndPos.Pos == pos {
-			return true
+func (s *EspressoStreamer) findMessageIndexByPos(pos uint64) int {
+	for i, msg := range s.messageWithMetadataAndPos {
+		if msg.Pos == pos {
+			return i
 		}
 	}
-	return false
+	return -1
 }
 
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
