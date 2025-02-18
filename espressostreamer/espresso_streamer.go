@@ -52,17 +52,6 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	headerReaderConfig headerreader.Config,
 	espressoTEEVerifierAddress common.Address,
 ) *EspressoStreamer {
-	var espressoClients []*espressoClient.Client
-	for _, url := range hotshotUrls {
-		client := espressoClient.NewClient(url)
-		if client == nil {
-			// we should be able to initialize
-			// all the clients
-			log.Crit("Failed to create espresso client", "url", url)
-			return nil
-		}
-		espressoClients = append(espressoClients, client)
-	}
 
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
