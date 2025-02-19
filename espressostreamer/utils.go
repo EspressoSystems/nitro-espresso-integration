@@ -5,6 +5,7 @@ package espressostreamer
 //   - 0 for the element to be returned
 //   - negative number for elements to be removed
 //   - positive number for elements to be kept
+//
 // Returns the found element (if any) and a boolean indicating if an element was found.
 func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) (T, bool) {
 	var found T

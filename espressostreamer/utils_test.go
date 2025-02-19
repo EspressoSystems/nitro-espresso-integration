@@ -1,13 +1,13 @@
 package espressostreamer
 
 import (
-	"testing"
 	"reflect"
+	"testing"
 )
 
 func TestFilterAndFind(t *testing.T) {
 	tests := []struct {
-		name           string
+		name          string
 		input         []int
 		compareFunc   func(int) int
 		wantFound     int
@@ -15,7 +15,7 @@ func TestFilterAndFind(t *testing.T) {
 		wantRemaining []int
 	}{
 		{
-			name: "find middle element and filter smaller ones",
+			name:  "find middle element and filter smaller ones",
 			input: []int{1, 2, 3, 4, 5},
 			compareFunc: func(n int) int {
 				if n == 3 {
@@ -31,7 +31,7 @@ func TestFilterAndFind(t *testing.T) {
 			wantRemaining: []int{4, 5},
 		},
 		{
-			name: "no element found",
+			name:  "no element found",
 			input: []int{1, 2, 3, 4, 5},
 			compareFunc: func(n int) int {
 				if n < 3 {
@@ -44,7 +44,7 @@ func TestFilterAndFind(t *testing.T) {
 			wantRemaining: []int{3, 4, 5},
 		},
 		{
-			name: "empty slice",
+			name:  "empty slice",
 			input: []int{},
 			compareFunc: func(n int) int {
 				return 1
@@ -54,7 +54,7 @@ func TestFilterAndFind(t *testing.T) {
 			wantRemaining: []int{},
 		},
 		{
-			name: "remove all elements",
+			name:  "remove all elements",
 			input: []int{1, 2, 3},
 			compareFunc: func(n int) int {
 				return -1
@@ -64,7 +64,7 @@ func TestFilterAndFind(t *testing.T) {
 			wantRemaining: []int{},
 		},
 		{
-			name: "keep all elements and find one",
+			name:  "keep all elements and find one",
 			input: []int{1, 2, 3},
 			compareFunc: func(n int) int {
 				if n == 2 {
