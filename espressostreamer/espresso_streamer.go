@@ -93,6 +93,8 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
 	s.currentMessagePos = currentMessagePos
 	s.nextHotshotBlockNum = currentHostshotBlock
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
@@ -157,6 +159,10 @@ func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestati
 * and store the messages in `messagesWithMetadata` queue
  */
 func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
+	// Note: Adding the lock on top level
+	// because s.nextHotshotBlockNum is updated if n.nextHotshotBlockNum == 0
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
 
 	if s.nextHotshotBlockNum == 0 {
 		// We dont need to check majority here  because when we eventually go
@@ -178,20 +184,19 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		log.Warn("failed to fetch the transactions", "err", err)
 		return err
 	}
+
 	if len(arbTxns.Transactions) == 0 {
 		log.Info("No transactions found in the hotshot block", "block number", s.nextHotshotBlockNum)
+		s.nextHotshotBlockNum += 1
 		return nil
 	}
-
-	s.messageMutex.Lock()
-	defer s.messageMutex.Unlock()
 
 	for _, tx := range arbTxns.Transactions {
 		// Parse hotshot payload
 		attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 		if err != nil {
-			log.Warn("failed to parse hotshot payload, will retry", "err", err)
-			return err
+			log.Warn("failed to parse hotshot payload", "err", err)
+			continue
 		}
 		// if attestation verification fails, we should skip this message
 		// Parse the messages
@@ -209,7 +214,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 			var messageWithMetadata arbostypes.MessageWithMetadata
 			err = rlp.DecodeBytes(message, &messageWithMetadata)
 			if err != nil {
-				log.Warn("failed to decode message, will retry", "err", err)
+				log.Warn("failed to decode message", "err", err)
 				// Instead of returnning an error, we should just skip this message
 				continue
 			}
@@ -226,6 +231,8 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		}
 	}
 
+	s.nextHotshotBlockNum += 1
+
 	return nil
 }
 
@@ -237,7 +244,6 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 			log.Error("error while queueing messages from hotshot", "err", err)
 			return s.retryTime
 		}
-		s.nextHotshotBlockNum += 1
 		log.Info("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
 		return s.pollingHotshotPollingInterval
 	})

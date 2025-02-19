@@ -159,6 +159,7 @@ func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction
 	if n.l2Client != nil {
 		err := n.l2Client.SendTransaction(ctx, tx)
 		if err != nil {
+			log.Error("failed to publish transaction", "err", err)
 			return err
 		}
 	}
