@@ -103,7 +103,13 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	defer s.messageMutex.Unlock()
 
 	message, found := FilterAndFind(&s.messageWithMetadataAndPos, func(msg *MessageWithMetadataAndPos) int {
-		return int(msg.Pos - 1 - s.currentMessagePos)
+		if msg.Pos == s.currentMessagePos+1 {
+			return 0
+		}
+		if msg.Pos < s.currentMessagePos+1 {
+			return -1
+		}
+		return 1
 	})
 	if !found {
 		return nil, fmt.Errorf("no message found")
