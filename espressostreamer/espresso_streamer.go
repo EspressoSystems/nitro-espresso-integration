@@ -3,7 +3,7 @@ package espressostreamer
 import (
 	"context"
 	"fmt"
-	"sort"
+	"sync"
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
@@ -42,6 +42,8 @@ type EspressoStreamer struct {
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
 	espressoTEEVerifierABI        *abi.ABI
 	espressoTEEVerifierAddr       common.Address
+
+	messageMutex sync.Mutex
 }
 
 func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
@@ -96,16 +98,17 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 }
 
 func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
 
-	posIndex := s.findMessageIndexByPos(s.currentMessagePos)
-	if posIndex == -1 {
-		return nil, fmt.Errorf("next message not found")
+	message, found := FilterAndFind(&s.messageWithMetadataAndPos, func(msg *MessageWithMetadataAndPos) int {
+		return int(msg.Pos - 1 - s.currentMessagePos)
+	})
+	if !found {
+		return nil, fmt.Errorf("no message found")
 	}
-	// Remove any messages before the current message pos and return the current message
-	msg := s.messageWithMetadataAndPos[posIndex]
-	s.messageWithMetadataAndPos = s.messageWithMetadataAndPos[posIndex+1:]
-	s.currentMessagePos++
-	return msg, nil
+	s.currentMessagePos += 1
+	return message, nil
 }
 
 /* Verify the attestation quote */
@@ -174,6 +177,9 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		return nil
 	}
 
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
+
 	for _, tx := range arbTxns.Transactions {
 		// Parse hotshot payload
 		attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
@@ -205,37 +211,16 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 				log.Warn("message index is less than current message pos, skipping", "messageIndex", indices[i], "currentMessagePos", s.currentMessagePos)
 				continue
 			}
-			// Only append to the slice if the message is not a duplicate
-			if s.findMessageIndexByPos(indices[i]) == -1 {
-				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
-					MessageWithMeta: messageWithMetadata,
-					Pos:             indices[i],
-					HotshotHeight:   nextHotshotBlockNum,
-				})
-				log.Info("Added message to queue", "message", indices[i])
-			}
+			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
+				MessageWithMeta: messageWithMetadata,
+				Pos:             indices[i],
+				HotshotHeight:   nextHotshotBlockNum,
+			})
+			log.Info("Added message to queue", "message", indices[i])
 		}
 	}
-
-	// Sort the messagesWithMetadataAndPos based on ascending order
-	// This is to ensure that we process messages in the correct order
-	sort.SliceStable(s.messageWithMetadataAndPos, func(i, j int) bool {
-		return s.messageWithMetadataAndPos[i].Pos < s.messageWithMetadataAndPos[j].Pos
-	})
 
 	return nil
-}
-
-/*
-Check if the message with metadata and pos is already in the queue
-*/
-func (s *EspressoStreamer) findMessageIndexByPos(pos uint64) int {
-	for i, msg := range s.messageWithMetadataAndPos {
-		if msg.Pos == pos {
-			return i
-		}
-	}
-	return -1
 }
 
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
