@@ -103,10 +103,10 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	defer s.messageMutex.Unlock()
 
 	message, found := FilterAndFind(&s.messageWithMetadataAndPos, func(msg *MessageWithMetadataAndPos) int {
-		if msg.Pos == s.currentMessagePos+1 {
+		if msg.Pos == s.currentMessagePos {
 			return 0
 		}
-		if msg.Pos < s.currentMessagePos+1 {
+		if msg.Pos < s.currentMessagePos {
 			return -1
 		}
 		return 1
@@ -173,14 +173,13 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 		s.nextHotshotBlockNum = latestBlock
 	}
 
-	nextHotshotBlockNum := s.nextHotshotBlockNum
-	arbTxns, err := s.espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, s.namespace)
+	arbTxns, err := s.espressoClient.FetchTransactionsInBlock(ctx, s.nextHotshotBlockNum, s.namespace)
 	if err != nil {
 		log.Warn("failed to fetch the transactions", "err", err)
 		return err
 	}
 	if len(arbTxns.Transactions) == 0 {
-		log.Info("No transactions found in the hotshot block", "block number", nextHotshotBlockNum)
+		log.Info("No transactions found in the hotshot block", "block number", s.nextHotshotBlockNum)
 		return nil
 	}
 
@@ -221,7 +220,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, &MessageWithMetadataAndPos{
 				MessageWithMeta: messageWithMetadata,
 				Pos:             indices[i],
-				HotshotHeight:   nextHotshotBlockNum,
+				HotshotHeight:   s.nextHotshotBlockNum,
 			})
 			log.Info("Added message to queue", "message", indices[i])
 		}

@@ -109,14 +109,12 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 		false,
 		core.MessageReplayMode)
 
-	if err != nil {
+	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
-		return false
-	}
-
-	// If block is nil or receipts is empty, return false
-	if block == nil {
-		log.Error("Failed to produce block, no receipts or block")
+		log.Info("Resetting espresso streamer", "currentMessagePos",
+			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+			messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
 

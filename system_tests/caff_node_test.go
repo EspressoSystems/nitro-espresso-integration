@@ -123,7 +123,7 @@ func TestEspressoCaffNode(t *testing.T) {
 		// convert number to uint
 		number, err := strconv.ParseInt(numberString, 0, 64)
 		Require(t, err)
-		if number > 3 {
+		if number >= 3 {
 			break
 		}
 		if time.Since(startTime) > 10*time.Minute {
