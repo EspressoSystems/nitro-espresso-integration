@@ -18,7 +18,8 @@ func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) (T, bool) {
 	j := 0
 	for i := 0; i < len(*arr); i++ {
 		result := compareFunc((*arr)[i])
-		if result == 0 {
+		// Take the first element that matches
+		if result == 0 && !hasFound {
 			found = (*arr)[i]
 			hasFound = true
 		} else if result > 0 {

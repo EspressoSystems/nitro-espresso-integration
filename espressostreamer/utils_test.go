@@ -76,6 +76,19 @@ func TestFilterAndFind(t *testing.T) {
 			wantExists:    true,
 			wantRemaining: []int{1, 3},
 		},
+		{
+			name:  "handle duplicate correctly",
+			input: []int{1, 2, 2, 3},
+			compareFunc: func(n int) int {
+				if n == 2 {
+					return 0
+				}
+				return 1
+			},
+			wantFound:     2,
+			wantExists:    true,
+			wantRemaining: []int{1, 3},
+		},
 	}
 
 	for _, tt := range tests {
