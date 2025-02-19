@@ -90,7 +90,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	}
 }
 
-func (s *EspressoStreamer) RefreshCaffNode(currentMessagePos uint64, currentHostshotBlock uint64) {
+func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
 	s.currentMessagePos = currentMessagePos
 	s.nextHotshotBlockNum = currentHostshotBlock
 }

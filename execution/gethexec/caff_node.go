@@ -127,10 +127,10 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 	err = n.executionEngine.appendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
-		log.Info("Refreshing espresso streamer", "currentMessagePos",
+		log.Info("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
-		n.espressoStreamer.RefreshCaffNode(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
 
