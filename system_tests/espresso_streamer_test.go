@@ -9,6 +9,7 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	types "github.com/EspressoSystems/espresso-sequencer-go/types"
+  "github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -83,19 +84,20 @@ func ShouldPopMessagesInOrderData() []TestBlock{
 func TestShouldPopMessagesInOrder(t *testing.T){
   ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+  log.Info("Test is running")
 
   mockParentChainClient := new(mockParentChainClient)
   mockEspressoClient := new(mockEspressoClient)
   
   //simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
-  mockParentChainClient.On("CallContract").Return([]byte{1})
+  mockParentChainClient.On("CallContract").Return([]byte{1}, nil)
   // create a new streamer object
-  streamer := espressostreamer.NewEspressoStreamer(1, []string{""}, 1, time.Millisecond, time.Millisecond, common.Address{}, new(mockParentChainClient), new(mockEspressoClient))
+  streamer := espressostreamer.NewEspressoStreamer(1, []string{""}, 1, time.Millisecond, time.Millisecond, common.Address{}, mockParentChainClient, mockEspressoClient)
   // Get the data for this test 
   testBlocks := ShouldPopMessagesInOrderData()
   
-  mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(testBlocks[0].blockNumber)
-  mockEspressoClient.On("FetchTransactionsInBlock", ctx, testBlocks[0].blockNumber, 1)
+  mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(testBlocks[0].blockNumber, nil)
+  mockEspressoClient.On("FetchTransactionsInBlock", ctx, testBlocks[0].blockNumber, uint64(1)).Return(testBlocks[0].transactionsInBlock, nil)
   // manually crank the streamers polling function to read an individual hotshot block prepared for the mockEspressoClient
   err := streamer.QueueMessagesFromHotshot(ctx)
   Require(t, err)
