@@ -14,6 +14,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
+  espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 )
 
 /*
@@ -33,15 +34,19 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	if err := config.Validate(); err != nil {
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
-
+  
+  l1Client, err := ethclient.Dial(config.CaffNodeConfig.ParentChainNodeUrl)
+  if err != nil {
+    log.Crit("Failed to create l1 client", "url", config.CaffNodeConfig.ParentChainNodeUrl)
+  }
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
 		config.CaffNodeConfig.HotShotUrls,
 		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
-		config.CaffNodeConfig.ParentChainNodeUrl,
-		config.CaffNodeConfig.ParentChainReader,
 		config.CaffNodeConfig.EspressoTEEVerifierAddr,
+    l1Client,
+    espressoClient.NewMultipleNodesClient(config.CaffNodeConfig.HotShotUrls),
 	)
 
 	if espressoStreamer == nil {
