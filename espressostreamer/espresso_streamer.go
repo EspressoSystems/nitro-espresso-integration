@@ -52,9 +52,13 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	pollingHotshotPollingInterval time.Duration,
 	parentChainNodeUrl string,
 	headerReaderConfig headerreader.Config,
-	espressoTEEVerifierAddress common.Address,
+	espressoTEEVerifierAddress string,
 ) *EspressoStreamer {
 
+	if !common.IsHexAddress(espressoTEEVerifierAddress) {
+		log.Crit("invalid espressoTEEVerifierAddress")
+		return nil
+	}
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		log.Crit("Unable to find EspressoTEEVerifier ABI")
@@ -88,7 +92,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 		namespace:                     namespace,
 		l1Reader:                      l1Reader,
 		espressoTEEVerifierABI:        espressoTEEVerifierAbi,
-		espressoTEEVerifierAddr:       espressoTEEVerifierAddress,
+		espressoTEEVerifierAddr:       common.HexToAddress(espressoTEEVerifierAddress),
 	}
 }
 
@@ -122,7 +126,6 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestation []byte, userDataHash [32]byte) error {
-
 	method, ok := s.espressoTEEVerifierABI.Methods["verify"]
 	if !ok {
 		return fmt.Errorf("verify method not found")
@@ -149,7 +152,6 @@ func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestati
 	if err != nil {
 		return fmt.Errorf("call to the contract failed: %w", err)
 	}
-
 	return nil
 }
 
