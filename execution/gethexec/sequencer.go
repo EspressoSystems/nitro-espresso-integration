@@ -165,7 +165,7 @@ var DefaultSequencerConfig = SequencerConfig{
 }
 
 func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.StringSlice(prefix+".hot-shot-urls", DefaultCaffNodeConfig.HotShotUrls, "hotshot urls")
+	f.StringSlice(prefix+".hotshot-urls", DefaultCaffNodeConfig.HotShotUrls, "hotshot urls")
 	f.Uint64(prefix+".next-hotshot-block", DefaultCaffNodeConfig.NextHotshotBlock, "the hotshot block number from which the caff node will read")
 	f.Uint64(prefix+".namespace", DefaultCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultCaffNodeConfig.RetryTime, "retry time after a failure")
