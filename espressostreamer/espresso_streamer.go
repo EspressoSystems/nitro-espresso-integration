@@ -5,24 +5,29 @@ import (
 	"fmt"
 	"sync"
 	"time"
+  "math/big"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
-	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+type ParentChainClientInterface interface{
+  CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error)
+}
+
+type EspressoClientInterface interface{
+  FetchLatestBlockHeight(ctx context.Context) (uint64, error)
+  FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error)
+}
 
 type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
@@ -32,8 +37,8 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	l1Reader                      *headerreader.HeaderReader
-	espressoClient                *espressoClient.MultipleNodesClient
+	l1Reader                      ParentChainClientInterface
+	espressoClient                EspressoClientInterface
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
 	namespace                     uint64
@@ -50,38 +55,22 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	parentChainNodeUrl string,
-	headerReaderConfig headerreader.Config,
 	espressoTEEVerifierAddress common.Address,
+  l1Reader ParentChainClientInterface,
+  espressoClient EspressoClientInterface,
 ) *EspressoStreamer {
 
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		log.Crit("Unable to find EspressoTEEVerifier ABI")
 	}
-	l1Client, err := ethclient.Dial(parentChainNodeUrl)
-	if err != nil {
-		log.Crit("Failed to create l1 client", "url", parentChainNodeUrl)
-		return nil
-	}
 
-	arbSys, err := precompilesgen.NewArbSys(types.ArbSysAddress, l1Client)
-	if err != nil {
-		log.Crit("Failed to create arbsys", "err", err)
-		return nil
-	}
-
-	// we initialze a l1 reader that will poll for header every 60 seconds
-	l1Reader, err := headerreader.New(context.Background(), l1Client, func() *headerreader.Config {
-		return &headerReaderConfig
-	}, arbSys)
-
-	if err != nil {
+		if err != nil {
 		log.Crit("Failed to create l1 reader", "err", err)
 		return nil
 	}
 	return &EspressoStreamer{
-		espressoClient:                espressoClient.NewMultipleNodesClient(hotshotUrls),
+		espressoClient:                espressoClient,
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
@@ -99,7 +88,11 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.nextHotshotBlockNum = currentHostshotBlock
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
-
+// Next filters over the espresso streamers buffer and, if it is non-empty,
+// returns a reference to a MessageWithMetadataAndPos. Calling Next() when the buffer is empty,
+// or there is no element in the list with position s.currentMessagePos, will result in an error
+// 
+// If err is nil it can be assumed that the message returned is non nil.
 func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	s.messageMutex.Lock()
 	defer s.messageMutex.Unlock()
@@ -139,7 +132,7 @@ func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestati
 	fullCalldata := append([]byte{}, method.ID...)
 	fullCalldata = append(fullCalldata, calldata...)
 
-	_, err = s.l1Reader.Client().CallContract(
+	_, err = s.l1Reader.CallContract(
 		ctx,
 		ethereum.CallMsg{
 			To:   &s.espressoTEEVerifierAddr,
@@ -158,7 +151,7 @@ func (s *EspressoStreamer) verifyAttestationQuote(ctx context.Context, attestati
 * It will sort the messages by the message index
 * and store the messages in `messagesWithMetadata` queue
  */
-func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
+func (s *EspressoStreamer) QueueMessagesFromHotshot(ctx context.Context) error {
 	// Note: Adding the lock on top level
 	// because s.nextHotshotBlockNum is updated if n.nextHotshotBlockNum == 0
 	s.messageMutex.Lock()
@@ -239,7 +232,7 @@ func (s *EspressoStreamer) queueMessagesFromHotshot(ctx context.Context) error {
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		err := s.queueMessagesFromHotshot(ctx)
+		err := s.QueueMessagesFromHotshot(ctx)
 		if err != nil {
 			log.Error("error while queueing messages from hotshot", "err", err)
 			return s.retryTime
