@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/arbitrum_types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -13,6 +14,9 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
+	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -34,14 +38,48 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
 
+	l1Client, err := ethclient.Dial(config.CaffNodeConfig.ParentChainNodeUrl)
+	if err != nil {
+		log.Crit("Failed to create l1 client", "url", config.CaffNodeConfig.ParentChainNodeUrl)
+		return nil
+	}
+
+	arbSys, err := precompilesgen.NewArbSys(types.ArbSysAddress, l1Client)
+	if err != nil {
+		log.Crit("Failed to create arbsys", "err", err)
+		return nil
+	}
+
+	// we initialze a l1 reader that will poll for header every 60 seconds
+	l1Reader, err := headerreader.New(context.Background(), l1Client, func() *headerreader.Config {
+		return &config.CaffNodeConfig.ParentChainReader
+	}, arbSys)
+
+	if err != nil {
+		log.Crit("Failed to create l1 reader", "err", err)
+		return nil
+	}
+
+	if !common.IsHexAddress(config.CaffNodeConfig.EspressoTEEVerifierAddr) {
+		log.Crit("Invalid EspressoTEEVerifierAddress provided")
+		return nil
+	}
+
+	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+		common.HexToAddress(config.CaffNodeConfig.EspressoTEEVerifierAddr),
+		l1Reader.Client())
+
+	if err != nil || espressoTEEVerifierCaller == nil {
+		log.Crit("failed to create espressoTEEVerifierCaller", "err", err)
+		return nil
+	}
+
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
 		config.CaffNodeConfig.HotShotUrls,
 		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
-		config.CaffNodeConfig.ParentChainNodeUrl,
-		config.CaffNodeConfig.ParentChainReader,
-		config.CaffNodeConfig.EspressoTEEVerifierAddr,
+		*espressoTEEVerifierCaller,
 	)
 
 	if espressoStreamer == nil {

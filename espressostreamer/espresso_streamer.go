@@ -9,17 +9,12 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
-	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -31,7 +26,6 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	l1Reader                      *headerreader.HeaderReader
 	espressoClient                *espressoClient.MultipleNodesClient
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
@@ -39,7 +33,6 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	espressoTEEVerifierAddr       common.Address
 	espressoTEEVerifierCaller     bridgegen.EspressoTEEVerifier
 
 	messageMutex sync.Mutex
@@ -49,51 +42,16 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	parentChainNodeUrl string,
-	headerReaderConfig headerreader.Config,
-	espressoTEEVerifierAddress string,
+	espressoTEEVerifierCaller bridgegen.EspressoTEEVerifier,
 ) *EspressoStreamer {
 
-	if !common.IsHexAddress(espressoTEEVerifierAddress) {
-		log.Crit("Invalid EspressoTEEVerifierAddress provided")
-		return nil
-	}
-
-	l1Client, err := ethclient.Dial(parentChainNodeUrl)
-	if err != nil {
-		log.Crit("Failed to create l1 client", "url", parentChainNodeUrl)
-		return nil
-	}
-
-	arbSys, err := precompilesgen.NewArbSys(types.ArbSysAddress, l1Client)
-	if err != nil {
-		log.Crit("Failed to create arbsys", "err", err)
-		return nil
-	}
-
-	// we initialze a l1 reader that will poll for header every 60 seconds
-	l1Reader, err := headerreader.New(context.Background(), l1Client, func() *headerreader.Config {
-		return &headerReaderConfig
-	}, arbSys)
-
-	if err != nil {
-		log.Crit("Failed to create l1 reader", "err", err)
-		return nil
-	}
-	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(common.HexToAddress(espressoTEEVerifierAddress), l1Reader.Client())
-	if err != nil || espressoTEEVerifierCaller == nil {
-		log.Crit("failed to create espressoTEEVerifierCaller", "err", err)
-		return nil
-	}
 	return &EspressoStreamer{
 		espressoClient:                espressoClient.NewMultipleNodesClient(hotshotUrls),
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
-		l1Reader:                      l1Reader,
-		espressoTEEVerifierAddr:       common.HexToAddress(espressoTEEVerifierAddress),
-		espressoTEEVerifierCaller:     *espressoTEEVerifierCaller,
+		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
 	}
 }
 
