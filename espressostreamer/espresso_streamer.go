@@ -56,7 +56,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 ) *EspressoStreamer {
 
 	if !common.IsHexAddress(espressoTEEVerifierAddress) {
-		log.Crit("invalid espressoTEEVerifierAddress")
+		log.Crit("Invalid EspressoTEEVerifierAddress provided")
 		return nil
 	}
 	espressoTEEVerifierAbi, err := bridgegen.IEspressoTEEVerifierMetaData.GetAbi()
