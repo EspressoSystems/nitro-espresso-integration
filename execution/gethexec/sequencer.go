@@ -118,7 +118,7 @@ func (c *SequencerConfig) Validate() error {
 type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
-	HotShotUrls             []string            `koanf:"hot-shot-urls"`
+	HotShotUrls             []string            `koanf:"hotshot-urls"`
 	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
