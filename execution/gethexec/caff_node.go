@@ -124,6 +124,12 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 		return false
 	}
 
+	// Only process message, if its not already present in the database
+	if lastBlockHeader.Number.Uint64() >= messageWithMetadataAndPos.Pos {
+		log.Warn("message already present in the database: %v", messageWithMetadataAndPos.Pos)
+		return false
+	}
+
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
 
 	// Get the state of the database at the last block
