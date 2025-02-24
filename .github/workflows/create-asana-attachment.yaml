@@ -11,6 +11,6 @@ jobs:
         uses: Asana/create-app-attachment-github-action@latest
         id: postAttachment
         with:
-          asana-secret: ${{ secrets.ASANA_SECRET }}
+          asana-secret: ${{ secrets.ASANA_TOKEN }}
       - name: Log output status
         run: echo "Status is ${{ steps.postAttachment.outputs.status }}"
