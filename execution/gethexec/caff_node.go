@@ -29,9 +29,10 @@ type CaffNode struct {
 	config           SequencerConfigFetcher
 	executionEngine  *ExecutionEngine
 	espressoStreamer *espressostreamer.EspressoStreamer
+	txForwarder      TransactionPublisher
 }
 
-func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine) *CaffNode {
+func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine, txForwarder TransactionPublisher) *CaffNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
 		log.Crit("Failed to validate caff  node config", "err", err)
@@ -94,6 +95,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		config:           configFetcher,
 		executionEngine:  execEngine,
 		espressoStreamer: espressoStreamer,
+		txForwarder:      txForwarder,
 	}
 }
 
@@ -189,13 +191,13 @@ func (n *CaffNode) Start(ctx context.Context) error {
 }
 
 func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	return nil
+	return n.txForwarder.PublishTransaction(ctx, tx, options)
 }
 
 func (n *CaffNode) CheckHealth(ctx context.Context) error {
-	return nil
+	return n.txForwarder.CheckHealth(ctx)
 }
 
 func (n *CaffNode) Initialize(ctx context.Context) error {
-	return nil
+	return n.txForwarder.Initialize(ctx)
 }
