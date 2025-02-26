@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/arbitrum_types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -13,8 +14,10 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
+	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-  espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 )
 
 /*
@@ -34,19 +37,54 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	if err := config.Validate(); err != nil {
 		log.Crit("Failed to validate caff  node config", "err", err)
 	}
-  
-  l1Client, err := ethclient.Dial(config.CaffNodeConfig.ParentChainNodeUrl)
-  if err != nil {
-    log.Crit("Failed to create l1 client", "url", config.CaffNodeConfig.ParentChainNodeUrl)
-  }
+
+	l1Client, err := ethclient.Dial(config.CaffNodeConfig.ParentChainNodeUrl)
+	if err != nil {
+		log.Crit("Failed to create l1 client", "url", config.CaffNodeConfig.ParentChainNodeUrl)
+		return nil
+	}
+
+	arbSys, err := precompilesgen.NewArbSys(types.ArbSysAddress, l1Client)
+	if err != nil {
+		log.Crit("Failed to create arbsys", "err", err)
+		return nil
+	}
+
+	// we initialze a l1 reader that will poll for header every 60 seconds
+	l1Reader, err := headerreader.New(context.Background(), l1Client, func() *headerreader.Config {
+		return &config.CaffNodeConfig.ParentChainReader
+	}, arbSys)
+
+	if err != nil {
+		log.Crit("Failed to create l1 reader", "err", err)
+		return nil
+	}
+
+	if !common.IsHexAddress(config.CaffNodeConfig.EspressoTEEVerifierAddr) {
+		log.Crit("Invalid EspressoTEEVerifierAddress provided")
+		return nil
+	}
+
+	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+		common.HexToAddress(config.CaffNodeConfig.EspressoTEEVerifierAddr),
+		l1Reader.Client())
+
+	if err != nil || espressoTEEVerifierCaller == nil {
+		log.Crit("failed to create espressoTEEVerifierCaller", "err", err)
+		return nil
+	}
+
+	if execEngine.bc == nil {
+		log.Crit("execution engine bc not initialized")
+		return nil
+	}
+
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
 		config.CaffNodeConfig.HotShotUrls,
 		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
-		config.CaffNodeConfig.EspressoTEEVerifierAddr,
-    l1Client,
-    espressoClient.NewMultipleNodesClient(config.CaffNodeConfig.HotShotUrls),
+		*espressoTEEVerifierCaller,
 	)
 
 	if espressoStreamer == nil {
@@ -77,16 +115,10 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
  */
 func (n *CaffNode) createBlock() (returnValue bool) {
 
-	// Get the last block header stored in the database
-	if n.executionEngine.bc == nil {
-		log.Error("execution engine bc not initialized")
-		return false
-	}
-
 	lastBlockHeader := n.executionEngine.bc.CurrentBlock()
 
 	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
-	if err != nil || messageWithMetadataAndPos == nil {
+	if err != nil {
 		log.Warn("unable to get next message", "err", err)
 		return false
 	}
@@ -97,6 +129,10 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 	statedb, err := n.executionEngine.bc.StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
+		log.Info("Resetting espresso streamer", "currentMessagePos",
+			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+			messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
 
@@ -146,6 +182,9 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
 	}
+	// This is +1 because the current block is the block after the last processed block
+	currentBlockNum := n.executionEngine.bc.CurrentBlock().Number.Uint64() + 1
+	n.espressoStreamer.Reset(currentBlockNum, n.config().CaffNodeConfig.NextHotshotBlock)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
