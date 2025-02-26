@@ -930,13 +930,6 @@ func applyChainParameters(k *koanf.Koanf, chainId uint64, chainName string, l2Ch
 	if !k.Bool("execution.sequencer.enable") && chainInfo.SequencerUrl != "" {
 		chainDefaults["execution.forwarding-target"] = chainInfo.SequencerUrl
 	}
-	// If espresso caff node is enabled, use the sequencer url as the forwarding target
-	if k.Bool("execution.sequencer.enable") &&
-		chainInfo.SequencerUrl != "" &&
-		k.Bool("execution.sequencer.enable-caff-node") &&
-		k.Bool("execution.sequencer.caff-node-config.forwarding") {
-		chainDefaults["execution.forwarding-target"] = chainInfo.SequencerUrl
-	}
 	if chainInfo.SecondaryForwardingTarget != "" {
 		chainDefaults["execution.secondary-forwarding-target"] = strings.Split(chainInfo.SecondaryForwardingTarget, ",")
 	}
