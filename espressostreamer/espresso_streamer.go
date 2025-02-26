@@ -58,7 +58,7 @@ func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
 ) *EspressoStreamer {
 
 	return &EspressoStreamer{
-		espressoClient:                espressoClient,
+		espressoClient:                espressoClient.NewMultipleNodesClient(hotshotUrls),
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
