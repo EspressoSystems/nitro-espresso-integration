@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -12,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"

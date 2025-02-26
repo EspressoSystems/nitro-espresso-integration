@@ -8,11 +8,13 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	"github.com/EspressoSystems/espresso-sequencer-go/types"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/offchainlabs/nitro/espressostreamer"
 )
 
 type TestBlock struct {
@@ -35,11 +37,13 @@ type mockEspressoClient struct {
 
 func (m *mockEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	args := m.Called(ctx)
+	//nolint:errcheck
 	return args.Get(0).(uint64), args.Error(1)
 }
 
 func (m *mockEspressoClient) FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error) {
 	args := m.Called(ctx, blockHeight, namespace)
+	//nolint:errcheck
 	return args.Get(0).(espressoClient.TransactionsInBlock), args.Error(1)
 }
 
@@ -70,7 +74,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-		//simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
+		// Simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
 		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		// create a new streamer object
 		streamer := espressostreamer.NewEspressoStreamer(1, 1, time.Millisecond, time.Millisecond, mockEspressoTEEVerifierClient, mockEspressoClient)
@@ -85,9 +89,9 @@ func TestEspressoStreamer(t *testing.T) {
 		Require(t, err)
 
 		msg, err := streamer.Next()
-		//assert we did not have an error on next
+		// Assert we did not have an error on next
 		Require(t, err)
-		//assert that the streamer believe this message to have originated at hotshot height 1
+		// Assert that the streamer believe this message to have originated at hotshot height 1
 		assert.Equal(t, msg.HotshotHeight, uint64(1))
 	})
 }
