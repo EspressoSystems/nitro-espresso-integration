@@ -20,10 +20,12 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.BlockValidator.Enable = false
 	nodeConfig.DelayedSequencer.Enable = false
 	nodeConfig.DelayedSequencer.FinalizeDistance = 1
-	nodeConfig.Sequencer = true
+	nodeConfig.Sequencer = false
 	nodeConfig.Dangerous.NoSequencerCoordinator = true
-	execConfig.Sequencer.Enable = true
+	execConfig.Sequencer.Enable = false
 	execConfig.Sequencer.EnableCaffNode = true
+	execConfig.ForwardingTarget = existing.l2StackConfig.IPCPath
+	execConfig.SecondaryForwardingTarget = []string{}
 	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
 	execConfig.Sequencer.CaffNodeConfig.NextHotshotBlock = 1
 	execConfig.Sequencer.CaffNodeConfig.ParentChainNodeUrl = "http://0.0.0.0:8545"
@@ -98,6 +100,9 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
 		balance := builderCaffNode.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+		if balance.Cmp(transferAmount) >= 0 {
+			log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+		}
 		return balance.Cmp(transferAmount) >= 0
 	})
 	Require(t, err)
