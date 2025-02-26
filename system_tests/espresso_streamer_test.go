@@ -61,32 +61,33 @@ func ShouldPopMessagesInOrderData() []TestBlock {
 	return data
 }
 
-func TestShouldPopMessagesInOrder(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	log.Info("Test is running")
+func TestEspressoStreamer(t *testing.T) {
+	t.Run("Test should pop messages in order", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		log.Info("Test is running")
 
-	mockEspressoClient := new(mockEspressoClient)
-	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoClient := new(mockEspressoClient)
+		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-	//simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
-	mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	// create a new streamer object
-	streamer := espressostreamer.NewEspressoStreamer(1, 1, time.Millisecond, time.Millisecond, mockEspressoTEEVerifierClient, mockEspressoClient)
-	streamer.Reset(735805, 1)
-	// Get the data for this test
-	testBlocks := ShouldPopMessagesInOrderData()
+		//simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
+		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		// create a new streamer object
+		streamer := espressostreamer.NewEspressoStreamer(1, 1, time.Millisecond, time.Millisecond, mockEspressoTEEVerifierClient, mockEspressoClient)
+		streamer.Reset(735805, 1)
+		// Get the data for this test
+		testBlocks := ShouldPopMessagesInOrderData()
 
-	mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(testBlocks[0].blockNumber, nil)
-	mockEspressoClient.On("FetchTransactionsInBlock", ctx, testBlocks[0].blockNumber, uint64(1)).Return(testBlocks[0].transactionsInBlock, nil)
-	// manually crank the streamers polling function to read an individual hotshot block prepared for the mockEspressoClient
-	err := streamer.QueueMessagesFromHotshot(ctx)
-	Require(t, err)
+		mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(testBlocks[0].blockNumber, nil)
+		mockEspressoClient.On("FetchTransactionsInBlock", ctx, testBlocks[0].blockNumber, uint64(1)).Return(testBlocks[0].transactionsInBlock, nil)
+		// manually crank the streamers polling function to read an individual hotshot block prepared for the mockEspressoClient
+		err := streamer.QueueMessagesFromHotshot(ctx)
+		Require(t, err)
 
-	msg, err := streamer.Next()
-	//assert we did not have an error on next
-	Require(t, err)
-	//assert that the streamer believe this message to have originated at hotshot height 1
-	assert.Equal(t, msg.HotshotHeight, uint64(1))
-
+		msg, err := streamer.Next()
+		//assert we did not have an error on next
+		Require(t, err)
+		//assert that the streamer believe this message to have originated at hotshot height 1
+		assert.Equal(t, msg.HotshotHeight, uint64(1))
+	})
 }
