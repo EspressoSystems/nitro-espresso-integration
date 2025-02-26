@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
+	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -80,11 +81,11 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 	}
 
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
-		config.CaffNodeConfig.HotShotUrls,
 		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
-		*espressoTEEVerifierCaller,
+		espressoTEEVerifierCaller,
+		espressoClient.NewMultipleNodesClient(config.CaffNodeConfig.HotShotUrls),
 	)
 
 	if espressoStreamer == nil {

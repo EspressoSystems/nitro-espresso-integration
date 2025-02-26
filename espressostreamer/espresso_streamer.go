@@ -3,13 +3,10 @@ package espressostreamer
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"sync"
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-
-	"github.com/ethereum/go-ethereum"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/log"
@@ -17,12 +14,11 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-type ParentChainClientInterface interface {
-	CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error)
+type EspressoTEEVerifierInterface interface {
+	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) error
 }
 
 type EspressoClientInterface interface {
@@ -38,27 +34,28 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	espressoClient                *espressoClient.MultipleNodesClient
+	espressoClient                EspressoClientInterface
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
 	namespace                     uint64
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	espressoTEEVerifierCaller     bridgegen.EspressoTEEVerifier
+	espressoTEEVerifierCaller     EspressoTEEVerifierInterface
 
 	messageMutex sync.Mutex
 }
 
-func NewEspressoStreamer(namespace uint64, hotshotUrls []string,
+func NewEspressoStreamer(namespace uint64,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	espressoTEEVerifierCaller bridgegen.EspressoTEEVerifier,
+	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
+	espressoClientInterface EspressoClientInterface,
 ) *EspressoStreamer {
 
 	return &EspressoStreamer{
-		espressoClient:                espressoClient.NewMultipleNodesClient(hotshotUrls),
+		espressoClient:                espressoClientInterface,
 		nextHotshotBlockNum:           nextHotshotBlockNum,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
