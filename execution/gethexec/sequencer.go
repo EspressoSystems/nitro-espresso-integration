@@ -126,7 +126,6 @@ type CaffNodeConfig struct {
 	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
 	EspressoTEEVerifierAddr string              `koanf:"espresso-tee-verifier-addr"`
-	SequencerUrl            string              `koanf:"sequencer-url"`
 }
 
 var DefaultCaffNodeConfig = CaffNodeConfig{
@@ -138,7 +137,6 @@ var DefaultCaffNodeConfig = CaffNodeConfig{
 	ParentChainReader:       headerreader.DefaultConfig,
 	ParentChainNodeUrl:      "",
 	EspressoTEEVerifierAddr: "",
-	SequencerUrl:            "",
 }
 
 var DefaultSequencerConfig = SequencerConfig{
@@ -171,7 +169,6 @@ func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".retry-time", DefaultCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultCaffNodeConfig.HotshotPollingInterval, "time after a success")
 	headerreader.AddOptions(prefix+".parent-chain-reader", f)
-	f.String(prefix+".sequencer-url", DefaultCaffNodeConfig.SequencerUrl, "the sequencer url")
 	f.String(prefix+".parent-chain-node-url", DefaultCaffNodeConfig.ParentChainNodeUrl, "the parent chain url")
 	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
 }
