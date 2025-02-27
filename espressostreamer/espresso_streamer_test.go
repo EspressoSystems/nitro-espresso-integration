@@ -9,13 +9,14 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	"github.com/EspressoSystems/espresso-sequencer-go/types"
-	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/offchainlabs/nitro/arbos/arbostypes"
 )
 
 func TestEspressoStreamer(t *testing.T) {
