@@ -81,7 +81,7 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 
 	// Espresso specific fields. These fields are set from batch poster
-	espressoClient               *espressoClient.EspressoClient
+	espressoClient               espressoClient.EspressoClient
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
 	maxBlockLagBeforeEscapeHatch uint64
@@ -1323,35 +1323,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	err = json.Unmarshal(jsonHeader, &header)
 	if err != nil {
 		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
-	}
-
-	log.Info("Fetching Merkle Root at hotshot", "height", height)
-	// Verify the merkle proof
-	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
-	if err != nil {
-		return fmt.Errorf("%w (height: %d): %w", EspressoValidationErr, height, err)
-	}
-
-	if snapshot.Height <= height {
-		return fmt.Errorf("snapshot height %v is less than or equal to the requested height %v", snapshot.Height, height)
-	}
-
-	nextHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, snapshot.Height)
-	if err != nil {
-		return fmt.Errorf("error fetching the snapshot header (height: %d): %w", snapshot.Height, err)
-	}
-
-	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
-	if err != nil {
-		return fmt.Errorf("error fetching the block merkle proof (height: %d, root height: %d): %w", height, snapshot.Height, err)
-	}
-
-	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
-
-	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
-	if !ok {
-		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshot.Height)
-	}
+	}	
 
 	// Verify the namespace proof
 	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
