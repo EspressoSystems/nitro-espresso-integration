@@ -1,0 +1,18 @@
+version: v1
+name: "batcher"
+target: "enclave-batcher:latest"
+sources:
+  app: "aws-nitro-poster:latest"
+defaults:
+  memory_mb: 8192
+  cpu_count: 4
+egress:
+  allow:
+    - 172.217.4.78
+    - query.decaf.testnet.espresso.network
+    - sepolia-rollup.arbitrum.io/rpc
+    - arb-sepolia.g.alchemy.com
+    - arbitrum-sepolia.infura.io
+    - 13.59.254.12
+ingress:
+  - listen_port: 8547

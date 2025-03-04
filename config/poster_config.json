@@ -1,0 +1,101 @@
+{
+    "parent-chain": {
+        "connection": {
+            "url": "wss://arbitrum-sepolia.infura.io/ws/v3/xxx"
+        }
+    },
+    "chain": {
+        "id": 13451260,
+        "info-files": [
+            "/config/l2_chain_info.json"
+        ]
+    },
+    "node": {
+        "staker": {
+            "parent-chain-wallet": {
+                "private-key": "xxxx"
+            },
+            "disable-challenge": false,
+            "enable": true,
+            "staker-interval": "10s",
+            "make-assertion-interval": "10s",
+            "strategy": "MakeNodes"
+        },
+        "sequencer": true,
+        "dangerous": {
+            "no-sequencer-coordinator": true,
+            "disable-blob-reader": true
+        },
+        "parent-chain-reader": {
+            "poll-only": true,
+            "poll-interval": "60s"
+        },
+        "delayed-sequencer": {
+            "enable": true
+        },
+        "seq-coordinator": {
+            "enable": false,
+            "redis-url": "redis://redis:6379",
+            "lockout-duration": "30s",
+            "lockout-spare": "1s",
+            "my-url": "",
+            "retry-interval": "0.5s",
+            "seq-num-duration": "24h0m0s",
+            "update-interval": "3s"
+        },
+        "batch-poster": {
+            "enable": true,
+            "redis-url": "",
+            "l1-block-bound": "ignore",
+            "hotshot-url": "https://query.decaf.testnet.espresso.network/v0",
+            "light-client-address": "0x08d16cb8243b3e172dddcdf1a1a5dacca1cd7098",
+            "wait-for-max-delay": true,
+            "resubmit-espresso-tx-deadline": "2m",
+            "parent-chain-wallet": {
+                "private-key": "xxxx"
+            },
+            "max-delay": "1m"
+        },
+        "block-validator": {
+            "enable": true,
+            "validation-server": {
+                "url": "ws://13.59.254.12:8949",
+                "jwtsecret": "/config/val_jwt.hex"
+            },
+            "dangerous": {
+                "reset-block-validation": true
+            }
+        },
+        "feed": {
+            "input": {
+                "url": []
+            },
+            "output": {
+                "enable": false,
+                "signed": false,
+                "addr": "0.0.0.0"
+            }
+        },
+        "data-availability": {
+            "enable": false
+        }
+    },
+    "execution": {
+        "sequencer": {
+            "enable": true
+        },
+        "forwarding-target": "null"
+    },
+    "persistent": {
+        "chain": "local",
+        "db-engine": "leveldb"
+    },
+    "ws": {
+        "addr": "0.0.0.0"
+    },
+    "http": {
+        "addr": "0.0.0.0",
+        "vhosts": "",
+        "corsdomain": ""
+    }
+}
