@@ -37,7 +37,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
-	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/util"
@@ -1325,23 +1324,9 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
 	}	
 
-	// Verify the namespace proof
 	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 	if err != nil {
 		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
-	}
-
-	namespaceOk := espressocrypto.VerifyNamespace(
-		s.chainConfig.ChainID.Uint64(),
-		resp.Proof,
-		*header.Header.GetPayloadCommitment(),
-		*header.Header.GetNsTable(),
-		resp.Transactions,
-		resp.VidCommon,
-	)
-
-	if !namespaceOk {
-		return fmt.Errorf("error validating namespace proof (height: %d)", height)
 	}
 
 	submittedPayload := firstSubmitted.Payload
