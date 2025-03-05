@@ -1292,7 +1292,6 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 // Check if the latest submitted transaction has been finalized on L1 and verify it.
 // Return a bool indicating whether a new transaction can be submitted to HotShot
 func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
-	// Validation completed. Update the database
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 	submittedTxns, err := s.getEspressoSubmittedTxns()
