@@ -12,15 +12,22 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
+	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+
+const NextHotshotBlockKey = "nextHotshotBlock"
+const CurrentPositionKey = "currentPositionKey"
 
 /*
 Caff Node creates blocks with finalized hotshot transactions
@@ -32,9 +39,11 @@ type CaffNode struct {
 	executionEngine  *ExecutionEngine
 	espressoStreamer *espressostreamer.EspressoStreamer
 	txForwarder      TransactionPublisher
+
+	db ethdb.Database
 }
 
-func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine, txForwarder TransactionPublisher) *CaffNode {
+func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine, txForwarder TransactionPublisher, stack *node.Node) *CaffNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
 		log.Crit("Failed to validate caff  node config", "err", err)
@@ -81,8 +90,27 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		return nil
 	}
 
+	db, err := stack.OpenDatabase("caffdata", 0, 0, "caffdata/", false)
+	if err != nil {
+		log.Crit("could not open the caff database")
+		return nil
+	}
+
+	currentPosition, nextHotshotBlock, err := ReadCurrentPositionAndNextHotshotBlockFromDb(db)
+	if err != nil {
+		log.Crit("failed to read current position and next hotshot block", "err", err)
+		return nil
+	}
+
+	if nextHotshotBlock == 0 {
+		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
+		nextHotshotBlock = config.CaffNodeConfig.NextHotshotBlock
+		currentPosition = 0
+	}
+
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
-		config.CaffNodeConfig.NextHotshotBlock,
+		nextHotshotBlock,
+		currentPosition,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
 		espressoTEEVerifierCaller,
@@ -99,6 +127,7 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		executionEngine:  execEngine,
 		espressoStreamer: espressoStreamer,
 		txForwarder:      txForwarder,
+		db:               db,
 	}
 }
 
@@ -199,7 +228,65 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start node, error in createBlock: %w", err)
 	}
+
+	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		batch := n.db.NewBatch()
+		nextHotshotBlock, currentPosition := n.espressoStreamer.GetNextMessagePosAndHotShotBlock()
+		nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
+		if err != nil {
+			log.Error("failed to encode next hotshot block", "err", err)
+		}
+		currentPositionBytes, err := rlp.EncodeToBytes(currentPosition)
+		if err != nil {
+			log.Error("failed to encode current position", "err", err)
+		}
+		err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
+		if err != nil {
+			log.Error("failed to put next hotshot block", "err", err)
+		}
+		err = batch.Put([]byte(CurrentPositionKey), currentPositionBytes)
+		if err != nil {
+			log.Error("failed to put current position", "err", err)
+		}
+
+		err = batch.Write()
+		if err != nil {
+			log.Error("failed to write batch", "err", err)
+		}
+
+		return time.Minute * 5
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start node, error in persisting: %w", err)
+	}
 	return nil
+}
+
+func ReadCurrentPositionAndNextHotshotBlockFromDb(db ethdb.Database) (uint64, uint64, error) {
+	var nextHotshotBlock uint64
+	var currentPosition uint64
+	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return 0, 0, fmt.Errorf("failed to get next hotshot block: %w", err)
+	}
+	if nextHotshotBytes != nil {
+		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
+		if err != nil {
+			return 0, 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
+		}
+	}
+	currentPositionBytes, err := db.Get([]byte(CurrentPositionKey))
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return 0, 0, fmt.Errorf("failed to get current position: %w", err)
+	}
+	if currentPositionBytes != nil {
+		err = rlp.DecodeBytes(currentPositionBytes, &currentPosition)
+		if err != nil {
+			return 0, 0, fmt.Errorf("failed to decode current position: %w", err)
+		}
+	}
+
+	return currentPosition, nextHotshotBlock, nil
 }
 
 func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {

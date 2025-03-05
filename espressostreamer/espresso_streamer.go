@@ -56,6 +56,7 @@ type EspressoStreamer struct {
 func NewEspressoStreamer(
 	namespace uint64,
 	nextHotshotBlockNum uint64,
+	currentPosition uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
 	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
@@ -71,12 +72,17 @@ func NewEspressoStreamer(
 	return &EspressoStreamer{
 		espressoClient:                espressoClientInterface,
 		nextHotshotBlockNum:           nextHotshotBlockNum,
+		currentMessagePos:             currentPosition,
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
 		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
 		perfRecorder:                  perfRecorder,
 	}
+}
+
+func (s *EspressoStreamer) GetNextMessagePosAndHotShotBlock() (uint64, uint64) {
+	return s.currentMessagePos, s.nextHotshotBlockNum
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
