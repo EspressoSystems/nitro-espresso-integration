@@ -116,6 +116,11 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 		return false
 	}
 
+	if messageWithMetadataAndPos == nil {
+		log.Debug("no message found")
+		return false
+	}
+
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
 
 	// Get the state of the database at the last block

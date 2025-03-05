@@ -2,6 +2,7 @@ package espressostreamer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -73,7 +75,7 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
 
-func (s *EspressoStreamer) Next() (MessageWithMetadataAndPos, error) {
+func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	s.messageMutex.Lock()
 	defer s.messageMutex.Unlock()
 
@@ -86,11 +88,16 @@ func (s *EspressoStreamer) Next() (MessageWithMetadataAndPos, error) {
 		}
 		return 1
 	})
-	if !found || message == nil {
-		return MessageWithMetadataAndPos{}, fmt.Errorf("no message found")
+	if !found {
+		return nil, nil
 	}
+	if message == nil {
+		// This should never happen.
+		return nil, fmt.Errorf("message is nil, but found is true")
+	}
+
 	s.currentMessagePos += 1
-	return *message, nil
+	return message, nil
 }
 
 /* Verify the attestation quote */
@@ -170,8 +177,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 		// that wasn't finalized at all
 		latestBlock, err := s.espressoClient.FetchLatestBlockHeight(ctx)
 		if err != nil {
-			log.Warn("unable to fetch latest hotshot block", "err", err)
-			return err
+			return fmt.Errorf("unable to fetch latest hotshot block: %w", err)
 		}
 		log.Info("Started node at the latest hotshot block", "block number", latestBlock)
 		s.nextHotshotBlockNum = latestBlock
@@ -179,8 +185,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 
 	arbTxns, err := s.espressoClient.FetchTransactionsInBlock(ctx, s.nextHotshotBlockNum, s.namespace)
 	if err != nil {
-		log.Warn("failed to fetch the transactions", "err", err)
-		return err
+		return fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
 	}
 
 	if len(arbTxns.Transactions) == 0 {
@@ -203,13 +208,21 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	return nil
 }
 
+var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
+
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
+
+	ephemeralErrorHandler := util.NewEphemeralErrorHandler(3*time.Minute, FailedToFetchTransactionsErr.Error(), 1*time.Minute)
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.QueueMessagesFromHotshot(ctx, s.parseEspressoTransaction)
 		if err != nil {
-			log.Error("error while queueing messages from hotshot", "err", err)
+			logLevel := log.Error
+			logLevel = ephemeralErrorHandler.LogLevel(err, logLevel)
+			logLevel("error while queueing messages from hotshot", "err", err)
 			return s.retryTime
+		} else {
+			ephemeralErrorHandler.Reset()
 		}
 		log.Info("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
 		return s.pollingHotshotPollingInterval
