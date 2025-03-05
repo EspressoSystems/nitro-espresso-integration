@@ -177,7 +177,11 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	}
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.bc.CurrentBlock().Number.Uint64() + 1
-	n.espressoStreamer.Reset(currentBlockNum, n.config().CaffNodeConfig.NextHotshotBlock)
+	currentMessagePos, err := n.executionEngine.BlockNumberToMessageIndex(currentBlockNum)
+	if err != nil {
+		return fmt.Errorf("failed to convert block number to message index: %w", err)
+	}
+	n.espressoStreamer.Reset(uint64(currentMessagePos), n.config().CaffNodeConfig.NextHotshotBlock)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
