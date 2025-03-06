@@ -22,5 +22,5 @@ func (p *PerfRecorder) SetStartTime(time time.Time) {
 func (p *PerfRecorder) SetEndTime(time time.Time, logMessage string) {
 	p.endTime = time
 	duration := p.endTime.Sub(p.startTime)
-	log.Info(logMessage, "start time", p.startTime, "end time", p.endTime, "duration", duration)
+	log.Debug(logMessage, "start time", p.startTime, "end time", p.endTime, "duration", duration)
 }

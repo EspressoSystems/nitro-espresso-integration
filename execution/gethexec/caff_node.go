@@ -15,19 +15,14 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-const NextHotshotBlockKey = "nextHotshotBlock"
-const CurrentPositionKey = "currentPositionKey"
 
 /*
 Caff Node creates blocks with finalized hotshot transactions
@@ -96,21 +91,8 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 		return nil
 	}
 
-	currentPosition, nextHotshotBlock, err := ReadCurrentPositionAndNextHotshotBlockFromDb(db)
-	if err != nil {
-		log.Crit("failed to read current position and next hotshot block", "err", err)
-		return nil
-	}
-
-	if nextHotshotBlock == 0 {
-		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
-		nextHotshotBlock = config.CaffNodeConfig.NextHotshotBlock
-		currentPosition = 0
-	}
-
 	espressoStreamer := espressostreamer.NewEspressoStreamer(config.CaffNodeConfig.Namespace,
-		nextHotshotBlock,
-		currentPosition,
+		config.CaffNodeConfig.NextHotshotBlock,
 		config.CaffNodeConfig.RetryTime,
 		config.CaffNodeConfig.HotshotPollingInterval,
 		espressoTEEVerifierCaller,
@@ -157,7 +139,7 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 	statedb, err := n.executionEngine.bc.StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
-		log.Info("Resetting espresso streamer", "currentMessagePos",
+		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
 		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
@@ -180,7 +162,7 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 
 	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
-		log.Info("Resetting espresso streamer", "currentMessagePos",
+		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
 		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
@@ -194,7 +176,19 @@ func (n *CaffNode) createBlock() (returnValue bool) {
 	err = n.executionEngine.appendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
-		log.Info("Resetting espresso streamer", "currentMessagePos",
+		log.Debug("Resetting espresso streamer", "currentMessagePos",
+			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+			messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		return false
+	}
+
+	n.espressoStreamer.RecordTimeDurationBetweenHotshotAndCurrentBlock(messageWithMetadataAndPos.HotshotHeight, time.Now())
+
+	err = n.espressoStreamer.StoreHotshotBlock(n.db, messageWithMetadataAndPos.HotshotHeight)
+	if err != nil {
+		log.Error("Failed to store hotshot block", "err", err)
+		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
 		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
@@ -216,7 +210,24 @@ func (n *CaffNode) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to convert block number to message index: %w", err)
 	}
-	n.espressoStreamer.Reset(uint64(currentMessagePos), n.config().CaffNodeConfig.NextHotshotBlock)
+	nextHotshotBlock, err := n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+	if err != nil {
+		log.Crit("failed to read  next hotshot block", "err", err)
+		return nil
+	}
+
+	if nextHotshotBlock == 0 {
+		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
+		nextHotshotBlock = n.config().CaffNodeConfig.NextHotshotBlock
+		if nextHotshotBlock == 0 {
+			log.Crit("No next hotshot block found in database, and no config.CaffNodeConfig.NextHotshotBlock set")
+		}
+	}
+	// The reason we do the reset here is because database is only initialized after Caff node is initialized
+	// so if we want to read the current position from the database, we need to reset the streamer
+	// during the start of the espresso streamer and caff node
+	log.Debug("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
+	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
@@ -229,64 +240,7 @@ func (n *CaffNode) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start node, error in createBlock: %w", err)
 	}
 
-	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		batch := n.db.NewBatch()
-		nextHotshotBlock, currentPosition := n.espressoStreamer.GetNextMessagePosAndHotShotBlock()
-		nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
-		if err != nil {
-			log.Error("failed to encode next hotshot block", "err", err)
-		}
-		currentPositionBytes, err := rlp.EncodeToBytes(currentPosition)
-		if err != nil {
-			log.Error("failed to encode current position", "err", err)
-		}
-		err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
-		if err != nil {
-			log.Error("failed to put next hotshot block", "err", err)
-		}
-		err = batch.Put([]byte(CurrentPositionKey), currentPositionBytes)
-		if err != nil {
-			log.Error("failed to put current position", "err", err)
-		}
-
-		err = batch.Write()
-		if err != nil {
-			log.Error("failed to write batch", "err", err)
-		}
-
-		return time.Minute * 5
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start node, error in persisting: %w", err)
-	}
 	return nil
-}
-
-func ReadCurrentPositionAndNextHotshotBlockFromDb(db ethdb.Database) (uint64, uint64, error) {
-	var nextHotshotBlock uint64
-	var currentPosition uint64
-	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, 0, fmt.Errorf("failed to get next hotshot block: %w", err)
-	}
-	if nextHotshotBytes != nil {
-		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
-		if err != nil {
-			return 0, 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
-		}
-	}
-	currentPositionBytes, err := db.Get([]byte(CurrentPositionKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, 0, fmt.Errorf("failed to get current position: %w", err)
-	}
-	if currentPositionBytes != nil {
-		err = rlp.DecodeBytes(currentPositionBytes, &currentPosition)
-		if err != nil {
-			return 0, 0, fmt.Errorf("failed to decode current position: %w", err)
-		}
-	}
-
-	return currentPosition, nextHotshotBlock, nil
 }
 
 func (n *CaffNode) PublishTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
