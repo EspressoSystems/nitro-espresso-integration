@@ -251,18 +251,6 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 		return nil
 	}
 
-	if s.PerfRecorder != nil {
-		now := time.Now()
-		timestamp, err := s.getEspressoBlockTimestamp(ctx, s.nextHotshotBlockNum)
-		if err != nil {
-			return fmt.Errorf("unable to fetch header for hotshot block: %w", err)
-		}
-		s.PerfRecorder.SetStartTime(timestamp)
-		s.PerfRecorder.SetEndTime(now, fmt.Sprintf("Fetched header for hotshot block %d", s.nextHotshotBlockNum))
-		// To check the time taken to parse the transactions
-		s.PerfRecorder.SetStartTime(time.Now())
-	}
-
 	for _, tx := range arbTxns.Transactions {
 		messages, err := parseHotShotPayloadFn(tx)
 		if err != nil {
@@ -270,11 +258,6 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 			continue
 		}
 		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
-	}
-
-	if s.PerfRecorder != nil {
-		currentTime := time.Now()
-		s.PerfRecorder.SetEndTime(currentTime, fmt.Sprintf("Finished parsing transactions for hotshot block %d", s.nextHotshotBlockNum))
 	}
 
 	s.nextHotshotBlockNum += 1
