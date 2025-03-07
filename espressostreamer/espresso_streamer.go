@@ -182,11 +182,13 @@ func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64
 			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
 		}
 	}
+	log.Info("Reading next hotshot block from db", "nextHotshotBlock", nextHotshotBlock)
 
 	return nextHotshotBlock, nil
 }
 
 func (s *EspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
+	log.Info("Storing hotshot block", "nextHotshotBlock", nextHotshotBlock)
 	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
 	if err != nil {
 		return fmt.Errorf("failed to encode next hotshot block: %w", err)
