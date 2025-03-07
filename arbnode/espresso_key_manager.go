@@ -12,7 +12,7 @@ import (
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() bool
-	Registry(hotshotBlock uint64, signFunc func([]byte) ([]byte, error)) error
+	Registry(signFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() []byte
 	Sign(message []byte) ([]byte, error)
 }
@@ -52,7 +52,7 @@ func (k *EspressoKeyManager) HasRegistered() bool {
 	return k.hasRegistered
 }
 
-func (k *EspressoKeyManager) Registry(hotshotBlock uint64, signFunc func([]byte) ([]byte, error)) error {
+func (k *EspressoKeyManager) Registry(signFunc func([]byte) ([]byte, error)) error {
 	if k.hasRegistered {
 		log.Info("EspressoKeyManager already registered")
 		return nil

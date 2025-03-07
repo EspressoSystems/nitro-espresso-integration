@@ -1787,7 +1787,7 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		if s.EspressoKeyManager != nil && !s.EspressoKeyManager.HasRegistered() {
 			// TODO: get the current hotshot block number
-			err := s.EspressoKeyManager.Registry(1, s.getAttestationQuote)
+			err := s.EspressoKeyManager.Registry(s.getAttestationQuote)
 			if err != nil {
 				log.Error("failed to register espresso key manager", "err", err)
 				return err
