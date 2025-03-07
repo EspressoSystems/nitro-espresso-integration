@@ -222,7 +222,7 @@ func CreateExecutionNode(
 		if config.Sequencer.EnableCaffNode {
 			targets := append([]string{config.forwardingTarget}, config.SecondaryForwardingTarget...)
 			txForwarder := NewForwarder(targets, &config.Forwarder)
-			espressoFinalityNode := NewCaffNode(seqConfigFetcher, execEngine, txForwarder, stack)
+			espressoFinalityNode := NewCaffNode(seqConfigFetcher, execEngine, txForwarder)
 			txPublisher = espressoFinalityNode
 		} else if config.Forwarder.RedisUrl != "" {
 			txPublisher = NewRedisTxForwarder(config.forwardingTarget, &config.Forwarder)
