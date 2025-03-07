@@ -140,6 +140,7 @@ func waitForEspressoNode(ctx context.Context) error {
 			log.Warn("retry to check the espresso dev node", "err", err)
 			return false
 		}
+		log.Info("out", "out", string(out))
 		return len(out) > 0
 	})
 }
@@ -164,6 +165,7 @@ func waitForL1Node(ctx context.Context) error {
 			"{'jsonrpc':'2.0','id':45678,'method':'eth_chainId','params':[]}",
 			"http://localhost:8545",
 		).Run(); e != nil {
+			log.Info("err", "err", e)
 			return false
 		}
 		return true

@@ -14,6 +14,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
+	builder.dataDir = "./caffnode"
 
 	// Disable the batch poster because it requires redis if enabled on the 2nd node
 	nodeConfig.BatchPoster.Enable = false
@@ -44,12 +45,14 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 }
 
 func TestEspressoCaffNode(t *testing.T) {
+	log.Info("?????")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
+	log.Info("hhhhhhhhhhhh")
 	builder, cleanup := createL1AndL2Node(ctx, t, true)
 	defer cleanup()
 
@@ -59,9 +62,12 @@ func TestEspressoCaffNode(t *testing.T) {
 	cleanEspresso := runEspresso()
 	defer cleanEspresso()
 
+	log.Info("???????????")
 	// wait for the builder
 	err = waitForEspressoNode(ctx)
 	Require(t, err)
+
+	log.Info("??????????? Waiting for 10 seconds")
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
 	Require(t, err)
