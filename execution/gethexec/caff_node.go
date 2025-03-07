@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -38,7 +37,7 @@ type CaffNode struct {
 	db ethdb.Database
 }
 
-func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine, txForwarder TransactionPublisher, stack *node.Node) *CaffNode {
+func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngine, txForwarder TransactionPublisher, db ethdb.Database) *CaffNode {
 	config := configFetcher()
 	if err := config.Validate(); err != nil {
 		log.Crit("Failed to validate caff  node config", "err", err)
@@ -82,12 +81,6 @@ func NewCaffNode(configFetcher SequencerConfigFetcher, execEngine *ExecutionEngi
 
 	if execEngine.bc == nil {
 		log.Crit("execution engine bc not initialized")
-		return nil
-	}
-
-	db, err := stack.OpenDatabase("caffdata", 0, 0, "caffdata/", false)
-	if err != nil {
-		log.Crit("could not open the caff database")
 		return nil
 	}
 

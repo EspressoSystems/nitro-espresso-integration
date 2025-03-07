@@ -529,6 +529,7 @@ func mainImpl() int {
 		ctx,
 		stack,
 		chainDb,
+		arbDb,
 		l2BlockChain,
 		l1Client,
 		func() *gethexec.Config { return &liveNodeConfig.Get().Execution },
