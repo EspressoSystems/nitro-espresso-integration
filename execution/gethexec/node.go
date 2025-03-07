@@ -181,7 +181,6 @@ func CreateExecutionNode(
 	ctx context.Context,
 	stack *node.Node,
 	chainDB ethdb.Database,
-	arbDB ethdb.Database,
 	l2BlockChain *core.BlockChain,
 	l1client *ethclient.Client,
 	configFetcher ConfigFetcher,
@@ -223,7 +222,7 @@ func CreateExecutionNode(
 		if config.Sequencer.EnableCaffNode {
 			targets := append([]string{config.forwardingTarget}, config.SecondaryForwardingTarget...)
 			txForwarder := NewForwarder(targets, &config.Forwarder)
-			espressoFinalityNode := NewCaffNode(seqConfigFetcher, execEngine, txForwarder, arbDB)
+			espressoFinalityNode := NewCaffNode(seqConfigFetcher, execEngine, txForwarder)
 			txPublisher = espressoFinalityNode
 		} else if config.Forwarder.RedisUrl != "" {
 			txPublisher = NewRedisTxForwarder(config.forwardingTarget, &config.Forwarder)
