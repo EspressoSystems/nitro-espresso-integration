@@ -91,6 +91,7 @@ type TransactionStreamer struct {
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
+	EspressoKeyManager EspressoKeyManagerInterface
 }
 
 type TransactionStreamerConfig struct {
@@ -1568,7 +1569,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
 
-		payload, err = arbutil.SignHotShotPayload(payload, s.getAttestationQuote)
+		payload, err = arbutil.SignHotShotPayload(payload, s.EspressoKeyManager.Sign)
 		if err != nil {
 			return fmt.Errorf("failed to sign the hotshot payload %w", err)
 		}
@@ -1779,6 +1780,14 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
+		if s.EspressoKeyManager != nil && !s.EspressoKeyManager.HasRegistered() {
+			// TODO: get the current hotshot block number
+			err := s.EspressoKeyManager.Registry(1, s.getAttestationQuote)
+			if err != nil {
+				log.Error("failed to register espresso key manager", "err", err)
+				return err
+			}
+		}
 		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
