@@ -17,6 +17,8 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 
 	// Disable the batch poster because it requires redis if enabled on the 2nd node
 	nodeConfig.BatchPoster.Enable = false
+	// Set the light client addr so that config validation passes even though we aren't using the batch poster in this case.
+	nodeConfig.BatchPoster.LightClientAddress = existing.nodeConfig.BatchPoster.LightClientAddress
 	nodeConfig.BlockValidator.Enable = false
 	nodeConfig.DelayedSequencer.Enable = false
 	nodeConfig.DelayedSequencer.FinalizeDistance = 1
