@@ -37,7 +37,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
-	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/util"
@@ -1294,109 +1293,118 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
+
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
-		return fmt.Errorf("submitted pos not found: %w", err)
+		return fmt.Errorf("submitted transactions not found: %w", err)
 	}
 	if len(submittedTxns) == 0 {
 		return nil // no submitted transaction, treated as successful
 	}
 
-	firstSubmitted := submittedTxns[0]
-	hash := firstSubmitted.Hash
-
-	submittedTxHash, err := tagged_base64.Parse(hash)
-	if err != nil || submittedTxHash == nil {
-		return fmt.Errorf("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
-	}
-
-	data, err := s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
-	if err != nil {
-		return fmt.Errorf("unable to fetch transaction by hash: %w", err)
-	}
-	height := data.BlockHeight
-
-	jsonHeader, err := s.espressoClient.FetchRawHeaderByHeight(ctx, height)
-	if err != nil {
-		return fmt.Errorf("could not get the header (height: %d): %w", height, err)
-	}
-
-	var header espressoTypes.HeaderImpl
-	err = json.Unmarshal(jsonHeader, &header)
-	if err != nil {
-		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
-	}
-
-	log.Info("Fetching Merkle Root at hotshot", "height", height)
-	// Verify the merkle proof
-	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
-	if err != nil {
-		return fmt.Errorf("%w (height: %d): %w", EspressoValidationErr, height, err)
-	}
-
-	if snapshot.Height <= height {
-		return fmt.Errorf("snapshot height %v is less than or equal to the requested height %v", snapshot.Height, height)
-	}
-
-	nextHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, snapshot.Height)
-	if err != nil {
-		return fmt.Errorf("error fetching the snapshot header (height: %d): %w", snapshot.Height, err)
-	}
-
-	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
-	if err != nil {
-		return fmt.Errorf("error fetching the block merkle proof (height: %d, root height: %d): %w", height, snapshot.Height, err)
-	}
-
-	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
-
-	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
-	if !ok {
-		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshot.Height)
-	}
-
-	// Verify the namespace proof
-	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
-	if err != nil {
-		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
-	}
-
-	namespaceOk := espressocrypto.VerifyNamespace(
-		s.chainConfig.ChainID.Uint64(),
-		resp.Proof,
-		*header.Header.GetPayloadCommitment(),
-		*header.Header.GetNsTable(),
-		resp.Transactions,
-		resp.VidCommon,
-	)
-
-	if !namespaceOk {
-		return fmt.Errorf("error validating namespace proof (height: %d)", height)
-	}
-
-	submittedPayload := firstSubmitted.Payload
-	validated := arbutil.ValidateIfPayloadIsInBlock(submittedPayload, resp.Transactions)
-	if !validated {
-		return fmt.Errorf("transactions fetched from HotShot doesn't contain the submitted payload")
-	}
-
-	// Reset the last submit failure time if we successfully fetch the transaction and verify its inclusion/namespace proof
-	s.lastSubmitFailureAt = nil
-
 	batch := s.db.NewBatch()
-	if err := s.setEspressoSubmittedTxns(batch, submittedTxns[1:]); err != nil {
-		return fmt.Errorf("failed to set the espresso submitted txns: %w", err)
-	}
-	lastConfirmedPos := firstSubmitted.Pos[len(firstSubmitted.Pos)-1]
-	if err := s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos); err != nil {
-		return fmt.Errorf("failed to set the last confirmed position (pos: %d): %w", lastConfirmedPos, err)
+	newSubmittedTxns := []arbutil.SubmittedEspressoTx{}
+	lastConfirmedPos := arbutil.MessageIndex(0)
+	for _, submittedTx := range submittedTxns {
+		hash := submittedTx.Hash
+		submittedTxHash, err := tagged_base64.Parse(hash)
+		if err != nil || submittedTxHash == nil {
+			return fmt.Errorf("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
+		}
+
+		data, err := s.checkEspressoQueryNodesForTransaction(ctx, submittedTxHash)
+		if err != nil {
+			resubmittedTxn, err := s.resubmitTransactionIfPastDelay(ctx, submittedTx)
+			if err != nil {
+				log.Error("failed to resubmit transaction", "err", err)
+				continue
+			}
+			if resubmittedTxn != nil {
+				newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
+			} else {
+				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
+			}
+			continue
+		}
+
+		height := data.BlockHeight
+
+		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
+		if err != nil {
+			log.Warn("Failed to fetch transactions in block referenced in fetch transaction by hash", "height", height, "error", err)
+			continue
+		}
+
+		validated := arbutil.ValidateIfPayloadIsInBlock(submittedTx.Payload, resp.Transactions)
+		if !validated {
+			log.Warn("Transaction payload not found in block, attempt to resubmit", "height", height, "tx", submittedTx.Hash)
+			resubmittedTxn, err := s.resubmitTransaction(ctx, submittedTx)
+			if err != nil {
+				log.Error("failed to resubmit transaction", "err", err)
+				continue
+			}
+			if resubmittedTxn == nil {
+				// This should never happen
+				log.Error("failed to resubmit transaction", "err", err)
+				continue
+			}
+			newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
+			continue
+		}
+
+		if submittedTx.Pos[len(submittedTx.Pos)-1] > lastConfirmedPos {
+			lastConfirmedPos = submittedTx.Pos[len(submittedTx.Pos)-1]
+		}
+
 	}
 
-	if err := batch.Write(); err != nil {
+	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
+	if err != nil {
+		return fmt.Errorf("failed to set last confirmed pos: %w", err)
+	}
+
+	// this will be remmoved in other PRs
+	err = s.setEspressoSubmittedTxns(batch, newSubmittedTxns)
+	if err != nil {
+		return fmt.Errorf("failed to set espresso submitted txns: %w", err)
+	}
+
+	if err = batch.Write(); err != nil {
 		return fmt.Errorf("failed to write to db: %w", err)
 	}
 
 	return nil
+}
+
+func (s *TransactionStreamer) checkEspressoQueryNodesForTransaction(ctx context.Context, hash *tagged_base64.TaggedBase64) (espressoTypes.TransactionQueryData, error) {
+	tx, err := s.espressoClient.FetchTransactionByHash(ctx, hash)
+	if err != nil {
+		return espressoTypes.TransactionQueryData{}, fmt.Errorf("failed to fetch transaction from espresso: %w", err)
+	}
+
+	return tx, nil
+}
+
+func (s *TransactionStreamer) resubmitTransaction(ctx context.Context, submittedTx arbutil.SubmittedEspressoTx) (*arbutil.SubmittedEspressoTx, error) {
+	submittedAt := time.Now()
+	hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
+		Payload:   submittedTx.Payload,
+		Namespace: s.chainConfig.ChainID.Uint64(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	submittedTx.Hash = hash.String()
+	submittedTx.SubmittedAt = submittedAt
+	return &submittedTx, nil
+}
+
+func (s *TransactionStreamer) resubmitTransactionIfPastDelay(ctx context.Context, submittedTx arbutil.SubmittedEspressoTx) (*arbutil.SubmittedEspressoTx, error) {
+	timeSinceSubmission := time.Since(submittedTx.SubmittedAt)
+	if timeSinceSubmission < s.resubmitEspressoTxDeadline {
+		return nil, nil
+	}
+	return s.resubmitTransaction(ctx, submittedTx)
 }
 
 func (s *TransactionStreamer) getEspressoSubmittedTxns() ([]arbutil.SubmittedEspressoTx, error) {
@@ -1575,6 +1583,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 
 		log.Info("submitting transaction to hotshot for finalization")
 
+		submittedAt := time.Now()
 		// Note: same key should not be used for two namespaces for this to work
 		hash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 			Payload:   payload,
@@ -1593,9 +1602,10 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return fmt.Errorf("failed to get the submitted txns: %w", err)
 		}
 		tx := arbutil.SubmittedEspressoTx{
-			Hash:    hash.String(),
-			Pos:     submittedPos,
-			Payload: payload,
+			Hash:        hash.String(),
+			Pos:         submittedPos,
+			Payload:     payload,
+			SubmittedAt: submittedAt,
 		}
 		if submittedTxns == nil {
 			submittedTxns = []arbutil.SubmittedEspressoTx{tx}
