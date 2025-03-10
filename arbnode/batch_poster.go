@@ -183,6 +183,7 @@ type BatchPosterConfig struct {
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
 	LightClientAddress          string        `koanf:"light-client-address"`
+	EspressoKeyManagerAddress   string        `koanf:"espresso-key-manager-address"`
 	HotShotUrl                  string        `koanf:"hotshot-url"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
@@ -258,6 +259,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
+	f.String(prefix+".espresso-key-manager-address", DefaultBatchPosterConfig.EspressoKeyManagerAddress, "specifies the espresso key manager address")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -380,6 +382,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	hotShotUrl := opts.Config().HotShotUrl
 	lightClientAddr := opts.Config().LightClientAddress
+	espressoKeyManagerAddr := opts.Config().EspressoKeyManagerAddress
 
 	if hotShotUrl != "" {
 		hotShotClient := hotshotClient.NewClient(hotShotUrl)
@@ -397,6 +400,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
+	}
+
+	if espressoKeyManagerAddr != "" {
+		espressoKeyManager := NewEspressoKeyManager(common.HexToAddress(espressoKeyManagerAddr), opts.L1Reader.Client())
+		opts.Streamer.EspressoKeyManager = espressoKeyManager
 	}
 
 	b := &BatchPoster{
