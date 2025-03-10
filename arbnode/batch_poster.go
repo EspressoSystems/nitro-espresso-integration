@@ -180,7 +180,7 @@ type BatchPosterConfig struct {
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
 	LightClientAddress          string        `koanf:"light-client-address"`
-	HotShotUrls                 []string        `koanf:"hotshot-urls"`
+	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
@@ -378,7 +378,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	hotShotUrls := opts.Config().HotShotUrls
 	lightClientAddr := opts.Config().LightClientAddress
 
-	if len(hotShotUrls) == 0 {
+	if len(hotShotUrls) != 0 {
 		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}

@@ -1324,7 +1324,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	err = json.Unmarshal(jsonHeader, &header)
 	if err != nil {
 		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
-	}	
+	}
 
 	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 	if err != nil {
@@ -1650,7 +1650,8 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
  * Submits the transactions to espresso if the escape hatch is not enabled
  */
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
+	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
+	retryRate := s.espressoTxnsPollingInterval * 2
 	shouldSubmit := s.shouldSubmitEspressoTransaction()
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
