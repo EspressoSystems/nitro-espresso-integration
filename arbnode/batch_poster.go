@@ -396,6 +396,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
 
+	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+		opts.DeployInfo.SequencerInbox,
+		opts.L1Reader.Client())
+	if err != nil {
+		return nil, err
+	}
+	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(espressoTEEVerifierCaller)
+
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
 		inbox:              opts.Inbox,
