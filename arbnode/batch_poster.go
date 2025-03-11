@@ -402,7 +402,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if err != nil {
 		return nil, err
 	}
-	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(espressoTEEVerifierCaller)
+	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(espressoTEEVerifierCaller, opts.Config().ParentChainWallet.PrivateKey)
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
