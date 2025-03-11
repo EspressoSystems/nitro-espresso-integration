@@ -1138,6 +1138,7 @@ func (b *BatchPoster) encodeAddBatch(
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata with attestation quote: %w", err)
 		}
+
 		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	}
@@ -1786,6 +1787,22 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			resetAllEphemeralErrs()
 			return b.config().PollInterval
 		}
+		log.Info("Parent chain wallet", "address", b.config().ParentChainWallet.Account)
+		log.Info("Parent chain wallet", "private key", b.config().ParentChainWallet.PrivateKey)
+
+		batchPosterUserDataString := b.config().ParentChainWallet.Account + "00000000000000000000000000000000"
+		userData, err := hex.DecodeString(batchPosterUserDataString)
+		if err != nil {
+			log.Error("Error decoding batch poster address", "err", err)
+			return b.config().PollInterval
+		}
+		quote, err := b.streamer.getAttestationQuote(userData)
+		if err != nil {
+			log.Error("Error getting attestation quote", "err", err)
+			return b.config().PollInterval
+		}
+		// Print the attestationm
+		log.Info("Attestation quote for adding an address to the user data", "quote", hex.EncodeToString(quote))
 		posted, err := b.maybePostSequencerBatch(ctx)
 		if err == nil {
 			resetAllEphemeralErrs()
