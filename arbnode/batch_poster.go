@@ -1787,20 +1787,22 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			resetAllEphemeralErrs()
 			return b.config().PollInterval
 		}
-		log.Info("Parent chain wallet", "address", b.config().ParentChainWallet.Account)
 		log.Info("Parent chain wallet", "private key", b.config().ParentChainWallet.PrivateKey)
 
-		batchPosterUserDataString := b.config().ParentChainWallet.Account + "00000000000000000000000000000000"
-		userData, err := hex.DecodeString(batchPosterUserDataString)
-		if err != nil {
-			log.Error("Error decoding batch poster address", "err", err)
-			return b.config().PollInterval
-		}
-		quote, err := b.streamer.getAttestationQuote(userData)
+		// convert a string to an address
+		batchPosterAddress := common.HexToAddress("0xe2148ee53c0755215df69b2616e552154edc584f")
+		batchPosterBytes := batchPosterAddress.Bytes()
+		// add 12 bytes of padding to the batch poster bytes
+		paddedBatchPosterBytes := make([]byte, 32)
+		copy(paddedBatchPosterBytes[12:], batchPosterBytes)
+		packedAddress := paddedBatchPosterBytes
+		log.Info("Packed address bytes are", "bytes", packedAddress)
+		quote, err := b.streamer.getAttestationQuote(packedAddress)
 		if err != nil {
 			log.Error("Error getting attestation quote", "err", err)
 			return b.config().PollInterval
 		}
+
 		// Print the attestationm
 		log.Info("Attestation quote for adding an address to the user data", "quote", hex.EncodeToString(quote))
 		posted, err := b.maybePostSequencerBatch(ctx)
