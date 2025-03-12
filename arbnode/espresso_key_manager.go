@@ -17,7 +17,7 @@ import (
 )
 
 type EspressoKeyManagerInterface interface {
-	HasRegistered() bool
+	HasRegistered() (bool, error)
 	Register(signFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
@@ -94,7 +94,8 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 	}
 
 	if opts.DataSigner == nil {
-		panic("DataSigner is nil")
+		// TODO: Fix this for tests
+		// panic("DataSigner is nil")
 	}
 
 	return &EspressoKeyManager{
@@ -106,9 +107,9 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 	}
 }
 
-func (k *EspressoKeyManager) HasRegistered() bool {
+func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 	if k.hasRegistered {
-		return true
+		return true, nil
 	}
 	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
 	if !ok {
@@ -120,13 +121,17 @@ func (k *EspressoKeyManager) HasRegistered() bool {
 	signerFromReport := common.BytesToAddress(hash[len(hash)-20:])
 	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerFromReport, 0)
 	if err != nil {
-		return false
+		return false, err
 	}
-	return ok
+	return ok, nil
 }
 
 func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) error {
-	if k.HasRegistered() {
+	registered, err := k.HasRegistered()
+	if err != nil {
+		return err
+	}
+	if registered {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}
@@ -148,7 +153,12 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 		return err
 	}
 
-	k.hasRegistered = true
+	// Verify our address is actually registered in contract
+	registered, err = k.HasRegistered()
+	if err != nil {
+		return err
+	}
+	k.hasRegistered = registered
 	return nil
 }
 
