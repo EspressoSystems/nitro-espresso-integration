@@ -30,7 +30,7 @@ func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attest
 func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-	mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 	wallet := DefaultBatchPosterL1WalletConfig
 	wallet.PrivateKey = privKey
 	opts := &BatchPosterOpts{
@@ -44,7 +44,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	// Test initialization
 	t.Run("NewEspressoKeyManager", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, nil)
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.pubKey, "Public key should be set")
 		assert.NotNil(t, km.privKey, "Private key should be set")
@@ -53,7 +53,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	// Test HasRegistered and Registry
 	t.Run("Registry", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, nil)
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		assert.False(t, km.HasRegistered(), "Should start unregistered")
 
 		// Mock sign function
@@ -84,8 +84,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.NotEmpty(t, pubKey, "Public key should not be empty")
 		assert.Equal(t, km.pubKey, pubKey, "GetCurrentKey should match initialized pubKey")
 
-		// Verify it’s a compressed public key (33 bytes for secp256k1)
-		assert.Equal(t, 33, len(pubKey), "Public key should be compressed (33 bytes)")
+		assert.Equal(t, 65, len(pubKey), "Public key should be 65 bytes")
 	})
 
 	// Test Sign
