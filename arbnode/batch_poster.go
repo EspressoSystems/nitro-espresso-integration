@@ -1792,12 +1792,9 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		// convert a string to an address
 		batchPosterAddress := common.HexToAddress("0xe2148ee53c0755215df69b2616e552154edc584f")
 		batchPosterBytes := batchPosterAddress.Bytes()
-		// add 12 bytes of padding to the batch poster bytes
-		paddedBatchPosterBytes := make([]byte, 32)
-		copy(paddedBatchPosterBytes[12:], batchPosterBytes)
-		packedAddress := paddedBatchPosterBytes
-		log.Info("Packed address bytes are", "bytes", packedAddress)
-		quote, err := b.streamer.getAttestationQuote(packedAddress)
+
+		log.Info("Packed address bytes are", "bytes", batchPosterBytes)
+		quote, err := b.streamer.getAttestationQuote(batchPosterBytes)
 		if err != nil {
 			log.Error("Error getting attestation quote", "err", err)
 			return b.config().PollInterval
