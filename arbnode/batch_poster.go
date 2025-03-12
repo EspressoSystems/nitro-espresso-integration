@@ -184,8 +184,7 @@ type BatchPosterConfig struct {
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
 	LightClientAddress          string        `koanf:"light-client-address"`
-	HotShotUrl                  string        `koanf:"hotshot-url"`
-	FallBackUrl                 string        `koanf:"fall-back-url"`
+	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
@@ -198,9 +197,17 @@ type BatchPosterConfig struct {
 }
 
 func (c *BatchPosterConfig) Validate() error {
-	if (c.LightClientAddress == "") != (c.HotShotUrl == "") {
-		return errors.New("light client address and hotshot URL must both be set together, or both left unset")
+	if len(c.HotShotUrls) == 0 {
+		return errors.New("HotShotUrls must not be empty")
 
+	} else {
+		urlsSlice := c.HotShotUrls[1:] // Slice off the first index as it is valid to leave that an empty string
+		// in the first position to avoid constructing an espressoClient in the batch poster.
+		for _, url := range urlsSlice {
+			if url == ("") {
+				return errors.New("An empty address (\"\") was used as a Hotshot url")
+			}
+		}
 	}
 	if len(c.GasRefunderAddress) > 0 && !common.IsHexAddress(c.GasRefunderAddress) {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
@@ -250,7 +257,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
-	f.String(prefix+".hotshot-url", DefaultBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
+	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
@@ -300,7 +307,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
-	HotShotUrl:                     "",
+	HotShotUrls:                    []string{""},
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -337,7 +344,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	EspressoTxnsPollingInterval:    time.Second,
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
-	HotShotUrl:                     "",
+	HotShotUrls:                    []string{""},
 	ResubmitEspressoTxDeadline:     10 * time.Second,
 }
 
@@ -383,11 +390,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		return nil, err
 	}
 
-	hotShotUrl := opts.Config().HotShotUrl
+	hotShotUrls := opts.Config().HotShotUrls
 	lightClientAddr := opts.Config().LightClientAddress
+	hotShotUrlsLen := len(hotShotUrls)
 
-	if hotShotUrl != "" {
-		hotShotClient := hotshotClient.NewClient(hotShotUrl, opts.Config().FallBackUrl)
+	// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
+
+	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
+		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}
 
