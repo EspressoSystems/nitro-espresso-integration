@@ -1781,6 +1781,8 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, func(ctx context.Context, ignored struct{}) time.Duration {
+			// Find a better way to do this
+			// Not sure why if we don't wrap it in `call iteratively`, an error occurs in the e2e test
 			if !s.EspressoKeyManager.HasRegistered() {
 				err := s.EspressoKeyManager.Register(s.getAttestationQuote)
 				if err != nil {
