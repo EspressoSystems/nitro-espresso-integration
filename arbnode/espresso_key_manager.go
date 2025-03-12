@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/offchainlabs/nitro/cmd/util"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
@@ -90,21 +89,12 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 	}
 	pubKeyBytes := crypto.FromECDSAPub(pubKey)
 
-	wallet := opts.Config().ParentChainWallet
-
-	// We open the wallet again because we want to get the signer function, which isn't included in the batch poster opts.
-	l1TransactionOpts, dataSigner, err := util.OpenWallet("l1-batch-poster", &wallet, opts.ParentChainID)
-
-	if err != nil {
-		panic(err)
-	}
-
 	return &EspressoKeyManager{
 		pubKey:                    pubKeyBytes,
 		privKey:                   privKey,
-		batchPosterSigner:         dataSigner,
+		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
-		batchPosterOpts:           l1TransactionOpts,
+		batchPosterOpts:           opts.TransactOpts,
 	}
 }
 

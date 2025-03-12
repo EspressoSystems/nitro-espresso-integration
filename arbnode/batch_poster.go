@@ -54,6 +54,7 @@ import (
 	"github.com/offchainlabs/nitro/util/blobs"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/redisutil"
+	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -347,6 +348,8 @@ type BatchPosterOpts struct {
 	DAPWriters    []daprovider.Writer
 	ParentChainID *big.Int
 	DAPReaders    []daprovider.Reader
+
+	DataSigner signature.DataSignerFunc
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
