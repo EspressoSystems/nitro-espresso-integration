@@ -48,6 +48,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
@@ -396,13 +397,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
 
-	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+	// TODO: remove this once we have a real espresso verifier
+	espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
 		opts.DeployInfo.SequencerInbox,
 		opts.L1Reader.Client())
 	if err != nil {
 		return nil, err
 	}
-	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(espressoTEEVerifierCaller, opts.Config().ParentChainWallet.PrivateKey)
+
+	verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
+	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
@@ -1122,7 +1126,7 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to pack calldata without attestation quote: %w", err)
 		}
 
-		attestationQuote, err := b.streamer.getAttestationQuote(calldata)
+		attestationQuote, err := b.streamer.EspressoKeyManager.SignBatch(calldata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}

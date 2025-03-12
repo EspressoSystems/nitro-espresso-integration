@@ -22,8 +22,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) error {
-	args := m.Called(opts, rawQuote, reportDataHash)
+func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) error {
+	args := m.Called(opts, attestation, pubKey, teeType)
 	return args.Error(0)
 }
 
@@ -31,10 +31,20 @@ func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 	mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	wallet := DefaultBatchPosterL1WalletConfig
+	wallet.PrivateKey = privKey
+	opts := &BatchPosterOpts{
+		ParentChainID: big.NewInt(1),
+		Config: func() *BatchPosterConfig {
+			return &BatchPosterConfig{
+				ParentChainWallet: wallet,
+			}
+		},
+	}
 
 	// Test initialization
 	t.Run("NewEspressoKeyManager", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, privKey)
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, nil)
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.pubKey, "Public key should be set")
 		assert.NotNil(t, km.privKey, "Private key should be set")
@@ -43,7 +53,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	// Test HasRegistered and Registry
 	t.Run("Registry", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, privKey)
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, nil)
 		assert.False(t, km.HasRegistered(), "Should start unregistered")
 
 		// Mock sign function
@@ -69,7 +79,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	// Test GetCurrentKey
 	t.Run("GetCurrentKey", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, privKey)
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		pubKey := km.GetCurrentKey()
 		assert.NotEmpty(t, pubKey, "Public key should not be empty")
 		assert.Equal(t, km.pubKey, pubKey, "GetCurrentKey should match initialized pubKey")
@@ -79,10 +89,10 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test Sign
-	t.Run("Sign", func(t *testing.T) {
-		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, privKey)
+	t.Run("SignBatch", func(t *testing.T) {
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		message := []byte("test-message")
-		signature, err := km.Sign(message)
+		signature, err := km.SignBatch(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
@@ -102,8 +112,10 @@ func TestEspressoKeyManager(t *testing.T) {
 
 		// Verify signature with public key
 		hash := crypto.Keccak256Hash(message)
-		pubKey := &km.batchPosterPrivKey.PublicKey
-		valid := ecdsa.Verify(pubKey, hash.Bytes(), sig.R, sig.S)
+		pubKey := km.privKey.Public()
+		ecdsaPubkey, ok := pubKey.(*ecdsa.PublicKey)
+		require.True(t, ok, "Public key should be an ecdsa.PublicKey")
+		valid := ecdsa.Verify(ecdsaPubkey, hash.Bytes(), sig.R, sig.S)
 		assert.True(t, valid, "Signature should verify with public key")
 	})
 }

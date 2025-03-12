@@ -1569,7 +1569,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
 
-		payload, err = arbutil.SignHotShotPayload(payload, s.EspressoKeyManager.Sign)
+		payload, err = arbutil.SignHotShotPayload(payload, s.EspressoKeyManager.SignHotShotPayload)
 		if err != nil {
 			return fmt.Errorf("failed to sign the hotshot payload %w", err)
 		}
@@ -1781,7 +1781,6 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		if !s.EspressoKeyManager.HasRegistered() {
-			// TODO: get the current hotshot block number
 			err := s.EspressoKeyManager.Register(s.getAttestationQuote)
 			if err != nil {
 				log.Error("failed to register espresso key manager", "err", err)
