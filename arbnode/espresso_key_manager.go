@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -27,6 +28,7 @@ var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
 type EspressoTEEVerifierInterface interface {
 	RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error
+	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
 }
 
 type EspressoTEEVerifier struct {
@@ -39,13 +41,7 @@ func NewEspressoTEEVerifier(contract *mocksgen.EspressoTEEVerifierMock, l1Client
 }
 
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error {
-
 	tx, err := e.contract.RegisterSigner(opts, attestation, addr, teeType)
-	if err != nil {
-		return err
-	}
-
-	err = e.l1Client.SendTransaction(context.Background(), tx)
 	if err != nil {
 		return err
 	}
@@ -64,6 +60,10 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestatio
 	log.Info("Register signer tx succeeded", "tx", tx.Hash())
 
 	return nil
+}
+
+func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8) (bool, error) {
+	return e.contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
 }
 
 type EspressoKeyManager struct {
@@ -107,17 +107,26 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 }
 
 func (k *EspressoKeyManager) HasRegistered() bool {
-	// pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
-	// if !ok {
-	// 	panic("failed to get public key")
-	// }
-	// signerAddr := crypto.PubkeyToAddress(*pubKey)
-	// err := k.espressoTEEVerifierCaller.registeredSigners(&bind.CallOpts{}, signerAddr, sgx)
-	return k.hasRegistered
+	if k.hasRegistered {
+		return true
+	}
+	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		panic("failed to get public key")
+	}
+	signerAddr := crypto.PubkeyToAddress(*pubKey)
+	data := signerAddr.Bytes()
+	hash := crypto.Keccak256(data)
+	signerFromReport := common.BytesToAddress(hash[len(hash)-20:])
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerFromReport, 0)
+	if err != nil {
+		return false
+	}
+	return ok
 }
 
 func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) error {
-	if k.hasRegistered {
+	if k.HasRegistered() {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}

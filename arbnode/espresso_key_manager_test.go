@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -27,10 +28,16 @@ func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attest
 	return args.Error(0)
 }
 
+func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8) (bool, error) {
+	args := m.Called(addr, teeType)
+	return args.Bool(0), nil
+}
+
 func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 	mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil)
 	tranOpts, signer, err := GetTransactOptsAndSigner(privKey, big.NewInt(1))
 	require.NoError(t, err, "Should open wallet")
 	opts := &BatchPosterOpts{
@@ -56,7 +63,11 @@ func TestEspressoKeyManager(t *testing.T) {
 		called := false
 		signFunc := func(data []byte) ([]byte, error) {
 			called = true
-			assert.Equal(t, km.pubKey, data, "Sign function should receive public key")
+			addr := crypto.PubkeyToAddress(*km.pubKey)
+			addrBytes := addr.Bytes()
+			var addrBytes32 [32]byte
+			copy(addrBytes32[:], addrBytes)
+			assert.Equal(t, addrBytes32[:], data, "Sign function should receive public key")
 			return []byte("mock-signature"), nil
 		}
 
