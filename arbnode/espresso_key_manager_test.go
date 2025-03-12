@@ -60,7 +60,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Twice()
+		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Maybe()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		registered, _ := km.HasRegistered()
@@ -72,9 +72,7 @@ func TestEspressoKeyManager(t *testing.T) {
 			called = true
 			addr := crypto.PubkeyToAddress(*km.pubKey)
 			addrBytes := addr.Bytes()
-			var addrBytes32 [32]byte
-			copy(addrBytes32[:], addrBytes)
-			assert.Equal(t, addrBytes32[:], data, "Sign function should receive public key")
+			assert.Equal(t, addrBytes, data, "Sign function should receive public key")
 			return []byte("mock-signature"), nil
 		}
 

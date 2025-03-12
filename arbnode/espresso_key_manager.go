@@ -108,18 +108,12 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 }
 
 func (k *EspressoKeyManager) HasRegistered() (bool, error) {
-	if k.hasRegistered {
-		return true, nil
-	}
 	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
 	if !ok {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	data := signerAddr.Bytes()
-	hash := crypto.Keccak256(data)
-	signerFromReport := common.BytesToAddress(hash[len(hash)-20:])
-	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerFromReport, 0)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, 0)
 	if err != nil {
 		return false, err
 	}
@@ -127,11 +121,7 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 }
 
 func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) error {
-	registered, err := k.HasRegistered()
-	if err != nil {
-		return err
-	}
-	if registered {
+	if k.hasRegistered {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}
@@ -139,26 +129,26 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 	addr := crypto.PubkeyToAddress(*k.pubKey)
 	addrBytes := addr.Bytes()
 
-	var addrBytes32 [32]byte
-	copy(addrBytes32[:], addrBytes)
-
-	log.Info("Signing address", "addr", addrBytes32[:])
-	attestation, err := signFunc(addrBytes32[:])
+	log.Info("Signing address", "addr", addrBytes)
+	attestation, err := signFunc(addrBytes)
 	if err != nil {
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, addrBytes32[:], 0)
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, addrBytes, 0)
 	if err != nil {
 		return err
 	}
 
 	// Verify our address is actually registered in contract
-	registered, err = k.HasRegistered()
+	hasRegistered, err := k.HasRegistered()
 	if err != nil {
 		return err
 	}
-	k.hasRegistered = registered
+	if !hasRegistered {
+		return errors.New("address is not registered in contract")
+	}
+	k.hasRegistered = true
 	return nil
 }
 
