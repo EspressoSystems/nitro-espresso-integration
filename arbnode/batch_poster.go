@@ -402,7 +402,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	// TODO: remove this once we have a real espresso verifier
 	espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
-		opts.DeployInfo.SequencerInbox,
+		// Fix here. Find out the TEEVerifier address
+		common.HexToAddress("0xA46C59ce2FCaF445F96f66F0411e06A94D34BF45"),
 		opts.L1Reader.Client())
 	if err != nil {
 		return nil, err

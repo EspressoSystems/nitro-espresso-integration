@@ -2,7 +2,7 @@ package arbnode
 
 import (
 	"crypto/ecdsa"
-	"encoding/asn1"
+	"encoding/hex"
 	"math/big"
 	"testing"
 
@@ -31,15 +31,11 @@ func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 	mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	wallet := DefaultBatchPosterL1WalletConfig
-	wallet.PrivateKey = privKey
+	tranOpts, signer, err := GetTransactOptsAndSigner(privKey, big.NewInt(1))
+	require.NoError(t, err, "Should open wallet")
 	opts := &BatchPosterOpts{
-		ParentChainID: big.NewInt(1),
-		Config: func() *BatchPosterConfig {
-			return &BatchPosterConfig{
-				ParentChainWallet: wallet,
-			}
-		},
+		TransactOpts: tranOpts,
+		DataSigner:   func(data []byte) ([]byte, error) { return signer(data) },
 	}
 
 	// Test initialization
@@ -83,38 +79,71 @@ func TestEspressoKeyManager(t *testing.T) {
 		pubKey := km.GetCurrentKey()
 		assert.NotEmpty(t, pubKey, "Public key should not be empty")
 		assert.Equal(t, km.pubKey, pubKey, "GetCurrentKey should match initialized pubKey")
-
-		assert.Equal(t, 65, len(pubKey), "Public key should be 65 bytes")
 	})
 
 	// Test Sign
-	t.Run("SignBatch", func(t *testing.T) {
+	t.Run("SignBatch with the ephemeral key", func(t *testing.T) {
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
 		message := []byte("test-message")
 		signature, err := km.SignBatch(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
-		// Check signature length (DER typically 70-72 bytes for secp256k1)
-		assert.GreaterOrEqual(t, len(signature), 70, "Signature should be at least 70 bytes (DER)")
-		assert.LessOrEqual(t, len(signature), 72, "Signature should be at most 72 bytes (DER)")
-
-		// Parse DER signature
-		var sig ecdsaSignature
-		rest, err := asn1.Unmarshal(signature, &sig)
-		require.NoError(t, err, "Should parse DER signature")
-		assert.Empty(t, rest, "Should consume entire signature")
-
-		// Verify r and s are non-zero
-		assert.NotZero(t, sig.R, "r should be non-zero")
-		assert.NotZero(t, sig.S, "s should be non-zero")
-
-		// Verify signature with public key
-		hash := crypto.Keccak256Hash(message)
-		pubKey := km.privKey.Public()
-		ecdsaPubkey, ok := pubKey.(*ecdsa.PublicKey)
+		ecdsaPubkey, ok := km.privKey.Public().(*ecdsa.PublicKey)
 		require.True(t, ok, "Public key should be an ecdsa.PublicKey")
-		valid := ecdsa.Verify(ecdsaPubkey, hash.Bytes(), sig.R, sig.S)
+		valid, err := VerifySignatureWithPublicKey(ecdsaPubkey, message, signature)
+		require.NoError(t, err, "Should verify signature")
+		assert.True(t, valid, "Signature should verify with public key")
+	})
+
+	t.Run("Sign Hotshot payload with batcher private key", func(t *testing.T) {
+		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, opts)
+		message := []byte("test-message")
+		signature, err := km.SignHotShotPayload(message)
+		require.NoError(t, err, "Sign should succeed")
+
+		privKeyBytes, err := hex.DecodeString(privKey)
+		assert.NoError(t, err, "Should decode private key")
+		pk, err := crypto.ToECDSA(privKeyBytes)
+		assert.NoError(t, err, "Should convert private key to ECDSA")
+
+		ecdsaPubkey, ok := pk.Public().(*ecdsa.PublicKey)
+		require.True(t, ok, "Public key should be an ecdsa.PublicKey")
+		valid, err := VerifySignatureWithPublicKey(ecdsaPubkey, message, signature)
+		require.NoError(t, err, "Should verify signature")
 		assert.True(t, valid, "Signature should verify with public key")
 	})
 }
+
+func VerifySignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signature []byte) (bool, error) {
+	hash := crypto.Keccak256Hash(data)
+
+	recoveredPubKey, err := crypto.SigToPub(hash.Bytes(), signature)
+	if err != nil {
+		return false, err
+	}
+
+	matches := recoveredPubKey.Equal(publicKey)
+	return matches, nil
+}
+
+func GetTransactOptsAndSigner(priKey string, chainId *big.Int) (*bind.TransactOpts, DataSignerFunc, error) {
+	privateKey, err := crypto.HexToECDSA(priKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	var txOpts *bind.TransactOpts
+	if chainId != nil {
+		txOpts, err = bind.NewKeyedTransactorWithChainID(privateKey, chainId)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	signer := func(data []byte) ([]byte, error) {
+		return crypto.Sign(data, privateKey)
+	}
+
+	return txOpts, signer, nil
+}
+
+type DataSignerFunc func([]byte) ([]byte, error)

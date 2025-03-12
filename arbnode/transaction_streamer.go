@@ -1780,14 +1780,20 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		if !s.EspressoKeyManager.HasRegistered() {
-			err := s.EspressoKeyManager.Register(s.getAttestationQuote)
-			if err != nil {
-				log.Error("failed to register espresso key manager", "err", err)
-				return err
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, func(ctx context.Context, ignored struct{}) time.Duration {
+			if !s.EspressoKeyManager.HasRegistered() {
+				err := s.EspressoKeyManager.Register(s.getAttestationQuote)
+				if err != nil {
+					log.Error("failed to register espresso key manager", "err", err)
+					return 10 * time.Second
+				}
 			}
+			return 100 * 24 * time.Hour
+		}, s.newSovereignTxNotifier)
+		if err != nil {
+			return err
 		}
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
+		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}

@@ -18,7 +18,7 @@ import (
 type EspressoKeyManagerInterface interface {
 	HasRegistered() bool
 	Register(signFunc func([]byte) ([]byte, error)) error
-	GetCurrentKey() []byte
+	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
 }
@@ -26,7 +26,7 @@ type EspressoKeyManagerInterface interface {
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) error
+	RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error
 }
 
 type EspressoTEEVerifier struct {
@@ -38,8 +38,9 @@ func NewEspressoTEEVerifier(contract *mocksgen.EspressoTEEVerifierMock, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) error {
-	tx, err := e.contract.RegisterSigner(opts, attestation, pubKey, teeType)
+func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error {
+
+	tx, err := e.contract.RegisterSigner(opts, attestation, addr, teeType)
 	if err != nil {
 		return err
 	}
@@ -67,7 +68,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestatio
 
 type EspressoKeyManager struct {
 	espressoTEEVerifierCaller EspressoTEEVerifierInterface
-	pubKey                    []byte
+	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
 	batchPosterOpts   *bind.TransactOpts
@@ -87,10 +88,17 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 	if !ok {
 		panic("failed to get public key")
 	}
-	pubKeyBytes := crypto.FromECDSAPub(pubKey)
+
+	if opts.TransactOpts == nil {
+		panic("TransactOpts is nil")
+	}
+
+	if opts.DataSigner == nil {
+		panic("DataSigner is nil")
+	}
 
 	return &EspressoKeyManager{
-		pubKey:                    pubKeyBytes,
+		pubKey:                    pubKey,
 		privKey:                   privKey,
 		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
@@ -99,7 +107,6 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 }
 
 func (k *EspressoKeyManager) HasRegistered() bool {
-	// TODO: Check address in mock contract
 	// pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
 	// if !ok {
 	// 	panic("failed to get public key")
@@ -115,12 +122,19 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 		return nil
 	}
 
-	attestation, err := signFunc(k.pubKey)
+	addr := crypto.PubkeyToAddress(*k.pubKey)
+	addrBytes := addr.Bytes()
+
+	var addrBytes32 [32]byte
+	copy(addrBytes32[:], addrBytes)
+
+	log.Info("Signing address", "addr", addrBytes32[:])
+	attestation, err := signFunc(addrBytes32[:])
 	if err != nil {
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, k.pubKey, 0)
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, addrBytes32[:], 0)
 	if err != nil {
 		return err
 	}
@@ -129,7 +143,7 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 	return nil
 }
 
-func (k *EspressoKeyManager) GetCurrentKey() []byte {
+func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
 	return k.pubKey
 }
 
@@ -140,5 +154,5 @@ func (k *EspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) 
 
 func (k *EspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
 	hash := crypto.Keccak256Hash(message)
-	return k.privKey.Sign(rand.Reader, hash.Bytes(), nil)
+	return crypto.Sign(hash.Bytes(), k.privKey)
 }
