@@ -37,7 +37,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
-	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/util"
@@ -81,7 +80,7 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 
 	// Espresso specific fields. These fields are set from batch poster
-	espressoClient               *espressoClient.Client
+	espressoClient               espressoClient.EspressoClient
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
 	maxBlockLagBeforeEscapeHatch uint64
@@ -1328,51 +1327,9 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		return fmt.Errorf("could not unmarshal header from bytes (height: %d): %w", height, err)
 	}
 
-	log.Info("Fetching Merkle Root at hotshot", "height", height)
-	// Verify the merkle proof
-	snapshot, err := s.lightClientReader.FetchMerkleRoot(height, nil)
-	if err != nil {
-		return fmt.Errorf("%w (height: %d): %w", EspressoValidationErr, height, err)
-	}
-
-	if snapshot.Height <= height {
-		return fmt.Errorf("snapshot height %v is less than or equal to the requested height %v", snapshot.Height, height)
-	}
-
-	nextHeader, err := s.espressoClient.FetchHeaderByHeight(ctx, snapshot.Height)
-	if err != nil {
-		return fmt.Errorf("error fetching the snapshot header (height: %d): %w", snapshot.Height, err)
-	}
-
-	proof, err := s.espressoClient.FetchBlockMerkleProof(ctx, snapshot.Height, height)
-	if err != nil {
-		return fmt.Errorf("error fetching the block merkle proof (height: %d, root height: %d): %w", height, snapshot.Height, err)
-	}
-
-	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
-
-	ok := espressocrypto.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
-	if !ok {
-		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d)", height, snapshot.Height)
-	}
-
-	// Verify the namespace proof
 	resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 	if err != nil {
 		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
-	}
-
-	namespaceOk := espressocrypto.VerifyNamespace(
-		s.chainConfig.ChainID.Uint64(),
-		resp.Proof,
-		*header.Header.GetPayloadCommitment(),
-		*header.Header.GetNsTable(),
-		resp.Transactions,
-		resp.VidCommon,
-	)
-
-	if !namespaceOk {
-		return fmt.Errorf("error validating namespace proof (height: %d)", height)
 	}
 
 	submittedPayload := firstSubmitted.Payload
@@ -1694,7 +1651,8 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
  * Submits the transactions to espresso if the escape hatch is not enabled
  */
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
+	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
+	retryRate := s.espressoTxnsPollingInterval * 2
 	shouldSubmit := s.shouldSubmitEspressoTransaction()
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
