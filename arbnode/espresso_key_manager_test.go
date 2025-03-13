@@ -15,10 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-type ecdsaSignature struct {
-	R, S *big.Int
-}
-
 type mockEspressoTEEVerifier struct {
 	mock.Mock
 }

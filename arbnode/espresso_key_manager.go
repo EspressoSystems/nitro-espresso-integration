@@ -57,7 +57,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestatio
 		return errors.New("transaction failed")
 	}
 
-	log.Info("Register signer tx succeeded", "tx", tx.Hash())
+	log.Info("Register signer tx succeeded", "signer address", addr, "tx", tx.Hash())
 
 	return nil
 }
