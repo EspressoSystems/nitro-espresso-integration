@@ -48,11 +48,13 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/redisutil"
+	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -179,6 +181,7 @@ type BatchPosterConfig struct {
 	gasRefunder                    common.Address
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
+	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
 	LightClientAddress          string        `koanf:"light-client-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
@@ -209,6 +212,9 @@ func (c *BatchPosterConfig) Validate() error {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}
 	c.gasRefunder = common.HexToAddress(c.GasRefunderAddress)
+	if len(c.EspressoTeeVerifierAddress) > 0 && !common.IsHexAddress(c.EspressoTeeVerifierAddress) {
+		return fmt.Errorf("invalid espresso tee verifier address \"%v\"", c.EspressoTeeVerifierAddress)
+	}
 	if c.MaxSize <= 40 {
 		return errors.New("MaxBatchSize too small")
 	}
@@ -253,6 +259,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
+	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
@@ -354,6 +361,8 @@ type BatchPosterOpts struct {
 	DAPWriters    []daprovider.Writer
 	ParentChainID *big.Int
 	DAPReaders    []daprovider.Reader
+
+	DataSigner signature.DataSignerFunc
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -405,6 +414,19 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
+	}
+
+	if opts.Config().EspressoTeeVerifierAddress != "" {
+		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
+		// TODO: remove this once we have a real espresso verifier
+		espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
+			espressoTeeVerifierAddress,
+			opts.L1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+		verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
+		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 	}
 
 	b := &BatchPoster{
