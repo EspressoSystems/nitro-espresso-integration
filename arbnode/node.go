@@ -824,6 +824,8 @@ func createNodeImpl(
 			DAPWriter:     dapWriter,
 			ParentChainID: parentChainID,
 			DAPReaders:    dapReaders,
+
+			DataSigner: dataSigner,
 		})
 		if err != nil {
 			return nil, err
