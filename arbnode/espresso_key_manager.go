@@ -94,8 +94,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 	}
 
 	if opts.DataSigner == nil {
-		// TODO: Fix this for tests
-		// panic("DataSigner is nil")
+		panic("DataSigner is nil")
 	}
 
 	return &EspressoKeyManager{

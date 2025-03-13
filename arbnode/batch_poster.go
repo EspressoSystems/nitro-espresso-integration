@@ -181,8 +181,7 @@ type BatchPosterConfig struct {
 	gasRefunder                    common.Address
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress  string `koanf:"espresso-tee-verifier-address"`
-	espressoTeeVerifierAddress  common.Address
+	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
 	LightClientAddress          string        `koanf:"light-client-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
@@ -216,7 +215,6 @@ func (c *BatchPosterConfig) Validate() error {
 	if len(c.EspressoTeeVerifierAddress) > 0 && !common.IsHexAddress(c.EspressoTeeVerifierAddress) {
 		return fmt.Errorf("invalid espresso tee verifier address \"%v\"", c.EspressoTeeVerifierAddress)
 	}
-	c.espressoTeeVerifierAddress = common.HexToAddress(c.EspressoTeeVerifierAddress)
 	if c.MaxSize <= 40 {
 		return errors.New("MaxBatchSize too small")
 	}
@@ -418,16 +416,18 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
 
-	// TODO: remove this once we have a real espresso verifier
-	espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
-		opts.Config().espressoTeeVerifierAddress,
-		opts.L1Reader.Client())
-	if err != nil {
-		return nil, err
+	if opts.Config().EspressoTeeVerifierAddress != "" {
+		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
+		// TODO: remove this once we have a real espresso verifier
+		espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
+			espressoTeeVerifierAddress,
+			opts.L1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+		verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
+		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 	}
-
-	verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
-	opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 
 	b := &BatchPoster{
 		l1Reader:           opts.L1Reader,
