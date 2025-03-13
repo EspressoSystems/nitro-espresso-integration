@@ -1147,7 +1147,7 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to pack calldata without attestation quote: %w", err)
 		}
 
-		attestationQuote, err := b.streamer.EspressoKeyManager.SignBatch(calldata)
+		attestationQuote, err := b.streamer.getAttestationQuote(calldata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
