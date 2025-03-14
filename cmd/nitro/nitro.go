@@ -876,9 +876,9 @@ func ParseNode(ctx context.Context, args []string) (*NodeConfig, *genericconf.Wa
 		}
 	}
 
-	if nodeConfig.Persistent.Chain == "" {
-		return nil, nil, errors.New("--persistent.chain not specified")
-	}
+	// if nodeConfig.Persistent.Chain == "" {
+	// 	return nil, nil, errors.New("--persistent.chain not specified")
+	// }
 
 	err = nodeConfig.ResolveDirectoryNames()
 	if err != nil {
