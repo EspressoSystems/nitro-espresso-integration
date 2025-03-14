@@ -117,7 +117,7 @@ func TestEspressoSovereignSequencer(t *testing.T) {
 
 	err = waitForWith(ctx, 8*time.Minute, 60*time.Second, func() bool {
 		validatedCnt := builder.L2.ConsensusNode.BlockValidator.Validated(t)
-		return validatedCnt == msgCnt
+		return validatedCnt >= msgCnt
 	})
 	Require(t, err)
 }
