@@ -46,6 +46,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
@@ -127,6 +128,7 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+  espressoStreamer *espressostreamer.EspressoStreamer
 }
 
 type l1BlockBound int
@@ -183,7 +185,9 @@ type BatchPosterConfig struct {
 	// Espresso specific flags
 	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
 	LightClientAddress          string        `koanf:"light-client-address"`
+	EspressoTEEVerifierAddr     string        `koanf:"espresso-tee-verifier-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
+	HotShotBlock                uint64        `koanf:"hotshot-block"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
@@ -262,6 +266,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
+	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTEEVerifierAddr, "specifies the address of the espresso tee verifier contract that is used to verify messages read by the espresso streamer")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
@@ -360,6 +365,7 @@ type BatchPosterOpts struct {
 	TransactOpts  *bind.TransactOpts
 	DAPWriters    []daprovider.Writer
 	ParentChainID *big.Int
+	ChainID       uint64
 	DAPReaders    []daprovider.Reader
 
 	DataSigner signature.DataSignerFunc
@@ -430,21 +436,22 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	b := &BatchPoster{
-		l1Reader:           opts.L1Reader,
-		inbox:              opts.Inbox,
-		streamer:           opts.Streamer,
-		arbOSVersionGetter: opts.VersionGetter,
-		syncMonitor:        opts.SyncMonitor,
-		config:             opts.Config,
-		seqInbox:           seqInbox,
-		seqInboxABI:        seqInboxABI,
-		seqInboxAddr:       opts.DeployInfo.SequencerInbox,
-		gasRefunderAddr:    opts.Config().gasRefunder,
-		bridgeAddr:         opts.DeployInfo.Bridge,
-		dapWriters:         opts.DAPWriters,
-		redisLock:          redisLock,
-		dapReaders:         opts.DAPReaders,
-	}
+	l1Reader:           opts.L1Reader,
+	inbox:              opts.Inbox,
+	streamer:           opts.Streamer,
+	arbOSVersionGetter: opts.VersionGetter,
+	syncMonitor:        opts.SyncMonitor,
+	config:             opts.Config,
+	seqInbox:           seqInbox,
+	seqInboxABI:        seqInboxABI,
+	seqInboxAddr:       opts.DeployInfo.SequencerInbox,
+	gasRefunderAddr:    opts.Config().gasRefunder,
+	bridgeAddr:         opts.DeployInfo.Bridge,
+	dapWriters:         opts.DAPWriters,
+	redisLock:          redisLock,
+	dapReaders:         opts.DAPReaders,
+	espressoStreamer:   espressoStreamer,
+}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
 		return nil, err
