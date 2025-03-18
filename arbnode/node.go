@@ -817,6 +817,7 @@ func createNodeImpl(
 			TransactOpts:  txOptsBatchPoster,
 			DAPWriters:    dapWriters,
 			ParentChainID: parentChainID,
+			ChainID:       l2ChainId,
 			DAPReaders:    dapReaders,
 
 			DataSigner: dataSigner,
