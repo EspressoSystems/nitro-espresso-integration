@@ -79,11 +79,6 @@ type SequencerConfig struct {
 	EnableProfiling              bool            `koanf:"enable-profiling" reload:"hot"`
 	expectedSurplusSoftThreshold int
 	expectedSurplusHardThreshold int
-
-	// Espresso specific flags
-	CaffNodeConfig CaffNodeConfig `koanf:"caff-node-config" reload:"hot"`
-	// Caff Node creates blocks with finalized hotshot transactions
-	EnableCaffNode bool `koanf:"enable-caff-node"`
 }
 
 func (c *SequencerConfig) Validate() error {
@@ -126,6 +121,7 @@ type CaffNodeConfig struct {
 	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
 	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
 	EspressoTEEVerifierAddr string              `koanf:"espresso-tee-verifier-addr"`
+	BatchPosterAddr         string              `koanf:"batch-poster-addr"`
 	// See how it is used in cmd/nitro/nitro.go
 	// search for "caff-node-config.forwarding"
 	Forwarding bool `koanf:"forwarding"`
@@ -161,9 +157,6 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusSoftThreshold: "default",
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
-
-	EnableCaffNode: false,
-	CaffNodeConfig: DefaultCaffNodeConfig,
 }
 
 func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -176,6 +169,7 @@ func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".parent-chain-node-url", DefaultCaffNodeConfig.ParentChainNodeUrl, "the parent chain url")
 	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
 	f.Bool(prefix+".forwarding", DefaultCaffNodeConfig.Forwarding, "forward transactions to the sequencer")
+	f.String(prefix+".batch-poster-addr", DefaultCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the hotshot transactions")
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -194,10 +188,6 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".expected-surplus-soft-threshold", DefaultSequencerConfig.ExpectedSurplusSoftThreshold, "if expected surplus is lower than this value, warnings are posted")
 	f.String(prefix+".expected-surplus-hard-threshold", DefaultSequencerConfig.ExpectedSurplusHardThreshold, "if expected surplus is lower than this value, new incoming transactions will be denied")
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
-
-	// Espresso specific flags
-	f.Bool(prefix+".enable-caff-node", DefaultSequencerConfig.EnableCaffNode, "enable caff node")
-	CaffNodeConfigAddOptions(prefix+".caff-node-config", f)
 }
 
 type txQueueItem struct {

@@ -10,6 +10,8 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -25,6 +27,12 @@ type EspressoTEEVerifierInterface interface {
 type EspressoClientInterface interface {
 	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
 	FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error)
+}
+
+type EspressoStreamerInterface interface {
+	Start(ctx context.Context) error
+	Next() (MessageWithMetadataAndPos, error)
+	Reset(currentMessagePos uint64, currentHostshotBlock uint64)
 }
 
 type MessageWithMetadataAndPos struct {
@@ -44,6 +52,8 @@ type EspressoStreamer struct {
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
 	espressoTEEVerifierCaller     EspressoTEEVerifierInterface
 
+	batchPosterAddr common.Address
+
 	messageMutex sync.Mutex
 }
 
@@ -53,6 +63,7 @@ func NewEspressoStreamer(namespace uint64,
 	pollingHotshotPollingInterval time.Duration,
 	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
+	batchPosterAddr common.Address,
 ) *EspressoStreamer {
 
 	return &EspressoStreamer{
@@ -62,6 +73,7 @@ func NewEspressoStreamer(namespace uint64,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
 		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
+		batchPosterAddr:               batchPosterAddr,
 	}
 }
 
@@ -103,23 +115,51 @@ func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHa
 	return nil
 }
 
+func (s *EspressoStreamer) verifySignatureWithPosterAddress(signature []byte, userDataHash []byte) error {
+	pubKey, err := crypto.SigToPub(userDataHash, signature)
+	if err != nil {
+		return fmt.Errorf("failed to get pubkey from user data hash: %w", err)
+	}
+
+	address := crypto.PubkeyToAddress(*pubKey)
+
+	if address.Cmp(s.batchPosterAddr) != 0 {
+		return fmt.Errorf("signature is not valid for the batch poster address")
+	}
+
+	return nil
+}
+
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error) {
 	attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 	if err != nil {
 		log.Warn("failed to parse hotshot payload", "err", err)
 		return nil, err
 	}
-	// if attestation verification fails, we should skip this message
+	// if attestation verification fails, we should skip this transaction
 	// Parse the messages
 	if len(userDataHash) != 32 {
 		log.Warn("user data hash is not 32 bytes")
 		return nil, fmt.Errorf("user data hash is not 32 bytes")
 	}
-	userDataHashArr := [32]byte(userDataHash)
-	err = s.verifyAttestationQuote(attestation, userDataHashArr)
-	if err != nil {
-		log.Warn("failed to verify attestation quote", "err", err)
-		return nil, err
+
+	verifySuccess := false
+	if s.batchPosterAddr != (common.Address{}) {
+		err = s.verifySignatureWithPosterAddress(attestation, userDataHash)
+		if err != nil {
+			log.Warn("failed to verify signature with poster address", "err", err)
+		} else {
+			verifySuccess = true
+		}
+	}
+
+	if !verifySuccess {
+		userDataHashArr := [32]byte(userDataHash)
+		err = s.verifyAttestationQuote(attestation, userDataHashArr)
+		if err != nil {
+			log.Warn("failed to verify attestation quote", "err", err)
+			return nil, err
+		}
 	}
 	result := []*MessageWithMetadataAndPos{}
 
