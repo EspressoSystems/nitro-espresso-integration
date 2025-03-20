@@ -356,3 +356,42 @@ pub extern "C" fn stylus_get_entry_size_estimate_bytes(
         Ok((_, _, entry_size_estimate_bytes)) => entry_size_estimate_bytes.try_into().unwrap(),
     }
 }
+
+/// Gets cache metrics.
+///
+/// # Safety
+///
+/// `output` must not be null.
+#[no_mangle]
+pub unsafe extern "C" fn stylus_get_cache_metrics(output: *mut CacheMetrics) {
+    let output = &mut *output;
+    InitCache::get_metrics(output);
+}
+
+/// Clears lru cache.
+/// Only used for testing purposes.
+#[no_mangle]
+pub extern "C" fn stylus_clear_lru_cache() {
+    InitCache::clear_lru_cache()
+}
+
+/// Clears long term cache (for arbos_tag = 1)
+/// Only used for testing purposes.
+#[no_mangle]
+pub extern "C" fn stylus_clear_long_term_cache() {
+    InitCache::clear_long_term(1);
+}
+
+/// Gets entry size in bytes.
+/// Only used for testing purposes.
+#[no_mangle]
+pub extern "C" fn stylus_get_entry_size_estimate_bytes(
+    module: GoSliceData,
+    version: u16,
+    debug: bool,
+) -> u64 {
+    match deserialize_module(module.slice(), version, debug) {
+        Err(error) => panic!("tried to get invalid asm!: {error}"),
+        Ok((_, _, entry_size_estimate_bytes)) => entry_size_estimate_bytes.try_into().unwrap(),
+    }
+}

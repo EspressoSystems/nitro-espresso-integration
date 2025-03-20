@@ -21,7 +21,10 @@ import (
 	"github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/das/dastree"
 	"github.com/offchainlabs/nitro/util/pretty"
+<<<<<<< HEAD
 	"github.com/offchainlabs/nitro/util/s3client"
+=======
+>>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 )
 
 type S3StorageServiceConfig struct {

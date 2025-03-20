@@ -450,7 +450,6 @@ func TestGetLifetime(t *testing.T) {
 
 func warpL1Time(t *testing.T, builder *NodeBuilder, ctx context.Context, currentL1time, advanceTime uint64) uint64 {
 	t.Log("Warping L1 time...")
-	l1LatestHeader, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(int64(rpc.LatestBlockNumber)))
 	Require(t, err)
 	if currentL1time == 0 {
 		currentL1time = l1LatestHeader.Time
@@ -628,9 +627,8 @@ func TestKeepaliveAndRetryableExpiry(t *testing.T) {
 	}
 }
 
+ 
 func TestKeepaliveAndCancelRetryable(t *testing.T) {
-	t.Parallel()
-	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
 	defer teardown()
 
 	ownerTxOpts := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
@@ -698,7 +696,12 @@ func TestKeepaliveAndCancelRetryable(t *testing.T) {
 	Require(t, err)
 	timeoutAfterKeepalive, err := arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
 	Require(t, err)
+<<<<<<< HEAD
 	expectedTimeoutAfterKeepAlive := arbmath.BigAdd(timeoutBeforeKeepalive, big.NewInt(retryables.RetryableLifetimeSeconds))
+=======
+	expectedTimeoutAfterKeepAlive := timeoutBeforeKeepalive
+	expectedTimeoutAfterKeepAlive.Add(expectedTimeoutAfterKeepAlive, big.NewInt(retryables.RetryableLifetimeSeconds))
+>>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	if timeoutAfterKeepalive.Cmp(expectedTimeoutAfterKeepAlive) != 0 {
 		Fatal(t, "expected timeout after keepalive to be", expectedTimeoutAfterKeepAlive, "but got", timeoutAfterKeepalive)
 	}

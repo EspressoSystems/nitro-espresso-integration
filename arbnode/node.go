@@ -54,7 +54,7 @@ import (
 	"github.com/offchainlabs/nitro/wsbroadcastserver"
 )
 
-func GenerateRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address) rollupgen.Config {
+func GenerateRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address, espressoTEEVerifier common.Address) rollupgen.Config {
 	var confirmPeriod uint64
 	if prod {
 		confirmPeriod = 45818
@@ -70,6 +70,7 @@ func GenerateRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner com
 		Owner:                    rollupOwner,
 		LoserStakeEscrow:         loserStakeEscrow,
 		ChainId:                  chainConfig.ChainID,
+		EspressoTEEVerifier:      espressoTEEVerifier,
 		// TODO could the ChainConfig be just []byte?
 		ChainConfig: string(serializedChainConfig),
 		SequencerInboxMaxTimeVariation: rollupgen.ISequencerInboxMaxTimeVariation{
@@ -191,6 +192,24 @@ var ConfigDefault = Config{
 	ResourceMgmt:         resourcemanager.DefaultConfig,
 	Maintenance:          DefaultMaintenanceConfig,
 	BlockMetadataFetcher: DefaultBlockMetadataFetcherConfig,
+	SnapSyncTest:         DefaultSnapSyncConfig,
+	Sequencer:            false,
+	ParentChainReader:    headerreader.DefaultConfig,
+	InboxReader:          DefaultInboxReaderConfig,
+	DelayedSequencer:     DefaultDelayedSequencerConfig,
+	BatchPoster:          DefaultBatchPosterConfig,
+	MessagePruner:        DefaultMessagePrunerConfig,
+	BlockValidator:       staker.DefaultBlockValidatorConfig,
+	Feed:                 broadcastclient.FeedConfigDefault,
+	Staker:               legacystaker.DefaultL1ValidatorConfig,
+	Bold:                 boldstaker.DefaultBoldConfig,
+	SeqCoordinator:       DefaultSeqCoordinatorConfig,
+	DataAvailability:     das.DefaultDataAvailabilityConfig,
+	SyncMonitor:          DefaultSyncMonitorConfig,
+	Dangerous:            DefaultDangerousConfig,
+	TransactionStreamer:  DefaultTransactionStreamerConfig,
+	ResourceMgmt:         resourcemanager.DefaultConfig,
+	Maintenance:          DefaultMaintenanceConfig,
 	SnapSyncTest:         DefaultSnapSyncConfig,
 }
 
