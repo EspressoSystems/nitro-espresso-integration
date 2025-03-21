@@ -34,9 +34,9 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	hotshotClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
+	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
@@ -1079,91 +1079,70 @@ func (b *BatchPoster) encodeAddBatch(
 	use4844 bool,
 	delayProof *bridgegen.DelayProof,
 ) ([]byte, []kzg4844.Blob, error) {
-<<<<<<< HEAD
 	var methodName string
 	if use4844 {
 		if delayProof != nil {
+			// Not yet supported by nitro-contracts version
 			methodName = sequencerBatchPostWithBlobsDelayProofMethodName
 		} else {
 			methodName = sequencerBatchPostWithBlobsMethodName
 		}
+		// NO OLD SEQUENCER BATCH METHOD NAME FOR DELAY PROOF
 	} else if delayProof != nil {
+		// Not yet supported by nitro-contracts version
 		methodName = sequencerBatchPostDelayProofMethodName
 	} else {
-		methodName = sequencerBatchPostMethodName
+		methodName = oldSequencerBatchPostMethodName
 	}
 	method, ok := b.seqInboxABI.Methods[methodName]
 	if !ok {
 		return nil, nil, errors.New("failed to find add batch method")
 	}
 	var args []any
-=======
 
 	var calldata []byte
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
+
 	var kzgBlobs []kzg4844.Blob
 	fullCalldata := make([]byte, 0)
 	var err error
 	args = append(args, seqNum)
 	if use4844 {
-		method, ok := b.seqInboxABI.Methods[sequencerBatchPostWithBlobsMethodName]
-		if !ok {
-			return nil, nil, errors.New("failed to find add batch method")
-		}
 		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
 		}
-<<<<<<< HEAD
-	} else {
-		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
-		args = append(args, l2MessageData)
-	}
-	args = append(args, new(big.Int).SetUint64(delayedMsg))
-	args = append(args, b.config().gasRefunder)
-	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-	if delayProof != nil {
-		args = append(args, delayProof)
-	}
-	calldata, err := method.Inputs.Pack(args...)
-	if err != nil {
-		return nil, nil, err
-	}
-	fullCalldata := append([]byte{}, method.ID...)
-	fullCalldata = append(fullCalldata, calldata...)
-=======
-		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
-		calldata, err = method.Inputs.Pack(
-			seqNum,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack calldata for eip-4844: %w", err)
+		args = append(args, new(big.Int).SetUint64(delayedMsg))
+		args = append(args, b.config().gasRefunder)
+		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
+		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+
+		if delayProof != nil {
+			args = append(args, delayProof)
 		}
-		fullCalldata = append(fullCalldata, method.ID...)
+
+		calldata, err = method.Inputs.Pack(args...)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		fullCalldata := append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	} else {
 		// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
 		// This will allow us to get the attestation quote on the hash of the data
-		method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostMethodName]
-		if !ok {
-			return nil, nil, errors.New("failed to find add batch method")
-		}
-		calldata, err = method.Inputs.Pack(
-			seqNum,
-			l2MessageData,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-		)
 
+		args = append(args, l2MessageData)
+		args = append(args, new(big.Int).SetUint64(delayedMsg))
+		args = append(args, b.config().gasRefunder)
+		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
+		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+
+		// Should we append DelayProof and remove after for attestation?
+		// Depends on future contract logic.
+
+		calldata, err := method.Inputs.Pack(args...)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack calldata without attestation quote: %w", err)
+			return nil, nil, err
 		}
 
 		attestationQuote, err := b.streamer.getAttestationQuote(calldata)
@@ -1171,30 +1150,26 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
 
-		//  construct the calldata with attestation quote
+		// Construct the calldata with attestation quote
 		method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
 		if !ok {
 			return nil, nil, errors.New("failed to find add batch method")
 		}
+		args = append(args, attestationQuote)
 
-		calldata, err = method.Inputs.Pack(
-			seqNum,
-			l2MessageData,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			attestationQuote,
-		)
+		if delayProof != nil {
+			args = append(args, delayProof)
+		}
+		calldata, err = method.Inputs.Pack(args...)
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack calldata with attestation quote: %w", err)
+			return nil, nil, err
 		}
-		fullCalldata = append([]byte{}, method.ID...)
+
+		fullCalldata := append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	}
 
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	return fullCalldata, kzgBlobs, nil
 }
 
@@ -1385,10 +1360,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// There's nothing after the newest batch, therefore batch posting was not required
 		return false, nil
 	}
-<<<<<<< HEAD
 
-=======
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 
@@ -1528,15 +1500,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 				b.building.firstUsefulMsg = msg
 			}
 		}
-<<<<<<< HEAD
 		if isDelayed {
 			if b.building.firstDelayedMsg == nil {
 				b.building.firstDelayedMsg = msg
 			}
 		} else if b.building.firstNonDelayedMsg == nil {
-=======
-		if !isDelayed && b.building.firstNonDelayedMsg == nil {
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
