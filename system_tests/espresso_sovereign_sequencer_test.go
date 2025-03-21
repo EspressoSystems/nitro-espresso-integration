@@ -18,7 +18,6 @@ func createL1AndL2Node(
 	delayedSequencer bool,
 ) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	builder.useL1StackConfig = true // Do not overwrite the L1 stack config when building
 	builder.l1StackConfig.HTTPPort = 8545
 	builder.l1StackConfig.WSPort = 8546
 	builder.l1StackConfig.HTTPHost = "0.0.0.0"
@@ -58,9 +57,7 @@ func createL1AndL2Node(
 
 	cleanup := builder.Build(t)
 
-	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
-	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
-	Require(t, err)
+	builder.L1Info.GenerateAccount("CommitmentTask")
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", big.NewInt(9e18), builder.L1Info)
 
 	return builder, cleanup
