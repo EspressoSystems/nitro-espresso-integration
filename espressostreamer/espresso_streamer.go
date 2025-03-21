@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
+	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/log"
@@ -22,11 +22,6 @@ type EspressoTEEVerifierInterface interface {
 	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) error
 }
 
-type EspressoClientInterface interface {
-	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
-	FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error)
-}
-
 type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
 	Pos             uint64
@@ -35,7 +30,7 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	espressoClient                EspressoClientInterface
+	espressoClient                espressoClient.EspressoClient
 	nextHotshotBlockNum           uint64
 	currentMessagePos             uint64
 	namespace                     uint64
@@ -52,7 +47,7 @@ func NewEspressoStreamer(namespace uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
 	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
-	espressoClientInterface EspressoClientInterface,
+	espressoClientInterface espressoClient.EspressoClient,
 ) *EspressoStreamer {
 
 	return &EspressoStreamer{
@@ -64,7 +59,15 @@ func NewEspressoStreamer(namespace uint64,
 		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
 	}
 }
-
+// GetMessageCount
+// This function will use the CountUniqueMessage to count the unique messages present in it's buffer.
+// Parameters:
+//  None
+// Return value:
+//  a uint64 representing the count of unique messages in the EspressoStreamer's internal buffer.
+func (s *EspressoStreamer) GetMessageCount() uint64 {
+  return CountUniqueEntries(&s.messageWithMetadataAndPos)
+}
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
 	s.messageMutex.Lock()
 	defer s.messageMutex.Unlock()
