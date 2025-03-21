@@ -192,3 +192,42 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 		})
 	}
 }
+
+// TestCountUniqueEntries tests the CountUniqueEntries function in espressostreamer/utils.go
+// It tests that the function works for arbitrary types of array inputs, and properly de-duplicates counting the entries in the list.
+// in practice the queue that the espressostreamer maintains might be a bit less
+func TestCountUniqueEntries(t *testing.T) {
+	strList1 := []string{"One", "Two", "Three"}                  // Should return 3
+	strList2 := []string{"One", "Two", "Three", "Three"}         // Should return 3
+	strList3 := []string{"One", "Two", "Three", "Three", "Four"} // Should return 4
+	intList1 := []uint64{1, 2, 3, 4}                             // should return 4
+	intList2 := []uint64{1, 2, 3, 3, 4}                          // should return 4
+	intList3 := []uint64{1, 2, 3, 4, 2, 3, 5}                    // should return 5
+
+	// get results from all of the inputs.
+	result1 := CountUniqueEntries(&strList1)
+	result2 := CountUniqueEntries(&strList2)
+	result3 := CountUniqueEntries(&strList3)
+	result4 := CountUniqueEntries(&intList1)
+	result5 := CountUniqueEntries(&intList2)
+	result6 := CountUniqueEntries(&intList3)
+
+	if result1 != 3 {
+		t.Errorf("Expected result of 3 for , but got %v", result1)
+	}
+	if result2 != 3 {
+		t.Errorf("Expected result of 3 for , but got %v", result1)
+	}
+	if result3 != 4 {
+		t.Errorf("Expected result of 4 for , but got %v", result1)
+	}
+	if result4 != 4 {
+		t.Errorf("Expected result of 4 for , but got %v", result1)
+	}
+	if result5 != 4 {
+		t.Errorf("Expected result of 4 for , but got %v", result1)
+	}
+	if result6 != 5 {
+		t.Errorf("Expected result of 5 for , but got %v", result1)
+	}
+}
