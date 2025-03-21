@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
+	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
 
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/common"
