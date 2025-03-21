@@ -32,8 +32,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	hotshotClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
+	hotshotClient "github.com/EspressoSystems/espresso-network-go/client"
+	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
@@ -123,6 +123,7 @@ type BatchPoster struct {
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
   espressoStreamer *espressostreamer.EspressoStreamer
+  hotshotBlockNumberFromConfigOrRecentMsg uint64
 }
 type l1BlockBound int
 // This enum starts at 1 to avoid the empty initialization of 0 being valid
@@ -596,6 +597,16 @@ var EspressoValidationErr = errors.New("failed to check espresso validation")
 var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso transaction")
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
+
+func (b *BatchPoster) tryGetNextMessageForBatch() *arbostypes.MessageWithMetadata {
+	streamerMsg, err := b.espressoStreamer.Next()
+	if err != nil {
+		log.Info("Espresso Streamer was not able to produce the next message", "err", err)
+		return &arbostypes.MessageWithMetadata{}
+	}
+	return &streamerMsg.MessageWithMeta
+}
+
 func (b *BatchPoster) checkEspressoValidation() bool {
 	b.building.segments.SetWaitingForValidation()
 	if b.streamer.espressoClient == nil && b.streamer.lightClientReader == nil {
@@ -1263,6 +1274,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("attempting to post batch %v, but the local inbox tracker database already has %v batches", batchPosition.NextSeqNum, dbBatchCount)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
+		b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), b.hotshotBlockNumberFromConfigOrRecentMsg)
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
 			return false, err
@@ -1320,7 +1332,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// There's nothing after the newest batch, therefore batch posting was not required
 		return false, nil
 	}
-	lastPotentialMsg, err := b.streamer.GetMessage(msgCount - 1)
 	if err != nil {
 
 		return false, err
@@ -1396,12 +1407,23 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
 		}
 	}
-
-	for b.building.msgCount < msgCount {
-		msg, err := b.streamer.GetMessage(b.building.msgCount)
-		if err != nil {
-			return false, fmt.Errorf("error getting message from streamer: %w", err)
-		}
+  var lastPotentialMsg *arbostypes.MessageWithMetadata
+	for {
+    msg := b.tryGetNextMessageForBatch()
+    lastPotentialMsg = msg
+    if msg == (&arbostypes.MessageWithMetadata{}){
+      if b.building.haveUsefulMessage{
+        // if we have a useful message, break from the batch building loop.
+        // the batcher will then check if the first useful message is older than the max delay.
+        // If it is, we will attempt to post the batch, otherwise, it will re-try this function and potentially add more messages to the batch.
+        break
+      } else {
+        // If we don't have a first useful message, we should wait for a small duration, and poll then espressoStreamer
+        // Till we add a message to the batch. 
+        time.Sleep(time.Second/2) //TODO: make this a configurable polling interval.
+        continue
+      }
+    }	
 
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
@@ -1676,7 +1698,10 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	} else {
 		b.non4844BatchCount++
 	}
-	unpostedMessages := msgCount - b.building.msgCount
+  // This is roughly equivalent to the amount of messages in the transaction streamer - the number of messages in the batch.
+  // It might be slightly inaccurate compared to nitros default method, but this only affects the batch compression
+  // and gas estimation, so a best effort estimate is fine. 
+	unpostedMessages := b.espressoStreamer.GetMessageCount()
 	messagesPerBatch := b.messagesPerBatch.Average()
 	if messagesPerBatch == 0 {
 		// This should be impossible because we always post at least one message in a batch.
@@ -1733,6 +1758,7 @@ func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()
 }
 func (b *BatchPoster) Start(ctxIn context.Context) {
+	b.hotshotBlockNumberFromConfigOrRecentMsg = b.config().HotShotBlock
 	b.dataPoster.Start(ctxIn)
 	b.redisLock.Start(ctxIn)
 	b.StopWaiter.Start(ctxIn, b)
