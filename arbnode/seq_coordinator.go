@@ -682,11 +682,7 @@ func (c *SeqCoordinator) update(ctx context.Context) time.Duration {
 	for msgToRead < readUntil && localMsgCount >= remoteFinalizedMsgCount {
 		var resString string
 		resString, msgReadErr = client.Get(ctx, redisutil.MessageKeyFor(msgToRead)).Result()
-<<<<<<< HEAD
 		if msgReadErr != nil && c.sequencer.Synced() {
-=======
-		if msgReadErr != nil {
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 			log.Warn("coordinator failed reading message", "pos", msgToRead, "err", msgReadErr)
 			break
 		}

@@ -34,11 +34,7 @@ func (c *mockGCSClient) Close(ctx context.Context) error {
 	return nil
 }
 
-<<<<<<< HEAD
 func (c *mockGCSClient) Upload(ctx context.Context, bucket, objectPrefix string, value []byte, discardAfterTimeout bool, timeout uint64) error {
-=======
-func (c *mockGCSClient) Upload(ctx context.Context, bucket, objectPrefix string, value []byte) error {
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	key := objectPrefix + EncodeStorageServiceKey(dastree.Hash(value))
 	c.storage[key] = value
 	return nil
@@ -51,11 +47,7 @@ func NewTestGoogleCloudStorageService(ctx context.Context, googleCloudStorageCon
 		operator: &mockGCSClient{
 			storage: make(map[string][]byte),
 		},
-<<<<<<< HEAD
 		discardAfterTimeout: true,
-=======
-		maxRetention: googleCloudStorageConfig.MaxRetention,
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	}, nil
 }
 
@@ -65,10 +57,6 @@ func TestNewGoogleCloudStorageService(t *testing.T) {
 	expiry := uint64(time.Now().Add(time.Hour).Unix())
 	googleCloudStorageServiceConfig := DefaultGoogleCloudStorageServiceConfig
 	googleCloudStorageServiceConfig.Enable = true
-<<<<<<< HEAD
-=======
-	googleCloudStorageServiceConfig.MaxRetention = time.Hour * 24
->>>>>>> 378fd063e4dc5ddf0089410732c73dc205b6d2d9
 	googleCloudService, err := NewTestGoogleCloudStorageService(ctx, googleCloudStorageServiceConfig)
 	Require(t, err)
 
