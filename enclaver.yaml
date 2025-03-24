@@ -8,11 +8,9 @@ defaults:
   cpu_count: 4
 egress:
   allow:
-    - 172.217.4.78
-    - query.decaf.testnet.espresso.network
-    - sepolia-rollup.arbitrum.io/rpc
-    - arb-sepolia.g.alchemy.com
-    - arbitrum-sepolia.infura.io
-    - 13.59.254.12
+    - query.*.*.espresso.network
+    - "**.amazonaws.com"
+    - arbitrum-sepolia.testnet.espresso.network
+    - 172.31.13.254 # Parent instance private ip
 ingress:
   - listen_port: 8547

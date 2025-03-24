@@ -1,6 +1,7 @@
 FROM ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:v3.3.2-fcd633f
 RUN curl -L -o kzg10-aztec20-srs-1048584.bin https://github.com/EspressoSystems/ark-srs/releases/download/v0.2.0/kzg10-aztec20-srs-1048584.bin
 
+USER root
 
 EXPOSE 8547
 EXPOSE 8548
@@ -13,9 +14,21 @@ COPY --chown=user:user /config/ /config/
 COPY --chown=user:user aws-nitro-entrypoint.sh /aws-nitro-entrypoint.sh
 RUN chmod +x /aws-nitro-entrypoint.sh
 
-RUN mkdir -p /home/user/.arbitrum && \
-    chown user:user /home/user/.arbitrum
+# Install required packages
+RUN apt-get update && \
+    apt-get install -y \
+    socat \
+    nfs-common \
+    iproute2 \
+    gosu \
+    procps && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-USER user
+# Create and set permissions for /home/user/.arbitrum
+RUN useradd -u 1002 -m -s /bin/bash enclave-user && \
+    usermod -aG 1000 enclave-user && \
+    mkdir -p /home/user/.arbitrum && \
+    chown -R user:user /home/user/.arbitrum
 
 ENTRYPOINT ["/aws-nitro-entrypoint.sh"]

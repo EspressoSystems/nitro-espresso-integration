@@ -1,7 +1,7 @@
 {
     "parent-chain": {
         "connection": {
-            "url": "wss://arbitrum-sepolia.infura.io/ws/v3/xxx"
+            "url": "wss://arbitrum-sepolia.testnet.espresso.network:4443/"
         }
     },
     "chain": {
@@ -59,7 +59,7 @@
         "block-validator": {
             "enable": true,
             "validation-server": {
-                "url": "ws://13.59.254.12:8949",
+                "url": "ws://172.31.13.254:8949",
                 "jwtsecret": "/config/val_jwt.hex"
             },
             "dangerous": {
