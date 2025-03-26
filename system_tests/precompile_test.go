@@ -29,6 +29,9 @@ func TestPurePrecompileMethodCalls(t *testing.T) {
 	defer cancel()
 
 	arbosVersion := params.ArbosVersion_31
+	builder := NewNodeBuilder(ctx).
+		DefaultConfig(t, false).
+		WithArbOSVersion(arbosVersion)
 	cleanup := builder.Build(t)
 	defer cleanup()
 
