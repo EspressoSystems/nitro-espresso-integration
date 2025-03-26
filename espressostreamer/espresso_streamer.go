@@ -170,24 +170,13 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 		return nil, fmt.Errorf("user data hash is not 32 bytes")
 	}
 
-	verifySuccess := false
-	if s.batchPosterAddr != (common.Address{}) {
-		err = s.verifySignatureWithPosterAddress(attestation, userDataHash)
-		if err != nil {
-			log.Warn("failed to verify signature with poster address", "err", err)
-		} else {
-			verifySuccess = true
-		}
+	userDataHashArr := [32]byte(userDataHash)
+	err = s.verifyAttestationQuote(attestation, userDataHashArr)
+	if err != nil {
+	  log.Warn("failed to verify attestation quote", "err", err)
+	  return nil, err
 	}
 
-	if !verifySuccess {
-		userDataHashArr := [32]byte(userDataHash)
-		err = s.verifyAttestationQuote(attestation, userDataHashArr)
-		if err != nil {
-			log.Warn("failed to verify attestation quote", "err", err)
-			return nil, err
-		}
-	}
 	result := []*MessageWithMetadataAndPos{}
 
 	for i, message := range messages {
