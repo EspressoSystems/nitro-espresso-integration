@@ -61,11 +61,13 @@ func (m *MockDelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes
 	return arbostypes.InvalidL1Message, nil
 }
 
+func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
+
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
 	caffNode := EspressoCaffNode{}
 	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3}
-	caffNode.delayedBridge = &MockDelayedMessageFetcher{}
+	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
 	caffNode.delayedCount = 1
 	msg1, err := caffNode.nextMessage()
 	require.NoError(t, err)

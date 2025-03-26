@@ -14,18 +14,27 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
+var (
+	DelayedFetcherCurrentL1BlockKey = []byte("delayedFetcherCurrentL1Block")
+	// To not to mess with the existing schema, we use another prefix
+	DelayedMessagePrefix = []byte("x")
+)
+
 type DelayedMessageFetcherInterface interface {
 	getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error)
+	reset(seqNum uint64)
 }
 
 type DelayedMessageFetcher struct {
@@ -33,23 +42,36 @@ type DelayedMessageFetcher struct {
 	delayedBridge *DelayedBridge
 	l1Reader      *ethclient.Client
 
-	delayedMessages map[uint64]*arbostypes.L1IncomingMessage
+	db ethdb.Database
 }
 
-func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *ethclient.Client) *DelayedMessageFetcher {
+func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *ethclient.Client, db ethdb.Database) *DelayedMessageFetcher {
+	var fromBlock uint64
+	fromBlock, err := readCurrentL1BlockFromDb(db)
+	if err != nil {
+		log.Crit("failed to read l1 block from db", "err", err)
+		return nil
+	}
+
+	if fromBlock == 0 {
+		fromBlock = delayedBridge.fromBlock
+	}
+
 	return &DelayedMessageFetcher{
-		fromBlock:       delayedBridge.fromBlock,
-		delayedBridge:   delayedBridge,
-		l1Reader:        l1Reader,
-		delayedMessages: make(map[uint64]*arbostypes.L1IncomingMessage),
+		fromBlock:     fromBlock,
+		delayedBridge: delayedBridge,
+		l1Reader:      l1Reader,
+		db:            db,
 	}
 }
 
 func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
-	if f.delayedMessages[index] != nil {
-		msg := f.delayedMessages[index]
-		delete(f.delayedMessages, index)
-		return msg, nil
+	msg, err := f.readDelayedMessage(index)
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return nil, err
+	}
+	if msg != nil && f.fromBlock >= msg.ParentChainBlockNumber {
+		return msg.Message, nil
 	}
 
 	currL1, err := f.l1Reader.BlockNumber(context.Background())
@@ -68,6 +90,7 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	// TODO: Make this configurable.
 	blocksToRead := uint64(100)
 
+	batch := f.db.NewBatch()
 	for startBlock <= endBlock && !hasFound {
 		from := big.NewInt(0).SetUint64(startBlock)
 		to := big.NewInt(0).SetUint64(startBlock + blocksToRead)
@@ -83,20 +106,71 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 			if seqNum == index {
 				hasFound = true
 			}
-			f.delayedMessages[seqNum] = msg.Message
+			err = f.storeDelayedMessage(batch, seqNum, *msg)
+			if err != nil {
+				return nil, err
+			}
 		}
-		startBlock = startBlock + blocksToRead
+		startBlock = startBlock + blocksToRead + 1
 	}
 
-	f.fromBlock = startBlock
+	if startBlock <= endBlock {
+		f.fromBlock = startBlock
+	} else {
+		f.fromBlock = endBlock + 1
+	}
+
+	err = storeCurrentL1Block(batch, f.fromBlock)
+	if err != nil {
+		return nil, err
+	}
+
+	err = batch.Write()
+	if err != nil {
+		return nil, err
+	}
 
 	if !hasFound {
 		return nil, fmt.Errorf("no message found for pos %d", index)
 	}
-	result := f.delayedMessages[index]
-	delete(f.delayedMessages, index)
 
-	return result, nil
+	result, err := f.readDelayedMessage(index)
+	if err != nil {
+		return nil, err
+	}
+	return result.Message, nil
+}
+
+func (f *DelayedMessageFetcher) reset(seqNum uint64) {
+	msg, err := f.readDelayedMessage(seqNum)
+	if err != nil {
+		log.Crit("failed to read delayed message", "err", err)
+		return
+	}
+	f.fromBlock = msg.ParentChainBlockNumber + 1
+}
+
+func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum uint64, msg DelayedInboxMessage) error {
+	key := dbKey(DelayedMessagePrefix, seqNum)
+	encodedMsg, err := rlp.EncodeToBytes(msg)
+	if err != nil {
+		return fmt.Errorf("failed to encode delayed message: %w", err)
+	}
+	return batch.Put(key, encodedMsg)
+}
+
+func (f *DelayedMessageFetcher) readDelayedMessage(seqNum uint64) (*DelayedInboxMessage, error) {
+	key := dbKey(DelayedMessagePrefix, seqNum)
+	encodedMsg, err := f.db.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get delayed message: %w", err)
+	}
+	var msg DelayedInboxMessage
+	err = rlp.DecodeBytes(encodedMsg, &msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode delayed message: %w", err)
+	}
+	return &msg, nil
 }
 
 type EspressoCaffNodeConfig struct {
@@ -141,12 +215,13 @@ type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
 	executionEngine  *gethexec.ExecutionEngine
-	delayedBridge    DelayedMessageFetcherInterface
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
 	delayedCount  uint64
 	db            ethdb.Database
+
+	delayedMessageFetcher DelayedMessageFetcherInterface
 }
 
 func NewEspressoCaffNode(
@@ -185,13 +260,15 @@ func NewEspressoCaffNode(
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 	)
 
+	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader.Client(), db)
+
 	return &EspressoCaffNode{
-		configFetcher:    configFetcher,
-		executionEngine:  execEngine,
-		delayedBridge:    NewDelayedMessageFetcher(delayedBridge, l1Reader.Client()),
-		espressoStreamer: espressoStreamer,
-		delayedCount:     1,
-		db:               db,
+		configFetcher:         configFetcher,
+		executionEngine:       execEngine,
+		delayedMessageFetcher: delayedMessageFetcher,
+		espressoStreamer:      espressoStreamer,
+		delayedCount:          1,
+		db:                    db,
 	}
 }
 
@@ -201,10 +278,14 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 		return nil, err
 	}
 
+	if messageWithMetadataAndPos == nil {
+		return nil, nil
+	}
+
 	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == n.delayedCount+1 {
 		// If this is delayed message, we need to get the message from L1
 		// and replace the message in the messageWithMetadataAndPos
-		message, err := n.delayedBridge.getDelayedMessage(n.delayedCount)
+		message, err := n.delayedMessageFetcher.getDelayedMessage(n.delayedCount)
 		if err != nil {
 			n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 			return nil, err
@@ -338,4 +419,34 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func storeCurrentL1Block(batch ethdb.Batch, fromBlock uint64) error {
+	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
+	if err != nil {
+		return fmt.Errorf("failed to encode next hotshot block: %w", err)
+	}
+
+	err = batch.Put([]byte(DelayedFetcherCurrentL1BlockKey), blockNumberBytes)
+	if err != nil {
+		return fmt.Errorf("failed to put next hotshot block: %w", err)
+	}
+
+	return nil
+}
+
+func readCurrentL1BlockFromDb(db ethdb.Database) (uint64, error) {
+	var blockNumber uint64
+	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentL1BlockKey))
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
+	}
+	if blockNumberBytes != nil {
+		err = rlp.DecodeBytes(blockNumberBytes, &blockNumber)
+		if err != nil {
+			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
+		}
+	}
+
+	return blockNumber, nil
 }
