@@ -45,6 +45,7 @@ type EspressoStreamerInterface interface {
 	Reset(currentMessagePos uint64, currentHostshotBlock uint64)
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
+	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 }
 
 type MessageWithMetadataAndPos struct {

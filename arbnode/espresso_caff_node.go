@@ -303,7 +303,28 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
-	n.espressoStreamer.Reset(currentBlockNum, n.configFetcher().NextHotshotBlock)
+	currentMessagePos, err := n.executionEngine.BlockNumberToMessageIndex(currentBlockNum)
+	if err != nil {
+		return fmt.Errorf("failed to convert block number to message index: %w", err)
+	}
+	nextHotshotBlock, err := n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+	if err != nil {
+		log.Crit("failed to read  next hotshot block", "err", err)
+		return nil
+	}
+
+	if nextHotshotBlock == 0 {
+		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
+		nextHotshotBlock = n.configFetcher().NextHotshotBlock
+		if nextHotshotBlock == 0 {
+			log.Crit("No next hotshot block found in database, and no config.CaffNodeConfig.NextHotshotBlock set")
+		}
+	}
+	// The reason we do the reset here is because database is only initialized after Caff node is initialized
+	// so if we want to read the current position from the database, we need to reset the streamer
+	// during the start of the espresso streamer and caff node
+	log.Debug("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
+	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
@@ -315,5 +336,6 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start node, error in createBlock: %w", err)
 	}
+
 	return nil
 }

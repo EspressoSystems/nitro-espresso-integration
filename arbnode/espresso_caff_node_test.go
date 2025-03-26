@@ -51,6 +51,10 @@ func (m *MockEspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotB
 	return nil
 }
 
+func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
+	return 0, nil
+}
+
 type MockDelayedMessageFetcher struct{}
 
 func (m *MockDelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
