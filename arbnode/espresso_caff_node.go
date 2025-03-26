@@ -354,7 +354,7 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 	}
 
 	if messageWithMetadataAndPos == nil {
-		return nil, nil
+		return nil, fmt.Errorf("espressoStreamer had no message to produce")
 	}
 
 	if n.nextDelayedCount > 0 && messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == n.nextDelayedCount {
@@ -467,7 +467,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
 	}
 	// This is +1 because the current block is the block after the last processed block
-	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
+	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64()
 	currentMessagePos, err := n.executionEngine.BlockNumberToMessageIndex(currentBlockNum)
 	if err != nil {
 		return fmt.Errorf("failed to convert block number to message index: %w", err)
