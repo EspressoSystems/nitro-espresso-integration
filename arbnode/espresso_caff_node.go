@@ -35,6 +35,7 @@ var (
 type DelayedMessageFetcherInterface interface {
 	getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error)
 	reset(seqNum uint64)
+  getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
 }
 
 type DelayedMessageFetcher struct {
@@ -63,6 +64,15 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *ethclient.
 		l1Reader:      l1Reader,
 		db:            db,
 	}
+}
+// getDelayedMessageCountAtBlock is a wrapper function for the delayedBridge.GetMessageCount function. This allows users of the DelayedMessageFetcher
+// to query for the message count at a block. 
+func (f *DelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error){
+  count, err := f.delayedBridge.GetMessageCount(nil, new(big.Int).SetUint64(blockNumber))
+  if err != nil{
+    return 0, err
+  }
+  return count, nil
 }
 
 func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
@@ -183,6 +193,9 @@ type EspressoCaffNodeConfig struct {
 	EspressoTEEVerifierAddr string        `koanf:"espresso-tee-verifier-addr"`
 	BatchPosterAddr         string        `koanf:"batch-poster-addr"`
 	RecordPerformance       bool          `koanf:"record-performance"`
+  WaitForFinalization     bool          `koanf:"wait-for-finalization"`
+  WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -195,18 +208,24 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	EspressoTEEVerifierAddr: "",
 	BatchPosterAddr:         "",
 	RecordPerformance:       false,
+  WaitForFinalization:     true,
+  WaitForConfirmations:    false,
+  RequiredBlockDepth:      6,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultEspressoCaffNodeConfig.Enable, "enable espresso caff node")
-	f.StringSlice(prefix+".hotshot-urls", DefaultEspressoCaffNodeConfig.HotShotUrls, "hotshot urls")
-	f.Uint64(prefix+".next-hotshot-block", DefaultEspressoCaffNodeConfig.NextHotshotBlock, "the hotshot block number from which the caff node will read")
+	f.Bool(prefix+".enable", DefaultEspressoCaffNodeConfig.Enable, "enable espresso Caff node")
+	f.StringSlice(prefix+".hotshot-urls", DefaultEspressoCaffNodeConfig.HotShotUrls, "Hotshot urls")
+	f.Uint64(prefix+".next-hotshot-block", DefaultEspressoCaffNodeConfig.NextHotshotBlock, "the Hotshot block number from which the Caff node will read")
 	f.Uint64(prefix+".namespace", DefaultEspressoCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
 	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
-	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the hotshot transactions")
-	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the caff node")
+	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the Hotshot transactions")
+	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the Caff node") 
+	f.Bool(prefix+".wait-for-finalization", DefaultEspressoCaffNodeConfig.WaitForFinalization, "Configures the Caff node to only produce blocks from delayed messages if they are finalized on the parent chain")
+	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
+  f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -218,10 +237,12 @@ type EspressoCaffNode struct {
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
-	delayedCount  uint64
+	nextDelayedCount  uint64
 	db            ethdb.Database
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
+
+  l1Reader  *headerreader.HeaderReader
 }
 
 func NewEspressoCaffNode(
@@ -267,11 +288,65 @@ func NewEspressoCaffNode(
 		executionEngine:       execEngine,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
-		delayedCount:          1,
+		nextDelayedCount:          1,
 		db:                    db,
+    l1Reader:              l1Reader,
 	}
 }
+// isDelayedMessageWithinSafetyTolerance determines if a delayed message given to it is within the configured safety tolerance of this Caff node
+// Parameters:
+//            message  - a Delayed message to check for compliance with the nodes safety tolerance strategy.
+// Return values:
+//            bool - representing if the delayed message is safe to add to this nodes internal state
+//            error - any error that occurrs as a result of a different function call is propegated to the caller. 
+// Semantics: 
+//            If the boolean return value is true, error will always be nil. if err is populated, the boolean will always be false.
+//            Any error calls to other functions makes it impossible to determine the safety of the message without retrying, therefore 
+//            the caller **MUST** assume error being non nil means that the message is unsafe to add to the nodes state.
+func (n *EspressoCaffNode) isDelayedMessageWithinSafetyTolerance(message *espressostreamer.MessageWithMetadataAndPos) (bool, error) {
+  var safeBlockNumber uint64
+  if n.configFetcher().WaitForFinalization{
+    // if we have configured to wait for finalizations, fetch the latest finalized block number.
+    blockNumber, err := n.l1Reader.LatestFinalizedBlockNr(nil)
+    safeBlockNumber = blockNumber
+    if err != nil{
+      log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
+      return false, err
+    }
 
+  } else if n.configFetcher().WaitForConfirmations {
+    // if we are waiting for block confirmations, get the latest header and subtract the required block depth.  
+    latestHeader, err := n.l1Reader.Client().HeaderByNumber(nil, nil)
+    if err != nil{
+      log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err) 
+      return false, err
+    }
+    safeBlockNumber = latestHeader.Number.Sub(latestHeader.Number, new(big.Int).SetUint64(n.configFetcher().RequiredBlockDepth)).Uint64()
+
+  } else {
+    // If we haven't configured a safety strategy, every delayed message is valid to include in the nodes state.
+    return true, nil
+  }
+  
+  //safeBlockNumber will be popluated from here onwards. Any code paths that don't set the variable, return from the function before they get here.
+  delayCount, err := n.delayedMessageFetcher.getDelayedMessageCountAtBlock(safeBlockNumber)
+  if err != nil{
+      log.Warn("Error getting the delayed message count while checking the delayed messages safety tolerance", "err", err) 
+      return false, err
+  }
+  if (message.MessageWithMeta.Message.Header.BlockNumber <= safeBlockNumber) && (message.MessageWithMeta.DelayedMessagesRead <= delayCount){
+    return true, nil
+  }
+  return false, nil
+
+}
+// nextMessage wraps the espressoStreamer.Next() method, to handle producing delayed messages by checking they are within the nodes safety tolerance.
+// Returns:
+//          - MessageWithMetadataAndPos: A message, delayed or normally sequenced, that is for the next position in the chain.
+//          - error: If any error is encountered during this function it is propegated to the caller.
+// Semantics:
+//           This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
+//           If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataAndPos, error) {
 	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
 	if err != nil {
@@ -282,16 +357,25 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 		return nil, nil
 	}
 
-	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == n.delayedCount+1 {
+	if n.nextDelayedCount > 0 && messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == n.nextDelayedCount {
 		// If this is delayed message, we need to get the message from L1
 		// and replace the message in the messageWithMetadataAndPos
-		message, err := n.delayedMessageFetcher.getDelayedMessage(n.delayedCount)
+		message, err := n.delayedMessageFetcher.getDelayedMessage(n.nextDelayedCount)
 		if err != nil {
 			n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 			return nil, err
 		}
-		n.delayedCount++
-		messageWithMetadataAndPos.MessageWithMeta.Message = message
+    messageWithMetadataAndPos.MessageWithMeta.Message = message
+    isDelayedMessageWithinSafetyTolerance, err := n.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
+    if err != nil{
+      n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+      return nil, err
+    }
+    if !isDelayedMessageWithinSafetyTolerance{
+      n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+      return nil, fmt.Errorf("Delayed message was not within safety tolerance parameters. The node needs to wait until it is.")
+    } 
+		n.nextDelayedCount++
 	}
 	return messageWithMetadataAndPos, nil
 }
@@ -350,6 +434,16 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 	blockCalcTime := time.Since(startTime)
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
+  
+  err = n.espressoStreamer.StoreHotshotBlock(n.db, messageWithMetadataAndPos.HotshotHeight)
+	if err != nil {
+		log.Error("Failed to store hotshot block", "err", err)
+		log.Debug("Resetting espresso streamer", "currentMessagePos",
+			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+			messageWithMetadataAndPos.HotshotHeight)
+		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		return false
+	}
 
 	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
@@ -362,16 +456,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 	}
 
 	n.espressoStreamer.RecordTimeDurationBetweenHotshotAndCurrentBlock(messageWithMetadataAndPos.HotshotHeight, time.Now())
-
-	err = n.espressoStreamer.StoreHotshotBlock(n.db, messageWithMetadataAndPos.HotshotHeight)
-	if err != nil {
-		log.Error("Failed to store hotshot block", "err", err)
-		log.Debug("Resetting espresso streamer", "currentMessagePos",
-			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			messageWithMetadataAndPos.HotshotHeight)
-		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
-		return false
-	}
 
 	return true
 }

@@ -60,6 +60,10 @@ type MockDelayedMessageFetcher struct{}
 func (m *MockDelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
 	return arbostypes.InvalidL1Message, nil
 }
+//This function isn't a proper implementation for the tests, but this gets the test to compile.
+func (M *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error){
+  return 1, nil 
+}
 
 func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
 
@@ -68,7 +72,7 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	caffNode := EspressoCaffNode{}
 	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3}
 	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
-	caffNode.delayedCount = 1
+	caffNode.nextDelayedCount = 1
 	msg1, err := caffNode.nextMessage()
 	require.NoError(t, err)
 
