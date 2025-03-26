@@ -20,15 +20,14 @@ RUN apt-get update && \
     socat \
     nfs-common \
     iproute2 \
-    gosu \
     procps && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # Create and set permissions for /home/user/.arbitrum
-RUN useradd -u 1002 -m -s /bin/bash enclave-user && \
-    usermod -aG 1000 enclave-user && \
-    mkdir -p /home/user/.arbitrum && \
-    chown -R user:user /home/user/.arbitrum
+RUN mkdir -p /home/user/.arbitrum && \
+    chown -R user:user /home/user
+
+USER user
 
 ENTRYPOINT ["/aws-nitro-entrypoint.sh"]

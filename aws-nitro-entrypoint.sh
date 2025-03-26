@@ -20,7 +20,21 @@ sleep 2
 echo "Mount NFS"
 mount -t nfs4 127.0.0.200:/ /home/user/.arbitrum
 
+PORT=8005
+echo "Starting tcp listener on port 8005 for INT signal"
+start_vsock_termination_server() {
+    socat VSOCK-LISTEN:$PORT,fork,keepalive SYSTEM:'
+        while read -r message; do
+            echo "Received shutdown"
+            pkill -INT -f "/usr/local/bin/nitro"
+            break
+        done
+    '
+}
+
+start_vsock_termination_server &
+
 # Start Nitro process
-exec gosu enclave-user:enclave-user /usr/local/bin/nitro \
-    --validation.wasm.enable-wasmroots-check=false \
-    --conf.file /config/poster_config.json
+exec /usr/local/bin/nitro \
+  --validation.wasm.enable-wasmroots-check=false \
+  --conf.file /config/poster_config.json 
