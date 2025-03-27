@@ -1103,7 +1103,7 @@ func (b *BatchPoster) encodeAddBatch(
 	var calldata []byte
 
 	var kzgBlobs []kzg4844.Blob
-	fullCalldata := make([]byte, 0)
+	var fullCalldata []byte
 	var err error
 	args = append(args, seqNum)
 	if use4844 {
@@ -1125,7 +1125,7 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, err
 		}
 
-		fullCalldata := append([]byte{}, method.ID...)
+		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	} else {
 		// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
@@ -1166,7 +1166,7 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, err
 		}
 
-		fullCalldata := append([]byte{}, method.ID...)
+		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	}
 
