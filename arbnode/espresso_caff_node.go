@@ -374,22 +374,27 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 		message, err := n.delayedMessageFetcher.getDelayedMessage(n.nextDelayedCount)
 		if err != nil {
 			log.Error("failed to get delayed message", "err", err)
-			n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+			n.reset(messageWithMetadataAndPos)
 			return nil, err
 		}
 		messageWithMetadataAndPos.MessageWithMeta.Message = message
 		isDelayedMessageWithinSafetyTolerance, err := n.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
 		if err != nil {
-			n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+			n.reset(messageWithMetadataAndPos)
 			return nil, err
 		}
 		if !isDelayedMessageWithinSafetyTolerance {
-			n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+			n.reset(messageWithMetadataAndPos)
 			return nil, fmt.Errorf("Delayed message was not within safety tolerance parameters. The node needs to wait until it is.")
 		}
 		n.nextDelayedCount++
 	}
 	return messageWithMetadataAndPos, nil
+}
+
+func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) {
+	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+	n.nextDelayedCount = messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 }
 
 func (n *EspressoCaffNode) createBlock() (returnValue bool) {
@@ -439,7 +444,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
-		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		n.reset(messageWithMetadataAndPos)
 		return false
 	}
 
@@ -453,7 +458,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
-		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		n.reset(messageWithMetadataAndPos)
 		return false
 	}
 
@@ -463,7 +468,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
 			messageWithMetadataAndPos.HotshotHeight)
-		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+		n.reset(messageWithMetadataAndPos)
 		return false
 	}
 
