@@ -60,9 +60,10 @@ type MockDelayedMessageFetcher struct{}
 func (m *MockDelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
 	return arbostypes.InvalidL1Message, nil
 }
-//This function isn't a proper implementation for the tests, but this gets the test to compile.
-func (M *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error){
-  return 1, nil 
+
+// This function isn't a proper implementation for the tests, but this gets the test to compile.
+func (m *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error) {
+	return 1, nil
 }
 
 func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
