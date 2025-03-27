@@ -1137,8 +1137,8 @@ func (b *BatchPoster) encodeAddBatch(
 		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
 		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
 
-		// Should we append DelayProof and remove after for attestation?
-		// Depends on future contract logic.
+		// Later append the delay proof if needed for getting the attestion quote.
+		// If not, only append at the end of the calldata as done below.
 
 		calldata, err := method.Inputs.Pack(args...)
 		if err != nil {
