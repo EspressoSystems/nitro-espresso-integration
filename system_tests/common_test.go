@@ -264,6 +264,8 @@ type NodeBuilder struct {
 	L1 *TestClient
 	L2 *TestClient
 	L3 *TestClient
+
+	useL1StackConfig bool // don't overwrite the L1 stack config when building
 }
 
 type NitroConfig struct {
@@ -420,7 +422,13 @@ func (b *NodeBuilder) CheckConfig(t *testing.T) {
 
 func (b *NodeBuilder) BuildL1(t *testing.T) {
 	b.L1 = NewTestClient(b.ctx)
-	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, b.l1StackConfig)
+
+	var l1StackConfig *node.Config
+	if b.useL1StackConfig {
+		l1StackConfig = b.l1StackConfig
+	}
+
+	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, l1StackConfig)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	b.addresses, b.initMessage = deployOnParentChain(
