@@ -19,7 +19,8 @@
 	url = https://github.com/OffchainLabs/wasmer.git
 [submodule "bold"]
 	path = bold
-	url = https://github.com/offchainlabs/bold.git
+	url = https://github.com/EspressoSystems/bold.git
+	branch = integration
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/EspressoSystems/nitro-contracts.git
