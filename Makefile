@@ -231,7 +231,7 @@ lint: .make/lint
 
 .PHONY: stylus-benchmarks
 stylus-benchmarks: $(stylus_benchmarks)
-	cargo test --manifest-path $< --release --features  benchmark_ -- --nocapture
+	cargo test --manifest-path $< --release --features benchmark benchmark_ -- --nocapture
 	@printf $(done)
 
 .PHONY: test-go
