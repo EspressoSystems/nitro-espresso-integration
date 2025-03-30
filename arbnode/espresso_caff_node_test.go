@@ -66,14 +66,17 @@ func (m *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber ui
 	return 1, nil
 }
 
-func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
+func (m *MockDelayedMessageFetcher) GetNextDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+	return messageWithMetadataAndPos, nil
+}
+
+func (m *MockDelayedMessageFetcher) reset(parentChainBlockNum uint64, seqNum uint64) {}
 
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
 	caffNode := EspressoCaffNode{}
 	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3}
 	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
-	caffNode.nextDelayedCount = 1
 	msg1, err := caffNode.nextMessage()
 	require.NoError(t, err)
 

@@ -13,7 +13,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -142,21 +141,6 @@ func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHa
 	return nil
 }
 
-func (s *EspressoStreamer) verifySignatureWithPosterAddress(signature []byte, userDataHash []byte) error {
-	pubKey, err := crypto.SigToPub(userDataHash, signature)
-	if err != nil {
-		return fmt.Errorf("failed to get pubkey from user data hash: %w", err)
-	}
-
-	address := crypto.PubkeyToAddress(*pubKey)
-
-	if address.Cmp(s.batchPosterAddr) != 0 {
-		return fmt.Errorf("signature is not valid for the batch poster address")
-	}
-
-	return nil
-}
-
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error) {
 	attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 	if err != nil {
@@ -173,8 +157,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	userDataHashArr := [32]byte(userDataHash)
 	err = s.verifyAttestationQuote(attestation, userDataHashArr)
 	if err != nil {
-	  log.Warn("failed to verify attestation quote", "err", err)
-	  return nil, err
+		log.Warn("failed to verify attestation quote", "err", err)
+		return nil, err
 	}
 
 	result := []*MessageWithMetadataAndPos{}

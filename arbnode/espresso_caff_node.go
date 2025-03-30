@@ -3,7 +3,6 @@ package arbnode
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
@@ -11,178 +10,17 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos"
-	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-var (
-	DelayedFetcherCurrentL1BlockKey = []byte("delayedFetcherCurrentL1Block")
-	// To not to mess with the existing schema, we use another prefix
-	DelayedMessagePrefix = []byte("x")
-)
-
-type DelayedMessageFetcherInterface interface {
-	getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error)
-	reset(seqNum uint64)
-	getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
-}
-
-type DelayedMessageFetcher struct {
-	fromBlock     uint64
-	delayedBridge *DelayedBridge
-	l1Reader      *ethclient.Client
-
-	db ethdb.Database
-}
-
-func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *ethclient.Client, db ethdb.Database) *DelayedMessageFetcher {
-	var fromBlock uint64
-	fromBlock, err := readCurrentL1BlockFromDb(db)
-	if err != nil {
-		log.Crit("failed to read l1 block from db", "err", err)
-		return nil
-	}
-
-	if fromBlock == 0 {
-		fromBlock = delayedBridge.fromBlock
-	}
-
-	return &DelayedMessageFetcher{
-		fromBlock:     fromBlock,
-		delayedBridge: delayedBridge,
-		l1Reader:      l1Reader,
-		db:            db,
-	}
-}
-
-// getDelayedMessageCountAtBlock is a wrapper function for the delayedBridge.GetMessageCount function. This allows users of the DelayedMessageFetcher
-// to query for the message count at a block.
-func (f *DelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error) {
-	count, err := f.delayedBridge.GetMessageCount(context.Background(), new(big.Int).SetUint64(blockNumber))
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
-	msg, err := f.readDelayedMessage(index)
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return nil, err
-	}
-	if msg != nil && f.fromBlock >= msg.ParentChainBlockNumber {
-		return msg.Message, nil
-	}
-
-	currL1, err := f.l1Reader.BlockNumber(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	if currL1 < f.fromBlock {
-		return nil, fmt.Errorf("l1 block number %d is less than from block %d", currL1, f.fromBlock)
-	}
-
-	startBlock := f.fromBlock
-	endBlock := currL1
-	hasFound := false
-
-	// This value is from the InboxReader default blocks-to-read.
-	// TODO: Make this configurable.
-	blocksToRead := uint64(100)
-
-	batch := f.db.NewBatch()
-	for startBlock <= endBlock && !hasFound {
-		from := big.NewInt(0).SetUint64(startBlock)
-		to := big.NewInt(0).SetUint64(startBlock + blocksToRead)
-		msgs, err := f.delayedBridge.LookupMessagesInRange(context.Background(), from, to, nil)
-		if err != nil {
-			return nil, err
-		}
-		for _, msg := range msgs {
-			seqNum, err := msg.Message.Header.SeqNum()
-			if err != nil {
-				return nil, err
-			}
-			if seqNum == index {
-				hasFound = true
-			}
-			err = f.storeDelayedMessage(batch, seqNum, *msg)
-			if err != nil {
-				return nil, err
-			}
-		}
-		startBlock = startBlock + blocksToRead + 1
-	}
-
-	if startBlock <= endBlock {
-		f.fromBlock = startBlock
-	} else {
-		f.fromBlock = endBlock + 1
-	}
-
-	err = storeCurrentL1Block(batch, f.fromBlock)
-	if err != nil {
-		return nil, err
-	}
-
-	err = batch.Write()
-	if err != nil {
-		return nil, err
-	}
-
-	if !hasFound {
-		return nil, fmt.Errorf("no message found for pos %d", index)
-	}
-
-	result, err := f.readDelayedMessage(index)
-	if err != nil {
-		return nil, err
-	}
-	return result.Message, nil
-}
-
-func (f *DelayedMessageFetcher) reset(seqNum uint64) {
-	msg, err := f.readDelayedMessage(seqNum)
-	if err != nil {
-		log.Crit("failed to read delayed message", "err", err)
-		return
-	}
-	f.fromBlock = msg.ParentChainBlockNumber + 1
-}
-
-func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum uint64, msg DelayedInboxMessage) error {
-	key := dbKey(DelayedMessagePrefix, seqNum)
-	encodedMsg, err := rlp.EncodeToBytes(msg)
-	if err != nil {
-		return fmt.Errorf("failed to encode delayed message: %w", err)
-	}
-	return batch.Put(key, encodedMsg)
-}
-
-func (f *DelayedMessageFetcher) readDelayedMessage(seqNum uint64) (*DelayedInboxMessage, error) {
-	key := dbKey(DelayedMessagePrefix, seqNum)
-	encodedMsg, err := f.db.Get(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get delayed message: %w", err)
-	}
-	var msg DelayedInboxMessage
-	err = rlp.DecodeBytes(encodedMsg, &msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode delayed message: %w", err)
-	}
-	return &msg, nil
-}
 
 type EspressoCaffNodeConfig struct {
 	Enable                  bool          `koanf:"enable"`
@@ -197,6 +35,7 @@ type EspressoCaffNodeConfig struct {
 	WaitForFinalization     bool          `koanf:"wait-for-finalization"`
 	WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
 	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
+	BlocksToRead            uint64        `koanf:"blocks-to-read"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -212,6 +51,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	WaitForFinalization:     true,
 	WaitForConfirmations:    false,
 	RequiredBlockDepth:      6,
+	BlocksToRead:            100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -227,6 +67,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".wait-for-finalization", DefaultEspressoCaffNodeConfig.WaitForFinalization, "Configures the Caff node to only produce blocks from delayed messages if they are finalized on the parent chain")
 	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
 	f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
+	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -237,9 +78,8 @@ type EspressoCaffNode struct {
 	executionEngine  *gethexec.ExecutionEngine
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
-	configFetcher    EspressoCaffNodeConfigFetcher
-	nextDelayedCount uint64
-	db               ethdb.Database
+	configFetcher EspressoCaffNodeConfigFetcher
+	db            ethdb.Database
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
@@ -253,6 +93,7 @@ func NewEspressoCaffNode(
 	l1Reader *headerreader.HeaderReader,
 	db ethdb.Database,
 	recordPerformance bool,
+	blocksToRead uint64,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -282,70 +123,17 @@ func NewEspressoCaffNode(
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 	)
 
-	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader.Client(), db)
+	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead, 1,
+		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
-		nextDelayedCount:      1,
 		db:                    db,
 		l1Reader:              l1Reader,
 	}
-}
-
-// isDelayedMessageWithinSafetyTolerance determines if a delayed message given to it is within the configured safety tolerance of this Caff node
-// Parameters:
-//
-//	message  - a Delayed message to check for compliance with the nodes safety tolerance strategy.
-//
-// Return values:
-//
-//	bool - representing if the delayed message is safe to add to this nodes internal state
-//	error - any error that occurrs as a result of a different function call is propegated to the caller.
-//
-// Semantics:
-//
-//	If the boolean return value is true, error will always be nil. if err is populated, the boolean will always be false.
-//	Any error calls to other functions makes it impossible to determine the safety of the message without retrying, therefore
-//	the caller **MUST** assume error being non nil means that the message is unsafe to add to the nodes state.
-func (n *EspressoCaffNode) isDelayedMessageWithinSafetyTolerance(message *espressostreamer.MessageWithMetadataAndPos) (bool, error) {
-	var safeBlockNumber uint64
-	if n.configFetcher().WaitForFinalization {
-		// if we have configured to wait for finalizations, fetch the latest finalized block number.
-		blockNumber, err := n.l1Reader.LatestFinalizedBlockNr(context.Background())
-		safeBlockNumber = blockNumber
-		if err != nil {
-			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
-			return false, err
-		}
-
-	} else if n.configFetcher().WaitForConfirmations {
-		// if we are waiting for block confirmations, get the latest header and subtract the required block depth.
-		latestHeader, err := n.l1Reader.Client().HeaderByNumber(context.Background(), nil)
-		if err != nil {
-			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
-			return false, err
-		}
-		safeBlockNumber = latestHeader.Number.Sub(latestHeader.Number, new(big.Int).SetUint64(n.configFetcher().RequiredBlockDepth)).Uint64()
-
-	} else {
-		// If we haven't configured a safety strategy, every delayed message is valid to include in the nodes state.
-		return true, nil
-	}
-
-	// safeBlockNumber will be popluated from here onwards. Any code paths that don't set the variable, return from the function before they get here.
-	delayCount, err := n.delayedMessageFetcher.getDelayedMessageCountAtBlock(safeBlockNumber)
-	if err != nil {
-		log.Warn("Error getting the delayed message count while checking the delayed messages safety tolerance", "err", err)
-		return false, err
-	}
-	if (message.MessageWithMeta.Message.Header.BlockNumber <= safeBlockNumber) && (message.MessageWithMeta.DelayedMessagesRead <= delayCount) {
-		return true, nil
-	}
-	return false, nil
-
 }
 
 // nextMessage wraps the espressoStreamer.Next() method, to handle producing delayed messages by checking they are within the nodes safety tolerance.
@@ -367,36 +155,26 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 		return nil, nil
 	}
 
-	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == n.nextDelayedCount+1 {
-		log.Info("Getting delayed message", "nextDelayedCount", n.nextDelayedCount)
-		// If this is delayed message, we need to get the message from L1
-		// and replace the message in the messageWithMetadataAndPos
-		message, err := n.delayedMessageFetcher.getDelayedMessage(n.nextDelayedCount)
-		if err != nil {
-			log.Error("failed to get delayed message", "err", err)
-			n.reset(messageWithMetadataAndPos)
-			return nil, err
-		}
-		messageWithMetadataAndPos.MessageWithMeta.Message = message
-		isDelayedMessageWithinSafetyTolerance, err := n.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
-		if err != nil {
-			n.reset(messageWithMetadataAndPos)
-			return nil, err
-		}
-		if !isDelayedMessageWithinSafetyTolerance {
-			n.reset(messageWithMetadataAndPos)
-			return nil, fmt.Errorf("Delayed message was not within safety tolerance parameters. The node needs to wait until it is.")
-		}
-		n.nextDelayedCount++
+	messageWithMetadataAndPos, err = n.delayedMessageFetcher.GetNextDelayedMessage(messageWithMetadataAndPos)
+	if err != nil {
+		log.Error("unable to get the next delayed message", "err", err)
+		n.reset(messageWithMetadataAndPos)
+		return nil, err
 	}
+
 	return messageWithMetadataAndPos, nil
 }
 
+/*
+Resets the espresso streamer to the given message and hotshot height.
+*/
 func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) {
 	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
-	n.nextDelayedCount = messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 }
 
+/*
+Creates a block from the next message in the queue.
+*/
 func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
@@ -508,6 +286,15 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	log.Debug("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
 	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
+	// Deserialize the current block from the database to get the parent chain block number
+	// and the delayed messages read. Note: the nonce in the header of the block contains the delayed messages read
+	header := types.DeserializeHeaderExtraInformation(n.executionEngine.Bc().CurrentHeader())
+	parentChainBlockNumber := header.L1BlockNumber
+	// Nonce of the previous block is the number of delayed messages read
+	// Check `NextDelayedMessageNumber` in execution node to confirm this
+	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
+	n.delayedMessageFetcher.reset(parentChainBlockNumber, delayedMessagesRead)
+
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()
 		if madeBlock {
@@ -520,34 +307,4 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-func storeCurrentL1Block(batch ethdb.Batch, fromBlock uint64) error {
-	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next hotshot block: %w", err)
-	}
-
-	err = batch.Put([]byte(DelayedFetcherCurrentL1BlockKey), blockNumberBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next hotshot block: %w", err)
-	}
-
-	return nil
-}
-
-func readCurrentL1BlockFromDb(db ethdb.Database) (uint64, error) {
-	var blockNumber uint64
-	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentL1BlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
-	}
-	if blockNumberBytes != nil {
-		err = rlp.DecodeBytes(blockNumberBytes, &blockNumber)
-		if err != nil {
-			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
-		}
-	}
-
-	return blockNumber, nil
 }

@@ -567,6 +567,7 @@ func createNodeImpl(
 				l1Reader,
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
+				config.EspressoCaffNode.BlocksToRead,
 			)
 
 			return &Node{
