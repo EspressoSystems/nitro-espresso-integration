@@ -155,7 +155,7 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 		return nil, nil
 	}
 
-	messageWithMetadataAndPos, err = n.delayedMessageFetcher.GetNextDelayedMessage(messageWithMetadataAndPos)
+	messageWithMetadataAndPos, err = n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
 	if err != nil {
 		log.Error("unable to get the next delayed message", "err", err)
 		n.reset(messageWithMetadataAndPos)

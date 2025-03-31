@@ -25,10 +25,9 @@ var (
 )
 
 type DelayedMessageFetcherInterface interface {
-	getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error)
 	reset(parentChainBlockNumber uint64, seqNum uint64)
 	getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
-	GetNextDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
+	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 }
 
 type DelayedMessageFetcher struct {
@@ -43,7 +42,15 @@ type DelayedMessageFetcher struct {
 	requiredBlockDepth   uint64
 }
 
-func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerreader.HeaderReader, db ethdb.Database, blocksToRead uint64, waitForFinalization bool, waitForConfirmations bool, requiredBlockDepth uint64) *DelayedMessageFetcher {
+func NewDelayedMessageFetcher(
+	delayedBridge *DelayedBridge,
+	l1Reader *headerreader.HeaderReader,
+	db ethdb.Database,
+	blocksToRead uint64,
+	waitForFinalization bool,
+	waitForConfirmations bool,
+	requiredBlockDepth uint64,
+) *DelayedMessageFetcher {
 	var fromBlock uint64
 	fromBlock, err := readCurrentL1BlockFromDb(db)
 	if err != nil {
@@ -177,7 +184,7 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	return result.Message, nil
 }
 
-func (f *DelayedMessageFetcher) GetNextDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 	if delayedMessagesRead > f.delayedCount+1 || delayedMessagesRead < f.delayedCount {
 		log.Error("messages are not processed in order", "delayedMessagesRead", delayedMessagesRead, "delayedCount", f.delayedCount)

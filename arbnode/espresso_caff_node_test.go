@@ -57,16 +57,12 @@ func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (ui
 
 type MockDelayedMessageFetcher struct{}
 
-func (m *MockDelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1IncomingMessage, error) {
-	return arbostypes.InvalidL1Message, nil
-}
-
 // This function isn't a proper implementation for the tests, but this gets the test to compile.
 func (m *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error) {
 	return 1, nil
 }
 
-func (m *MockDelayedMessageFetcher) GetNextDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	return messageWithMetadataAndPos, nil
 }
 
