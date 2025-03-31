@@ -54,14 +54,14 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerread
 	if fromBlock == 0 {
 		fromBlock = delayedBridge.fromBlock
 	}
-	nextDelayedCount, err := readDelayedMessageCount(db)
-	if err != nil {
+	delayedCount, err := readDelayedMessageCount(db)
+	if err != nil && !dbutil.IsErrNotFound(err) {
 		log.Crit("failed to read delayed message count from db", "err", err)
 		return nil
 	}
 
-	if nextDelayedCount == 0 {
-		nextDelayedCount = 1
+	if delayedCount == 0 {
+		delayedCount = 1
 	}
 
 	return &DelayedMessageFetcher{
@@ -70,7 +70,7 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerread
 		l1Reader:             l1Reader,
 		db:                   db,
 		blocksToRead:         blocksToRead,
-		delayedCount:         nextDelayedCount,
+		delayedCount:         delayedCount,
 		waitForFinalization:  waitForFinalization,
 		waitForConfirmations: waitForConfirmations,
 		requiredBlockDepth:   requiredBlockDepth,
@@ -333,7 +333,7 @@ func readCurrentL1BlockFromDb(db ethdb.Database) (uint64, error) {
 func readDelayedMessageCount(db ethdb.Database) (uint64, error) {
 	var delayedCount uint64
 	delayedCountBytes, err := db.Get([]byte(DelayedMessageCountKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil {
 		return 0, fmt.Errorf("failed to get delayed message count: %w", err)
 	}
 	err = rlp.DecodeBytes(delayedCountBytes, &delayedCount)
