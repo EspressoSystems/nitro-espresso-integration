@@ -18,9 +18,10 @@ import (
 )
 
 var (
-	DelayedFetcherCurrentL1BlockKey = []byte("delayedFetcherCurrentL1Block")
+	DelayedFetcherCurrentL1BlockKey = []byte("espressoDelayedFetcherCurrentL1Block")
+	DelayedMessageCountKey          = []byte("espressoDelayedMessageCount")
 	// To not to mess with the existing schema, we use another prefix
-	DelayedMessagePrefix = []byte("delayed")
+	DelayedMessagePrefix = []byte("espressoDelayed")
 )
 
 type DelayedMessageFetcherInterface interface {
@@ -36,13 +37,13 @@ type DelayedMessageFetcher struct {
 	l1Reader             *headerreader.HeaderReader
 	blocksToRead         uint64
 	db                   ethdb.Database
-	nextDelayedCount     uint64
+	delayedCount         uint64
 	waitForFinalization  bool
 	waitForConfirmations bool
 	requiredBlockDepth   uint64
 }
 
-func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerreader.HeaderReader, db ethdb.Database, blocksToRead uint64, nextDelayedCount uint64, waitForFinalization bool, waitForConfirmations bool, requiredBlockDepth uint64) *DelayedMessageFetcher {
+func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerreader.HeaderReader, db ethdb.Database, blocksToRead uint64, waitForFinalization bool, waitForConfirmations bool, requiredBlockDepth uint64) *DelayedMessageFetcher {
 	var fromBlock uint64
 	fromBlock, err := readCurrentL1BlockFromDb(db)
 	if err != nil {
@@ -53,6 +54,15 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerread
 	if fromBlock == 0 {
 		fromBlock = delayedBridge.fromBlock
 	}
+	nextDelayedCount, err := readDelayedMessageCount(db)
+	if err != nil {
+		log.Crit("failed to read delayed message count from db", "err", err)
+		return nil
+	}
+
+	if nextDelayedCount == 0 {
+		nextDelayedCount = 1
+	}
 
 	return &DelayedMessageFetcher{
 		fromBlock:            fromBlock,
@@ -60,7 +70,7 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerread
 		l1Reader:             l1Reader,
 		db:                   db,
 		blocksToRead:         blocksToRead,
-		nextDelayedCount:     nextDelayedCount,
+		delayedCount:         nextDelayedCount,
 		waitForFinalization:  waitForFinalization,
 		waitForConfirmations: waitForConfirmations,
 		requiredBlockDepth:   requiredBlockDepth,
@@ -69,7 +79,7 @@ func NewDelayedMessageFetcher(delayedBridge *DelayedBridge, l1Reader *headerread
 
 func (f *DelayedMessageFetcher) reset(parentChainBlockNumber uint64, seqNum uint64) {
 	f.fromBlock = parentChainBlockNumber
-	f.nextDelayedCount = seqNum
+	f.delayedCount = seqNum
 }
 
 // getDelayedMessageCountAtBlock is a wrapper function for the delayedBridge.GetMessageCount function. This allows users of the DelayedMessageFetcher
@@ -168,13 +178,18 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 }
 
 func (f *DelayedMessageFetcher) GetNextDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
-	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == f.nextDelayedCount+1 {
-		log.Debug("Getting delayed message", "nextDelayedCount", f.nextDelayedCount)
+	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
+	if delayedMessagesRead > f.delayedCount+1 || delayedMessagesRead < f.delayedCount {
+		log.Error("messages are not processed in order", "delayedMessagesRead", delayedMessagesRead, "delayedCount", f.delayedCount)
+		return nil, fmt.Errorf("delayed message count is greater than the delayed count")
+	}
+	if delayedMessagesRead == f.delayedCount+1 {
+		log.Debug("Getting delayed message", "delayedCount", f.delayedCount)
 		// If this is delayed message, we need to get the message from L1
 		// and replace the message in the messageWithMetadataAndPos
 		// Note: here we are using DelayedMessagesRead - 1 because that is the index of the delayed message
 		// that needs to be read
-		message, err := f.getDelayedMessage(f.nextDelayedCount)
+		message, err := f.getDelayedMessage(f.delayedCount)
 		if err != nil {
 			log.Error("failed to get delayed message", "err", err)
 			return messageWithMetadataAndPos, err
@@ -187,7 +202,11 @@ func (f *DelayedMessageFetcher) GetNextDelayedMessage(messageWithMetadataAndPos 
 		if !isDelayedMessageWithinSafetyTolerance {
 			return messageWithMetadataAndPos, fmt.Errorf("delayed message was not within safety tolerance parameters, the node needs to wait until it is")
 		}
-		f.nextDelayedCount++
+		f.delayedCount++
+		err = storeDelayedMessageCount(f.db, f.delayedCount)
+		if err != nil {
+			return messageWithMetadataAndPos, err
+		}
 	}
 
 	return messageWithMetadataAndPos, nil
@@ -309,4 +328,25 @@ func readCurrentL1BlockFromDb(db ethdb.Database) (uint64, error) {
 	}
 
 	return blockNumber, nil
+}
+
+func readDelayedMessageCount(db ethdb.Database) (uint64, error) {
+	var delayedCount uint64
+	delayedCountBytes, err := db.Get([]byte(DelayedMessageCountKey))
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return 0, fmt.Errorf("failed to get delayed message count: %w", err)
+	}
+	err = rlp.DecodeBytes(delayedCountBytes, &delayedCount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode delayed message count: %w", err)
+	}
+	return delayedCount, nil
+}
+
+func storeDelayedMessageCount(db ethdb.Database, count uint64) error {
+	countBytes, err := rlp.EncodeToBytes(count)
+	if err != nil {
+		return fmt.Errorf("failed to encode delayed message count: %w", err)
+	}
+	return db.Put([]byte(DelayedMessageCountKey), countBytes)
 }

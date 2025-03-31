@@ -123,7 +123,7 @@ func NewEspressoCaffNode(
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 	)
 
-	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead, 1,
+	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
 
 	return &EspressoCaffNode{
