@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -131,6 +132,18 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	return message, nil
 }
 
+func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userDataHash [32]byte) error {
+	publicKey, err := crypto.SigToPub(userDataHash[:], signature)
+	if err != nil {
+		return fmt.Errorf("failed to convert signature to public key: %w", err)
+	}
+	addr := crypto.PubkeyToAddress(*publicKey)
+	if addr != s.batchPosterAddr {
+		return fmt.Errorf("batch poster address does not match")
+	}
+	return nil
+}
+
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
 
@@ -142,7 +155,7 @@ func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHa
 }
 
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error) {
-	attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
+	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 	if err != nil {
 		log.Warn("failed to parse hotshot payload", "err", err)
 		return nil, err
@@ -155,10 +168,19 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	}
 
 	userDataHashArr := [32]byte(userDataHash)
-	err = s.verifyAttestationQuote(attestation, userDataHashArr)
-	if err != nil {
-		log.Warn("failed to verify attestation quote", "err", err)
-		return nil, err
+
+	var success bool
+	err = s.verifyBatchPosterSignature(signature, userDataHashArr)
+	if err == nil {
+		success = true
+	}
+
+	if !success {
+		err = s.verifyAttestationQuote(signature, userDataHashArr)
+		if err != nil {
+			log.Warn("failed to verify attestation quote", "err", err)
+			return nil, err
+		}
 	}
 
 	result := []*MessageWithMetadataAndPos{}
