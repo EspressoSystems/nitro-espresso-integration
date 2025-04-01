@@ -144,6 +144,13 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	return nil
 }
 
+func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+	if len(s.messageWithMetadataAndPos) == 0 {
+		return 0
+	}
+	return s.messageWithMetadataAndPos[0].HotshotHeight
+}
+
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
 
