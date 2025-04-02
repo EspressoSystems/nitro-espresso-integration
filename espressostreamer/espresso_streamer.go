@@ -145,8 +145,13 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 }
 
 func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
+
 	if len(s.messageWithMetadataAndPos) == 0 {
-		return 0
+		// This case means that the espresso streamer is empty and the earliest hotshot block number
+		// is the next hotshot block number.
+		return s.nextHotshotBlockNum
 	}
 	return s.messageWithMetadataAndPos[0].HotshotHeight
 }
