@@ -172,6 +172,9 @@ func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.Mes
 		log.Error("failed to read next hotshot block from db", "err", err)
 		return
 	}
+	log.Debug("Resetting espresso streamer", "currentMessagePos",
+		messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+		lastStoredHotshotBlock)
 	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, lastStoredHotshotBlock)
 }
 
@@ -197,9 +200,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 	statedb, err := n.executionEngine.Bc().StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
-		log.Debug("Resetting espresso streamer", "currentMessagePos",
-			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			messageWithMetadataAndPos.HotshotHeight)
 		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
@@ -220,9 +220,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
-		log.Debug("Resetting espresso streamer", "currentMessagePos",
-			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			messageWithMetadataAndPos.HotshotHeight)
 		n.reset(messageWithMetadataAndPos)
 		return false
 	}
@@ -231,25 +228,20 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
-	err = n.espressoStreamer.StoreHotshotBlock(n.db, hotshotBlockNumber)
+	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
-		log.Error("Failed to store hotshot block", "err", err)
-		log.Debug("Resetting espresso streamer", "currentMessagePos",
-			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			hotshotBlockNumber)
+		log.Error("Failed to append block", "err", err)
 		n.reset(messageWithMetadataAndPos)
 		return false
 	}
 
-	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
+	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	err = n.espressoStreamer.StoreHotshotBlock(n.db, hotshotBlockNumber)
 	if err != nil {
-		log.Error("Failed to append block", "err", err)
-		log.Debug("Resetting espresso streamer", "currentMessagePos",
-			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			hotshotBlockNumber)
-		n.reset(messageWithMetadataAndPos)
-		return false
+		log.Warn("Failed to store hotshot block. This should be an ephemeral error", "err", err)
+		// We have already created the block successfully, and not storing the hotshot block
+		// merely makes the node reset/restart to/from an earlier hotshot block, which doesn't
+		// affect its correctness.
 	}
 
 	n.espressoStreamer.RecordTimeDurationBetweenHotshotAndCurrentBlock(messageWithMetadataAndPos.HotshotHeight, time.Now())
