@@ -6,10 +6,11 @@ import (
 	"context"
 	"time"
 
+	solimpl "github.com/EspressoSystems/bold/chain-abstraction/sol-implementation"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	solimpl "github.com/offchainlabs/bold/chain-abstraction/sol-implementation"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 )
 

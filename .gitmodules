@@ -17,10 +17,6 @@
 [submodule "arbitrator/tools/wasmer"]
 	path = arbitrator/tools/wasmer
 	url = https://github.com/OffchainLabs/wasmer.git
-[submodule "bold"]
-	path = bold
-	url = https://github.com/EspressoSystems/bold.git
-	branch = integration
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/EspressoSystems/nitro-contracts.git
@@ -40,3 +36,7 @@
 [submodule "nitro-testnode"]
 	path = nitro-testnode
 	url = https://github.com/EspressoSystems/nitro-testnode
+[submodule "bold"]
+	path = bold
+	url = https://github.com/EspressoSystems/bold.git
+	branch = integration

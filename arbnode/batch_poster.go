@@ -34,9 +34,9 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	"github.com/EspressoSystems/bold/solgen/go/bridgegen"
 	hotshotClient "github.com/EspressoSystems/espresso-sequencer-go/client"
 	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"

@@ -22,6 +22,10 @@ import (
 	"testing"
 	"time"
 
+	boldMocksgen "github.com/EspressoSystems/bold/solgen/go/mocksgen"
+	"github.com/EspressoSystems/bold/solgen/go/rollupgen"
+	"github.com/EspressoSystems/bold/testing/setup"
+	butil "github.com/EspressoSystems/bold/util"
 	"github.com/redis/go-redis/v9"
 
 	"github.com/ethereum/go-ethereum"
@@ -51,10 +55,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	boldMocksgen "github.com/offchainlabs/bold/solgen/go/mocksgen"
-	"github.com/offchainlabs/bold/solgen/go/rollupgen"
-	"github.com/offchainlabs/bold/testing/setup"
-	butil "github.com/offchainlabs/bold/util"
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"

@@ -11,11 +11,12 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/EspressoSystems/bold/solgen/go/bridgegen"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/util/headerreader"
 )

@@ -1,5 +1,5 @@
 // Copyright 2023, Offchain Labs, Inc.
-// For license information, see https://github.com/offchainlabs/bold/blob/main/LICENSE
+// For license information, see https://github.com/EspressoSystems/bold/blob/main/LICENSE
 
 //go:build challengetest && !race
 
@@ -30,14 +30,14 @@ import (
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/validator/valnode"
 
-	protocol "github.com/offchainlabs/bold/chain-abstraction"
-	"github.com/offchainlabs/bold/containers/option"
-	l2stateprovider "github.com/offchainlabs/bold/layer2-state-provider"
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
-	"github.com/offchainlabs/bold/solgen/go/mocksgen"
-	prefixproofs "github.com/offchainlabs/bold/state-commitments/prefix-proofs"
-	mockmanager "github.com/offchainlabs/bold/testing/mocks/state-provider"
-	"github.com/offchainlabs/bold/testing/setup"
+	protocol "github.com/EspressoSystems/bold/chain-abstraction"
+	"github.com/EspressoSystems/bold/containers/option"
+	l2stateprovider "github.com/EspressoSystems/bold/layer2-state-provider"
+	"github.com/EspressoSystems/bold/solgen/go/bridgegen"
+	"github.com/EspressoSystems/bold/solgen/go/mocksgen"
+	prefixproofs "github.com/EspressoSystems/bold/state-commitments/prefix-proofs"
+	mockmanager "github.com/EspressoSystems/bold/testing/mocks/state-provider"
+	"github.com/EspressoSystems/bold/testing/setup"
 )
 
 func TestChallengeProtocolBOLD_Bisections(t *testing.T) {
