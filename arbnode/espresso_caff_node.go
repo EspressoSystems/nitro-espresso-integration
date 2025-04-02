@@ -158,7 +158,7 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 	messageWithMetadataAndPos, err = n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
 	if err != nil {
 		log.Error("unable to get the next delayed message", "err", err)
-		n.reset(messageWithMetadataAndPos)
+		n.reset(messageWithMetadataAndPos.Pos)
 		return nil, err
 	}
 
@@ -166,16 +166,16 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 }
 
 // Resets the espresso streamer to the given message position and the last committed hotshot block.
-func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) {
+func (n *EspressoCaffNode) reset(pos uint64) {
 	lastStoredHotshotBlock, err := n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
 	if err != nil {
 		log.Error("failed to read next hotshot block from db", "err", err)
 		return
 	}
 	log.Debug("Resetting espresso streamer", "currentMessagePos",
-		messageWithMetadataAndPos.Pos, "currentHostshotBlock",
+		pos, "currentHostshotBlock",
 		lastStoredHotshotBlock)
-	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, lastStoredHotshotBlock)
+	n.espressoStreamer.Reset(pos, lastStoredHotshotBlock)
 }
 
 // Creates a block from the next message in the queue.
@@ -220,7 +220,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
-		n.reset(messageWithMetadataAndPos)
+		n.reset(messageWithMetadataAndPos.Pos)
 		return false
 	}
 
@@ -231,7 +231,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
-		n.reset(messageWithMetadataAndPos)
+		n.reset(messageWithMetadataAndPos.Pos)
 		return false
 	}
 
