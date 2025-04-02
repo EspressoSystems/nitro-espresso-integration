@@ -20,6 +20,10 @@ type MockEspressoStreamer struct {
 	delayedPos uint64
 }
 
+func (m *MockEspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+	return m.currHotShot
+}
+
 func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 	return nil
 }
@@ -42,7 +46,10 @@ func (m *MockEspressoStreamer) Next() (*espressostreamer.MessageWithMetadataAndP
 	return &result, nil
 }
 
-func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {}
+func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
+	m.currrPos = currentMessagePos
+	m.currHotShot = currentHostshotBlock
+}
 
 func (m *MockEspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time) {
 }

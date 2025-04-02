@@ -165,16 +165,17 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 	return messageWithMetadataAndPos, nil
 }
 
-/*
-Resets the espresso streamer to the given message and hotshot height.
-*/
+// Resets the espresso streamer to the given message position and the last committed hotshot block.
 func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) {
-	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
+	lastStoredHotshotBlock, err := n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+	if err != nil {
+		log.Error("failed to read next hotshot block from db", "err", err)
+		return
+	}
+	n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, lastStoredHotshotBlock)
 }
 
-/*
-Creates a block from the next message in the queue.
-*/
+// Creates a block from the next message in the queue.
 func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
@@ -230,12 +231,13 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	err = n.espressoStreamer.StoreHotshotBlock(n.db, messageWithMetadataAndPos.HotshotHeight)
+	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	err = n.espressoStreamer.StoreHotshotBlock(n.db, hotshotBlockNumber)
 	if err != nil {
 		log.Error("Failed to store hotshot block", "err", err)
 		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			messageWithMetadataAndPos.HotshotHeight)
+			hotshotBlockNumber)
 		n.reset(messageWithMetadataAndPos)
 		return false
 	}
@@ -245,7 +247,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 		log.Error("Failed to append block", "err", err)
 		log.Debug("Resetting espresso streamer", "currentMessagePos",
 			messageWithMetadataAndPos.Pos, "currentHostshotBlock",
-			messageWithMetadataAndPos.HotshotHeight)
+			hotshotBlockNumber)
 		n.reset(messageWithMetadataAndPos)
 		return false
 	}

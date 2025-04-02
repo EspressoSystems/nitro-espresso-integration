@@ -46,6 +46,7 @@ type EspressoStreamerInterface interface {
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
+	GetCurrentEarliestHotShotBlockNumber() uint64
 }
 
 type MessageWithMetadataAndPos struct {
