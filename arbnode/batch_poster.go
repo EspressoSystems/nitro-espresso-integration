@@ -46,6 +46,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
@@ -127,6 +128,8 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+
+	espressoStreamer *espressostreamer.EspressoStreamer
 }
 
 type l1BlockBound int
@@ -1134,6 +1137,12 @@ func (b *BatchPoster) encodeAddBatch(
 		if !ok {
 			return nil, nil, errors.New("failed to find add batch method")
 		}
+
+		hotshotBlockNumber := new(big.Int).SetUint64(0)
+		if b.espressoStreamer != nil {
+			earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+			hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
+		}
 		calldata, err = method.Inputs.Pack(
 			seqNum,
 			l2MessageData,
@@ -1141,13 +1150,14 @@ func (b *BatchPoster) encodeAddBatch(
 			b.config().gasRefunder,
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
+			hotshotBlockNumber,
 		)
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata without attestation quote: %w", err)
 		}
 
-		attestationQuote, err := b.streamer.getAttestationQuote(calldata)
+		signature, err := b.streamer.EspressoKeyManager.SignBatch(calldata)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
 		}
@@ -1158,6 +1168,27 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, errors.New("failed to find add batch method")
 		}
 
+		bytesType, err := abi.NewType("bytes", "", nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create bytes type: %w", err)
+		}
+		uint256Type, err := abi.NewType("uint256", "", nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create uint256 type: %w", err)
+		}
+
+		hotshotNumberAndSignature, err := abi.Arguments{
+			{Type: uint256Type},
+			{Type: bytesType},
+		}.Pack(
+			hotshotBlockNumber,
+			signature,
+		)
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack hotshot number and signature: %w", err)
+		}
+
 		calldata, err = method.Inputs.Pack(
 			seqNum,
 			l2MessageData,
@@ -1165,7 +1196,7 @@ func (b *BatchPoster) encodeAddBatch(
 			b.config().gasRefunder,
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
-			attestationQuote,
+			hotshotNumberAndSignature,
 		)
 
 		if err != nil {
