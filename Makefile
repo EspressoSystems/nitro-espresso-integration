@@ -166,9 +166,8 @@ build-espresso-crypto-lib: $(espresso_crypto_lib)
 
 $(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
 	mkdir -p `dirname $(espresso_crypto_lib)`
-	mkdir -p target/lib
 	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
-	install -D $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.a $@
+	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.a $@
 
 .PHONY: push
 push: lint test-go .make/fmt
