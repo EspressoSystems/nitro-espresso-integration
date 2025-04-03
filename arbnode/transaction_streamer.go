@@ -26,6 +26,10 @@ import (
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
+	"github.com/hf/nitrite"
+	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -1848,4 +1852,43 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 	}
 
 	return attestationQuote, nil
+}
+
+/**
+ * TODO
+ */
+func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error) {
+
+	sess, err := nsm.OpenDefaultSession()
+	if err != nil {
+		return []byte{}, nil
+	}
+	defer sess.Close()
+
+	res, err := sess.Send(&request.Attestation{
+		PublicKey: pubKey,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send attestation request: %v", err)
+	}
+
+	if res.Error != "" {
+		return nil, fmt.Errorf("NSM returned error: %s", res.Error)
+	}
+
+	if res.Attestation == nil || res.Attestation.Document == nil {
+		return nil, fmt.Errorf("no attestation document returned")
+	}
+
+	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify attestation")
+	}
+
+	attestationBytes, err := json.Marshal(attestation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal attestation")
+	}
+	return attestationBytes, nil
 }
