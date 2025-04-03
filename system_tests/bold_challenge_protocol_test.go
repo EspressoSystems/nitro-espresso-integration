@@ -690,7 +690,6 @@ func deployContractsOnly(
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
-		espressoTEEVerifierAddress,
 		challengetesting.WithLayerZeroHeights(&protocol.LayerZeroHeights{
 			BlockChallengeHeight:     protocol.Height(blockChallengeLeafHeight),
 			BigStepChallengeHeight:   protocol.Height(bigStepChallengeLeafHeight),
@@ -699,7 +698,10 @@ func deployContractsOnly(
 
 		challengetesting.WithNumBigStepLevels(uint8(3)),       // TODO: Hardcoded.
 		challengetesting.WithConfirmPeriodBlocks(uint64(120)), // TODO: Hardcoded.
+
 	)
+
+	cfg.EspressoTEEVerifier = espressoTEEVerifierAddress
 	config, err := json.Marshal(chaininfo.ArbitrumDevTestChainConfig())
 	Require(t, err)
 	cfg.ChainConfig = string(config)
