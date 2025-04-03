@@ -1082,55 +1082,32 @@ func (b *BatchPoster) encodeAddBatch(
 	var methodName string
 	if use4844 {
 		if delayProof != nil {
-			// Not yet supported by nitro-contracts version
 			methodName = sequencerBatchPostWithBlobsDelayProofMethodName
 		} else {
 			methodName = sequencerBatchPostWithBlobsMethodName
 		}
-		// NO OLD SEQUENCER BATCH METHOD NAME FOR DELAY PROOF
 	} else if delayProof != nil {
-		// Not yet supported by nitro-contracts version
 		methodName = sequencerBatchPostDelayProofMethodName
 	} else {
-		methodName = oldSequencerBatchPostMethodName
+		methodName = newSequencerBatchPostMethodName
 	}
 	method, ok := b.seqInboxABI.Methods[methodName]
 	if !ok {
 		return nil, nil, errors.New("failed to find add batch method")
 	}
 	var args []any
-
-	var calldata []byte
-
 	var kzgBlobs []kzg4844.Blob
 	var fullCalldata []byte
 	var err error
-	args = append(args, seqNum)
-	if use4844 {
-		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
+	if methodName == newSequencerBatchPostMethodName {
+		log.Info("Coming inside the newSequencerBatchPostMethodName")
+		method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostMethodName]
+		if !ok {
+			return nil, nil, errors.New("failed to find add batch method")
 		}
-		args = append(args, new(big.Int).SetUint64(delayedMsg))
-		args = append(args, b.config().gasRefunder)
-		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-
-		if delayProof != nil {
-			args = append(args, delayProof)
-		}
-
-		calldata, err = method.Inputs.Pack(args...)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		fullCalldata = append([]byte{}, method.ID...)
-		fullCalldata = append(fullCalldata, calldata...)
-	} else {
 		// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
 		// This will allow us to get the attestation quote on the hash of the data
-
+		args = append(args, seqNum)
 		args = append(args, l2MessageData)
 		args = append(args, new(big.Int).SetUint64(delayedMsg))
 		args = append(args, b.config().gasRefunder)
@@ -1157,15 +1134,38 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 		args = append(args, attestationQuote)
 
-		if delayProof != nil {
-			args = append(args, delayProof)
-		}
 		calldata, err = method.Inputs.Pack(args...)
 
 		if err != nil {
 			return nil, nil, err
 		}
 
+		fullCalldata = append([]byte{}, method.ID...)
+		fullCalldata = append(fullCalldata, calldata...)
+
+	} else {
+		log.Info("Coming inside the oldSequencerBatchPostMethodName", "methodName", methodName)
+		args = append(args, seqNum)
+		if use4844 {
+			kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
+			}
+		} else {
+			// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
+			args = append(args, l2MessageData)
+		}
+		args = append(args, new(big.Int).SetUint64(delayedMsg))
+		args = append(args, b.config().gasRefunder)
+		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
+		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+		if delayProof != nil {
+			args = append(args, delayProof)
+		}
+		calldata, err := method.Inputs.Pack(args...)
+		if err != nil {
+			return nil, nil, err
+		}
 		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	}
