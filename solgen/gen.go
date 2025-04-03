@@ -82,8 +82,14 @@ func main() {
 		log.Fatal(err)
 	}
 
+	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "espresso-tee-contracts", "*", "*.sol", "*.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
+	filePaths = append(filePaths, filePathsEspressoTeeContracts...)
 
 	modules := make(map[string]*moduleInfo)
 
@@ -97,6 +103,12 @@ func main() {
 		_, module := filepath.Split(dir[:len(dir)-1])
 		module = strings.ReplaceAll(module, "-", "_")
 		module += "gen"
+
+		if strings.Contains(file, "TEEVerifier") {
+			fmt.Printf("dir: %v\n", dir)
+			// override the module name for espresso contracts
+			module = "espressogen"
+		}
 
 		name := file[:len(file)-5]
 

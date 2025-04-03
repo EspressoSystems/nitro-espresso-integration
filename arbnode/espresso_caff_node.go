@@ -17,7 +17,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -104,7 +104,7 @@ func NewEspressoCaffNode(
 		return nil
 	}
 
-	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+	espressoTEEVerifierCaller, err := espressogen.NewIEspressoSGXTEEVerifier(
 		common.HexToAddress(configFetcher().EspressoTEEVerifierAddr),
 		l1Reader.Client())
 

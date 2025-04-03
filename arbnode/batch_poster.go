@@ -49,7 +49,7 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
@@ -422,13 +422,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if opts.Config().EspressoTeeVerifierAddress != "" {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
 		// TODO: remove this once we have a real espresso verifier
-		espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
+		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
 			espressoTeeVerifierAddress,
 			opts.L1Reader.Client())
 		if err != nil {
 			return nil, err
 		}
-		verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
+		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 	}
 
@@ -1139,11 +1139,21 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 
 		hotshotBlockNumber := new(big.Int).SetUint64(0)
+		// Remove this condition once we have get an espresso streamer
 		if b.espressoStreamer != nil {
 			earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 			hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
 		}
-		calldata, err = method.Inputs.Pack(
+
+		uint256Type, err := abi.NewType("uint256", "", nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create uint256 type: %w", err)
+		}
+
+		arguments := method.Inputs
+		arguments = append(arguments, abi.Argument{Type: uint256Type})
+
+		calldata, err = arguments.Pack(
 			seqNum,
 			l2MessageData,
 			new(big.Int).SetUint64(delayedMsg),
@@ -1154,39 +1164,34 @@ func (b *BatchPoster) encodeAddBatch(
 		)
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack calldata without attestation quote: %w", err)
+			return nil, nil, fmt.Errorf("failed to pack calldata without hotshot number: %w", err)
 		}
 
 		signature, err := b.streamer.EspressoKeyManager.SignBatch(calldata)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
-		}
-
-		//  construct the calldata with attestation quote
-		method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
-		if !ok {
-			return nil, nil, errors.New("failed to find add batch method")
+			return nil, nil, fmt.Errorf("failed to sign the calldata: %w", err)
 		}
 
 		bytesType, err := abi.NewType("bytes", "", nil)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create bytes type: %w", err)
 		}
-		uint256Type, err := abi.NewType("uint256", "", nil)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create uint256 type: %w", err)
-		}
 
 		hotshotNumberAndSignature, err := abi.Arguments{
 			{Type: uint256Type},
 			{Type: bytesType},
-		}.Pack(
-			hotshotBlockNumber,
-			signature,
-		)
+		}.Pack(hotshotBlockNumber, signature)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack signature: %w", err)
+		}
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack hotshot number and signature: %w", err)
+			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
+		}
+
+		method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
+		if !ok {
+			return nil, nil, errors.New("failed to find add batch method")
 		}
 
 		calldata, err = method.Inputs.Pack(
@@ -1200,8 +1205,9 @@ func (b *BatchPoster) encodeAddBatch(
 		)
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack calldata with attestation quote: %w", err)
+			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
 		}
+
 		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
 	}

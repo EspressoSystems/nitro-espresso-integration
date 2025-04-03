@@ -20,6 +20,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -30,7 +31,7 @@ const NextHotshotBlockKey = "nextHotshotBlock"
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
 
 type EspressoTEEVerifierInterface interface {
-	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) error
+	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (espressogen.EnclaveReport, error)
 }
 
 type EspressoClientInterface interface {
@@ -160,7 +161,7 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
 
-	err := s.espressoTEEVerifierCaller.Verify(&bind.CallOpts{}, attestation, userDataHash)
+	_, err := s.espressoTEEVerifierCaller.Verify(&bind.CallOpts{}, attestation, userDataHash)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}

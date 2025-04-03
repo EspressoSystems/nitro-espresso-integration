@@ -28,6 +28,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbstate"
 	"github.com/offchainlabs/nitro/solgen/go/challengegen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/yulgen"
@@ -208,7 +209,7 @@ func setupSequencerInboxStub(ctx context.Context, t *testing.T, l1Info *Blockcha
 	}
 
 	//  Deploy EspressoTEEVerifier Mock
-	espressoTEEVerifierAddr, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&txOpts, l1Client)
+	espressoTEEVerifierAddr, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&txOpts, l1Client)
 	Require(t, err)
 	_, err = EnsureTxSucceeded(ctx, l1Client, tx)
 	Require(t, err)
