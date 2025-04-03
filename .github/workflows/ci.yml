@@ -64,7 +64,19 @@ jobs:
           echo
 
       - name: Install dependencies
-        run: sudo apt update && sudo apt install -y wabt gotestsum
+        run: >
+          sudo apt update && sudo apt install -y wabt
+          build-essential bison golang clang make
+
+      - name: Install cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: "3.31.6"
+
+      - name: Install latest gotestsum
+        uses: autero1/action-gotestsum@v2.0.0
+        with:
+          gotestsum_version: v1.12.0
 
       - name: Setup nodejs
         uses: actions/setup-node@v3
@@ -107,7 +119,7 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
-        
+
       - name: Install cbindgen
         run: cargo install --force cbindgen
 
