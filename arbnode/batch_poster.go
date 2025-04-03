@@ -348,6 +348,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
 	ResubmitEspressoTxDeadline:     10 * time.Second,
+	EspressoTeeType:                "SGX",
 }
 
 type BatchPosterOpts struct {

@@ -24,6 +24,7 @@ type EspressoKeyManagerInterface interface {
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
+	TeeType() TEE
 }
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
@@ -43,7 +44,8 @@ func NewEspressoTEEVerifier(contract *mocksgen.EspressoTEEVerifierMock, l1Client
 }
 
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) error {
-	tx, err := e.contract.RegisterSigner(opts, attestation, data, teeType)
+	// TODO: Make sure contracts support teeType Nitro
+	tx, err := e.contract.RegisterSigner(opts, attestation, data, uint8(SGX))
 	if err != nil {
 		return err
 	}
@@ -123,7 +125,8 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType))
+	// TODO: Make sure contracts support teeType Nitro
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(SGX))
 	if err != nil {
 		return false, err
 	}
@@ -157,13 +160,16 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 			return err
 		}
 
+		// TODO: Handle if attestation bytes are empty
 		var res nitrite.Result
 		err = json.Unmarshal(attestation, &res)
 		if err != nil {
-			return err
+			attestation = []byte{}
+			data = crypto.PubkeyToAddress(*k.pubKey).Bytes()
+		} else {
+			attestation = res.COSESign1
+			data = res.Signature
 		}
-		attestation = res.COSESign1
-		data = res.Signature
 	}
 
 	err := k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType))
@@ -185,6 +191,10 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 
 func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
 	return k.pubKey
+}
+
+func (k *EspressoKeyManager) TeeType() TEE {
+	return k.teeType
 }
 
 func (k *EspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) {
