@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/EspressoSystems/bold/solgen/go/bridgegen"
+	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

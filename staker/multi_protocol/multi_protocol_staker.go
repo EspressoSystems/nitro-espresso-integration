@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/EspressoSystems/bold/solgen/go/bridgegen"
-	boldrollup "github.com/EspressoSystems/bold/solgen/go/rollupgen"
+	"github.com/offchainlabs/bold/solgen/go/bridgegen"
+	boldrollup "github.com/offchainlabs/bold/solgen/go/rollupgen"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

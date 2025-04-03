@@ -6,7 +6,7 @@ replace github.com/VictoriaMetrics/fastcache => ./fastcache
 
 replace github.com/ethereum/go-ethereum => ./go-ethereum
 
-replace github.com/EspressoSystems/bold => ./bold
+replace github.com/offchainlabs/bold => ./bold
 
 require (
 	cloud.google.com/go/storage v1.43.0
@@ -45,7 +45,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/miguelmota/go-ethereum-hdwallet v0.1.2
 	github.com/mitchellh/mapstructure v1.4.1
-	github.com/EspressoSystems/bold v0.0.0-00010101000000-000000000000
+	github.com/offchainlabs/bold v0.0.0-00010101000000-000000000000
 	github.com/pkg/errors v0.9.1
 	github.com/r3labs/diff/v3 v3.0.1
 	github.com/redis/go-redis/v9 v9.6.1
