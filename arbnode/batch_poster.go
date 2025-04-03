@@ -185,6 +185,7 @@ type BatchPosterConfig struct {
 	l1BlockBound                   l1BlockBound
 	// Espresso specific flags
 	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
+	EspressoTeeType             string        `koanf:"espresso-tee-type"`
 	LightClientAddress          string        `koanf:"light-client-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
@@ -312,6 +313,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
+	EspressoTeeType:                "SGX",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -428,7 +430,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
-		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
+		var teeType TEE
+		if opts.Config().EspressoTeeType == "SGX" {
+			teeType = SGX
+		} else {
+			teeType = NITRO
+		}
+		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts, teeType)
 	}
 
 	b := &BatchPoster{
