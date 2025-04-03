@@ -1809,7 +1809,13 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := s.EspressoKeyManager.Register(s.getAttestationQuote)
+		var err error
+		if s.EspressoKeyManager.TeeType() == SGX {
+			err = s.EspressoKeyManager.Register(s.getAttestationQuote)
+		} else {
+			err = s.EspressoKeyManager.Register(s.getNitroAttestation)
+		}
+
 		if err != nil {
 			log.Error("failed to register espresso key manager", "err", err)
 			return err
@@ -1869,7 +1875,10 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 }
 
 /**
- * TODO
+ * This function gets the attestation document for AWS Nitro Enclaves
+ * We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
+ * After we retrieve, we verify the attestation, where we retrieve the result
+ * Which will contain the complete attestation which we serialize for further processing
  */
 func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error) {
 
