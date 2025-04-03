@@ -1167,9 +1167,12 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to pack calldata without hotshot number: %w", err)
 		}
 
-		signature, err := b.streamer.EspressoKeyManager.SignBatch(calldata)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to sign the calldata: %w", err)
+		var signature []byte
+		if b.streamer.EspressoKeyManager != nil {
+			signature, err = b.streamer.EspressoKeyManager.SignBatch(calldata)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to sign the calldata: %w", err)
+			}
 		}
 
 		bytesType, err := abi.NewType("bytes", "", nil)
