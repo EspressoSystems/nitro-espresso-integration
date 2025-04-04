@@ -29,6 +29,10 @@ func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType
 	return args.Bool(0), nil
 }
 
+func (m *mockEspressoTEEVerifier) Verify(opts *bind.TransactOpts, userDataHash []byte, reportDataHash [32]byte) error {
+  panic("not implemented")
+}
+
 func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 
