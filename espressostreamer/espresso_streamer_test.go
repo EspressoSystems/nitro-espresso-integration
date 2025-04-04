@@ -6,10 +6,12 @@ import (
 	"errors"
 	"testing"
 	"time"
+  "encoding/json"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	"github.com/EspressoSystems/espresso-sequencer-go/types"
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
+	"github.com/EspressoSystems/espresso-network-go/types"
+	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
+  espressoCommon "github.com/EspressoSystems/espresso-network-go/types/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -175,6 +177,26 @@ func (m *mockEspressoClient) FetchTransactionsInBlock(ctx context.Context, block
 
 func (m *mockEspressoClient) FetchHeaderByHeight(ctx context.Context, blockHeight uint64) (espressoTypes.HeaderImpl, error) {
 	panic("not implemented")
+}
+
+func (m *mockEspressoClient) FetchHeadersByRange(ctx context.Context, from uint64, until uint64) ([]types.HeaderImpl, error) {
+	panic("not implemented")
+}
+
+func (m *mockEspressoClient) FetchRawHeaderByHeight(ctx context.Context, height uint64) (json.RawMessage, error){
+  panic("not implemented")
+}
+
+func (m *mockEspressoClient) FetchTransactionByHash(ctx context.Context, hash *types.TaggedBase64) (types.TransactionQueryData, error){
+  panic("not implemented")
+}
+
+func (m *mockEspressoClient) FetchVidCommonByHeight(ctx context.Context, blockHeight uint64) (types.VidCommon, error){
+  panic("not implemented")
+}
+
+func (m *mockEspressoClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error){
+  panic("not implemented")
 }
 
 // To generate test scripts for the mock clients, we can create a list of test blocks that we can iterate through and set as the call and return values.
