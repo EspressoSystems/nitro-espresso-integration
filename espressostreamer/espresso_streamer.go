@@ -141,6 +141,7 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	}
 	addr := crypto.PubkeyToAddress(*publicKey)
 	if addr != s.batchPosterAddr {
+		log.Warn("batch poster address", "addr", addr, "expected", s.batchPosterAddr)
 		return fmt.Errorf("batch poster address does not match")
 	}
 	return nil
@@ -187,6 +188,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	err = s.verifyBatchPosterSignature(signature, userDataHashArr)
 	if err == nil {
 		success = true
+	} else {
+		log.Warn("failed to verify batch poster signature", "err", err)
 	}
 
 	if !success {
