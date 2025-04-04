@@ -179,6 +179,7 @@ type BatchPosterConfig struct {
 	LightClientAddress          string        `koanf:"light-client-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	HotShotBlock                uint64        `koanf:"hotshot-block"`
+  HotShotGenesisBlock         uint64        `koanf:"hotshot-genesis-block"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
@@ -252,6 +253,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
 	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
+  f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+  f.Uint64(prefix+".hotshot-genesis-block", DefaultBatchPosterConfig.HotShotGenesisBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
@@ -302,6 +305,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go,
 	// Try to fill 3 blobs per batch,
 	HotShotBlock: 1,
+	HotShotGenesisBlock: 1,
 }
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 	Pathname:      "batch-poster-wallet",
@@ -337,6 +341,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
 	ResubmitEspressoTxDeadline:     10 * time.Second,
+  HotShotBlock: 1,
+	HotShotGenesisBlock: 1,
 }
 type BatchPosterOpts struct {
 	DataPosterDB  ethdb.Database
@@ -419,19 +425,21 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 
-		espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
-			common.HexToAddress(opts.Config().EspressoTeeVerifierAddress),
-			opts.L1Reader.Client())
-		if err != nil {
-			return nil, err
-		}
+		// espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
+			// common.HexToAddress(opts.Config().EspressoTeeVerifierAddress),
+			// opts.L1Reader.Client())
+		// if err != nil {
+			// return nil, err
+		// }
 		espressoStreamer = espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
 			opts.Config().HotShotBlock,
 			opts.Config().ResubmitEspressoTxDeadline,
 			opts.Streamer.espressoTxnsPollingInterval,
-			espressoTEEVerifierCaller,
+			verifier,
 			opts.Streamer.espressoClient,
+      false,
+      opts.Streamer.EspressoKeyManager.GetAddress(),
 		)
 	}
 
@@ -598,39 +606,16 @@ var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso trans
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
 
-func (b *BatchPoster) tryGetNextMessageForBatch() *arbostypes.MessageWithMetadata {
+func (b *BatchPoster) tryGetNextMessageForBatch() (*arbostypes.MessageWithMetadata, uint64, uint64) {
 	streamerMsg, err := b.espressoStreamer.Next()
 	if err != nil {
 		log.Info("Espresso Streamer was not able to produce the next message", "err", err)
-		return &arbostypes.MessageWithMetadata{}
+		return &arbostypes.MessageWithMetadata{}, 0, 0
 	}
-	return &streamerMsg.MessageWithMeta
+	return &streamerMsg.MessageWithMeta, streamerMsg.Pos, streamerMsg.HotshotHeight
 }
 
-func (b *BatchPoster) checkEspressoValidation() bool {
-	b.building.segments.SetWaitingForValidation()
-	if b.streamer.espressoClient == nil && b.streamer.lightClientReader == nil {
-		// We are not using espresso mode since these haven't been set, return true to advance batch posting
-		return true
-	}
-	if b.streamer.EscapeHatchEnabled {
-		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
-		return true // return true to skip verification of batch
-	}
-	lastConfirmed, err := b.streamer.getLastConfirmedPos()
-	if err != nil {
-		log.Error("failed call to get last confirmed pos", "err", err)
-		return false // if we get an error we can't validate
-	}
 
-	// This message has passed the espresso verification
-
-	if lastConfirmed != nil && b.building.msgCount-1 <= *lastConfirmed {
-		return true
-	}
-	// If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry.
-	return false
-}
 type txInfo struct {
 	Hash      common.Hash       `json:"hash"`
 	Nonce     hexutil.Uint64    `json:"nonce"`
@@ -836,12 +821,12 @@ type batchSegments struct {
 	lastCompressedSize             int
 	trailingHeaders                int // how many trailing segments are headers
 	isDone                         bool
-	isWaitingForEspressoValidation bool // We are waiting for the entirety of the batch to be validated by espresso. Should be false by default
 }
 type buildingBatch struct {
 	segments           *batchSegments
 	startMsgCount      arbutil.MessageIndex
 	msgCount           arbutil.MessageIndex
+  hotshotHeight      uint64 
 	haveUsefulMessage  bool
 	use4844            bool
 	muxBackend         *simulatedMuxBackend
@@ -1018,13 +1003,7 @@ func (s *batchSegments) addDelayedMessage() (bool, error) {
 	}
 	return success, err
 }
-func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, error) {
-
-	if s.isWaitingForEspressoValidation {
-		log.Info("Current batch is waiting for espresso validation, we won't add more messages")
-		// if we are waiting for espresso validation return that the batch is full with no error
-		return false, nil
-	}
+func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, error) {	
 	if s.isDone {
 		return false, errBatchAlreadyClosed
 	}
@@ -1068,13 +1047,44 @@ func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 	fullMsg = append(fullMsg, compressedBytes...)
 	return fullMsg, nil
 }
-// Make the batch wait for validation Add this so we don't need to export the structs state to set it as we shouldn't need to set it to false again.
-func (s *batchSegments) SetWaitingForValidation() {
-	if !s.isWaitingForEspressoValidation {
-		log.Info("Set current batch segments to waiting for validation")
-		s.isWaitingForEspressoValidation = true
-	}
+// fetchHotshotBlockFromLastCheckpoint: 
+// This function uses the sequencer inbox bridgegen contract to filter for logs related to the TEESignatureVerified events
+// If any of these events are encountered, it checks the log iterator for the data about this event and returns the Hotshot height
+// That was emitted by that event, otherwise it will return 0
+//
+func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) uint64{
+  header, err := b.l1Reader.LastHeader(ctx)
+  if err != nil{
+    log.Error("Failed to fetch last header from parent chain")
+    return 0
+  }
+  var logIterator *bridgegen.SequencerInboxTEESignatureVerifiedIterator
+  for i := header.Number.Uint64(); i >= b.config().HotShotGenesisBlock; i-= 2000 {
+    filterOpts := bind.FilterOpts{
+      Start: i-2000,
+      End: &i,
+      Context: ctx,
+    }
+    // Filter logs by their 
+    logIterator, err = b.seqInbox.FilterTEESignatureVerified(&filterOpts, []*big.Int{}, []*big.Int{})
+    if err != nil{
+      log.Error("Failed to obtain iterator for logs for block", "blockNumber", i)
+      return 0
+    }
+    log.Info("logIterator.Event", "event", logIterator.Event)
+  }
+  if logIterator == nil{
+    return 0
+  }
+  for {
+    if !logIterator.Next(){
+      // As soon as the iterator returns that it has no logs left, we have the most recent one
+      break
+    }
+  }
+  return logIterator.Event.HotshotHeight.Uint64()
 }
+
 func (b *BatchPoster) encodeAddBatch(
 	seqNum *big.Int,
 	prevMsgNum arbutil.MessageIndex,
@@ -1309,7 +1319,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("attempting to post batch %v, but the local inbox tracker database already has %v batches", batchPosition.NextSeqNum, dbBatchCount)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
-		b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), b.hotshotBlockNumberFromConfigOrRecentMsg)
+    // if the building cache is nil, we need to reset the espresso streamer to the last checkpoint.
+    hotshotBlock := b.fetchHotshotBlockFromLastCheckpoint(ctx)
+    if hotshotBlock == 0{
+      hotshotBlock = b.config().HotShotBlock
+    }
+		b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), b.config().HotShotBlock)
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
 			return false, err
@@ -1358,15 +1373,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 		}
 	}
-	msgCount, err := b.streamer.GetMessageCount()
-	if err != nil {
-		log.Error("Error getting message count", "err", err)
-		return false, err
-	}
-	if msgCount <= batchPosition.MessageCount {
-		// There's nothing after the newest batch, therefore batch posting was not required
-		return false, nil
-	}
+  // TODO: Check if there is nothing to post (With the new streamer design, call PEEK)
+	
 	if err != nil {
 
 		return false, err
@@ -1443,9 +1451,16 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
   var lastPotentialMsg *arbostypes.MessageWithMetadata
+  var lastPotentialMsgPos arbutil.MessageIndex
 	for {
-    msg := b.tryGetNextMessageForBatch()
+    msg, msgPos, hotshotHeight:= b.tryGetNextMessageForBatch()
+    if b.building.hotshotHeight == 0{
+      // store the hotshot height associated with the first message 
+      b.building.hotshotHeight = hotshotHeight
+    }
     lastPotentialMsg = msg
+    lastPotentialMsgPos = arbutil.MessageIndex(msgPos)
+    
     if msg == (&arbostypes.MessageWithMetadata{}){
       if b.building.haveUsefulMessage{
         // if we have a useful message, break from the batch building loop.
@@ -1521,7 +1536,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		b.building.msgCount++
 	}
-
+  msgCount := lastPotentialMsgPos
 	firstUsefulMsgTime := time.Now()
 	if b.building.firstUsefulMsg != nil {
 		// #nosec G115
@@ -1557,12 +1572,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// don't post anything for now
 		return false, nil
 	}
-	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
-	hasBatchBeenValidated := b.checkEspressoValidation()
-	log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated, "b.building.msgCount", b.building.msgCount, "b.building.startMsgCount", b.building.startMsgCount)
-	if !hasBatchBeenValidated {
-		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
-	}
+
 	sequencerMsg, err := b.building.segments.CloseAndGetBytes()
 	if err != nil {
 		return false, err
