@@ -1,0 +1,562 @@
+{
+  "proof": [
+    {
+      "Leaf": {
+        "value": "FIELD~DcnZ07RxPlMsdwiR0baPFBMcu5tqZBlZ0K__pS13AAXb",
+        "pos": "FIELD~_gEAAAAAAADs",
+        "elem": "FIELD~U6NZ6W_MrgPRMy4uWSuIzmvJfrlV3tleIqizpttHfsvs"
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~DcnZ07RxPlMsdwiR0baPFBMcu5tqZBlZ0K__pS13AAXb"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~azQTz4gm3jl3QrnSn3NptAy_eDaYj0TfBjaWL6W_yWa8"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~jq_CDUna-LSgDZiozzPfy3DcNCW-ZwDW2iMY_alhlugc"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~bqXdcZa3GmNRDWyVVlmFN8ZdyXzMDPiMi7EdYszmnnUE"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~KhMOzW8RAyjOX8QEQz2DkaIafZEm6GERQDVvPb7lh_CI"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~pTvZKqIaqm4lmnDv7K3OZ4J125A-JQKxvyYVuw3P-Qsg"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~YyknbbBvuN92GA6TKkx8s1g38tLpbgXnxsRD0-Tr8arz"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~3LtfYqfVY6NQrqeiwv1qRfu0RFHlXp3r-f0dCjt_PxnY"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~Q53LCyMiwJeM9W0sMu00Hbu66JyzHWZtlIhTIPqBJZHN"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~FraHeLSS5RPovhrLL826qx1m6C0oSGqOrfkYLeQwB9uj"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~_lZ1L_fBJZ_-S_ua0jHm-UqQSjLp7wy9BIR53tmp7noe"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~zjsCQxis01GEdanGAizCVz-pbfkOCsvEvDZJUnCN7bbQ"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~jc0Re5qXzftW_Nf0hNiLQci8cF1gTasv-xAZ2l_8M7sK"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~OFQWOHPJQp9VFiGaLxVC7FGufce1Q6VfS6C2O4uoPBnL"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~lFaYsLBIstwWoawAAMEFudmv4He3Rn-1RtUsSv5cUObp"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~CgQgjFu9Vz-Raa3wBmcq6kc8fo8Y_MtJ85tTxrG3orkx"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~ycIw075_AhuUiMIl_VkmNtLmbv7J-nyZp4TfOOGk6eYh"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~eVKPqGVQFaP3XTK4ug1ewDDHhx96Gl1HeOcG2R-HjyP0"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~uSXHBRmz7a_zCYZOGZeHYUTVQw-g3FQNSHyRi21aytrB"
+            }
+          },
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~dSwEo-4IZ4zxNOPKgce7icGU9GB4CZC7BYj4wSrwhsZ6"
+            }
+          },
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~3ngYm6Xh7cRvrOpmmB547bkb72h6FM8k_33YDdspDaw5"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~BIGliDScBq5r6PnIIGsxjyzAbIqouyetdnK5fsi1joS4"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~xWNAtWtDa-0gBy8EbNxn2coG6BLNmXS0l0jUzXwRVu2d"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~UeQ8X5Amp2rL86DgYtN_TvTSQbSZr_UuyeqCi-KaF7IW"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~frsLQ4bv01CPrLtlycgBDNKrWjQVkTddSGgqry8CpuDR"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~4m6Ic_eOYj5070Ghg6Vz6rtWxX8ewNxjwFgOgh-mLVOW"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~XunoegQgb-e0hkAjQs9nlq3jrJdh0nGXgtMI_sGGfc2k"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~H-Or6i-EKetOlRADfwyh91HLtQiMbHW2u-1vlzFVWIR_"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~KEDFMHv3GXrGTLRc-RtfjmXYRGqpSGYELhdOyZMIG1A6"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~EVlauo0m1cDqtXiU0yDR_27FMhDgBlRv-KHJrMBO9-uz"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~bV5Dyo4p1w1SS_T3kQaQETYvk6B9wulFgR6LwVphYLSc"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~8BHeeLZDswjv4RVxVU7OzSBVZEKAXE2keoVYaqCSlD2e"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~BbVjRDSxAUeJr8Rb0teyye19nyl1nv7aVOPJgI4u5_8y"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~-byioZ-d9aJWA78JIECbAShWKpSP1oY6dA3dmECf2VCE"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~K1YbIY2H5oL287IHKa6yx6xcFlP7CUzkmcV8IBEj1PCI"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~GKfopBcEWNTRR5WZjKaVQoNmjkcctVK2ZT1wCtUiGD33"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~cmDTqA8cfO0ur8bmVDgDx8kBVM0bsoaO_OfHsIYGmMF9"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~tEpimFrTG4rerRZq8VmL8thZr-uPmFZzgLxmF6uGnfiJ"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~mxjV6c-fPi5u-ZNPx8uEKGnE7M4YIbEajuQ6XzYHZznV"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~AAt3wK9LOKBKJn4fscymoUyfjVekh2HTnusq2BJHx41M"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~v_2MDur30BrECwxh60GASmR8l1ZOKjZwf_vwzWo75_DT"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~eYiFz9mKAQWmAVPWBOOnA-7fvIZ1j679TGZhekWU25eL"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~LcxK9TV_f2iPc0tWNwp-QS3x9yVdfk-HLAtgK3ISLMg3"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~DBzlj7BRQmUd2HaaFcVmMLEuxU-KyTgVBpZapBcuc6DX"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    },
+    {
+      "Branch": {
+        "value": "FIELD~AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA-",
+        "children": [
+          {
+            "ForgettenSubtree": {
+              "value": "FIELD~nrtb2SGFhTKDsR7DbqXYuFL7ibEJNddGnoZLLUV9E7ih"
+            }
+          },
+          "Empty",
+          "Empty"
+        ]
+      }
+    }
+  ],
+  "header": {
+    "version": { "Version": { "major": 0, "minor": 99 } },
+    "fields": {
+      "chain_config": {
+        "chain_config": {
+          "Left": {
+            "chain_id": "35353",
+            "max_block_size": "30720",
+            "base_fee": "0",
+            "fee_contract": null,
+            "fee_recipient": "0x0000000000000000000000000000000000000000",
+            "bid_recipient": null
+          }
+        }
+      },
+      "height": 510,
+      "timestamp": 1734502770,
+      "l1_head": 41,
+      "l1_finalized": {
+        "number": 32,
+        "timestamp": "0x6762694a",
+        "hash": "0xcd7a250b6abb054c27f8fb2d6fa2e62c8dbb95b904437914acc885fdf2017850"
+      },
+      "payload_commitment": "HASH~MuhII73cvm-zUb_cdtPgTRGn2CDhvhy07B8Pyhfi5viH",
+      "builder_commitment": "BUILDER_COMMITMENT~gmA1Gee6U6RzYpNRa43ZvT26BOAlhzfYo48-G5FcLqFJ",
+      "ns_table": { "bytes": "AQAAALpKBgCGAAAA" },
+      "block_merkle_tree_root": "MERKLE_COMM~jHEKwZlTUooyZDXrrYWZf3aJLV1t33LROfNE5Ts9QxcgAAAAAAAAAP4BAAAAAAAAOA",
+      "fee_merkle_tree_root": "MERKLE_COMM~m9aCqlOO_G4dtM2WqzaxvWx_SkX_Q1iT-QOwFqo5n2wUAAAAAAAAAAIAAAAAAAAAkQ",
+      "fee_info": [
+        {
+          "account": "0x7103f704ee6272ad0228343b362eeb3199f7e2b1",
+          "amount": "1420"
+        }
+      ],
+      "builder_signature": [
+        {
+          "r": "0xd4ab47b72a29a32a1e119adb3c0d4dfeb91bff2ed382ae50e160914d9d84d8fa",
+          "s": "0x2b10b3b297b8c2577cf1584789e174131dbcfba3e26c72091a554a986e88fecc",
+          "v": 28
+        }
+      ],
+      "auction_results": {
+        "view_number": 0,
+        "winning_bids": [],
+        "reserve_bids": []
+      }
+    }
+  },
+  "header_commitment": null,
+  "block_merkle_root": "MERKLE_COMM~mHbU01CwGO6Gn9a9Rijv2SxW12MDsAJVevnnEUvwgkcgAAAAAAAAABEDAAAAAAAA2A",
+  "hotshot_commitment": "VvTt41nglBB7VWS5tROtZmrqgzgxgRZnn/SxnSP+OxM="
+}
