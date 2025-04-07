@@ -48,7 +48,7 @@ require (
 	github.com/r3labs/diff/v3 v3.0.1
 	github.com/redis/go-redis/v9 v9.6.1
 	github.com/rivo/tview v0.0.0-20240307173318-e804876934a1
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.6
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/tendermint v0.35.9
 	github.com/wealdtech/go-merkletree v1.0.0
@@ -215,4 +215,7 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-require github.com/stretchr/objx v0.5.2 // indirect
+require (
+	github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407054029-00cda4d53a54 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
+)

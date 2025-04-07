@@ -38,7 +38,9 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
+	builder.nodeConfig.BatchPoster.HotShotUrl = "http://127.0.0.1:300"
+	builder.nodeConfig.BatchPoster.FallbackUrl = hotShotUrl
+
 	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
 
 	// validator config
