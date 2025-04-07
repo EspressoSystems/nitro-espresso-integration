@@ -230,7 +230,7 @@ RUN ./download-machine.sh consensus-v32 0x184884e1eb9fefdc158f6c8ac912bb183bf3cf
 RUN ./download-machine-celestia.sh v3.2.1-rc.1 0xe81f986823a85105c5fd91bb53b4493d38c0c26652d23f76a7405ac889908287 celestiaorg
 RUN ./download-machine-celestia.sh v3.3.2 0xaf1dbdfceb871c00bfbb1675983133df04f0ed04e89647812513c091e3a982b3 celestiaorg
 
-FROM golang:1.23.1-bookworm AS node-builder
+FROM golang:1.23.4-bookworm AS node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""

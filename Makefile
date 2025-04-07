@@ -175,7 +175,6 @@ $(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
 	mkdir -p `dirname $(espresso_crypto_lib)`
 	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
 	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
-	chmod +x $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename)
 
 .PHONY: push
 push: lint test-go .make/fmt
