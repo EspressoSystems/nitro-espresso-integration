@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # This script runs the Espresso tests in ./system_tests only.
 set -euo pipefail
+
+export LD_LIBRARY_PATH="$(pwd)/target/lib:$LD_LIBRARY_PATH"
+
 gotestsum \
     --format short-verbose \
     --packages="github.com/offchainlabs/nitro/system_tests" \
