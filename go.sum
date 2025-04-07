@@ -96,8 +96,6 @@ github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwS
 github.com/Djarvur/go-err113 v0.0.0-20210108212216-aea10b59be24/go.mod h1:4UJr5HIiMZrwgkSPdsjy2uOQExX/WEILpIrO9UPGuXs=
 github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407054029-00cda4d53a54 h1:aiLUjcemfj7dtlH3vAxCdOZ1JcgoG+YRB+6c6h2vHE4=
 github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407054029-00cda4d53a54/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
-github.com/EspressoSystems/espresso-sequencer-go v0.0.31 h1:DdAzlGiHlfosbUsg0G8C/r1pb9aMyv10yukYi+aW/Ks=
-github.com/EspressoSystems/espresso-sequencer-go v0.0.31/go.mod h1:zWS7ohpSPm2QLVb5jXbSjqszFr1UtJO/8txwqSWOppQ=
 github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0/go.mod h1:n/vLeA7V+QY84iYAGwMkkUUp9ooeuftMEvaDrSVch+Q=
 github.com/HdrHistogram/hdrhistogram-go v1.1.0/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
 github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
@@ -1219,10 +1217,7 @@ github.com/spf13/jwalterweatherman v1.1.0/go.mod h1:aNWZUN0dPAAO/Ljvb5BEdw96iTZ0
 github.com/spf13/pflag v1.0.1/go.mod h1:DYY7MBk1bdzusC3SYhjObp+wFpr4gzcvqqNjLnInEg4=
 github.com/spf13/pflag v1.0.3/go.mod h1:DYY7MBk1bdzusC3SYhjObp+wFpr4gzcvqqNjLnInEg4=
 github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
-<<<<<<< HEAD
-=======
 github.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=
->>>>>>> e6a56cc1a (Multi node client batcher (#515))
 github.com/spf13/pflag v1.0.6/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/spf13/viper v1.10.0/go.mod h1:SoyBPwAtKDzypXNDFKN5kzH7ppppbGZtls1UpIy5AsM=

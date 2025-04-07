@@ -34,8 +34,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	hotshotClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
+	hotshotClient "github.com/EspressoSystems/espresso-network-go/client"
+	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"

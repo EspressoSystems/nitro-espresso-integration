@@ -10,7 +10,7 @@ replace github.com/offchainlabs/bold => ./bold
 
 require (
 	cloud.google.com/go/storage v1.43.0
-	github.com/EspressoSystems/espresso-sequencer-go v0.0.33
+	github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407054029-00cda4d53a54
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/alicebob/miniredis/v2 v2.32.1
@@ -215,7 +215,4 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-require (
-	github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407054029-00cda4d53a54 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
-)
+require github.com/stretchr/objx v0.5.2 // indirect
