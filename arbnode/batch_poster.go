@@ -379,7 +379,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	lightClientAddr := opts.Config().LightClientAddress
 
 	if hotShotUrl != "" {
-		hotShotClient := hotshotClient.NewClient(hotShotUrl)
+		hotShotClient := hotshotClient.NewClient(hotShotUrl, hotShotUrl)
 		opts.Streamer.espressoClient = hotShotClient
 	}
 

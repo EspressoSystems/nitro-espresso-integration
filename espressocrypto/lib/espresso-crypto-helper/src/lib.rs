@@ -4,8 +4,9 @@ use committable::{Commitment, Committable};
 use espresso_types::{
     BlockMerkleCommitment, BlockMerkleTree, Header, NsProof, NsTable, Transaction,
 };
-use ethers_core::types::U256;
-use hotshot_types::vid::{VidCommitment, VidCommon};
+use ethers::types::U256;
+use hotshot_query_service::VidCommon;
+use hotshot_types::data::VidCommitment;
 use jf_crhf::CRHF;
 use jf_merkle_tree::prelude::{
     MerkleCommitment, MerkleNode, MerkleProof, MerkleTreeScheme, Sha3Node,
