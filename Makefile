@@ -162,7 +162,7 @@ espresso_crypto_filename = libespresso_crypto_helper.so
 ifeq ($(UNAME_S), Darwin)
 	espresso_crypto_filename = libespresso_crypto_helper.dylib
 else
-	export LD_LIBRARY_PATH="$(pwd)/target/lib:$LD_LIBRARY_PATH"
+	export LD_LIBRARY_PATH := "$(shell pwd)/target/lib:$LD_LIBRARY_PATH"
 endif
 
 CBROTLI_WASM_BUILD_ARGS ?=-d
