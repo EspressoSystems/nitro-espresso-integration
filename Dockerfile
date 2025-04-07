@@ -96,7 +96,7 @@ COPY --from=contracts-builder workspace/contracts/node_modules/@offchainlabs/upg
 COPY --from=contracts-builder workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
-FROM rust:1.81.0-slim-bookworm AS prover-header-builder
+FROM rust:1.84.0-slim-bookworm AS prover-header-builder
 WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -120,7 +120,13 @@ COPY brotli brotli
 RUN apt-get update && apt-get install -y cmake
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 
-RUN apt-get install -y libssl-dev pkg-config
+RUN apt-get update && \
+    apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    perl \
+    perl-modules-5.36 \
+    libfindbin-libs-perl
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-espresso-crypto-lib
 
 FROM scratch AS prover-header-export
