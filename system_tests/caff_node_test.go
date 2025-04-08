@@ -34,6 +34,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	execConfig.Sequencer.CaffNodeConfig.ParentChainReader.UseFinalityData = true
 	// for testing, we can use the same hotshot url for both
 	execConfig.Sequencer.CaffNodeConfig.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
+	execConfig.Sequencer.CaffNodeConfig.FallbackUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 	execConfig.Sequencer.CaffNodeConfig.RetryTime = time.Second * 1
 	execConfig.Sequencer.CaffNodeConfig.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = false

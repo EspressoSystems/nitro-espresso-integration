@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-sequencer-go/client"
-	"github.com/EspressoSystems/espresso-sequencer-go/types"
+	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
+	"github.com/EspressoSystems/espresso-network-go/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
