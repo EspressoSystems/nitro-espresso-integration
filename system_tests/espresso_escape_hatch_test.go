@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	lightclientmock lightclientmock "github.com/EspressoSystems/espresso-network-go/light-client-mock"
+	lightclientmock "github.com/EspressoSystems/espresso-network-go/light-client-mock"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"

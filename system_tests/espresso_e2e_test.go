@@ -9,6 +9,7 @@ import (
 	"time"
 
 	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
