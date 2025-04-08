@@ -164,6 +164,7 @@ type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
 	HotShotUrls             []string            `koanf:"hotshot-urls"`
+	FallbackUrls            []string            `koanf:"fallback-urls"`
 	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
@@ -180,6 +181,7 @@ type CaffNodeConfig struct {
 
 var DefaultCaffNodeConfig = CaffNodeConfig{
 	HotShotUrls:             []string{},
+	FallbackUrls:            []string{},
 	NextHotshotBlock:        1,
 	Namespace:               0,
 	RetryTime:               time.Second * 2,

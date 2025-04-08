@@ -71,7 +71,7 @@ jobs:
       - name: Install cmake
         uses: jwlawson/actions-setup-cmake@v2
         with:
-          cmake-version: '3.31.6'
+          cmake-version: "3.31.6"
 
       - name: Install latest gotestsum
         uses: autero1/action-gotestsum@v2.0.0
@@ -188,6 +188,7 @@ jobs:
           echo "GOMEMLIMIT=6GiB" >> "$GITHUB_ENV"
           echo "GOGC=80" >> "$GITHUB_ENV"
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${{ github.workspace }}/target/lib" >> "$GITHUB_ENV"
 
       - name: run tests without race detection and path state scheme
         if: matrix.test-mode == 'defaults'
@@ -245,11 +246,15 @@ jobs:
         if: matrix.test-mode == 'challenge'
         shell: bash
         run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/target/lib
           scripts/espresso-run-test-ci -run=TestChallenge -tags=challengetest
 
       - name: run stylus tests
         if: matrix.test-mode == 'stylus'
-        run: ${{ github.workspace }}/.github/workflows/gotestsum.sh --tags stylustest --run TestProgramArbitrator --timeout 60m --cover
+        shell: bash
+        run: |
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/target/lib
+          scripts/espresso-run-test-ci -tags=stylustest -run=TestProgramArbitrator
 
       - name: run long stylus tests
         if: matrix.test-mode == 'long'
