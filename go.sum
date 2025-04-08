@@ -94,10 +94,8 @@ github.com/DataDog/zstd v1.4.1/go.mod h1:1jcaCB/ufaK+sKp1NBhlGmpz41jOoPQ35bpF36t
 github.com/DataDog/zstd v1.5.2 h1:vUG4lAyuPCXO0TLbXvPv7EB7cNK1QV/luu55UHLrrn8=
 github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/Djarvur/go-err113 v0.0.0-20210108212216-aea10b59be24/go.mod h1:4UJr5HIiMZrwgkSPdsjy2uOQExX/WEILpIrO9UPGuXs=
-github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407060432-b8c11014d2ca h1:ylZuUa84MMDiLH3aWH25jCQPTWn+mHhtl8OWey7yINo=
-github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250407060432-b8c11014d2ca/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
-github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250408014156-c5c491dcc434 h1:e2sqg7euzSwsE5RJ3uyJlHs6n+fBCPCuNbwUL1vhcP0=
-github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250408014156-c5c491dcc434/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
+github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250408141119-89fe76140e87 h1:cmOPNQCA1yvcUOUQbYC4nvkqPxLq2Kh5cjSQvmBOJM8=
+github.com/EspressoSystems/espresso-network-go v0.0.35-0.20250408141119-89fe76140e87/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
 github.com/GaijinEntertainment/go-exhaustruct/v2 v2.2.0/go.mod h1:n/vLeA7V+QY84iYAGwMkkUUp9ooeuftMEvaDrSVch+Q=
 github.com/HdrHistogram/hdrhistogram-go v1.1.0/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
 github.com/HdrHistogram/hdrhistogram-go v1.1.2/go.mod h1:yDgFjdqOqDEKOvasDdhWNXYg9BVp4O+o5f6V/ehm6Oo=
