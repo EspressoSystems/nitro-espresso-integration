@@ -89,8 +89,7 @@ COPY ./safe-smart-account ./safe-smart-account
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
-COPY ./scripts/remove_reference_types.sh ./scripts/
-RUN chmod +x ./scripts/remove_reference_types.sh
+COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/precompiles/ contracts/build/contracts/src/precompiles/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/celestia/ contracts/build/contracts/src/celestia/
