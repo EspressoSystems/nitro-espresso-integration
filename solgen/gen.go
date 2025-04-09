@@ -105,7 +105,6 @@ func main() {
 		module += "gen"
 
 		if strings.Contains(file, "TEEVerifier") {
-			fmt.Printf("dir: %v\n", dir)
 			// override the module name for espresso contracts
 			module = "espressogen"
 		}
