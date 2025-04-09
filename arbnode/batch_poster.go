@@ -421,7 +421,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	if opts.Config().EspressoTeeVerifierAddress != "" {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
-		// TODO: remove this once we have a real espresso verifier
 		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
 			espressoTeeVerifierAddress,
 			opts.L1Reader.Client())
@@ -1184,9 +1183,6 @@ func (b *BatchPoster) encodeAddBatch(
 			{Type: uint256Type},
 			{Type: bytesType},
 		}.Pack(hotshotBlockNumber, signature)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack signature: %w", err)
-		}
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
