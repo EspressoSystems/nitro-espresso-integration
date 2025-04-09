@@ -20,7 +20,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -29,10 +29,6 @@ import (
 const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
-
-type EspressoTEEVerifierInterface interface {
-	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (espressogen.EnclaveReport, error)
-}
 
 type EspressoClientInterface interface {
 	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
@@ -65,7 +61,7 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	espressoTEEVerifierCaller     EspressoTEEVerifierInterface
+	espressoTEEVerifier           espressotee.EspressoTEEVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -78,7 +74,7 @@ func NewEspressoStreamer(
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
+	espressoTEEVerifier espressotee.EspressoTEEVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
@@ -95,7 +91,7 @@ func NewEspressoStreamer(
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
-		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
+		espressoTEEVerifier:           espressoTEEVerifier,
 		PerfRecorder:                  PerfRecorder,
 		batchPosterAddr:               batchPosterAddr,
 	}
@@ -162,7 +158,7 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
 
-	_, err := s.espressoTEEVerifierCaller.Verify(&bind.CallOpts{}, attestation, userDataHash)
+	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, userDataHash)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
