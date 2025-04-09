@@ -1149,7 +1149,8 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to create uint256 type: %w", err)
 		}
 
-		arguments := method.Inputs
+		var arguments abi.Arguments
+		arguments = append(arguments, method.Inputs...)
 		arguments = append(arguments, abi.Argument{Type: uint256Type})
 
 		calldata, err = arguments.Pack(
