@@ -30,7 +30,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
 		// Simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
-		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 		// create a new streamer object
 		streamer := NewEspressoStreamer(1, 1, time.Millisecond, time.Millisecond, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{})
 		streamer.Reset(735805, 1)
@@ -152,9 +152,9 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (bool, error) {
-	args := m.Called(opts, rawQuote, reportDataHash)
-	return true, args.Error(0)
+func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (bool, error) {
+	args := m.Called(opts, attestation, signature)
+	return args.Bool(0), args.Error(1)
 }
 
 type mockEspressoClient struct {

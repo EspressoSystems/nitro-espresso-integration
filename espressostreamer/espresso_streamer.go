@@ -156,9 +156,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 }
 
 /* Verify the attestation quote */
-func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
+func (s *EspressoStreamer) verifySignature(attestation []byte, signature [32]byte) error {
 
-	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, userDataHash)
+	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
@@ -189,7 +189,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	}
 
 	if !success {
-		err = s.verifyAttestationQuote(signature, userDataHashArr)
+		err = s.verifySignature(signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
 			return nil, err
