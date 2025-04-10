@@ -152,8 +152,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, teeType uint8) (bool, error) {
-	args := m.Called(opts, attestation, signature, teeType)
+func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (bool, error) {
+	args := m.Called(opts, attestation, signature)
 	return args.Bool(0), args.Error(1)
 }
 
