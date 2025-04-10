@@ -45,7 +45,7 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) error {
 	// TODO: Make sure contracts support teeType Nitro
-	tx, err := e.contract.RegisterSigner(opts, attestation, data, uint8(SGX))
+	tx, err := e.contract.RegisterSigner(opts, attestation, data, uint8(teeType))
 	if err != nil {
 		return err
 	}
@@ -73,8 +73,8 @@ func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType 
 type TEE uint8
 
 const (
-	SGX   TEE = 0 // SGX (Intel Software Guard Extensions)
-	NITRO TEE = 1 // Nitro (AWS Nitro Enclaves)
+	SGX   TEE = 0 // SGX
+	NITRO TEE = 1 // AWS Nitro
 )
 
 type EspressoKeyManager struct {
@@ -125,8 +125,7 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	// TODO: Make sure contracts support teeType Nitro
-	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(SGX))
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType))
 	if err != nil {
 		return false, err
 	}
@@ -144,7 +143,7 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 	if k.teeType == SGX {
 		addr := crypto.PubkeyToAddress(*k.pubKey)
 		data = addr.Bytes()
-		log.Info("SGX Signing address", "addr", data)
+		log.Info("sgx signing address", "addr", data)
 		res, err := signFunc(data)
 		if err != nil {
 			return err
@@ -154,22 +153,19 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 	} else if k.teeType == NITRO {
 		pubKeyBytes := crypto.FromECDSAPub(k.pubKey)
 
-		log.Info("Nitro Signing address", "addr", crypto.PubkeyToAddress(*k.pubKey))
+		log.Info("nitro signing address", "addr", crypto.PubkeyToAddress(*k.pubKey))
 		attestation, err := signFunc(pubKeyBytes)
 		if err != nil {
 			return err
 		}
 
-		// TODO: Handle if attestation bytes are empty
 		var res nitrite.Result
 		err = json.Unmarshal(attestation, &res)
 		if err != nil {
-			attestation = []byte{}
-			data = crypto.PubkeyToAddress(*k.pubKey).Bytes()
-		} else {
-			attestation = res.COSESign1
-			data = res.Signature
+			return err
 		}
+		attestation = res.COSESign1
+		data = res.Signature
 	}
 
 	err := k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType))
