@@ -432,10 +432,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 		var teeType TEE
-		if opts.Config().EspressoTeeType == "SGX" {
+		configTee := opts.Config().EspressoTeeType
+		if configTee == "SGX" {
 			teeType = SGX
-		} else {
+		} else if configTee == "NITRO" {
 			teeType = NITRO
+		} else {
+			return nil, fmt.Errorf("unpsupported tee type in config: %s", configTee)
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts, teeType)
 	}

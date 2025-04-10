@@ -1810,10 +1810,13 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		var err error
-		if s.EspressoKeyManager.TeeType() == SGX {
+		teeType := s.EspressoKeyManager.TeeType()
+		if teeType == SGX {
 			err = s.EspressoKeyManager.Register(s.getAttestationQuote)
-		} else {
+		} else if teeType == NITRO {
 			err = s.EspressoKeyManager.Register(s.getNitroAttestation)
+		} else {
+			return fmt.Errorf("unsupported tee Type: %d", teeType)
 		}
 
 		if err != nil {
@@ -1884,7 +1887,7 @@ func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error)
 
 	sess, err := nsm.OpenDefaultSession()
 	if err != nil {
-		return []byte{}, nil
+		return nil, fmt.Errorf("failed to open nsm session: %v", err)
 	}
 	defer sess.Close()
 
@@ -1897,7 +1900,7 @@ func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error)
 	}
 
 	if res.Error != "" {
-		return nil, fmt.Errorf("NSM returned error: %s", res.Error)
+		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
 	}
 
 	if res.Attestation == nil || res.Attestation.Document == nil {
