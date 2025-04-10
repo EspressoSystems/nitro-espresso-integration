@@ -16,8 +16,8 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -104,11 +104,9 @@ func NewEspressoCaffNode(
 		return nil
 	}
 
-	espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
-		common.HexToAddress(configFetcher().EspressoTEEVerifierAddr),
-		l1Reader.Client())
+	espressoTEEVerifier, err := espressotee.NewEspressoTEEVerifier(l1Reader.Client(), common.HexToAddress(configFetcher().EspressoTEEVerifierAddr), 0)
 
-	if err != nil || espressoTEEVerifierCaller == nil {
+	if err != nil || espressoTEEVerifier == nil {
 		log.Crit("failed to create espressoTEEVerifierCaller", "err", err)
 		return nil
 	}
@@ -117,7 +115,7 @@ func NewEspressoCaffNode(
 		configFetcher().NextHotshotBlock,
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
-		espressoTEEVerifierCaller,
+		espressoTEEVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),

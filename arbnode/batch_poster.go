@@ -48,7 +48,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
@@ -422,13 +422,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if opts.Config().EspressoTeeVerifierAddress != "" {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
 		// TODO: remove this once we have a real espresso verifier
-		espressoMock, err := mocksgen.NewEspressoTEEVerifierMock(
+		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
 			espressoTeeVerifierAddress,
 			opts.L1Reader.Client())
 		if err != nil {
 			return nil, err
 		}
-		verifier := NewEspressoTEEVerifier(espressoMock, opts.L1Reader.Client())
+		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 		var teeType TEE
 		if opts.Config().EspressoTeeType == "SGX" {
 			teeType = SGX

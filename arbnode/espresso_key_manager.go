@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hf/nitrite"
-	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -35,11 +35,11 @@ type EspressoTEEVerifierInterface interface {
 }
 
 type EspressoTEEVerifier struct {
-	contract *mocksgen.EspressoTEEVerifierMock
+	contract *espressogen.IEspressoTEEVerifier
 	l1Client *ethclient.Client
 }
 
-func NewEspressoTEEVerifier(contract *mocksgen.EspressoTEEVerifierMock, l1Client *ethclient.Client) *EspressoTEEVerifier {
+func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) *EspressoTEEVerifier {
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
 }
 
