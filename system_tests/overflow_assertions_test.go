@@ -224,7 +224,10 @@ func TestOverflowAssertions(t *testing.T) {
 		challengemanager.StackWithPostingInterval(time.Second),
 		challengemanager.StackWithPollingInterval(time.Millisecond * 500),
 		challengemanager.StackWithAverageBlockCreationTime(time.Second),
+<<<<<<< HEAD
 		challengemanager.StackWithMinimumGapToParentAssertion(0),
+=======
+>>>>>>> celestia-integration
 	}
 
 	manager, err := challengemanager.NewChallengeStack(

@@ -478,3 +478,4 @@ pub unsafe extern "C" fn arbitrator_get_opcode(mach: *mut Machine) -> u16 {
         None => panic!("Failed to get next opcode for Machine"),
     }
 }
+

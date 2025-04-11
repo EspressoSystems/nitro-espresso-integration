@@ -57,6 +57,7 @@ COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
 COPY scripts/build-brotli.sh scripts/
+COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 RUN apt-get update && apt-get install -y cmake
 RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
@@ -65,6 +66,7 @@ FROM scratch AS wasm-libs-export
 COPY --from=wasm-libs-builder /workspace/ /
 
 FROM wasm-base AS wasm-bin-builder
+RUN apt-get update && apt-get install -y wabt
 # pinned go version
 RUN curl -L https://golang.org/dl/go1.23.1.linux-`dpkg --print-architecture`.tar.gz | tar -C /usr/local -xzf -
 COPY ./Makefile ./go.mod ./go.sum ./
@@ -89,6 +91,7 @@ COPY ./safe-smart-account ./safe-smart-account
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
+COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/precompiles/ contracts/build/contracts/src/precompiles/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/celestia/ contracts/build/contracts/src/celestia/
@@ -96,7 +99,7 @@ COPY --from=contracts-builder workspace/contracts/node_modules/@offchainlabs/upg
 COPY --from=contracts-builder workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
-FROM rust:1.80.1-slim-bookworm AS prover-header-builder
+FROM rust:1.83.0-slim-bookworm AS prover-header-builder
 WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -113,16 +116,26 @@ COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/jit arbitrator/jit
 COPY arbitrator/stylus arbitrator/stylus
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
+COPY espressocrypto espressocrypto
 COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
 RUN apt-get update && apt-get install -y cmake
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 
+RUN apt-get update && \
+    apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    perl \
+    perl-modules-5.36 \
+    libfindbin-libs-perl
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-espresso-crypto-lib
+
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
 
-FROM rust:1.80.1-slim-bookworm AS prover-builder
+FROM rust:1.81.0-slim-bookworm AS prover-builder
 WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -200,6 +213,8 @@ RUN apt-get update && apt-get install -y unzip wget curl
 WORKDIR /workspace/machines
 # Download WAVM machines
 COPY ./scripts/download-machine.sh .
+COPY ./scripts/download-machine-celestia.sh .
+RUN chmod +x ./download-machine.sh ./download-machine-celestia.sh
 #RUN ./download-machine.sh consensus-v1-rc1 0xbb9d58e9527566138b682f3a207c0976d5359837f6e330f4017434cca983ff41
 #RUN ./download-machine.sh consensus-v2.1 0x9d68e40c47e3b87a8a7e6368cc52915720a6484bb2f47ceabad7e573e3a11232
 #RUN ./download-machine.sh consensus-v3 0x53c288a0ca7100c0f2db8ab19508763a51c7fd1be125d376d940a65378acaee7
@@ -221,10 +236,10 @@ COPY ./scripts/download-machine.sh .
 RUN ./download-machine.sh consensus-v30 0xb0de9cb89e4d944ae6023a3b62276e54804c242fd8c4c2d8e6cc4450f5fa8b1b && true
 RUN ./download-machine.sh consensus-v31 0x260f5fa5c3176a856893642e149cf128b5a8de9f828afec8d11184415dd8dc69
 RUN ./download-machine.sh consensus-v32 0x184884e1eb9fefdc158f6c8ac912bb183bf3cf83f0090317e0bc4ac5860baa39
-RUN ./download-machine.sh v3.2.1-rc.1 0xe81f986823a85105c5fd91bb53b4493d38c0c26652d23f76a7405ac889908287 celestiaorg
-RUN ./download-machine.sh v3.3.2 0xaf1dbdfceb871c00bfbb1675983133df04f0ed04e89647812513c091e3a982b3 celestiaorg
+RUN ./download-machine-celestia.sh v3.2.1-rc.1 0xe81f986823a85105c5fd91bb53b4493d38c0c26652d23f76a7405ac889908287 celestiaorg
+RUN ./download-machine-celestia.sh v3.3.2 0xaf1dbdfceb871c00bfbb1675983133df04f0ed04e89647812513c091e3a982b3 celestiaorg
 
-FROM golang:1.23.1-bookworm AS node-builder
+FROM golang:1.23.4-bookworm AS node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""
@@ -232,6 +247,13 @@ ARG modified=""
 ENV NITRO_VERSION=$version
 ENV NITRO_DATETIME=$datetime
 ENV NITRO_MODIFIED=$modified
+
+# Install Rust and build dependencies
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN apt-get update && \
+    apt-get install -y wabt pkg-config libssl-dev && \
+    apt-get clean
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y wabt
@@ -265,6 +287,8 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "FuzzStateTransition", "--binary-path",
 
 FROM debian:bookworm-slim AS nitro-node-slim
 WORKDIR /home/user
+COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper.so /usr/local/lib/
+RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/nitro-val /usr/local/bin/

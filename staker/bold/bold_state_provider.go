@@ -38,6 +38,10 @@ var (
 
 var executionNodeOfflineGauge = metrics.NewRegisteredGauge("arb/state_provider/execution_node_offline", nil)
 
+var (
+	ErrChainCatchingUp = errors.New("chain catching up")
+)
+
 type BOLDStateProvider struct {
 	validator                *staker.BlockValidator
 	statelessValidator       *staker.StatelessBlockValidator
@@ -167,7 +171,7 @@ func (s *BOLDStateProvider) isStateValidatedAndMessageCountPastThreshold(
 		return false, err
 	}
 	if lastValidatedGs == nil {
-		return false, l2stateprovider.ErrChainCatchingUp
+		return false, ErrChainCatchingUp
 	}
 	stateValidated := gs.Batch < lastValidatedGs.GlobalState.Batch || (gs.Batch == lastValidatedGs.GlobalState.Batch && gs.PosInBatch <= lastValidatedGs.GlobalState.PosInBatch)
 	return stateValidated, nil

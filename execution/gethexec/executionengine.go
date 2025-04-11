@@ -1040,23 +1040,19 @@ func (s *ExecutionEngine) Start(ctx_in context.Context) {
 			}
 		}
 	})
-	if !s.disableStylusCacheMetricsCollection {
-		// periodically update stylus cache metrics
-		s.LaunchThread(func(ctx context.Context) {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(time.Minute):
-					programs.UpdateWasmCacheMetrics()
-				}
-			}
-		})
-	}
 }
 
 func (s *ExecutionEngine) Maintenance(capLimit uint64) error {
 	s.createBlocksMutex.Lock()
 	defer s.createBlocksMutex.Unlock()
 	return s.bc.FlushTrieDB(common.StorageSize(capLimit))
+}
+
+// Publish following functions for espresso caff node to access the blockchain
+func (s *ExecutionEngine) Bc() *core.BlockChain {
+	return s.bc
+}
+
+func (s *ExecutionEngine) AppendBlock(block *types.Block, statedb *state.StateDB, receipts types.Receipts, duration time.Duration) error {
+	return s.appendBlock(block, statedb, receipts, duration)
 }
