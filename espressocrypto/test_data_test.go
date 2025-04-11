@@ -11,6 +11,7 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
 	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
