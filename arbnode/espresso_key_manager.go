@@ -44,7 +44,6 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 }
 
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) error {
-	// TODO: Make sure contracts support teeType Nitro
 	tx, err := e.contract.RegisterSigner(opts, attestation, data, uint8(teeType))
 	if err != nil {
 		return err

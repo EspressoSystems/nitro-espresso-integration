@@ -10,7 +10,8 @@ import (
 func createDummyEspressoMetadata(t *testing.T) []byte {
 	hotshotHeight := new(big.Int).SetUint64(1)
 	signature := make([]byte, 32)
-	teeType := new(uint8).SetUint64(0)
+	teeType := new(uint8)
+	*teeType = 0
 
 	uint256Type, err := abi.NewType("uint256", "", nil)
 	if err != nil {
