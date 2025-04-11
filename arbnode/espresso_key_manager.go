@@ -23,22 +23,6 @@ type EspressoKeyManagerInterface interface {
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
 }
-func (e *EspressoTEEVerifier) Verify(opts *bind.TransactOpts, userDataHash []byte, reportDataHash[32]byte) error{
-  tx, err := e.contract.Verify(opts, userDataHash, reportDataHash)
-  if err != nil{
-    return err
-  }
-	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
-	if err != nil {
-		return err
-	}
-
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		return errors.New("transaction failed")
-	}
-  
-  return nil
-}
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
