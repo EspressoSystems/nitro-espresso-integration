@@ -1186,15 +1186,17 @@ func (b *BatchPoster) encodeAddBatch(
 				return nil, nil, fmt.Errorf("failed to sign the calldata: %w", err)
 			}
 
-			if len(signature) > 0 {
+			sigLength := len(signature)
+			if sigLength > 0 {
 				// Get the last byte (v)
-				v := signature[len(signature)-1]
+				vIndex := sigLength - 1
+				v := signature[vIndex]
 
 				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
 				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
 				// https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
 				if v == 0 || v == 1 {
-					signature[len(signature)-1] = v + 27
+					signature[vIndex] = v + 27
 				}
 			}
 		}
