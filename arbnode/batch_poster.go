@@ -1192,10 +1192,16 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to create bytes type: %w", err)
 		}
 
-		hotshotNumberAndSignature, err := abi.Arguments{
+		uint8Type, err := abi.NewType("uint8", "", nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create uint8 type: %w", err)
+		}
+
+		espressoMetadata, err := abi.Arguments{
 			{Type: uint256Type},
 			{Type: bytesType},
-		}.Pack(hotshotBlockNumber, signature)
+			{Type: uint8Type},
+		}.Pack(hotshotBlockNumber, signature, b.espressoStreamer.GetTeeType())
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
@@ -1213,7 +1219,7 @@ func (b *BatchPoster) encodeAddBatch(
 			b.config().gasRefunder,
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
-			hotshotNumberAndSignature,
+			espressoMetadata,
 		)
 
 		if err != nil {

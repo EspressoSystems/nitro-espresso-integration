@@ -44,6 +44,7 @@ type EspressoStreamerInterface interface {
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
+	GetTeeType() uint8
 }
 
 type MessageWithMetadataAndPos struct {
@@ -156,8 +157,8 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 }
 
 /* Verify the attestation quote */
-func (s *EspressoStreamer) verifySignature(attestation []byte, signature [32]byte) error {
-
+func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, signature [32]byte) error {
+	// TODO: Use EspressoSGXTEEVerify here
 	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
@@ -189,7 +190,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	}
 
 	if !success {
-		err = s.verifySignature(signature, userDataHashArr)
+		// TODO: Make this use SGX contract `Verify`
+		err = s.verifyAttestationQuote(signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
 			return nil, err
@@ -333,4 +335,8 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return s.pollingHotshotPollingInterval
 	})
 	return err
+}
+
+func (s *EspressoStreamer) GetTeeType() uint8 {
+	return s.espressoTEEVerifier.GetTeeType()
 }
