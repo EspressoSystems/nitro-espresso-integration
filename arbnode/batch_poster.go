@@ -1180,6 +1180,7 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 
 		var signature []byte
+		teeType := SGX
 		if b.streamer.EspressoKeyManager != nil {
 			signature, err = b.streamer.EspressoKeyManager.SignBatch(calldata)
 			if err != nil {
@@ -1199,6 +1200,7 @@ func (b *BatchPoster) encodeAddBatch(
 					signature[vIndex] = v + 27
 				}
 			}
+			teeType = b.streamer.EspressoKeyManager.TeeType()
 		}
 
 		bytesType, err := abi.NewType("bytes", "", nil)
@@ -1215,7 +1217,7 @@ func (b *BatchPoster) encodeAddBatch(
 			{Type: uint256Type},
 			{Type: bytesType},
 			{Type: uint8Type},
-		}.Pack(hotshotBlockNumber, signature, b.espressoStreamer.GetTeeType())
+		}.Pack(hotshotBlockNumber, signature, teeType)
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)

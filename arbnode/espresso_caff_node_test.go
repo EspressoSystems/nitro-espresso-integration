@@ -100,7 +100,7 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	msg4, err := caffNode.nextMessage()
 	require.NoError(t, err)
 	require.Equal(t, msg4.MessageWithMeta.DelayedMessagesRead, uint64(2))
-	require.Equal(t, msg4.MessageWithMeta.Message, arbostypes.InvalidL1Message)
+	require.Equal(t, msg4.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
 }
 
 func TestEspressoCaffNodeShouldResetToLastStoredHotshotBlock(t *testing.T) {

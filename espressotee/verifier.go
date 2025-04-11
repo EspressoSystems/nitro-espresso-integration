@@ -9,7 +9,6 @@ import (
 
 type EspressoTEEVerifierInterface interface {
 	Verify(opts *bind.CallOpts, signature []byte, userDataHash [32]byte) (bool, error)
-	GetTeeType() uint8
 }
 
 type EspressoTEEVerifier struct {
@@ -32,8 +31,4 @@ func NewEspressoTEEVerifier(l1Client *ethclient.Client, addr common.Address, tee
 
 func (e *EspressoTEEVerifier) Verify(opts *bind.CallOpts, signature []byte, userDataHash [32]byte) (bool, error) {
 	return e.verifier.Verify(opts, signature, userDataHash, e.teeType)
-}
-
-func (e *EspressoTEEVerifier) GetTeeType() uint8 {
-	return e.teeType
 }

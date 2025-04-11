@@ -44,7 +44,6 @@ type EspressoStreamerInterface interface {
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
-	GetTeeType() uint8
 }
 
 type MessageWithMetadataAndPos struct {
@@ -335,8 +334,4 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return s.pollingHotshotPollingInterval
 	})
 	return err
-}
-
-func (s *EspressoStreamer) GetTeeType() uint8 {
-	return s.espressoTEEVerifier.GetTeeType()
 }
