@@ -417,9 +417,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	var espressoStreamer *espressostreamer.EspressoStreamer
 	if opts.Config().EspressoTeeVerifierAddress != "" && opts.Streamer.espressoClient != nil {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
-
+	
 		verifier, err := espressotee.NewEspressoTEEVerifier(opts.L1Reader.Client(), espressoTeeVerifierAddress, 1)
-    if err != nil {
+	    if err != nil {
 		return nil, err
 	}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
@@ -437,8 +437,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			opts.Streamer.espressoTxnsPollingInterval,
 			verifier,
 			opts.Streamer.espressoClient,
-      false,
-      opts.Streamer.EspressoKeyManager.GetAddress(),
+	      false,
+	      opts.Streamer.EspressoKeyManager.GetAddress(),
 		)
 	}
 
