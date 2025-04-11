@@ -320,19 +320,21 @@ func TestEspressoE2E(t *testing.T) {
 
 	log.Info("Resuming espresso node")
 	unpauseEspresso := func() {
-		p := exec.Command("docker", "compose", "unpause")
-		p.Dir = workingDir
-		err := p.Run()
-		if err != nil {
-			panic(err)
-		}
-		p = exec.Command(
+		// reconnect the network first
+		p := exec.Command(
 			"docker",
 			"network",
 			"connect",
 			"espresso-e2e_default",
 			"espresso-e2e-espresso-dev-node-1",
 		)
+		err := p.Run()
+		if err != nil {
+			panic(err)
+		}
+		// resume the dev node
+		p = exec.Command("docker", "compose", "unpause")
+		p.Dir = workingDir
 		err = p.Run()
 		if err != nil {
 			panic(err)
