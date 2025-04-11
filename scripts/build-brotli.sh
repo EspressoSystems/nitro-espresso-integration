@@ -103,14 +103,22 @@ if $BUILD_WASM; then
     make -j
     make install
     cp -rv "$TEMP_INSTALL_DIR_ABS/lib" "$TARGET_DIR_ABS/lib-wasm"
+    (cd "$TARGET_DIR_ABS/lib-wasm" && \
+        [ -f libbrotlicommon.a ] && ln -sf libbrotlicommon.a libbrotlicommon-static.a || true; \
+        [ -f libbrotlidec.a ] && ln -sf libbrotlidec.a libbrotlidec-static.a || true; \
+        [ -f libbrotlienc.a ] && ln -sf libbrotlienc.a libbrotlienc-static.a || true)
     cd ..
 fi
 
 if $BUILD_LOCAL; then
     mkdir -p buildfiles/build-local
     cd buildfiles/build-local
-    cmake ../../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$TARGET_DIR_ABS"
+    cmake ../../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$TARGET_DIR_ABS" -DBUILD_SHARED_LIBS=OFF
     make -j
     make install
+    (cd "$TARGET_DIR_ABS/lib" && \
+        [ -f libbrotlicommon.a ] && ln -sf libbrotlicommon.a libbrotlicommon-static.a; \
+        [ -f libbrotlidec.a ] && ln -sf libbrotlidec.a libbrotlidec-static.a; \
+        [ -f libbrotlienc.a ] && ln -sf libbrotlienc.a libbrotlienc-static.a)
     cd ..
 fi
