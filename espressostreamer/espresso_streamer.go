@@ -13,12 +13,14 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -28,10 +30,6 @@ const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
 var PayloadHadNoMessagesErr = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
-
-type EspressoTEEVerifierInterface interface {
-	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) error
-}
 
 type EspressoClientInterface interface {
 	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
@@ -46,6 +44,7 @@ type EspressoStreamerInterface interface {
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
+	GetCurrentEarliestHotShotBlockNumber() uint64
 }
 
 type MessageWithMetadataAndPos struct {
@@ -63,7 +62,7 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	espressoTEEVerifierCaller     EspressoTEEVerifierInterface
+	espressoTEEVerifier           espressotee.EspressoTEEVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -76,7 +75,7 @@ func NewEspressoStreamer(
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	espressoTEEVerifierCaller EspressoTEEVerifierInterface,
+	espressoTEEVerifier espressotee.EspressoTEEVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
@@ -93,7 +92,7 @@ func NewEspressoStreamer(
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
-		espressoTEEVerifierCaller:     espressoTEEVerifierCaller,
+		espressoTEEVerifier:           espressoTEEVerifier,
 		PerfRecorder:                  PerfRecorder,
 		batchPosterAddr:               batchPosterAddr,
 	}
@@ -132,10 +131,35 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	return message, nil
 }
 
-/* Verify the attestation quote */
-func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHash [32]byte) error {
+func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userDataHash [32]byte) error {
+	publicKey, err := crypto.SigToPub(userDataHash[:], signature)
+	if err != nil {
+		return fmt.Errorf("failed to convert signature to public key: %w", err)
+	}
+	addr := crypto.PubkeyToAddress(*publicKey)
+	if addr != s.batchPosterAddr {
+		log.Warn("batch poster address", "addr", addr, "expected", s.batchPosterAddr)
+		return fmt.Errorf("batch poster address does not match")
+	}
+	return nil
+}
 
-	err := s.espressoTEEVerifierCaller.Verify(&bind.CallOpts{}, attestation, userDataHash)
+func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+	s.messageMutex.Lock()
+	defer s.messageMutex.Unlock()
+
+	if len(s.messageWithMetadataAndPos) == 0 {
+		// This case means that the espresso streamer is empty and the earliest hotshot block number
+		// is the next hotshot block number.
+		return s.nextHotshotBlockNum
+	}
+	return s.messageWithMetadataAndPos[0].HotshotHeight
+}
+
+/* Verify the attestation quote */
+func (s *EspressoStreamer) verifySignature(attestation []byte, signature [32]byte) error {
+
+	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
@@ -143,7 +167,7 @@ func (s *EspressoStreamer) verifyAttestationQuote(attestation []byte, userDataHa
 }
 
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error) {
-	attestation, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
+	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 	if err != nil {
 		log.Warn("failed to parse hotshot payload", "err", err)
 		return nil, err
@@ -159,10 +183,21 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	}
 
 	userDataHashArr := [32]byte(userDataHash)
-	err = s.verifyAttestationQuote(attestation, userDataHashArr)
-	if err != nil {
-		log.Warn("failed to verify attestation quote", "err", err)
-		return nil, err
+
+	var success bool
+	err = s.verifyBatchPosterSignature(signature, userDataHashArr)
+	if err == nil {
+		success = true
+	} else {
+		log.Warn("failed to verify batch poster signature", "err", err)
+	}
+
+	if !success {
+		err = s.verifySignature(signature, userDataHashArr)
+		if err != nil {
+			log.Warn("failed to verify attestation quote", "err", err)
+			return nil, err
+		}
 	}
 
 	result := []*MessageWithMetadataAndPos{}

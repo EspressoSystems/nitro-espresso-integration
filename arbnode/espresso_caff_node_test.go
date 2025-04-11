@@ -18,6 +18,11 @@ type MockEspressoStreamer struct {
 	currHotShot uint64
 
 	delayedPos uint64
+	dbHotShot  uint64
+}
+
+func (m *MockEspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+	return m.currHotShot
 }
 
 func (m *MockEspressoStreamer) Start(ctx context.Context) error {
@@ -42,7 +47,10 @@ func (m *MockEspressoStreamer) Next() (*espressostreamer.MessageWithMetadataAndP
 	return &result, nil
 }
 
-func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {}
+func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
+	m.currrPos = currentMessagePos
+	m.currHotShot = currentHostshotBlock
+}
 
 func (m *MockEspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time) {
 }
@@ -52,7 +60,7 @@ func (m *MockEspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotB
 }
 
 func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
-	return 0, nil
+	return m.dbHotShot, nil
 }
 
 type MockDelayedMessageFetcher struct{}
@@ -93,4 +101,15 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, msg4.MessageWithMeta.DelayedMessagesRead, uint64(2))
 	require.Equal(t, msg4.MessageWithMeta.Message, arbostypes.InvalidL1Message)
+}
+
+func TestEspressoCaffNodeShouldResetToLastStoredHotshotBlock(t *testing.T) {
+	caffNode := EspressoCaffNode{}
+	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, dbHotShot: 10}
+	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
+
+	caffNode.reset(3)
+	espressoStreamer, _ := caffNode.espressoStreamer.(*MockEspressoStreamer)
+	require.Equal(t, espressoStreamer.currHotShot, uint64(10))
+	require.Equal(t, espressoStreamer.currrPos, uint64(3))
 }
