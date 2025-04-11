@@ -188,7 +188,8 @@ func TestEspressoE2E(t *testing.T) {
 	err := waitForL1Node(ctx)
 	Require(t, err)
 
-	runEspresso()
+	shutdown := runEspresso()
+	defer shutdown()
 
 	// wait for the builder
 	err = waitForEspressoNode(ctx)
