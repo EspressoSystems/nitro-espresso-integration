@@ -127,7 +127,10 @@ func IgnoreTestGenerateMerkleProofTestData(t *testing.T) {
 	}
 	defer file.Close()
 
-	json.NewEncoder(file).Encode(testData)
+	err = json.NewEncoder(file).Encode(testData)
+	if err != nil {
+		t.Fatalf("Failed to encode json: %v", err)
+	}
 }
 
 /// For namespace proof testdata, it is recommended to generate
