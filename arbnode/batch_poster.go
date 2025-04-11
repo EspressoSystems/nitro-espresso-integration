@@ -45,9 +45,9 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/espressostreamer"
+  "github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
@@ -417,14 +417,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	var espressoStreamer *espressostreamer.EspressoStreamer
 	if opts.Config().EspressoTeeVerifierAddress != "" && opts.Streamer.espressoClient != nil {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
-		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-			espressoTeeVerifierAddress,
-			opts.L1Reader.Client())
-		if err != nil {
-			return nil, err
-		}
 
-		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
+		verifier, err := espressotee.NewEspressoTEEVerifier(opts.L1Reader.Client(), espressoTeeVerifierAddress, 1)
+    if err != nil {
+		return nil, err
+	}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 
 		// espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
