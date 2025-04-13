@@ -16,8 +16,8 @@
         (final: prev: rec {
           go = prev."go_1_${toString goVersion}";
           # Overlaying nodejs here to ensure nodePackages use the desired
-          # version of nodejs. Updated to Node.js 20 to handle newer packages.
-          nodejs = prev.nodejs_20;
+          # version of nodejs. Offchainlabs suggests nodejs v18 in the docs.
+          nodejs = prev.nodejs_18;
           yarn = (prev.yarn.override { inherit nodejs; });
           pnpm = (prev.pnpm.override { inherit nodejs; });
         })
