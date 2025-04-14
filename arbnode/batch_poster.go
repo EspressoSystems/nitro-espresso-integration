@@ -185,7 +185,6 @@ type BatchPosterConfig struct {
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
 	LightClientAddress          string        `koanf:"light-client-address"`
-	FallBackUrls                []string      `koanf:"fall-back-urls"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
@@ -260,7 +259,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
-	f.StringArray(prefix+".fall-back-urls", DefaultBatchPosterConfig.FallBackUrls, "specifies the fall back urls if we are batching in espresso mode")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
@@ -311,7 +309,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
-	FallBackUrls:                   []string{""},
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -401,8 +398,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
 
 	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
-		//  TODO: tech debt, want to remove fallback urls in the future
-		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls, DefaultBatchPosterConfig.FallBackUrls)
+		//  TODO: tech debt should remove fallback urls in the future
+		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls, hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}
 

@@ -38,7 +38,6 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
-	// Test that fallbackurl work
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl}
 	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
 
