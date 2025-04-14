@@ -196,6 +196,7 @@ var ConfigDefault = Config{
 	Maintenance:          DefaultMaintenanceConfig,
 	BlockMetadataFetcher: DefaultBlockMetadataFetcherConfig,
 	SnapSyncTest:         DefaultSnapSyncConfig,
+	EspressoCaffNode:     DefaultEspressoCaffNodeConfig,
 }
 
 func ConfigDefaultL1Test() *Config {
