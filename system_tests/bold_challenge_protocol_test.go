@@ -579,7 +579,9 @@ func createTestNodeOnL1ForBoldProtocol(
 	Require(t, err)
 	l1TransactionOpts.Value = nil
 
-	addresses := deployContractsOnly(t, ctx, l1info, l1client, chainConfig.ChainID, rollupStackConf, stakeToken)
+	espressoTEEVerifierAddress, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&l1TransactionOpts, l1client)
+	Require(t, err)
+	addresses := deployContractsOnly(t, ctx, l1info, l1client, chainConfig.ChainID, rollupStackConf, stakeToken, espressoTEEVerifierAddress)
 	rollupUser, err := rollupgen.NewRollupUserLogic(addresses.Rollup, l1client)
 	Require(t, err)
 	chalManagerAddr, err := rollupUser.ChallengeManager(&bind.CallOpts{})
@@ -662,6 +664,7 @@ func deployContractsOnly(
 	chainId *big.Int,
 	rollupStackConf setup.RollupStackConfig,
 	stakeToken common.Address,
+	espressoTEEVerifierAddress common.Address,
 ) *chaininfo.RollupAddresses {
 	l1TransactionOpts := l1info.GetDefaultTransactOpts("RollupOwner", ctx)
 	locator, err := server_common.NewMachineLocator("")
@@ -688,6 +691,7 @@ func deployContractsOnly(
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
+		espressoTEEVerifierAddress,
 		challengetesting.WithLayerZeroHeights(&protocol.LayerZeroHeights{
 			BlockChallengeHeight:     protocol.Height(blockChallengeLeafHeight),
 			BigStepChallengeHeight:   protocol.Height(bigStepChallengeLeafHeight),
@@ -696,6 +700,7 @@ func deployContractsOnly(
 		challengetesting.WithNumBigStepLevels(uint8(3)),       // TODO: Hardcoded.
 		challengetesting.WithConfirmPeriodBlocks(uint64(120)), // TODO: Hardcoded.
 	)
+	cfg.EspressoTEEVerifier = espressoTEEVerifierAddress
 	config, err := json.Marshal(chaininfo.ArbitrumDevTestChainConfig())
 	Require(t, err)
 	cfg.ChainConfig = string(config)
@@ -783,7 +788,11 @@ func create2ndNodeWithConfigForBoldProtocol(
 		Fatal(t, "not geth execution node")
 	}
 	chainConfig := firstExec.ArbInterface.BlockChain().Config()
-	addresses := deployContractsOnly(t, ctx, l1info, l1client, chainConfig.ChainID, rollupStackConf, stakeTokenAddr)
+	rollupOwner := l1info.GetDefaultTransactOpts("RollupOwner", ctx)
+
+	espressoTEEVerifierAddress, _, _, err := mocksgen.DeployEspressoTEEVerifierMock(&rollupOwner, l1client)
+	Require(t, err)
+	addresses := deployContractsOnly(t, ctx, l1info, l1client, chainConfig.ChainID, rollupStackConf, stakeTokenAddr, espressoTEEVerifierAddress)
 
 	l1info.SetContract("EvilBridge", addresses.Bridge)
 	l1info.SetContract("EvilSequencerInbox", addresses.SequencerInbox)
