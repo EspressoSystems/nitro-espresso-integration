@@ -174,6 +174,8 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 		if condition(messages) {
 			break
 		}
+
+		time.Sleep(s.pollingHotshotPollingInterval)
 	}
 
 	return nil
