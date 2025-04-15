@@ -16,33 +16,31 @@ const (
 func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) int {
 
 	var hasFound bool
-	result := -1
+	idx := -1
 
 	if arr == nil || len(*arr) == 0 {
-		return result
+		return idx
 	}
 
 	j := 0
 	for i := 0; i < len(*arr); i++ {
 		result := compareFunc((*arr)[i])
 
-		if result == FilterAndFind_Remove {
+		if result == FilterAndFind_Remove || (result == FilterAndFind_Target && hasFound) {
 			continue
 		}
 
 		// Take the first element that matches
-		if result == FilterAndFind_Target && !hasFound {
+		if result == FilterAndFind_Target {
 			hasFound = true
-			result = i
-			j++
-		} else if result == FilterAndFind_Keep {
-			if i != j {
-				(*arr)[j] = (*arr)[i]
-			}
-			j++
+			idx = j
 		}
+		if i != j {
+			(*arr)[j] = (*arr)[i]
+		}
+		j++
 	}
 
 	*arr = (*arr)[:j]
-	return result
+	return idx
 }

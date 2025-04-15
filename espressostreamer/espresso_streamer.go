@@ -143,9 +143,12 @@ func (s *EspressoStreamer) Peek() (*MessageWithMetadataAndPos, error) {
 		return nil, err
 	}
 
-	// The function above should have added the message to the buffer
-	// So we just need to peek the message again
-	return s.Peek()
+	messageIndex = FilterAndFind(&s.messageWithMetadataAndPos, compareMessageWithCurrentPos)
+
+	if messageIndex >= 0 {
+		return s.messageWithMetadataAndPos[messageIndex], nil
+	}
+	return nil, fmt.Errorf("message not found, please check the condition")
 }
 
 // Call this function to advance the streamer to the next message
@@ -162,23 +165,36 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error),
 	condition func(messages []*MessageWithMetadataAndPos) bool,
 ) error {
+	var e error
 	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
 		if err != nil {
+			e = fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
+			// TODO: handle the case more appropriately
+			if condition(messages) || ctx.Err() != nil {
+				break
+			}
 			continue
 		}
 
-		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
+		if len(messages) > 0 {
+			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
+		}
 		s.nextHotshotBlockNum += 1
 
 		if condition(messages) {
 			break
 		}
 
+		err = nil
 		time.Sleep(s.pollingHotshotPollingInterval)
 	}
 
-	return nil
+	return e
 }
 
 func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userDataHash [32]byte) error {
@@ -331,7 +347,7 @@ func fetchNextHotshotBlock(
 ) ([]*MessageWithMetadataAndPos, error) {
 	arbTxns, err := espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, namespace)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
+		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
 	}
 
 	result := []*MessageWithMetadataAndPos{}

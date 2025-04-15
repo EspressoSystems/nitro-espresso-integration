@@ -25,7 +25,7 @@ func TestFilterAndFind(t *testing.T) {
 				}
 				return FilterAndFind_Keep
 			},
-			wantFound:     2,
+			wantFound:     0,
 			wantRemaining: []int{3, 4, 5},
 		},
 		{
@@ -131,9 +131,9 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 			input: []TestStruct{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}, {ID: 3, Name: "Charlie"}},
 			compareFunc: func(ts TestStruct) int {
 				if ts.ID == 2 {
-					return 0
+					return FilterAndFind_Target
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
 			wantFound:     1,
 			wantRemaining: []TestStruct{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}, {ID: 3, Name: "Charlie"}},
@@ -143,9 +143,9 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 			input: []TestStruct{{ID: 2, Name: "Charlie"}, {ID: 1, Name: "Alice"}, {ID: 1, Name: "Bob"}},
 			compareFunc: func(ts TestStruct) int {
 				if ts.ID == 1 {
-					return 0
+					return FilterAndFind_Target
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
 			wantFound:     1,
 			wantRemaining: []TestStruct{{ID: 2, Name: "Charlie"}, {ID: 1, Name: "Alice"}},
