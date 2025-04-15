@@ -35,7 +35,7 @@ func runEspresso() func() {
 	shutdown := func() {
 		p := exec.Command("docker", "compose", "down", "--volumes")
 		p.Dir = workingDir
-		err := p.Wait()
+		err := p.Run()
 		if err != nil {
 			panic(err)
 		}
