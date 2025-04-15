@@ -11,7 +11,6 @@ func TestFilterAndFind(t *testing.T) {
 		input         []int
 		compareFunc   func(int) int
 		wantFound     int
-		wantExists    bool
 		wantRemaining []int
 	}{
 		{
@@ -19,48 +18,44 @@ func TestFilterAndFind(t *testing.T) {
 			input: []int{1, 2, 3, 4, 5},
 			compareFunc: func(n int) int {
 				if n == 3 {
-					return 0
+					return FilterAndFind_Target
 				}
 				if n < 3 {
-					return -1
+					return FilterAndFind_Remove
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
-			wantFound:     3,
-			wantExists:    true,
-			wantRemaining: []int{4, 5},
+			wantFound:     2,
+			wantRemaining: []int{3, 4, 5},
 		},
 		{
 			name:  "no element found",
 			input: []int{1, 2, 3, 4, 5},
 			compareFunc: func(n int) int {
 				if n < 3 {
-					return -1
+					return FilterAndFind_Remove
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
-			wantFound:     0, // zero value for int
-			wantExists:    false,
+			wantFound:     -1,
 			wantRemaining: []int{3, 4, 5},
 		},
 		{
 			name:  "empty slice",
 			input: []int{},
 			compareFunc: func(n int) int {
-				return 1
+				return FilterAndFind_Keep
 			},
-			wantFound:     0,
-			wantExists:    false,
+			wantFound:     -1,
 			wantRemaining: []int{},
 		},
 		{
 			name:  "remove all elements",
 			input: []int{1, 2, 3},
 			compareFunc: func(n int) int {
-				return -1
+				return FilterAndFind_Remove
 			},
-			wantFound:     0,
-			wantExists:    false,
+			wantFound:     -1,
 			wantRemaining: []int{},
 		},
 		{
@@ -68,26 +63,24 @@ func TestFilterAndFind(t *testing.T) {
 			input: []int{1, 2, 3},
 			compareFunc: func(n int) int {
 				if n == 2 {
-					return 0
+					return FilterAndFind_Target
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
-			wantFound:     2,
-			wantExists:    true,
-			wantRemaining: []int{1, 3},
+			wantFound:     1,
+			wantRemaining: []int{1, 2, 3},
 		},
 		{
 			name:  "handle duplicate correctly",
 			input: []int{1, 2, 2, 3},
 			compareFunc: func(n int) int {
 				if n == 2 {
-					return 0
+					return FilterAndFind_Target
 				}
-				return 1
+				return FilterAndFind_Keep
 			},
-			wantFound:     2,
-			wantExists:    true,
-			wantRemaining: []int{1, 3},
+			wantFound:     1,
+			wantRemaining: []int{1, 2, 3},
 		},
 	}
 
@@ -97,14 +90,10 @@ func TestFilterAndFind(t *testing.T) {
 			input := make([]int, len(tt.input))
 			copy(input, tt.input)
 
-			found, exists := FilterAndFind(&input, tt.compareFunc)
+			found := FilterAndFind(&input, tt.compareFunc)
 
 			if found != tt.wantFound {
 				t.Errorf("FilterAndFind() found = %v, want %v", found, tt.wantFound)
-			}
-
-			if exists != tt.wantExists {
-				t.Errorf("FilterAndFind() exists = %v, want %v", exists, tt.wantExists)
 			}
 
 			if !reflect.DeepEqual(input, tt.wantRemaining) {
@@ -116,14 +105,10 @@ func TestFilterAndFind(t *testing.T) {
 	// Test with nil slice
 	t.Run("nil slice", func(t *testing.T) {
 		var nilSlice []int
-		found, exists := FilterAndFind(&nilSlice, func(n int) int { return 1 })
+		msgIndex := FilterAndFind(&nilSlice, func(n int) int { return 1 })
 
-		if exists {
-			t.Error("FilterAndFind() with nil slice should return exists = false")
-		}
-
-		if found != 0 {
-			t.Errorf("FilterAndFind() with nil slice should return zero value, got %v", found)
+		if msgIndex != -1 {
+			t.Errorf("FilterAndFind() with nil slice should return zero value, got %v", msgIndex)
 		}
 	})
 }
@@ -138,8 +123,7 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 		name          string
 		input         []TestStruct
 		compareFunc   func(TestStruct) int
-		wantFound     TestStruct
-		wantExists    bool
+		wantFound     int
 		wantRemaining []TestStruct
 	}{
 		{
@@ -151,9 +135,8 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 				}
 				return 1
 			},
-			wantFound:     TestStruct{ID: 2, Name: "Bob"},
-			wantExists:    true,
-			wantRemaining: []TestStruct{{ID: 1, Name: "Alice"}, {ID: 3, Name: "Charlie"}},
+			wantFound:     1,
+			wantRemaining: []TestStruct{{ID: 1, Name: "Alice"}, {ID: 2, Name: "Bob"}, {ID: 3, Name: "Charlie"}},
 		},
 		{
 			name:  "consume elements in order and filter out duplicates",
@@ -164,9 +147,8 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 				}
 				return 1
 			},
-			wantFound:     TestStruct{ID: 1, Name: "Alice"},
-			wantExists:    true,
-			wantRemaining: []TestStruct{{ID: 2, Name: "Charlie"}},
+			wantFound:     1,
+			wantRemaining: []TestStruct{{ID: 2, Name: "Charlie"}, {ID: 1, Name: "Alice"}},
 		},
 	}
 
@@ -176,14 +158,10 @@ func TestFilterAndFindWithStruct(t *testing.T) {
 			input := make([]TestStruct, len(tt.input))
 			copy(input, tt.input)
 
-			found, exists := FilterAndFind(&input, tt.compareFunc)
+			idx := FilterAndFind(&input, tt.compareFunc)
 
-			if found != tt.wantFound {
-				t.Errorf("FilterAndFind() found = %v, want %v", found, tt.wantFound)
-			}
-
-			if exists != tt.wantExists {
-				t.Errorf("FilterAndFind() exists = %v, want %v", exists, tt.wantExists)
+			if idx != tt.wantFound {
+				t.Errorf("FilterAndFind() found = %v, want %v", idx, tt.wantFound)
 			}
 
 			if !reflect.DeepEqual(input, tt.wantRemaining) {
