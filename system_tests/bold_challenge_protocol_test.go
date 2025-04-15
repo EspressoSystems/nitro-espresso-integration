@@ -691,7 +691,6 @@ func deployContractsOnly(
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
-		espressoTEEVerifierAddress,
 		challengetesting.WithLayerZeroHeights(&protocol.LayerZeroHeights{
 			BlockChallengeHeight:     protocol.Height(blockChallengeLeafHeight),
 			BigStepChallengeHeight:   protocol.Height(bigStepChallengeLeafHeight),
