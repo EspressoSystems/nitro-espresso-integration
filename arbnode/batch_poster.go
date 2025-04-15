@@ -308,7 +308,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
-	HotShotUrls:                    []string{},
+	HotShotUrls:                    []string{""},
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
