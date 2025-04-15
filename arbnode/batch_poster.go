@@ -198,18 +198,6 @@ type BatchPosterConfig struct {
 }
 
 func (c *BatchPosterConfig) Validate() error {
-	if len(c.HotShotUrls) == 0 {
-		return errors.New("HotShotUrls must not be empty")
-
-	} else {
-		urlsSlice := c.HotShotUrls[1:] // Slice off the first index as it is valid to leave that an empty string
-		// in the first position to avoid constructing an espressoClient in the batch poster.
-		for _, url := range urlsSlice {
-			if url == ("") {
-				return errors.New("An empty address (\"\") was used as a Hotshot url")
-			}
-		}
-	}
 	if len(c.GasRefunderAddress) > 0 && !common.IsHexAddress(c.GasRefunderAddress) {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}
@@ -308,7 +296,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
-	HotShotUrls:                    []string{""},
+	HotShotUrls:                    []string{},
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -346,7 +334,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	ResubmitEspressoTxDeadline:     10 * time.Second,
-	HotShotUrls:                    []string{""},
+	HotShotUrls:                    []string{},
 }
 
 type BatchPosterOpts struct {
