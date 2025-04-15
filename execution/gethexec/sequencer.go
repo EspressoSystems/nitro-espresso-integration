@@ -156,6 +156,7 @@ func (c *SequencerConfig) Validate() error {
 
 type SequencerConfigFetcher func() *SequencerConfig
 
+<<<<<<< HEAD
 type CaffNodeConfig struct {
 	HotShotUrls             []string            `koanf:"hotshot-urls"`
 	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
@@ -185,6 +186,8 @@ var DefaultCaffNodeConfig = CaffNodeConfig{
 	RecordPerformance:       false,
 }
 
+=======
+>>>>>>> 830e91477 (Cherry picking some commits for V1 release (#565))
 var DefaultSequencerConfig = SequencerConfig{
 	Enable:                      false,
 	MaxBlockSpeed:               time.Millisecond * 250,
@@ -203,7 +206,15 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusSoftThreshold: "default",
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
+<<<<<<< HEAD
 	Timeboost:                    DefaultTimeboostConfig,
+=======
+	Dangerous:                    DefaultDangerousConfig,
+}
+
+var DefaultDangerousConfig = DangerousConfig{
+	Timeboost: DefaultTimeboostConfig,
+>>>>>>> 830e91477 (Cherry picking some commits for V1 release (#565))
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
