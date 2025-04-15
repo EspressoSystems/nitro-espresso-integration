@@ -53,6 +53,8 @@ func runEspresso() func() {
 	go func() {
 		if err := procees.Run(); err != nil {
 			log.Error(err.Error())
+			output, _ := exec.Command("docker", "compose", "logs").Output()
+			log.Error("docker compose logs", "logs", string(output))
 			panic(err)
 		}
 	}()
