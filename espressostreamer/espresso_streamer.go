@@ -35,8 +35,8 @@ type EspressoClientInterface interface {
 }
 
 type EspressoStreamerInterface interface {
-	Next() (*MessageWithMetadataAndPos, error)
-	Peek() (*MessageWithMetadataAndPos, error)
+	Next(ctx context.Context) (*MessageWithMetadataAndPos, error)
+	Peek(ctx context.Context) (*MessageWithMetadataAndPos, error)
 	Advance()
 	Reset(currentMessagePos uint64, currentHostshotBlock uint64)
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
@@ -100,8 +100,8 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
 
-func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
-	result, err := s.Peek()
+func (s *EspressoStreamer) Next(ctx context.Context) (*MessageWithMetadataAndPos, error) {
+	result, err := s.Peek(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 	return result, nil
 }
 
-func (s *EspressoStreamer) Peek() (*MessageWithMetadataAndPos, error) {
+func (s *EspressoStreamer) Peek(ctx context.Context) (*MessageWithMetadataAndPos, error) {
 	compareMessageWithCurrentPos := func(msg *MessageWithMetadataAndPos) int {
 		if msg.Pos == s.currentMessagePos {
 			return FilterAndFind_Target

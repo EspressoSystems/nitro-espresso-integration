@@ -142,8 +142,8 @@ func NewEspressoCaffNode(
 //
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
-func (n *EspressoCaffNode) peekMessage() (*espressostreamer.MessageWithMetadataAndPos, error) {
-	messageWithMetadataAndPos, err := n.espressoStreamer.Peek()
+func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
+	messageWithMetadataAndPos, err := n.espressoStreamer.Peek(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -162,11 +162,11 @@ func (n *EspressoCaffNode) peekMessage() (*espressostreamer.MessageWithMetadataA
 }
 
 // Creates a block from the next message in the queue.
-func (n *EspressoCaffNode) createBlock() (returnValue bool) {
+func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
 
-	messageWithMetadataAndPos, err := n.peekMessage()
+	messageWithMetadataAndPos, err := n.peekMessage(ctx)
 	if err != nil {
 		log.Warn("unable to get next message", "err", err)
 		return false
@@ -266,7 +266,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.delayedMessageFetcher.reset(parentChainBlockNumber, delayedMessagesRead)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock()
+		madeBlock := n.createBlock(ctx)
 		if madeBlock {
 			return n.configFetcher().HotshotPollingInterval
 		}
