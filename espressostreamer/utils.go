@@ -22,11 +22,13 @@ func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) int {
 		return idx
 	}
 
+	// `j` is the next legal index to insert an element
 	j := 0
 	for i := 0; i < len(*arr); i++ {
 		result := compareFunc((*arr)[i])
 
 		if result == FilterAndFind_Remove || (result == FilterAndFind_Target && hasFound) {
+			// here we skip the element and do not increment `j`
 			continue
 		}
 
@@ -36,11 +38,13 @@ func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) int {
 			idx = j
 		}
 		if i != j {
+			// current element should be kept, so we move it to the next legal index `j`.
 			(*arr)[j] = (*arr)[i]
 		}
 		j++
 	}
 
+	// now `j` is the length of elements to keep, we truncate the array to the new length
 	*arr = (*arr)[:j]
 	return idx
 }
