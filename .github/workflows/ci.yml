@@ -305,7 +305,7 @@ jobs:
       - name: Archive detailed run log
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.test-mode }}-full.log
+          name: ${{ matrix.test-mode }}-${{ matrix.test-state-scheme || 'default' }}-full.log
           path: full.log
 
       - name: Upload coverage to Codecov
