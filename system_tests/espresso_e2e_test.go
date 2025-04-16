@@ -39,13 +39,6 @@ func runEspresso() func() {
 		if err != nil {
 			panic(err)
 		}
-		// For some reason, the network is not being removed automatically in some machines
-		// Default network name for the espresso-e2e test
-		pruneNetwork := exec.Command("docker", "network", "rm", "espresso-e2e_default", "--force")
-		err = pruneNetwork.Run()
-		if err != nil {
-			panic(err)
-		}
 	}
 
 	shutdown()
@@ -59,9 +52,6 @@ func runEspresso() func() {
 
 	go func() {
 		if err := procees.Run(); err != nil {
-			log.Error(err.Error())
-			output, _ := exec.Command("docker", "compose", "logs").Output()
-			log.Error("docker compose logs", "logs", string(output))
 			panic(err)
 		}
 	}()

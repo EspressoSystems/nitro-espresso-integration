@@ -144,6 +144,3 @@ jobs:
       - name: Run Espresso tests
         run: |
           scripts/run-espresso-ci-job
-
-      - name: Get logs
-        run: docker compose logs

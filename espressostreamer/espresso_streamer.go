@@ -165,36 +165,28 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error),
 	condition func(messages []*MessageWithMetadataAndPos) bool,
 ) error {
-	var e error
 	for {
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return ctx.Err()
-		}
-
-		messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
-		if err != nil {
-			e = fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
-			// TODO: handle the case more appropriately
-			if condition(messages) || ctx.Err() != nil {
-				break
+		default:
+			messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
+			if err != nil {
+				continue
 			}
-			continue
-		}
 
-		if len(messages) > 0 {
-			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
-		}
-		s.nextHotshotBlockNum += 1
+			if len(messages) > 0 {
+				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
+			}
+			s.nextHotshotBlockNum += 1
 
-		if condition(messages) {
-			break
-		}
+			if condition(messages) {
+				return nil
+			}
 
-		err = nil
-		time.Sleep(s.pollingHotshotPollingInterval)
+			time.Sleep(s.pollingHotshotPollingInterval)
+		}
 	}
-
-	return e
 }
 
 func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userDataHash [32]byte) error {
