@@ -1168,7 +1168,12 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, err
 	}
 	// Log info for debugging / generating test data
-	log.Info("Packed attestationQuote data", "args", args, "packedData", packedData, "blobHashes", blobHashes)
+	log.Info("Packed attestationQuote data", "packedData", packedData, "blobHashes", blobHashes)
+	log.Info("Args:", "seqNum", seqNum)
+	log.Info("Args:", "delayedMsg", delayedMsg)
+	log.Info("Args:", "gasRefunder", b.config().gasRefunder)
+	log.Info("Args:", "prevMsgNum", prevMsgNum)
+	log.Info("Args:", "newMsgNum", newMsgNum)
 	// Generate attestation quote
 	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
 	if err != nil {
