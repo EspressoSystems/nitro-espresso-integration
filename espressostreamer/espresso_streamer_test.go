@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 )
@@ -159,6 +160,15 @@ type mockEspressoTEEVerifier struct {
 func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (bool, error) {
 	args := m.Called(opts, attestation, signature)
 	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockEspressoTEEVerifier) VerifyLegacy(opts *bind.CallOpts, signature []byte, userDataHash [32]byte) (bool, error) {
+	args := m.Called(opts, signature, userDataHash)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockEspressoTEEVerifier) GetLegacySgxVerifier() *espressogen.IEspressoSGXTEEVerifier {
+	return nil
 }
 
 type mockEspressoClient struct {

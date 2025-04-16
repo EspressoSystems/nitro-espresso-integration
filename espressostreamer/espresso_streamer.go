@@ -244,8 +244,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 		log.Warn("failed to verify batch poster signature", "err", err)
 	}
 
-	if !success {
-		err = s.verifySignature(signature, userDataHashArr)
+	if !success && s.espressoTEEVerifier.GetLegacySgxVerifier() != nil {
+		success, err = s.espressoTEEVerifier.VerifyLegacy(&bind.CallOpts{}, signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
 			return nil, err
