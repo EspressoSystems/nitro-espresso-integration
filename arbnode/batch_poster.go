@@ -128,7 +128,9 @@ type BatchPoster struct {
 	nextRevertCheckBlock int64       // the last parent block scanned for reverting batches
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
-	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	accessList                func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	bytes32Type               abi.Type
+	blobsAttestationArguments abi.Arguments
 }
 
 type l1BlockBound int
@@ -385,6 +387,19 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		return nil, err
 	}
 
+	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	method, ok := seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+
+	blobsAttestationArguments := method.Inputs
+	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytes32ArrayType})
+
 	hotShotUrl := opts.Config().HotShotUrl
 	lightClientAddr := opts.Config().LightClientAddress
 
@@ -407,20 +422,22 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	b := &BatchPoster{
-		l1Reader:           opts.L1Reader,
-		inbox:              opts.Inbox,
-		streamer:           opts.Streamer,
-		arbOSVersionGetter: opts.VersionGetter,
-		syncMonitor:        opts.SyncMonitor,
-		config:             opts.Config,
-		seqInbox:           seqInbox,
-		seqInboxABI:        seqInboxABI,
-		seqInboxAddr:       opts.DeployInfo.SequencerInbox,
-		gasRefunderAddr:    opts.Config().gasRefunder,
-		bridgeAddr:         opts.DeployInfo.Bridge,
-		dapWriter:          opts.DAPWriter,
-		redisLock:          redisLock,
-		dapReaders:         opts.DAPReaders,
+		l1Reader:                  opts.L1Reader,
+		inbox:                     opts.Inbox,
+		streamer:                  opts.Streamer,
+		arbOSVersionGetter:        opts.VersionGetter,
+		syncMonitor:               opts.SyncMonitor,
+		config:                    opts.Config,
+		seqInbox:                  seqInbox,
+		seqInboxABI:               seqInboxABI,
+		seqInboxAddr:              opts.DeployInfo.SequencerInbox,
+		gasRefunderAddr:           opts.Config().gasRefunder,
+		bridgeAddr:                opts.DeployInfo.Bridge,
+		dapWriter:                 opts.DAPWriter,
+		redisLock:                 redisLock,
+		dapReaders:                opts.DAPReaders,
+		bytes32Type:               bytes32ArrayType,
+		blobsAttestationArguments: blobsAttestationArguments,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1142,40 +1159,27 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	args = append(args, b.config().gasRefunder)
 	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
 	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-
-	// Later append the delay proof if needed for getting the attestion quote.
-	// If not, only append at the end of the calldata as done below.
-	calldata, err := method.Inputs.Pack(args...)
+	// pack remaining data for the attestation quote.
+	attestationQuoteArgs := args
+	attestationQuoteArgs = append(attestationQuoteArgs, blobHashes)
+	// Generate the attestation quote over the method args, and the blob hashes.
+	packedData, err := b.blobsAttestationArguments.Pack(attestationQuoteArgs...)
 	if err != nil {
 		return nil, err
 	}
-	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
-	if err != nil {
-		return nil, err
-	}
-
-	packedBlobHashes, err := abi.Arguments{
-		{Type: bytes32ArrayType},
-	}.Pack(blobHashes)
-
-  log.Info("Packed blob hashes", "blobHashes", blobHashes, "packedBlobHashes", packedBlobHashes)
-  if err != nil{
-    return nil, err
-  }
-	quoteData := append(calldata, packedBlobHashes...)
-	attestationQuote, err := b.streamer.getAttestationQuote(quoteData)
+	// Log info for debugging / generating test data
+	log.Info("Packed attestationQuote data", "args", args, "packedData", packedData, "blobHashes", blobHashes)
+	// Generate attestation quote
+	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
 	}
-  log.Info("Attestation Quote:", "quote", attestationQuote)
+
+	log.Info("Attestation Quote:", "quote", attestationQuote)
 	// Construct the calldata with attestation quote
-	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
-	if !ok {
-		return nil, errors.New("failed to find add batch method")
-	}
 	args = append(args, attestationQuote)
 
-	calldata, err = method.Inputs.Pack(args...)
+	calldata, err := method.Inputs.Pack(args...)
 
 	if err != nil {
 		return nil, err
