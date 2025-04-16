@@ -1129,7 +1129,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	delayedMsg uint64,
 ) ([]byte, error) {
 	var args []any
-	method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
+	method, ok := b.seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
 	}
@@ -1149,24 +1149,25 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	if err != nil {
 		return nil, err
 	}
-	// bytes32Type, err := abi.NewType("bytes32", "", nil)
-	// if err != nil{
-	//   return nil, err
-	// }
 	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
 	if err != nil {
 		return nil, err
 	}
+
 	packedBlobHashes, err := abi.Arguments{
 		{Type: bytes32ArrayType},
 	}.Pack(blobHashes)
+
+  log.Info("Packed blob hashes", "blobHashes", blobHashes, "packedBlobHashes", packedBlobHashes)
+  if err != nil{
+    return nil, err
+  }
 	quoteData := append(calldata, packedBlobHashes...)
 	attestationQuote, err := b.streamer.getAttestationQuote(quoteData)
-	log.Info("Attestation Quote:", "quote", attestationQuote)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
 	}
-
+  log.Info("Attestation Quote:", "quote", attestationQuote)
 	// Construct the calldata with attestation quote
 	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
 	if !ok {

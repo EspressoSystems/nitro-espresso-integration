@@ -42,6 +42,9 @@ func createL1AndL2Node(
 	// Test that fallbackurl work
 	builder.nodeConfig.BatchPoster.FallBackUrl = hotShotUrl
 	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
+  // Enable these for testing blobs
+  builder.nodeConfig.BatchPoster.Post4844Blobs = true
+  builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
