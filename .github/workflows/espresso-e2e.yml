@@ -141,9 +141,6 @@ jobs:
         with:
           version: "2.22.0"
 
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
-
       - name: Run Espresso tests
         run: |
           scripts/run-espresso-ci-job
