@@ -1040,6 +1040,19 @@ func (s *ExecutionEngine) Start(ctx_in context.Context) {
 			}
 		}
 	})
+	if !s.disableStylusCacheMetricsCollection {
+		// periodically update stylus cache metrics
+		s.LaunchThread(func(ctx context.Context) {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Minute):
+					programs.UpdateWasmCacheMetrics()
+				}
+			}
+		})
+	}
 }
 
 func (s *ExecutionEngine) Maintenance(capLimit uint64) error {
