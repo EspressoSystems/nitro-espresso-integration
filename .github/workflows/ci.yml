@@ -90,7 +90,7 @@ jobs:
       - name: Install cmake
         uses: jwlawson/actions-setup-cmake@v2
         with:
-          cmake-version: '3.31.6'
+          cmake-version: "3.31.6"
 
       - name: Install latest gotestsum
         uses: autero1/action-gotestsum@v2.0.0
@@ -116,6 +116,7 @@ jobs:
 
       - name: Install rust stable
         uses: dtolnay/rust-toolchain@stable
+        id: install-rust
         with:
           toolchain: "1.81.0"
           targets: "wasm32-wasi, wasm32-unknown-unknown"
@@ -140,6 +141,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install cbindgen
+        run: cargo install --force cbindgen
 
       - name: Cache Build Products
         uses: actions/cache@v3
@@ -215,24 +219,25 @@ jobs:
           echo "GOGC=80" >> "$GITHUB_ENV"
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
 
-      - name: run tests without race detection (path and hash state scheme)
+      - name: run tests without race detection and path state scheme
         if: matrix.test-mode == 'defaults'
         shell: bash
         env:
-          TEST_STATE_SCHEME: ${{ matrix.test-state-scheme }}
+          TEST_STATE_SCHEME: path
         run: |
           scripts/espresso-run-test-ci
 
-      - name: run tests with race detection (path and hash state scheme)
+      - name: run tests with race detection and hash state scheme
         if: matrix.test-mode == 'race'
         shell: bash
         env:
-          TEST_STATE_SCHEME: ${{ matrix.test-state-scheme }}
+          TEST_STATE_SCHEME: hash
         run: |
           scripts/espresso-run-test-ci -race
 
       - name: run redis tests
-        if: matrix.test-mode == 'redis'
+        if: matrix.test-mode == 'defaults'
+        shell: bash
         run: |
           TEST_REDIS=redis://localhost:6379/0 scripts/espresso-run-test-ci -p 1 -run TestRedis ./arbnode/... ./system_tests/...
 
@@ -257,19 +262,14 @@ jobs:
       - name: Archive detailed run log
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.test-mode }}-full.log
+          name: ${{ matrix.test-mode }}-${{ matrix.test-state-scheme || 'default' }}-full.log
           path: full.log
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v2
-        if: false
+        if: matrix.test-mode == 'defaults'
         with:
           fail_ci_if_error: false
           files: ./coverage.txt,./coverage-redis.txt
           verbose: false
           token: ${{ secrets.CODECOV_TOKEN }}
-
-      - name: Check available space after CI run
-        if: "!cancelled()"
-        run: |
-          sudo df -h
