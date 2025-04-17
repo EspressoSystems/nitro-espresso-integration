@@ -560,11 +560,6 @@ func createNodeImpl(
 
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			var legacyAddr *common.Address
-			if config.EspressoCaffNode.LegacySgxVerifierAddr != "" {
-				addr := common.HexToAddress(config.EspressoCaffNode.LegacySgxVerifierAddr)
-				legacyAddr = &addr
-			}
 			espressoCaffNode := NewEspressoCaffNode(
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
 				exec.ExecEngine,
@@ -573,7 +568,6 @@ func createNodeImpl(
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
-				legacyAddr,
 			)
 
 			return &Node{

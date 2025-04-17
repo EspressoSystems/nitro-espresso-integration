@@ -36,7 +36,6 @@ type EspressoCaffNodeConfig struct {
 	WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
 	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
 	BlocksToRead            uint64        `koanf:"blocks-to-read"`
-	LegacySgxVerifierAddr   string        `koanf:"legacy-sgx-verifier-addr"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -53,7 +52,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	WaitForConfirmations:    false,
 	RequiredBlockDepth:      6,
 	BlocksToRead:            100,
-	LegacySgxVerifierAddr:   "",
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -70,7 +68,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
 	f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
-	f.String(prefix+".legacy-sgx-verifier-addr", DefaultEspressoCaffNodeConfig.LegacySgxVerifierAddr, "legacy sgx verifier address")
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -97,7 +94,6 @@ func NewEspressoCaffNode(
 	db ethdb.Database,
 	recordPerformance bool,
 	blocksToRead uint64,
-	legacyAddr *common.Address,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -108,12 +104,7 @@ func NewEspressoCaffNode(
 		return nil
 	}
 
-	espressoTEEVerifier, err := espressotee.NewEspressoTEEVerifier(
-		l1Reader.Client(),
-		common.HexToAddress(configFetcher().EspressoTEEVerifierAddr),
-		0,
-		legacyAddr,
-	)
+	espressoTEEVerifier, err := espressotee.NewEspressoTEEVerifier(l1Reader.Client(), common.HexToAddress(configFetcher().EspressoTEEVerifierAddr), 0)
 	if err != nil {
 		log.Crit("failed to create espressoTEEVerifier", "err", err)
 		return nil
