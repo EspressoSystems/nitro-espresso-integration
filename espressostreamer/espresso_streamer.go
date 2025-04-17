@@ -60,7 +60,7 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	espressoTEEVerifier           espressotee.EspressoTEEVerifierInterface
+	legacyVerifier                espressotee.EspressoTEEVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -71,7 +71,7 @@ func NewEspressoStreamer(
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	espressoTEEVerifier espressotee.EspressoTEEVerifierInterface,
+	legacyVerifier espressotee.EspressoTEEVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
@@ -88,7 +88,7 @@ func NewEspressoStreamer(
 		retryTime:                     retryTime,
 		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
 		namespace:                     namespace,
-		espressoTEEVerifier:           espressoTEEVerifier,
+		legacyVerifier:                legacyVerifier,
 		PerfRecorder:                  PerfRecorder,
 		batchPosterAddr:               batchPosterAddr,
 	}
@@ -212,9 +212,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 }
 
 /* Verify the attestation quote */
-func (s *EspressoStreamer) verifySignature(attestation []byte, signature [32]byte) error {
+func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
 
-	_, err := s.espressoTEEVerifier.Verify(&bind.CallOpts{}, attestation, signature)
+	_, err := s.legacyVerifier.Verify(&bind.CallOpts{}, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
@@ -244,8 +244,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 		log.Warn("failed to verify batch poster signature", "err", err)
 	}
 
-	if !success {
-		err = s.verifySignature(signature, userDataHashArr)
+	if !success && s.legacyVerifier != nil {
+		err = s.verifyLegacy(signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
 			return nil, err

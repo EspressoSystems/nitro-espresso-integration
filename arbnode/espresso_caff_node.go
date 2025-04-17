@@ -104,7 +104,14 @@ func NewEspressoCaffNode(
 		return nil
 	}
 
-	espressoTEEVerifier, err := espressotee.NewEspressoTEEVerifier(l1Reader.Client(), common.HexToAddress(configFetcher().EspressoTEEVerifierAddr), 0)
+	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
+	// hotshot transactions using SGX quote. Therefore we create a SGX TEE verifier here.
+	// `0` is the tee type for SGX.
+	legacyVerifier, err := espressotee.NewEspressoTEEVerifier(
+		l1Reader.Client(),
+		common.HexToAddress(configFetcher().EspressoTEEVerifierAddr),
+		0,
+	)
 	if err != nil {
 		log.Crit("failed to create espressoTEEVerifier", "err", err)
 		return nil
@@ -114,7 +121,7 @@ func NewEspressoCaffNode(
 		configFetcher().NextHotshotBlock,
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
-		espressoTEEVerifier,
+		legacyVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
