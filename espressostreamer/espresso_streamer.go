@@ -138,9 +138,13 @@ func (s *EspressoStreamer) Peek(ctx context.Context) (*MessageWithMetadataAndPos
 		return false
 	}
 
-	err := s.QueueMessagesFromHotShotUntil(context.Background(), s.parseEspressoTransaction, condition)
+	// We set a timeout to avoid infinite loop in case of a bug.
+	timeout := 2 * time.Minute
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	err := s.QueueMessagesFromHotShotUntil(timeoutCtx, s.parseEspressoTransaction, condition)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to queue messages from hotshot until condition is met within %s", timeout)
 	}
 
 	messageIndex = FilterAndFind(&s.messageWithMetadataAndPos, compareMessageWithCurrentPos)
@@ -172,6 +176,9 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 		default:
 			messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
 			if err != nil {
+				// TODO: minimize the log output
+				log.Error("failed to fetch next hotshot block", "err", err)
+				time.Sleep(s.retryTime)
 				continue
 			}
 
