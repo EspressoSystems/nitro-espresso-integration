@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
 
 func TestEspressoStreamer(t *testing.T) {
@@ -156,9 +157,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (bool, error) {
-	args := m.Called(opts, attestation, signature)
-	return args.Bool(0), args.Error(1)
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
+	return espressogen.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {

@@ -10,7 +10,6 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
 	"github.com/ccoveille/go-safecast"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -60,7 +59,7 @@ type EspressoStreamer struct {
 	retryTime                     time.Duration
 	pollingHotshotPollingInterval time.Duration
 	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	legacyVerifier                espressotee.EspressoTEEVerifierInterface
+	legacyVerifier                espressotee.LegacySGXVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -71,7 +70,7 @@ func NewEspressoStreamer(
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
 	pollingHotshotPollingInterval time.Duration,
-	legacyVerifier espressotee.EspressoTEEVerifierInterface,
+	legacyVerifier espressotee.LegacySGXVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
@@ -221,7 +220,7 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
 
-	_, err := s.legacyVerifier.Verify(&bind.CallOpts{}, attestation, signature)
+	_, err := s.legacyVerifier.Verify(nil, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
