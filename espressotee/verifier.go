@@ -8,9 +8,30 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
+
+type LegacySGXVerifierInterface interface {
+	Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error)
+}
+
+type LegacySGXVerifier struct {
+	verifier *espressogen.IEspressoSGXTEEVerifier
+}
+
+func (v *LegacySGXVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
+	return v.verifier.Verify(opts, attestation, signature)
+}
+
+func NewLegacySGXVerifier(l1Client *ethclient.Client, addr common.Address) (*LegacySGXVerifier, error) {
+	verifier, err := espressogen.NewIEspressoSGXTEEVerifier(addr, l1Client)
+	if err != nil {
+		return nil, err
+	}
+	return &LegacySGXVerifier{verifier: verifier}, nil
+}
 
 type EspressoTEEVerifierInterface interface {
 	RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte) error
@@ -35,30 +56,42 @@ func NewEspressoTEEVerifier(l1Client *ethclient.Client, addr common.Address, tee
 		verifier: verifier,
 	}, nil
 }
+
 // Verify:
-//        This function calls verify on the bound EspressoTEEVerifier contract
+//
+//	This function calls verify on the bound EspressoTEEVerifier contract
+//
 // Parameters:
-//        opts: default call opts.
-//        signature: batchers signature with ephemeral key over the batch data.
-//        userDataHash: the hash of the user data that was signed.
+//
+//	opts: default call opts.
+//	signature: batchers signature with ephemeral key over the batch data.
+//	userDataHash: the hash of the user data that was signed.
+//
 // Returns:
-//        True if the verification succeeds, false, if it does not, or false and an error if an error occurs.
+//
+//	True if the verification succeeds, false, if it does not, or false and an error if an error occurs.
 func (e *EspressoTEEVerifier) Verify(opts *bind.CallOpts, signature []byte, userDataHash [32]byte) (bool, error) {
-  res, err := e.verifier.Verify(opts, signature, userDataHash, e.teeType)
-  if err != nil{
-    return false, err
-  }
-  return res, nil
+	res, err := e.verifier.Verify(opts, signature, userDataHash, e.teeType)
+	if err != nil {
+		return false, err
+	}
+	return res, nil
 }
+
 // RegisterSigner:
-//        This function calls RegisterSigner on the bound contract.
+//
+//	This function calls RegisterSigner on the bound contract.
+//
 // Parameters:
-//        opts: Transaction details
-//        attestation: The tee attestation to be verified to register the signer.
-//        addr: The address associated with the ephemeral key to be registered.
+//
+//	opts: Transaction details
+//	attestation: The tee attestation to be verified to register the signer.
+//	addr: The address associated with the ephemeral key to be registered.
+//
 // Returns:
-//        An error if one occurs. The returned value being nil indicates that the transaction to register the signer was
-//        has succeeded and been mined on chain.
+//
+//	An error if one occurs. The returned value being nil indicates that the transaction to register the signer was
+//	has succeeded and been mined on chain.
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte) error {
 	tx, err := e.verifier.RegisterSigner(opts, attestation, addr, e.teeType)
 	if err != nil {
@@ -82,14 +115,19 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestatio
 }
 
 // RegisteredSigners:
-//        This function calls RegisteredSigners on the bound contract.
+//
+//	This function calls RegisteredSigners on the bound contract.
+//
 // Parameters:
-//        Address:
-//        The address to query the registration status of.
+//
+//	Address:
+//	The address to query the registration status of.
+//
 // Returns:
-//        boolean:
-//          Representing if parameter address is a registered signer.
-//          This will be false if an error occurrs.
+//
+//	boolean:
+//	  Representing if parameter address is a registered signer.
+//	  This will be false if an error occurrs.
 func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address) (bool, error) {
 	return e.verifier.RegisteredSigners(&bind.CallOpts{}, address, e.teeType)
 }

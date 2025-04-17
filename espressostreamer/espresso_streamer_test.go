@@ -21,9 +21,14 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
 
 func TestEspressoStreamer(t *testing.T) {
+	fetchOnce := func(_ []*MessageWithMetadataAndPos) bool {
+		return true
+	}
+
 	t.Run("Test should pop messages in order", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -42,10 +47,10 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(testBlocks[0].blockNumber, nil)
 		mockEspressoClient.On("FetchTransactionsInBlock", ctx, testBlocks[0].blockNumber, uint64(1)).Return(testBlocks[0].transactionsInBlock, nil)
 		// manually crank the streamers polling function to read an individual hotshot block prepared for the mockEspressoClient
-		err := streamer.QueueMessagesFromHotshot(ctx, streamer.parseEspressoTransaction)
+		err := streamer.QueueMessagesFromHotShotUntil(ctx, streamer.parseEspressoTransaction, fetchOnce)
 		require.NoError(t, err)
 
-		msg, err := streamer.Next()
+		msg, err := streamer.Next(ctx)
 		// Assert we did not have an error on next
 		require.NoError(t, err)
 		// Assert that the streamer believe this message to have originated at hotshot height 1
@@ -73,19 +78,19 @@ func TestEspressoStreamer(t *testing.T) {
 			return nil, nil
 		}
 
-		err := streamer.QueueMessagesFromHotshot(ctx, testParseFn)
+		err := streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn, fetchOnce)
 		require.NoError(t, err)
 		require.Equal(t, streamer.nextHotshotBlockNum, uint64(4))
 
-		err = streamer.QueueMessagesFromHotshot(ctx, testParseFn)
+		err = streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn, fetchOnce)
 		require.NoError(t, err)
 		require.Equal(t, streamer.nextHotshotBlockNum, uint64(5))
 
-		err = streamer.QueueMessagesFromHotshot(ctx, testParseFn)
+		err = streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn, fetchOnce)
 		require.NoError(t, err)
 		require.Equal(t, streamer.nextHotshotBlockNum, uint64(6))
 
-		err = streamer.QueueMessagesFromHotshot(ctx, testParseFn)
+		err = streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn, fetchOnce)
 		require.Error(t, err)
 		require.Equal(t, streamer.nextHotshotBlockNum, uint64(6))
 
@@ -126,10 +131,10 @@ func TestEspressoStreamer(t *testing.T) {
 			}
 		}
 
-		err := streamer.QueueMessagesFromHotshot(ctx, testParseFn(3, 3))
+		err := streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn(3, 3), fetchOnce)
 		require.NoError(t, err)
 
-		err = streamer.QueueMessagesFromHotshot(ctx, testParseFn(4, 4))
+		err = streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn(4, 4), fetchOnce)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(streamer.messageWithMetadataAndPos))
@@ -138,7 +143,7 @@ func TestEspressoStreamer(t *testing.T) {
 
 		require.Equal(t, 0, len(streamer.messageWithMetadataAndPos))
 
-		err = streamer.QueueMessagesFromHotshot(ctx, testParseFn(3, 3))
+		err = streamer.QueueMessagesFromHotShotUntil(ctx, testParseFn(3, 3), fetchOnce)
 		require.NoError(t, err)
 
 		require.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
@@ -154,9 +159,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (bool, error) {
-	args := m.Called(opts, attestation, signature)
-	return args.Bool(0), args.Error(1)
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
+	return espressogen.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {
