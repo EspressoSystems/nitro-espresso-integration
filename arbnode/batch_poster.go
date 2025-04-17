@@ -347,7 +347,7 @@ type BatchPosterOpts struct {
 	Streamer      *TransactionStreamer
 	VersionGetter execution.FullExecutionClient
 	SyncMonitor   *SyncMonitor
-	Config        BatchPosterConfigFeqtcher
+	Config        BatchPosterConfigFetcher
 	DeployInfo    *chaininfo.RollupAddresses
 	TransactOpts  *bind.TransactOpts
 	DAPWriter     daprovider.Writer
@@ -395,7 +395,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	blobsAttestationArguments := method.Inputs
 	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytes32ArrayType})
 
-	hotShotUrl := opts.Config().HotShotUrls
+	hotShotUrls := opts.Config().HotShotUrls
 
 	lightClientAddr := opts.Config().LightClientAddress
 	hotShotUrlsLen := len(hotShotUrls)
