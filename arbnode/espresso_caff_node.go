@@ -29,6 +29,7 @@ type EspressoCaffNodeConfig struct {
 	Namespace              uint64        `koanf:"namespace"`
 	RetryTime              time.Duration `koanf:"retry-time"`
 	HotshotPollingInterval time.Duration `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout  time.Duration `koanf:"hotshot-polling-timeout"`
 	LegacySGXVerifierAddr  string        `koanf:"legacy-sgx-verifier-addr"`
 	BatchPosterAddr        string        `koanf:"batch-poster-addr"`
 	RecordPerformance      bool          `koanf:"record-performance"`
@@ -45,6 +46,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	Namespace:              0,
 	RetryTime:              time.Second * 2,
 	HotshotPollingInterval: time.Millisecond * 100,
+	HotshotPollingTimeout:  time.Minute * 2,
 	LegacySGXVerifierAddr:  "",
 	BatchPosterAddr:        "",
 	RecordPerformance:      false,
@@ -61,6 +63,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".namespace", DefaultEspressoCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
+	f.Duration(prefix+".hotshot-polling-timeout", DefaultEspressoCaffNodeConfig.HotshotPollingTimeout, "timeout for hotshot polling")
 	f.String(prefix+".legacy-sgx-verifier-addr", "", "legacy SGX verifier address")
 	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the Hotshot transactions")
 	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the Caff node")
@@ -119,6 +122,7 @@ func NewEspressoCaffNode(
 		configFetcher().NextHotshotBlock,
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
+		configFetcher().HotshotPollingTimeout,
 		legacyVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,

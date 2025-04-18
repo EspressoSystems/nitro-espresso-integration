@@ -48,6 +48,7 @@ func FilterAndFind[T any](arr *[]T, compareFunc func(T) int) int {
 	*arr = (*arr)[:j]
 	return idx
 }
+
 // CountUniqueEntries iterates over an array with potential duplicate values and counts the unique entries.
 // returns a Uint that represents the number of unique entries.
 // @Dev:

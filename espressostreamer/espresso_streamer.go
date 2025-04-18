@@ -10,7 +10,6 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
 	"github.com/ccoveille/go-safecast"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -53,14 +52,17 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	espressoClient                espressoClient.EspressoClient
-	nextHotshotBlockNum           uint64
-	currentMessagePos             uint64
-	namespace                     uint64
-	retryTime                     time.Duration
-	pollingHotshotPollingInterval time.Duration
-	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	legacyVerifier                espressotee.LegacySGXVerifierInterface
+	espressoClient         EspressoClientInterface
+	nextHotshotBlockNum    uint64
+	currentMessagePos      uint64
+	namespace              uint64
+	retryTime              time.Duration
+	hotshotPollingInterval time.Duration
+	// Technically, we don't need a timeout for the hotshot polling.
+	// This is used to avoid infinite loop and the caller should handle the timeout.
+	hotshotPollingTimeout     time.Duration
+	messageWithMetadataAndPos []*MessageWithMetadataAndPos
+	legacyVerifier            espressotee.LegacySGXVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -70,9 +72,10 @@ func NewEspressoStreamer(
 	namespace uint64,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
-	pollingHotshotPollingInterval time.Duration,
+	hotshotPollingInterval time.Duration,
+	hotshotPollingTimeout time.Duration,
 	legacyVerifier espressotee.LegacySGXVerifierInterface,
-	espressoClientInterface espressoClient.EspressoClient,
+	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
 ) *EspressoStreamer {
@@ -83,14 +86,15 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:                espressoClientInterface,
-		nextHotshotBlockNum:           nextHotshotBlockNum,
-		retryTime:                     retryTime,
-		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
-		namespace:                     namespace,
-		legacyVerifier:                legacyVerifier,
-		PerfRecorder:                  PerfRecorder,
-		batchPosterAddr:               batchPosterAddr,
+		espressoClient:         espressoClientInterface,
+		nextHotshotBlockNum:    nextHotshotBlockNum,
+		retryTime:              retryTime,
+		hotshotPollingInterval: hotshotPollingInterval,
+		hotshotPollingTimeout:  hotshotPollingTimeout,
+		namespace:              namespace,
+		legacyVerifier:         legacyVerifier,
+		PerfRecorder:           PerfRecorder,
+		batchPosterAddr:        batchPosterAddr,
 	}
 }
 
@@ -203,7 +207,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 				return nil
 			}
 
-			time.Sleep(s.pollingHotshotPollingInterval)
+			time.Sleep(s.hotshotPollingInterval)
 		}
 	}
 }
@@ -233,7 +237,7 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
 
-	_, err := s.legacyVerifier.Verify(&bind.CallOpts{}, attestation, signature)
+	_, err := s.legacyVerifier.Verify(nil, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
