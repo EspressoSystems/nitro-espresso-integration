@@ -23,35 +23,37 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
-	Enable                  bool          `koanf:"enable"`
-	HotShotUrls             []string      `koanf:"hotshot-urls"`
-	NextHotshotBlock        uint64        `koanf:"next-hotshot-block"`
-	Namespace               uint64        `koanf:"namespace"`
-	RetryTime               time.Duration `koanf:"retry-time"`
-	HotshotPollingInterval  time.Duration `koanf:"hotshot-polling-interval"`
-	EspressoTEEVerifierAddr string        `koanf:"espresso-tee-verifier-addr"`
-	BatchPosterAddr         string        `koanf:"batch-poster-addr"`
-	RecordPerformance       bool          `koanf:"record-performance"`
-	WaitForFinalization     bool          `koanf:"wait-for-finalization"`
-	WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
-	BlocksToRead            uint64        `koanf:"blocks-to-read"`
+	Enable                 bool          `koanf:"enable"`
+	HotShotUrls            []string      `koanf:"hotshot-urls"`
+	NextHotshotBlock       uint64        `koanf:"next-hotshot-block"`
+	Namespace              uint64        `koanf:"namespace"`
+	RetryTime              time.Duration `koanf:"retry-time"`
+	HotshotPollingInterval time.Duration `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout  time.Duration `koanf:"hotshot-polling-timeout"`
+	LegacySGXVerifierAddr  string        `koanf:"legacy-sgx-verifier-addr"`
+	BatchPosterAddr        string        `koanf:"batch-poster-addr"`
+	RecordPerformance      bool          `koanf:"record-performance"`
+	WaitForFinalization    bool          `koanf:"wait-for-finalization"`
+	WaitForConfirmations   bool          `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth     uint64        `koanf:"required-block-depth"`
+	BlocksToRead           uint64        `koanf:"blocks-to-read"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
-	Enable:                  false,
-	HotShotUrls:             []string{},
-	NextHotshotBlock:        1,
-	Namespace:               0,
-	RetryTime:               time.Second * 2,
-	HotshotPollingInterval:  time.Millisecond * 100,
-	EspressoTEEVerifierAddr: "",
-	BatchPosterAddr:         "",
-	RecordPerformance:       false,
-	WaitForFinalization:     true,
-	WaitForConfirmations:    false,
-	RequiredBlockDepth:      6,
-	BlocksToRead:            100,
+	Enable:                 false,
+	HotShotUrls:            []string{},
+	NextHotshotBlock:       1,
+	Namespace:              0,
+	RetryTime:              time.Second * 2,
+	HotshotPollingInterval: time.Millisecond * 100,
+	HotshotPollingTimeout:  time.Minute * 2,
+	LegacySGXVerifierAddr:  "",
+	BatchPosterAddr:        "",
+	RecordPerformance:      false,
+	WaitForFinalization:    true,
+	WaitForConfirmations:   false,
+	RequiredBlockDepth:     6,
+	BlocksToRead:           100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -61,7 +63,8 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".namespace", DefaultEspressoCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
-	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
+	f.Duration(prefix+".hotshot-polling-timeout", DefaultEspressoCaffNodeConfig.HotshotPollingTimeout, "timeout for hotshot polling")
+	f.String(prefix+".legacy-sgx-verifier-addr", "", "legacy SGX verifier address")
 	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the Hotshot transactions")
 	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the Caff node")
 	f.Bool(prefix+".wait-for-finalization", DefaultEspressoCaffNodeConfig.WaitForFinalization, "Configures the Caff node to only produce blocks from delayed messages if they are finalized on the parent chain")
@@ -104,7 +107,12 @@ func NewEspressoCaffNode(
 		return nil
 	}
 
-	espressoTEEVerifier, err := espressotee.NewEspressoTEEVerifier(l1Reader.Client(), common.HexToAddress(configFetcher().EspressoTEEVerifierAddr), 0)
+	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
+	// hotshot transactions using SGX quote. Therefore we create a SGX TEE verifier here.
+	legacyVerifier, err := espressotee.NewLegacySGXVerifier(
+		l1Reader.Client(),
+		common.HexToAddress(configFetcher().LegacySGXVerifierAddr),
+	)
 	if err != nil {
 		log.Crit("failed to create espressoTEEVerifier", "err", err)
 		return nil
@@ -114,7 +122,8 @@ func NewEspressoCaffNode(
 		configFetcher().NextHotshotBlock,
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
-		espressoTEEVerifier,
+		configFetcher().HotshotPollingTimeout,
+		legacyVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
@@ -133,7 +142,7 @@ func NewEspressoCaffNode(
 	}
 }
 
-// nextMessage wraps the espressoStreamer.Next() method, to handle producing delayed messages by checking they are within the nodes safety tolerance.
+// peekMessage wraps the espressoStreamer.Peek() method, to handle producing delayed messages by checking they are within the nodes safety tolerance.
 // Returns:
 //   - MessageWithMetadataAndPos: A message, delayed or normally sequenced, that is for the next position in the chain.
 //   - error: If any error is encountered during this function it is propegated to the caller.
@@ -142,8 +151,8 @@ func NewEspressoCaffNode(
 //
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
-func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataAndPos, error) {
-	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
+func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
+	messageWithMetadataAndPos, err := n.espressoStreamer.Peek(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,32 +164,18 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 	messageWithMetadataAndPos, err = n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
 	if err != nil {
 		log.Error("unable to get the next delayed message", "err", err)
-		n.reset(messageWithMetadataAndPos.Pos)
 		return nil, err
 	}
 
 	return messageWithMetadataAndPos, nil
 }
 
-// Resets the espresso streamer to the given message position and the last committed hotshot block.
-func (n *EspressoCaffNode) reset(pos uint64) {
-	lastStoredHotshotBlock, err := n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
-	if err != nil {
-		log.Error("failed to read next hotshot block from db", "err", err)
-		return
-	}
-	log.Debug("Resetting espresso streamer", "currentMessagePos",
-		pos, "currentHostshotBlock",
-		lastStoredHotshotBlock)
-	n.espressoStreamer.Reset(pos, lastStoredHotshotBlock)
-}
-
 // Creates a block from the next message in the queue.
-func (n *EspressoCaffNode) createBlock() (returnValue bool) {
+func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
 
-	messageWithMetadataAndPos, err := n.nextMessage()
+	messageWithMetadataAndPos, err := n.peekMessage(ctx)
 	if err != nil {
 		log.Warn("unable to get next message", "err", err)
 		return false
@@ -197,7 +192,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 	statedb, err := n.executionEngine.Bc().StateAt(lastBlockHeader.Root)
 	if err != nil {
 		log.Error("failed to get state at last block header", "err", err)
-		n.espressoStreamer.Reset(messageWithMetadataAndPos.Pos, messageWithMetadataAndPos.HotshotHeight)
 		return false
 	}
 
@@ -217,7 +211,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
-		n.reset(messageWithMetadataAndPos.Pos)
 		return false
 	}
 
@@ -225,22 +218,20 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
-	if err != nil {
-		log.Error("Failed to append block", "err", err)
-		n.reset(messageWithMetadataAndPos.Pos)
-		return false
-	}
-
 	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 	err = n.espressoStreamer.StoreHotshotBlock(n.db, hotshotBlockNumber)
 	if err != nil {
 		log.Warn("Failed to store hotshot block. This should be an ephemeral error", "err", err)
-		// We have already created the block successfully, and not storing the hotshot block
-		// merely makes the node reset/restart to/from an earlier hotshot block, which doesn't
-		// affect its correctness.
+		return false
 	}
 
+	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
+	if err != nil {
+		log.Error("Failed to append block", "err", err)
+		return false
+	}
+
+	n.espressoStreamer.Advance()
 	n.espressoStreamer.RecordTimeDurationBetweenHotshotAndCurrentBlock(messageWithMetadataAndPos.HotshotHeight, time.Now())
 
 	return true
@@ -248,10 +239,7 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	err := n.espressoStreamer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to start espresso streamer: %w", err)
-	}
+
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
 	currentMessagePos, err := n.executionEngine.BlockNumberToMessageIndex(currentBlockNum)
@@ -287,7 +275,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.delayedMessageFetcher.reset(parentChainBlockNumber, delayedMessagesRead)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		madeBlock := n.createBlock()
+		madeBlock := n.createBlock(ctx)
 		if madeBlock {
 			return n.configFetcher().HotshotPollingInterval
 		}

@@ -1,12 +1,28 @@
 #!/usr/bin/env bash
 # This script runs the Espresso tests in ./system_tests only.
 set -euo pipefail
-gotestsum \
-    --format short-verbose \
-    --packages="github.com/offchainlabs/nitro/system_tests" \
-    -- \
-    -v \
-    -timeout 35m \
-    -p 1 \
-    ./system_tests/ \
-    -run 'TestEspresso'
+
+# Define the script you want to run between tests
+run_between_tests() {
+    docker network prune -f
+}
+
+# List all tests
+tests=$(go test -list 'TestEspresso' ./system_tests/ | grep '^Test')
+
+# Run each test individually
+for test in $tests; do
+    gotestsum \
+        --format short-verbose \
+        --packages="github.com/offchainlabs/nitro/system_tests" \
+        -- \
+        -v \
+        -timeout 35m \
+        -p 1 \
+        ./system_tests/ \
+        -run "^$test$"
+
+    echo "finished test $test"
+    # Run the custom script between tests
+    run_between_tests
+done
