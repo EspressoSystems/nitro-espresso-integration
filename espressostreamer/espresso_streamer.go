@@ -52,14 +52,17 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	espressoClient                EspressoClientInterface
-	nextHotshotBlockNum           uint64
-	currentMessagePos             uint64
-	namespace                     uint64
-	retryTime                     time.Duration
-	pollingHotshotPollingInterval time.Duration
-	messageWithMetadataAndPos     []*MessageWithMetadataAndPos
-	legacyVerifier                espressotee.LegacySGXVerifierInterface
+	espressoClient         EspressoClientInterface
+	nextHotshotBlockNum    uint64
+	currentMessagePos      uint64
+	namespace              uint64
+	retryTime              time.Duration
+	hotshotPollingInterval time.Duration
+	// Technically, we don't need a timeout for the hotshot polling.
+	// This is used to avoid infinite loop and the caller should handle the timeout.
+	hotshotPollingTimeout     time.Duration
+	messageWithMetadataAndPos []*MessageWithMetadataAndPos
+	legacyVerifier            espressotee.LegacySGXVerifierInterface
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
@@ -69,7 +72,8 @@ func NewEspressoStreamer(
 	namespace uint64,
 	nextHotshotBlockNum uint64,
 	retryTime time.Duration,
-	pollingHotshotPollingInterval time.Duration,
+	hotshotPollingInterval time.Duration,
+	hotshotPollingTimeout time.Duration,
 	legacyVerifier espressotee.LegacySGXVerifierInterface,
 	espressoClientInterface EspressoClientInterface,
 	recordPerformance bool,
@@ -82,14 +86,15 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:                espressoClientInterface,
-		nextHotshotBlockNum:           nextHotshotBlockNum,
-		retryTime:                     retryTime,
-		pollingHotshotPollingInterval: pollingHotshotPollingInterval,
-		namespace:                     namespace,
-		legacyVerifier:                legacyVerifier,
-		PerfRecorder:                  PerfRecorder,
-		batchPosterAddr:               batchPosterAddr,
+		espressoClient:         espressoClientInterface,
+		nextHotshotBlockNum:    nextHotshotBlockNum,
+		retryTime:              retryTime,
+		hotshotPollingInterval: hotshotPollingInterval,
+		hotshotPollingTimeout:  hotshotPollingTimeout,
+		namespace:              namespace,
+		legacyVerifier:         legacyVerifier,
+		PerfRecorder:           PerfRecorder,
+		batchPosterAddr:        batchPosterAddr,
 	}
 }
 
@@ -190,7 +195,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 				return nil
 			}
 
-			time.Sleep(s.pollingHotshotPollingInterval)
+			time.Sleep(s.hotshotPollingInterval)
 		}
 	}
 }
