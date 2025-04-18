@@ -1805,20 +1805,23 @@ func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Con
 	return true
 }
 
+func (s *TransactionStreamer) RegisterSigner() error {
+	teeType := s.EspressoKeyManager.TeeType()
+	switch teeType {
+	case SGX:
+		return s.EspressoKeyManager.Register(s.getAttestationQuote)
+	case NITRO:
+		return s.EspressoKeyManager.Register(s.getNitroAttestation)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
+}
+
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		var err error
-		teeType := s.EspressoKeyManager.TeeType()
-		if teeType == SGX {
-			err = s.EspressoKeyManager.Register(s.getAttestationQuote)
-		} else if teeType == NITRO {
-			err = s.EspressoKeyManager.Register(s.getNitroAttestation)
-		} else {
-			return fmt.Errorf("unsupported tee Type: %d", teeType)
-		}
-
+		err := s.RegisterSigner()
 		if err != nil {
 			log.Error("failed to register espresso key manager", "err", err)
 			return err

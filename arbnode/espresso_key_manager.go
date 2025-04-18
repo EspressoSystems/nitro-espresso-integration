@@ -4,9 +4,8 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -14,14 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/hf/nitrite"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() (bool, error)
-	Register(signFunc func([]byte) ([]byte, error)) error
+	Register(getAttestationFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
@@ -31,9 +30,8 @@ type EspressoKeyManagerInterface interface {
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8, signerAddr common.Address) error
+	RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) (common.Hash, error)
 	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
-	VerifyCert(opts *bind.TransactOpts, certificate []byte, parentCertHash [32]byte, isCA bool, teeType uint8) (common.Hash, error)
 }
 
 type EspressoTEEVerifier struct {
@@ -45,48 +43,24 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8, signerAddr common.Address) error {
+func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) (common.Hash, error) {
 	tx, err := e.contract.RegisterSigner(opts, attestation, data, teeType)
 	if err != nil {
-		return err
+		return common.Hash{}, err
 	}
 
 	log.Info("Waiting for register signer tx to be mined", "tx", tx.Hash())
 
 	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
 	if err != nil {
-		return err
+		return common.Hash{}, err
 	}
 
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		return errors.New("transaction failed")
+		return common.Hash{}, errors.New("transaction failed")
 	}
 
-	log.Info("Register signer tx succeeded", "signer address", signerAddr, "tx", tx.Hash())
-
-	return nil
-}
-
-func (e *EspressoTEEVerifier) VerifyCert(opts *bind.TransactOpts, certificate []byte, parentCertHash [32]byte, isCA bool, teeType uint8) (common.Hash, error) {
-	certHash := crypto.Keccak256Hash(certificate)
-	verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash, teeType)
-	if verified {
-		log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
-		return certHash, nil
-	}
-
-	tx, err := e.contract.VerifyCert(opts, certificate, parentCertHash, isCA, teeType)
-	log.Info("Waiting for cert tx to be mined", "tx", tx.Hash(), "isCA", isCA)
-
-	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
-	if err != nil {
-		return certHash, err
-	}
-
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		return certHash, errors.New("cert transaction failed")
-	}
-	return certHash, nil
+	return tx.Hash(), nil
 }
 
 func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8) (bool, error) {
@@ -102,6 +76,7 @@ const (
 
 type EspressoKeyManager struct {
 	espressoTEEVerifierCaller EspressoTEEVerifierInterface
+	espressoNitroTEEVerifier  espressotee.EspressoNitroTEEVerifierInterface
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
@@ -112,7 +87,7 @@ type EspressoKeyManager struct {
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
+func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
@@ -137,6 +112,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 		privKey:                   privKey,
 		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
+		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		batchPosterOpts:           opts.TransactOpts,
 		teeType:                   teeType,
 	}
@@ -155,69 +131,63 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 	return ok, nil
 }
 
-func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) error {
+/*
+ * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
+ */
+func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, common.Address, error) {
+	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	switch k.teeType {
+	case SGX:
+		addr := signerAddr.Bytes()
+		log.Info("sgx signing address", "addr", signerAddr)
+
+		attestationQuote, err := getAttestationFunc(addr)
+		if err != nil {
+			return nil, nil, common.Address{}, fmt.Errorf("sgx signing failed: %w", err)
+		}
+		return attestationQuote, addr, signerAddr, nil
+
+	case NITRO:
+		pubKeyBytes := crypto.FromECDSAPub(k.pubKey)
+		log.Info("nitro signing address", "addr", signerAddr)
+
+		attestationBytes, err := getAttestationFunc(pubKeyBytes)
+		if err != nil {
+			return nil, nil, common.Address{}, fmt.Errorf("nitro signing failed: %w", err)
+		}
+
+		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationCertificates(
+			attestationBytes,
+			k.batchPosterOpts,
+		)
+		if err != nil {
+			return nil, nil, common.Address{}, fmt.Errorf("attestation verification failed: %w", err)
+		}
+		return attestation, data, signerAddr, nil
+
+	default:
+		return nil, nil, common.Address{}, fmt.Errorf("unsupported TEE type: %v", k.teeType)
+	}
+}
+
+func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) error {
 	if k.hasRegistered {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}
 
-	var attestation []byte
-	var data []byte
-	var signerAddr common.Address
-	if k.teeType == SGX {
-		addr := crypto.PubkeyToAddress(*k.pubKey)
-		data = addr.Bytes()
-		signerAddr = addr
-		log.Info("sgx signing address", "addr", data)
-		res, err := signFunc(data)
-		if err != nil {
-			return err
-		}
-		attestation = res
-
-	} else if k.teeType == NITRO {
-		pubKeyBytes := crypto.FromECDSAPub(k.pubKey)
-		signerAddr = crypto.PubkeyToAddress(*k.pubKey)
-		log.Info("nitro signing address", "addr", signerAddr)
-		attestationBytes, err := signFunc(pubKeyBytes)
-		if err != nil {
-			return err
-		}
-
-		var res nitrite.Result
-		err = json.Unmarshal(attestationBytes, &res)
-		if err != nil {
-			return err
-		}
-
-		log.Info("succesfully got attestation", "pcr0 hash", "0x"+hex.EncodeToString(crypto.Keccak256(res.Document.PCRs[0])))
-
-		// Verify attestation certificates first, to prevent high gas prices in RegisterSigner
-		parentCertHash := crypto.Keccak256Hash(res.Document.CABundle[0])
-		for i := 0; i < len(res.Document.CABundle); i++ {
-			cert := res.Document.CABundle[i]
-			certHash, err := k.espressoTEEVerifierCaller.VerifyCert(k.batchPosterOpts, cert, parentCertHash, true, uint8(k.teeType))
-			if err != nil {
-				log.Error("failed to get ca cert verified")
-				return err
-			}
-
-			parentCertHash = certHash
-		}
-
-		_, err = k.espressoTEEVerifierCaller.VerifyCert(k.batchPosterOpts, res.Document.Certificate, parentCertHash, false, uint8(k.teeType))
-		if err != nil {
-			log.Error("failed to get client cert verified")
-			return err
-		}
-		attestation = res.COSESign1
-		data = res.Signature
-	}
-
-	err := k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType), signerAddr)
+	// Get the attestation and data needed to register the signer
+	attestation, data, signerAddr, err := k.PrepareRegisterSigner(getAttestationFunc)
 	if err != nil {
 		return err
 	}
+
+	txHash, err := k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType))
+	if err != nil {
+		return err
+	}
+
+	log.Info("Register signer tx succeeded", "signer address", signerAddr, "tx", txHash)
 
 	// Verify our address is actually registered in contract
 	hasRegistered, err := k.HasRegistered()

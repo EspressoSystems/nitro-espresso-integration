@@ -47,6 +47,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
@@ -423,6 +424,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if opts.Config().EspressoTeeVerifierAddress != "" {
+		// Setup tee verifier interface
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
 		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
 			espressoTeeVerifierAddress,
@@ -431,16 +433,28 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
+
+		// Setup nitro contract interface
+		nitroAddr, err := teeVerifier.RetrieveTEEContractAddress(&bind.CallOpts{}, uint8(NITRO))
+		nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
+			nitroAddr,
+			opts.L1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+		nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, opts.L1Reader.Client())
+
 		var teeType TEE
 		configTee := opts.Config().EspressoTeeType
-		if configTee == "SGX" {
+		switch configTee {
+		case "SGX":
 			teeType = SGX
-		} else if configTee == "NITRO" {
+		case "NITRO":
 			teeType = NITRO
-		} else {
-			return nil, fmt.Errorf("unpsupported tee type in config: %s", configTee)
+		default:
+			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
 		}
-		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts, teeType)
+		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
 	}
 
 	b := &BatchPoster{
