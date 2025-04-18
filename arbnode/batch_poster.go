@@ -129,7 +129,6 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList                func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
-	bytes32Type               abi.Type
 	blobsAttestationArguments abi.Arguments
 }
 
@@ -382,18 +381,18 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		return nil, err
 	}
 
-	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
+	bytesType, err := abi.NewType("bytes", "", nil)
 	if err != nil {
 		return nil, err
 	}
 
-	method, ok := seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
+	method, ok := seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
 	}
 
 	blobsAttestationArguments := method.Inputs
-	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytes32ArrayType})
+	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytesType})
 
 	hotShotUrls := opts.Config().HotShotUrls
 
@@ -436,7 +435,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		dapWriter:                 opts.DAPWriter,
 		redisLock:                 redisLock,
 		dapReaders:                opts.DAPReaders,
-		bytes32Type:               bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
