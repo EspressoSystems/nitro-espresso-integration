@@ -10,7 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
-  "github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -18,7 +18,7 @@ type EspressoKeyManagerInterface interface {
 	HasRegistered() (bool, error)
 	Register(signFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() *ecdsa.PublicKey
-  GetAddress() common.Address
+	GetAddress() common.Address
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
 }
@@ -27,7 +27,7 @@ type EspressoKeyManager struct {
 	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
-  address                   *common.Address
+	address                   *common.Address
 
 	batchPosterOpts   *bind.TransactOpts
 	batchPosterSigner signature.DataSignerFunc
@@ -47,7 +47,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("failed to get public key")
 	}
 
-  address := crypto.PubkeyToAddress(*pubKey)
+	address := crypto.PubkeyToAddress(*pubKey)
 
 	if opts.TransactOpts == nil {
 		panic("TransactOpts is nil")
@@ -60,7 +60,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
 		privKey:                   privKey,
-    address:                   &address,
+		address:                   &address,
 		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
 		batchPosterOpts:           opts.TransactOpts,

@@ -19,18 +19,19 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) error {
-	args := m.Called(opts, attestation, pubKey, teeType)
+func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte) error {
+	args := m.Called(opts, attestation, pubKey)
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8) (bool, error) {
-	args := m.Called(addr, teeType)
+func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address) (bool, error) {
+	args := m.Called(addr)
 	return args.Bool(0), nil
 }
 
-func (m *mockEspressoTEEVerifier) Verify(opts *bind.TransactOpts, userDataHash []byte, reportDataHash [32]byte) error {
-  panic("not implemented")
+func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, userDataHash []byte, reportDataHash [32]byte) (bool, error) {
+	args := m.Called(opts, userDataHash, reportDataHash)
+	return args.Bool(0), args.Error(1)
 }
 
 func TestEspressoKeyManager(t *testing.T) {
