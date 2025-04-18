@@ -903,6 +903,7 @@ func newBatchSegments(firstDelayed uint64, config *BatchPosterConfig, backlog ui
 		delayedMsg:         firstDelayed,
 	}
 }
+
 func (s *batchSegments) recompressAll() error {
 	s.compressedBuffer = bytes.NewBuffer(make([]byte, 0, s.sizeLimit*2))
 	s.compressedWriter = brotli.NewWriterLevel(s.compressedBuffer, s.recompressionLevel)
@@ -922,6 +923,7 @@ func (s *batchSegments) recompressAll() error {
 	}
 	return nil
 }
+
 func (s *batchSegments) testForOverflow(isHeader bool) (bool, error) {
 	// we've reached the max decompressed size
 	if s.totalUncompressedSize > arbstate.MaxDecompressedLen {
@@ -950,6 +952,7 @@ func (s *batchSegments) testForOverflow(isHeader bool) (bool, error) {
 	}
 	return false, nil
 }
+
 func (s *batchSegments) close() error {
 	s.rawSegments = s.rawSegments[:len(s.rawSegments)-s.trailingHeaders]
 	s.trailingHeaders = 0
@@ -960,6 +963,7 @@ func (s *batchSegments) close() error {
 	s.isDone = true
 	return nil
 }
+
 func (s *batchSegments) addSegmentToCompressed(segment []byte) error {
 	encoded, err := rlp.EncodeToBytes(segment)
 	if err != nil {
@@ -996,12 +1000,14 @@ func (s *batchSegments) addSegment(segment []byte, isHeader bool) (bool, error) 
 	}
 	return true, nil
 }
+
 func (s *batchSegments) addL2Msg(l2msg []byte) (bool, error) {
 	segment := make([]byte, 1, len(l2msg)+1)
 	segment[0] = arbstate.BatchSegmentKindL2Message
 	segment = append(segment, l2msg...)
 	return s.addSegment(segment, false)
 }
+
 func (s *batchSegments) prepareIntSegment(val uint64, segmentHeader byte) ([]byte, error) {
 	segment := make([]byte, 1, 16)
 	segment[0] = segmentHeader
@@ -1281,6 +1287,7 @@ func estimateGas(client rpc.ClientInterface, ctx context.Context, params estimat
 	err := client.CallContext(ctx, &gas, "eth_estimateGas", params)
 	return uint64(gas), err
 }
+
 func (b *BatchPoster) estimateGas(ctx context.Context, sequencerMessage []byte, delayedMessages uint64, realData []byte, realBlobs []kzg4844.Blob, realNonce uint64, realAccessList types.AccessList) (uint64, error) {
 	config := b.config()
 	rpcClient := b.l1Reader.Client()
@@ -1860,9 +1867,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 
 	return true, nil
 }
+
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
 	return b.backlog.Load()
 }
+
 func (b *BatchPoster) Start(ctxIn context.Context) {
 	b.dataPoster.Start(ctxIn)
 	b.redisLock.Start(ctxIn)
@@ -1961,6 +1970,7 @@ func NewBoolRing(size int) *BoolRing {
 		buffer: make([]bool, 0, size),
 	}
 }
+
 func (b *BoolRing) Update(value bool) {
 	period := cap(b.buffer)
 	if period == 0 {
