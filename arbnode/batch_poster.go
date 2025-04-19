@@ -432,10 +432,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, err
 		}
-		verifier := NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
+		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 
 		// Setup nitro contract interface
-		nitroAddr, err := teeVerifier.RetrieveTEEContractAddress(&bind.CallOpts{}, uint8(NITRO))
+		nitroAddr, err := teeVerifier.RetrieveTEEContractAddress(&bind.CallOpts{}, uint8(espressotee.NITRO))
 		nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
 			nitroAddr,
 			opts.L1Reader.Client())
@@ -446,12 +446,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		var teeType TEE
 		configTee := opts.Config().EspressoTeeType
-		switch configTee {
-		case "SGX":
-			teeType = SGX
-		case "NITRO":
-			teeType = NITRO
-		default:
+		teeType, err = teeType.FromString(configTee)
+		if err != nil {
 			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
@@ -1209,7 +1205,7 @@ func (b *BatchPoster) encodeAddBatch(
 
 				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
 				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-				// https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
+				// https://github.com/ethereum/go-ethereum/issues/19751
 				if v == 0 || v == 1 {
 					signature[vIndex] = v + 27
 				}

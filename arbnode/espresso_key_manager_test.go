@@ -58,7 +58,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	mockEspressoNitroTEEVerifier.On("VerifyAttestationCertificates", mock.Anything, mock.Anything).Return(nil, nil, nil)
 
 	// Test initialization
-	t.Run("NewEspressoKeyManager", func(t *testing.T) {
+	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(common.Hash{}, nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
@@ -71,7 +71,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test HasRegistered and Registry
-	t.Run("Registry", func(t *testing.T) {
+	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
@@ -116,7 +116,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test Sign
-	t.Run("SignBatch with the ephemeral key", func(t *testing.T) {
+	t.Run("SGX SignBatch with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
@@ -133,7 +133,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.True(t, valid, "Signature should verify with public key")
 	})
 
-	t.Run("Sign Hotshot payload with batcher private key", func(t *testing.T) {
+	t.Run("SGX Sign Hotshot payload with batcher private key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()

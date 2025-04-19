@@ -23,37 +23,37 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
-	Enable                 bool          `koanf:"enable"`
-	HotShotUrls            []string      `koanf:"hotshot-urls"`
-	NextHotshotBlock       uint64        `koanf:"next-hotshot-block"`
-	Namespace              uint64        `koanf:"namespace"`
-	RetryTime              time.Duration `koanf:"retry-time"`
-	HotshotPollingInterval time.Duration `koanf:"hotshot-polling-interval"`
-	HotshotPollingTimeout  time.Duration `koanf:"hotshot-polling-timeout"`
-	LegacySGXVerifierAddr  string        `koanf:"legacy-sgx-verifier-addr"`
-	BatchPosterAddr        string        `koanf:"batch-poster-addr"`
-	RecordPerformance      bool          `koanf:"record-performance"`
-	WaitForFinalization    bool          `koanf:"wait-for-finalization"`
-	WaitForConfirmations   bool          `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth     uint64        `koanf:"required-block-depth"`
-	BlocksToRead           uint64        `koanf:"blocks-to-read"`
+	Enable                  bool          `koanf:"enable"`
+	HotShotUrls             []string      `koanf:"hotshot-urls"`
+	NextHotshotBlock        uint64        `koanf:"next-hotshot-block"`
+	Namespace               uint64        `koanf:"namespace"`
+	RetryTime               time.Duration `koanf:"retry-time"`
+	HotshotPollingInterval  time.Duration `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout   time.Duration `koanf:"hotshot-polling-timeout"`
+	EspressoSGXVerifierAddr string        `koanf:"legacy-sgx-verifier-addr"`
+	BatchPosterAddr         string        `koanf:"batch-poster-addr"`
+	RecordPerformance       bool          `koanf:"record-performance"`
+	WaitForFinalization     bool          `koanf:"wait-for-finalization"`
+	WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
+	BlocksToRead            uint64        `koanf:"blocks-to-read"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
-	Enable:                 false,
-	HotShotUrls:            []string{},
-	NextHotshotBlock:       1,
-	Namespace:              0,
-	RetryTime:              time.Second * 2,
-	HotshotPollingInterval: time.Millisecond * 100,
-	HotshotPollingTimeout:  time.Minute * 2,
-	LegacySGXVerifierAddr:  "",
-	BatchPosterAddr:        "",
-	RecordPerformance:      false,
-	WaitForFinalization:    true,
-	WaitForConfirmations:   false,
-	RequiredBlockDepth:     6,
-	BlocksToRead:           100,
+	Enable:                  false,
+	HotShotUrls:             []string{},
+	NextHotshotBlock:        1,
+	Namespace:               0,
+	RetryTime:               time.Second * 2,
+	HotshotPollingInterval:  time.Millisecond * 100,
+	HotshotPollingTimeout:   time.Minute * 2,
+	EspressoSGXVerifierAddr: "",
+	BatchPosterAddr:         "",
+	RecordPerformance:       false,
+	WaitForFinalization:     true,
+	WaitForConfirmations:    false,
+	RequiredBlockDepth:      6,
+	BlocksToRead:            100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -109,9 +109,9 @@ func NewEspressoCaffNode(
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
 	// hotshot transactions using SGX quote. Therefore we create a SGX TEE verifier here.
-	legacyVerifier, err := espressotee.NewLegacySGXVerifier(
+	sgxVerifier, err := espressotee.NewEspressoSGXVerifier(
 		l1Reader.Client(),
-		common.HexToAddress(configFetcher().LegacySGXVerifierAddr),
+		common.HexToAddress(configFetcher().EspressoSGXVerifierAddr),
 	)
 	if err != nil {
 		log.Crit("failed to create espressoTEEVerifier", "err", err)
@@ -123,7 +123,7 @@ func NewEspressoCaffNode(
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
 		configFetcher().HotshotPollingTimeout,
-		legacyVerifier,
+		sgxVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
