@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -95,6 +96,7 @@ type batchPosterPosition struct {
 	DelayedMessageCount uint64
 	NextSeqNum          uint64
 }
+
 type BatchPoster struct {
 	stopwaiter.StopWaiter
 	l1Reader           *headerreader.HeaderReader
@@ -192,6 +194,7 @@ type BatchPosterConfig struct {
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	EspressoEventPollingStep    uint64        `koanf:"espresso-event-polling-step"`
+	EspressoTeeType             uint8         `koanf:"espresso-tee-type"`
 	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
 	// state updates can lag behind before triggering the escape hatch. If the difference
 	// between the current L1 block number and the latest state update's block number
@@ -244,6 +247,7 @@ type BatchPosterConfigFetcher func() *BatchPosterConfig
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
 }
+
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultBatchPosterConfig.Enable, "enable posting batches to l1")
 	f.Bool(prefix+".disable-dap-fallback-store-data-on-chain", DefaultBatchPosterConfig.DisableDapFallbackStoreDataOnChain, "If unable to batch to DA provider, disable fallback storing data on chain")
@@ -274,6 +278,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Uint8(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "specifies the espresso tee type")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
@@ -320,6 +325,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// Try to fill 3 blobs per batch,
 	HotShotBlock:        1,
 	HotShotGenesisBlock: 1,
+	EspressoTeeType:     1,
 	// The default for this will vary based on restrictions imposed by rpc providers.
 	EspressoEventPollingStep: 2000,
 }
@@ -331,6 +337,7 @@ var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 	Account:       genericconf.WalletConfigDefault.Account,
 	OnlyCreateKey: genericconf.WalletConfigDefault.OnlyCreateKey,
 }
+
 var TestBatchPosterConfig = BatchPosterConfig{
 	Enable:                         true,
 	MaxSize:                        100000,
@@ -436,24 +443,24 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if opts.Config().EspressoTeeVerifierAddress != "" && opts.Streamer.espressoClient != nil {
 		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
 
-		legacyVerifier, err := espressotee.NewLegacySGXVerifier(opts.L1Reader.Client(), espressoTeeVerifierAddress)
-		if err != nil {
-			return nil, err
-		}
-
-		verifier, err := espressotee.NewEspressoTEEVerifier(opts.L1Reader.Client(), espressoTeeVerifierAddress, 1)
+		verifier, err := espressotee.NewEspressoTEEVerifier(opts.L1Reader.Client(), espressoTeeVerifierAddress, opts.Config().EspressoTeeType)
 		if err != nil {
 			return nil, err
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
+		batchPosterAddress, err := recoverAddressFromSigner(opts.DataSigner)
+		if err != nil {
+			log.Error("Failed to recover address from signer", "error", err)
+			return nil, err
+		}
 
 		espressoStreamer = espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
 			opts.Config().HotShotBlock,
-			legacyVerifier,
+			nil,
 			opts.Streamer.espressoClient,
 			false,
-			opts.Streamer.EspressoKeyManager.GetAddress(),
+			batchPosterAddress,
 		)
 	}
 
@@ -802,6 +809,7 @@ func (b *BatchPoster) pollForReverts(ctx context.Context) {
 		}
 	}
 }
+
 func (b *BatchPoster) getBatchPosterPosition(ctx context.Context, blockNum *big.Int) ([]byte, error) {
 	bigInboxBatchCount, err := b.seqInbox.BatchCount(&bind.CallOpts{Context: ctx, BlockNumber: blockNum})
 	if err != nil {
@@ -1233,10 +1241,16 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, fmt.Errorf("failed to create bytes type: %w", err)
 		}
 
+		uint8Type, err := abi.NewType("uint8", "", nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create uint8 type: %w", err)
+		}
+
 		hotshotNumberAndSignature, err := abi.Arguments{
 			{Type: uint256Type},
 			{Type: bytesType},
-		}.Pack(hotshotBlockNumber, signature)
+			{Type: uint8Type},
+		}.Pack(hotshotBlockNumber, signature, b.config().EspressoTeeType)
 
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
@@ -2047,4 +2061,19 @@ func (b *BoolRing) All(value bool) bool {
 		}
 	}
 	return true
+}
+
+func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, error) {
+	message := make([]byte, 32)
+	signature, err := signer(message)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	publicKey, err := crypto.SigToPub(message, signature)
+	if err != nil {
+		return common.Address{}, err
+	}
+
+	return crypto.PubkeyToAddress(*publicKey), nil
 }

@@ -34,6 +34,10 @@ func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, userDataHash []byt
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *mockEspressoTEEVerifier) GetTeeType() uint8 {
+	return 0
+}
+
 func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
 

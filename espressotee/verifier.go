@@ -34,6 +34,7 @@ func NewLegacySGXVerifier(l1Client *ethclient.Client, addr common.Address) (*Leg
 }
 
 type EspressoTEEVerifierInterface interface {
+	GetTeeType() uint8
 	RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte) error
 	RegisteredSigners(signer common.Address) (bool, error)
 	Verify(opts *bind.CallOpts, signature []byte, userDataHash [32]byte) (bool, error)
@@ -130,4 +131,8 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestatio
 //	  This will be false if an error occurrs.
 func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address) (bool, error) {
 	return e.verifier.RegisteredSigners(&bind.CallOpts{}, address, e.teeType)
+}
+
+func (e *EspressoTEEVerifier) GetTeeType() uint8 {
+	return e.teeType
 }
