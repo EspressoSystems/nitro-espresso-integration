@@ -1393,7 +1393,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		// if the building cache is nil, we need to reset the espresso streamer to the last checkpoint.
-		b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+		if b.espressoStreamer != nil {
+			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
 			return false, err
