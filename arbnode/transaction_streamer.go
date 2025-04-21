@@ -1684,37 +1684,6 @@ func getLogLevel(err error) func(string, ...interface{}) {
 }
 
 /**
-* Checks if the submitted transaction has been finalized by Espresso  and verifies it.
- */
-func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
-	var err error
-	if s.UseEscapeHatch {
-		err = s.checkEspressoLiveness()
-		if err != nil {
-			if ctx.Err() != nil {
-				return 0
-			}
-			logLevel := getLogLevel(err)
-			logLevel("error checking escape hatch, will retry", "err", err)
-			return retryRate
-		}
-		espressoTransactionEphemeralErrorHandler.Reset()
-	}
-	err = s.checkSubmittedTransactionForFinality(ctx)
-	if err != nil {
-		if ctx.Err() != nil {
-			return 0
-		}
-		logLevel := getLogLevel(err)
-		logLevel("error polling finality, will retry", "err", err)
-		return retryRate
-	}
-	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return 0
-}
-
-/**
  * Submits the transactions to espresso if the escape hatch is not enabled
  */
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
@@ -1808,10 +1777,6 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 		err := s.EspressoKeyManager.Register(s.getAttestationQuote)
 		if err != nil {
 			log.Error("failed to register espresso key manager", "err", err)
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
-		if err != nil {
 			return err
 		}
 		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)

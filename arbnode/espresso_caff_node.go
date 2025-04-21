@@ -120,9 +120,6 @@ func NewEspressoCaffNode(
 
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
-		configFetcher().RetryTime,
-		configFetcher().HotshotPollingInterval,
-		configFetcher().HotshotPollingTimeout,
 		legacyVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,

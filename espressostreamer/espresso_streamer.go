@@ -27,17 +27,23 @@ const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
 
-type EspressoClientInterface interface {
-	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
-	FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error)
-	FetchHeaderByHeight(ctx context.Context, blockHeight uint64) (espressoTypes.HeaderImpl, error)
-}
-
+// This module is responsible for fetching hotshot blocks and parsing messages
+// when users invoke the `Peek` and `Next` methods. Unlike `arbnode`, it does
+// not have a `Start` method to run a task asynchronously. As a result, we have
+// to pass a timeout to the `Next` and `Peek` methods to avoid infinite loop
+// and the caller is responsible for handling the timeout.
 type EspressoStreamerInterface interface {
 	Next(ctx context.Context) (*MessageWithMetadataAndPos, error)
+	// Peek returns the next message in the streamer's buffer. If the message is not
+	// in the buffer, it will fetch next hotshot blocks and parse them until the next
+	// message is found or any error occurs.
 	Peek(ctx context.Context) (*MessageWithMetadataAndPos, error)
+	// Advance moves the current message position to the next message.
 	Advance()
+	// Reset sets the current message position and the next hotshot block number.
 	Reset(currentMessagePos uint64, currentHostshotBlock uint64)
+	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
+	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
@@ -52,15 +58,10 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamer struct {
 	stopwaiter.StopWaiter
-	espressoClient         EspressoClientInterface
-	nextHotshotBlockNum    uint64
-	currentMessagePos      uint64
-	namespace              uint64
-	retryTime              time.Duration
-	hotshotPollingInterval time.Duration
-	// Technically, we don't need a timeout for the hotshot polling.
-	// This is used to avoid infinite loop and the caller should handle the timeout.
-	hotshotPollingTimeout     time.Duration
+	espressoClient            espressoClient.EspressoClient
+	nextHotshotBlockNum       uint64
+	currentMessagePos         uint64
+	namespace                 uint64
 	messageWithMetadataAndPos []*MessageWithMetadataAndPos
 	legacyVerifier            espressotee.LegacySGXVerifierInterface
 
@@ -71,11 +72,8 @@ type EspressoStreamer struct {
 func NewEspressoStreamer(
 	namespace uint64,
 	nextHotshotBlockNum uint64,
-	retryTime time.Duration,
-	hotshotPollingInterval time.Duration,
-	hotshotPollingTimeout time.Duration,
 	legacyVerifier espressotee.LegacySGXVerifierInterface,
-	espressoClientInterface EspressoClientInterface,
+	espressoClient espressoClient.EspressoClient,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
 ) *EspressoStreamer {
@@ -86,15 +84,12 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:         espressoClientInterface,
-		nextHotshotBlockNum:    nextHotshotBlockNum,
-		retryTime:              retryTime,
-		hotshotPollingInterval: hotshotPollingInterval,
-		hotshotPollingTimeout:  hotshotPollingTimeout,
-		namespace:              namespace,
-		legacyVerifier:         legacyVerifier,
-		PerfRecorder:           PerfRecorder,
-		batchPosterAddr:        batchPosterAddr,
+		espressoClient:      espressoClient,
+		nextHotshotBlockNum: nextHotshotBlockNum,
+		namespace:           namespace,
+		legacyVerifier:      legacyVerifier,
+		PerfRecorder:        PerfRecorder,
+		batchPosterAddr:     batchPosterAddr,
 	}
 }
 
@@ -154,13 +149,9 @@ func (s *EspressoStreamer) Peek(ctx context.Context) (*MessageWithMetadataAndPos
 		return false
 	}
 
-	// We set a timeout to avoid infinite loop in case of a bug.
-	timeout := 2 * time.Minute
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	err := s.QueueMessagesFromHotShotUntil(timeoutCtx, s.parseEspressoTransaction, condition)
+	err := s.QueueMessagesFromHotShotUntil(ctx, s.parseEspressoTransaction, condition)
 	if err != nil {
-		return nil, fmt.Errorf("failed to queue messages from hotshot until condition is met within %s", timeout)
+		return nil, err
 	}
 
 	messageIndex = FilterAndFind(&s.messageWithMetadataAndPos, compareMessageWithCurrentPos)
@@ -186,28 +177,18 @@ func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
 	condition func(messages []*MessageWithMetadataAndPos) bool,
 ) error {
 	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
-			if err != nil {
-				// TODO: minimize the log output
-				log.Error("failed to fetch next hotshot block", "err", err)
-				time.Sleep(s.retryTime)
-				continue
-			}
+		messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
+		if err != nil {
+			return err
+		}
 
-			if len(messages) > 0 {
-				s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
-			}
-			s.nextHotshotBlockNum += 1
+		if len(messages) > 0 {
+			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
+		}
+		s.nextHotshotBlockNum += 1
 
-			if condition(messages) {
-				return nil
-			}
-
-			time.Sleep(s.hotshotPollingInterval)
+		if condition(messages) {
+			return nil
 		}
 	}
 }
@@ -355,7 +336,7 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 
 func fetchNextHotshotBlock(
 	ctx context.Context,
-	espressoClient EspressoClientInterface,
+	espressoClient espressoClient.EspressoClient,
 	nextHotshotBlockNum uint64,
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error),
 	namespace uint64,

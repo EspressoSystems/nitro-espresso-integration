@@ -283,34 +283,37 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 
 var DefaultBatchPosterConfig = BatchPosterConfig{
 	Enable:                             false,
-	DisableDapFallbackStoreDataOnChain: false, // This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go, MaxSize: 100000, Try to fill 3 blobs per batch,
-	Max4844BatchSize:                   blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
-	PollInterval:                       time.Second * 10,
-	ErrorDelay:                         time.Second * 10,
-	MaxDelay:                           time.Hour,
-	WaitForMaxDelay:                    false,
-	CompressionLevel:                   brotli.BestCompression,
-	DASRetentionPeriod:                 daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:                 "",
-	ExtraBatchGas:                      50_000,
-	Post4844Blobs:                      false,
-	IgnoreBlobPrice:                    false,
-	DataPoster:                         dataposter.DefaultDataPosterConfig,
-	ParentChainWallet:                  DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                       "",
-	L1BlockBoundBypass:                 time.Hour,
-	UseAccessLists:                     true,
-	RedisLock:                          redislock.DefaultCfg,
-	GasEstimateBaseFeeMultipleBips:     arbmath.OneInUBips * 3 / 2,
-	ReorgResistanceMargin:              10 * time.Minute,
-	CheckBatchCorrectness:              true,
-	UseEscapeHatch:                     false,
-	EspressoTxnsPollingInterval:        time.Second,
-	ResubmitEspressoTxDeadline:         10 * time.Minute,
-	MaxBlockLagBeforeEscapeHatch:       350,
-	LightClientAddress:                 "",
-	HotShotUrls:                        []string{""},
-	MaxEmptyBatchDelay:                 3 * 24 * time.Hour,
+	DisableDapFallbackStoreDataOnChain: false,
+	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
+	MaxSize: 100000,
+	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go, MaxSize: 100000, Try to fill 3 blobs per batch,
+	Max4844BatchSize:               blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
+	PollInterval:                   time.Second * 10,
+	ErrorDelay:                     time.Second * 10,
+	MaxDelay:                       time.Hour,
+	WaitForMaxDelay:                false,
+	CompressionLevel:               brotli.BestCompression,
+	DASRetentionPeriod:             daprovider.DefaultDASRetentionPeriod,
+	GasRefunderAddress:             "",
+	ExtraBatchGas:                  50_000,
+	Post4844Blobs:                  false,
+	IgnoreBlobPrice:                false,
+	DataPoster:                     dataposter.DefaultDataPosterConfig,
+	ParentChainWallet:              DefaultBatchPosterL1WalletConfig,
+	L1BlockBound:                   "",
+	L1BlockBoundBypass:             time.Hour,
+	UseAccessLists:                 true,
+	RedisLock:                      redislock.DefaultCfg,
+	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
+	ReorgResistanceMargin:          10 * time.Minute,
+	CheckBatchCorrectness:          true,
+	UseEscapeHatch:                 false,
+	EspressoTxnsPollingInterval:    time.Second,
+	ResubmitEspressoTxDeadline:     10 * time.Minute,
+	MaxBlockLagBeforeEscapeHatch:   350,
+	LightClientAddress:             "",
+	HotShotUrls:                    []string{""},
+	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go,
 	// Try to fill 3 blobs per batch,
 	HotShotBlock:        1,
@@ -318,6 +321,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// The default for this will vary based on restrictions imposed by rpc providers.
 	EspressoEventPollingStep: 2000,
 }
+
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 	Pathname:      "batch-poster-wallet",
 	Password:      genericconf.WalletConfigDefault.Password,
@@ -450,9 +454,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		espressoStreamer = espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
 			opts.Config().HotShotBlock,
-			opts.Config().EspressoTxnsPollingInterval,
-			opts.Config().EspressoTxnsPollingInterval,
-			opts.Config().EspressoTxnsPollingInterval,
 			legacyVerifier,
 			opts.Streamer.espressoClient,
 			false,
@@ -526,6 +527,7 @@ type simulatedBlobReader struct {
 func (b *simulatedBlobReader) GetBlobs(ctx context.Context, batchBlockHash common.Hash, versionedHashes []common.Hash) ([]kzg4844.Blob, error) {
 	return b.blobs, nil
 }
+
 func (b *simulatedBlobReader) Initialize(ctx context.Context) error { return nil }
 
 type simulatedMuxBackend struct {
@@ -540,10 +542,12 @@ type simulatedMuxBackend struct {
 func (b *simulatedMuxBackend) PeekSequencerInbox() ([]byte, common.Hash, error) {
 	return b.seqMsg, common.Hash{}, nil
 }
+
 func (b *simulatedMuxBackend) GetSequencerInboxPosition() uint64   { return b.batchSeqNum }
 func (b *simulatedMuxBackend) AdvanceSequencerInbox()              {}
 func (b *simulatedMuxBackend) GetPositionWithinMessage() uint64    { return b.positionWithinMessage }
 func (b *simulatedMuxBackend) SetPositionWithinMessage(pos uint64) { b.positionWithinMessage = pos }
+
 func (b *simulatedMuxBackend) ReadDelayedInbox(seqNum uint64) (*arbostypes.L1IncomingMessage, error) {
 	pos := arbmath.SaturatingUSub(seqNum, b.delayedInboxStart)
 	if pos < uint64(len(b.delayedInbox)) {
@@ -628,18 +632,6 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 var EspressoValidationErr = errors.New("failed to check espresso validation")
 var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso transaction")
 
-// Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
-// hashes to some light client state root.
-
-func (b *BatchPoster) tryGetNextMessageForBatch(ctx context.Context) (*arbostypes.MessageWithMetadata, uint64, uint64) {
-	streamerMsg, err := b.espressoStreamer.Next(ctx)
-	if err != nil {
-		log.Info("Espresso Streamer was not able to produce the next message", "err", err)
-		return &arbostypes.MessageWithMetadata{}, 0, 0
-	}
-	return &streamerMsg.MessageWithMeta, streamerMsg.Pos, streamerMsg.HotshotHeight
-}
-
 type txInfo struct {
 	Hash      common.Hash       `json:"hash"`
 	Nonce     hexutil.Uint64    `json:"nonce"`
@@ -717,6 +709,7 @@ func (b *BatchPoster) checkReverts(ctx context.Context, to int64) (bool, error) 
 	}
 	return false, nil
 }
+
 func (b *BatchPoster) pollForL1PriceData(ctx context.Context) {
 	headerCh, unsubscribe := b.l1Reader.Subscribe(false)
 	defer unsubscribe()
@@ -1017,6 +1010,7 @@ func (s *batchSegments) prepareIntSegment(val uint64, segmentHeader byte) ([]byt
 	}
 	return append(segment, enc...), nil
 }
+
 func (s *batchSegments) maybeAddDiffSegment(base *uint64, newVal uint64, segmentHeader byte) (bool, error) {
 	if newVal == *base {
 		return true, nil
@@ -1032,6 +1026,7 @@ func (s *batchSegments) maybeAddDiffSegment(base *uint64, newVal uint64, segment
 	}
 	return success, err
 }
+
 func (s *batchSegments) addDelayedMessage() (bool, error) {
 	segment := []byte{arbstate.BatchSegmentKindDelayedMessages}
 	success, err := s.addSegment(segment, false)
@@ -1040,6 +1035,7 @@ func (s *batchSegments) addDelayedMessage() (bool, error) {
 	}
 	return success, err
 }
+
 func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, error) {
 	if s.isDone {
 		return false, errBatchAlreadyClosed
@@ -1060,6 +1056,7 @@ func (s *batchSegments) AddMessage(msg *arbostypes.MessageWithMetadata) (bool, e
 	}
 	return s.addL2Msg(msg.Message.L2msg)
 }
+
 func (s *batchSegments) IsDone() bool {
 	return s.isDone
 }
@@ -1441,7 +1438,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 		}
 	}
-	// TODO: Check if there is nothing to post (With the new streamer design, call PEEK)
 
 	if err != nil {
 
@@ -1521,27 +1517,19 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	var lastPotentialMsg *arbostypes.MessageWithMetadata
 	var lastPotentialMsgPos arbutil.MessageIndex
 	for {
-		msg, msgPos, hotshotHeight := b.tryGetNextMessageForBatch(ctx)
+		espressoMsg, err := b.espressoStreamer.Next(ctx)
+		if err != nil {
+			log.Info("Error getting next message", "err", err, "pos", b.building.msgCount)
+			break
+		}
 		if b.building.hotshotHeight == 0 {
 			// store the hotshot height associated with the first message
-			b.building.hotshotHeight = hotshotHeight
+			b.building.hotshotHeight = espressoMsg.HotshotHeight
 		}
-		lastPotentialMsg = msg
-		lastPotentialMsgPos = arbutil.MessageIndex(msgPos)
+		lastPotentialMsg = &espressoMsg.MessageWithMeta
+		lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
 
-		if msg == (&arbostypes.MessageWithMetadata{}) {
-			if b.building.haveUsefulMessage {
-				// if we have a useful message, break from the batch building loop.
-				// the batcher will then check if the first useful message is older than the max delay.
-				// If it is, we will attempt to post the batch, otherwise, it will re-try this function and potentially add more messages to the batch.
-				break
-			} else {
-				// If we don't have a first useful message, we should wait for a small duration, and poll then espressoStreamer
-				// Till we add a message to the batch.
-				time.Sleep(time.Second / 2) //TODO: make this a configurable polling interval.
-				continue
-			}
-		}
+		msg := &espressoMsg.MessageWithMeta
 
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
@@ -1954,6 +1942,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		}
 	})
 }
+
 func (b *BatchPoster) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.dataPoster.StopAndWait()
