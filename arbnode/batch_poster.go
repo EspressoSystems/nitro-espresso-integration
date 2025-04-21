@@ -1516,20 +1516,60 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	var lastPotentialMsg *arbostypes.MessageWithMetadata
 	var lastPotentialMsgPos arbutil.MessageIndex
-	for {
-		espressoMsg, err := b.espressoStreamer.Next(ctx)
-		if err != nil {
-			log.Info("Error getting next message", "err", err, "pos", b.building.msgCount)
-			break
-		}
-		if b.building.hotshotHeight == 0 {
-			// store the hotshot height associated with the first message
-			b.building.hotshotHeight = espressoMsg.HotshotHeight
-		}
-		lastPotentialMsg = &espressoMsg.MessageWithMeta
-		lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
+	var addMessageLoop func() bool
+	var getNextMessage func() (*arbostypes.MessageWithMetadata, error)
+	var breakLoopWhenErrorOccurs bool
 
-		msg := &espressoMsg.MessageWithMeta
+	if b.espressoStreamer == nil {
+		msgCount, err := b.streamer.GetMessageCount()
+		if err != nil {
+			log.Error("Error getting message count", "err", err)
+			return false, err
+		}
+		if msgCount <= batchPosition.MessageCount {
+			// There's nothing after the newest batch, therefore batch posting was not required
+			return false, nil
+		}
+
+		lastPotentialMsg, err = b.streamer.GetMessage(msgCount - 1)
+		if err != nil {
+			return false, err
+		}
+		addMessageLoop = func() bool { return b.building.msgCount < msgCount }
+		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
+			msg, err := b.streamer.GetMessage(b.building.msgCount)
+			if err != nil {
+				return nil, err
+			}
+			return msg, nil
+		}
+		breakLoopWhenErrorOccurs = false
+	} else {
+		addMessageLoop = func() bool { return true }
+		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
+			espressoMsg, err := b.espressoStreamer.Next(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if b.building.hotshotHeight == 0 {
+				// store the hotshot height associated with the first message
+				b.building.hotshotHeight = espressoMsg.HotshotHeight
+			}
+			lastPotentialMsg = &espressoMsg.MessageWithMeta
+			lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
+			return &espressoMsg.MessageWithMeta, nil
+		}
+		breakLoopWhenErrorOccurs = true
+	}
+	for addMessageLoop() {
+		msg, err := getNextMessage()
+		if err != nil {
+			if breakLoopWhenErrorOccurs {
+				log.Error("Error getting next message", "err", err, "pos", b.building.msgCount)
+				break
+			}
+			return false, err
+		}
 
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
 			log.Warn(
