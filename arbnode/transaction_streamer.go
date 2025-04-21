@@ -1808,7 +1808,7 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool 
 	// check if the pos has already been posted on L1
 	if s.Brige != nil && pos != nil {
 		// check if the pos is already finalized on L1
-		sequencerMessageCount, err := s.Brige.SequencerMessageCount(&bind.CallOpts{
+		sequencerMessageCount, err := s.Brige.SequencerReportedSubMessageCount(&bind.CallOpts{
 			Pending: false,
 		})
 		if err != nil {
