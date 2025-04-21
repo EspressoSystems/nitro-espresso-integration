@@ -2019,6 +2019,7 @@ func (b *BoolRing) Update(value bool) {
 	}
 	b.bufferPosition = (b.bufferPosition + 1) % period
 }
+
 func (b *BoolRing) Empty() bool {
 	return len(b.buffer) == 0
 }
