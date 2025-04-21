@@ -26,6 +26,7 @@ import (
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -33,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
@@ -91,6 +93,7 @@ type TransactionStreamer struct {
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
+	SequencerInbox     *bridgegen.SequencerInbox
 }
 
 type TransactionStreamerConfig struct {
@@ -100,6 +103,7 @@ type TransactionStreamerConfig struct {
 	TrackBlockMetadataFrom  uint64        `koanf:"track-block-metadata-from"`
 	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
 	QuoteFile               string        `koanf:"quote-file"`
+	SequencerInboxAddress   string        `koanf:"sequencer-inbox-address"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -1165,12 +1169,16 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	//  to be used later to submit the message to hotshot for finalization.
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		//  Only submit the transaction if escape hatch is not enabled
-		if s.shouldSubmitEspressoTransaction() {
-			for i := range messages {
-				idx, err := safecast.ToUint64(i)
-				if err != nil {
-					return err
-				}
+		for i := range messages {
+			idx, err := safecast.ToUint64(i)
+			if err != nil {
+				return err
+			}
+
+			// check if the pos should be submitted to espresso
+			checkPos := uint64(pos) + idx
+			if s.shouldSubmitEspressoTransaction(&checkPos) {
+
 				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
 				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
 				if err != nil {
@@ -1754,7 +1762,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
 	retryRate := s.espressoTxnsPollingInterval * 2
-	shouldSubmit := s.shouldSubmitEspressoTransaction()
+	shouldSubmit := s.shouldSubmitEspressoTransaction(nil)
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
 		err := s.submitEspressoTransactions(ctx)
@@ -1793,10 +1801,27 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	return s.espressoTxnsPollingInterval
 }
 
-func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
+func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool {
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
+	// SequencerInbox is not nil and pos is not nil
+	// check if the pos has already been posted on L1
+	if s.SequencerInbox != nil && pos != nil {
+		// check if the pos is already finalized on L1
+		batchCount, err := s.SequencerInbox.BatchCount(&bind.CallOpts{
+			Pending: false,
+		})
+		if err != nil {
+			log.Error("failed to get batch count", "err", err)
+			return false
+		}
+		// This means the pos has already been posted on L1
+		if *pos < batchCount.Uint64() {
+			return false
+		}
+	}
+
 	return !s.EscapeHatchEnabled
 }
 

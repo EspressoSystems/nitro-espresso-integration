@@ -400,6 +400,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
 		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls, hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
+		// If hotshot url is set, also set the sequencer inbox
+		if seqInbox == nil {
+			log.Error("espresso mode enabled without a sequencer inbox address")
+			return nil, fmt.Errorf("espresso mode enabled without a sequencer inbox address")
+		}
+		log.Info("Using hotshot url to create the sequencer inbox")
+		opts.Streamer.SequencerInbox = seqInbox
+
 	}
 
 	if lightClientAddr != "" {
