@@ -406,8 +406,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, fmt.Errorf("espresso mode enabled without a sequencer inbox address")
 		}
 		log.Info("Using hotshot url to create the sequencer inbox")
-		opts.Streamer.SequencerInbox = seqInbox
-
+		bridgeAddress, err := seqInbox.Bridge(&bind.CallOpts{Context: context.Background()})
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled bridge")
+		}
+		bride, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled without bridge")
+		}
+		opts.Streamer.Brige = bride
 	}
 
 	if lightClientAddr != "" {

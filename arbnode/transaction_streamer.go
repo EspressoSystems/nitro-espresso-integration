@@ -93,7 +93,7 @@ type TransactionStreamer struct {
 	// Public these fields for testing
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
-	SequencerInbox     *bridgegen.SequencerInbox
+	Brige              *bridgegen.Bridge
 }
 
 type TransactionStreamerConfig struct {
@@ -103,7 +103,6 @@ type TransactionStreamerConfig struct {
 	TrackBlockMetadataFrom  uint64        `koanf:"track-block-metadata-from"`
 	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
 	QuoteFile               string        `koanf:"quote-file"`
-	SequencerInboxAddress   string        `koanf:"sequencer-inbox-address"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -1807,17 +1806,17 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool 
 	}
 	// SequencerInbox is not nil and pos is not nil
 	// check if the pos has already been posted on L1
-	if s.SequencerInbox != nil && pos != nil {
+	if s.Brige != nil && pos != nil {
 		// check if the pos is already finalized on L1
-		batchCount, err := s.SequencerInbox.BatchCount(&bind.CallOpts{
+		sequencerMessageCount, err := s.Brige.SequencerMessageCount(&bind.CallOpts{
 			Pending: false,
 		})
 		if err != nil {
-			log.Error("failed to get batch count", "err", err)
+			log.Error("failed to get sequencerMessageCount", "err", err)
 			return false
 		}
 		// This means the pos has already been posted on L1
-		if *pos < batchCount.Uint64() {
+		if *pos < sequencerMessageCount.Uint64() {
 			return false
 		}
 	}
