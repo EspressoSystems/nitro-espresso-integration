@@ -130,6 +130,7 @@ type BatchPoster struct {
 	espressoStreamer                        *espressostreamer.EspressoStreamer
 	hotshotBlockNumberFromConfigOrRecentMsg uint64
 }
+
 type l1BlockBound int
 
 // This enum starts at 1 to avoid the empty initialization of 0 being valid
@@ -145,6 +146,7 @@ const (
 type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 }
+
 type BatchPosterConfig struct {
 	Enable                             bool `koanf:"enable"`
 	DisableDapFallbackStoreDataOnChain bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
@@ -445,12 +447,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, opts)
 
-		// espressoTEEVerifierCaller, err := bridgegen.NewEspressoTEEVerifier(
-		// common.HexToAddress(opts.Config().EspressoTeeVerifierAddress),
-		// opts.L1Reader.Client())
-		// if err != nil {
-		// return nil, err
-		// }
 		espressoStreamer = espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
 			opts.Config().HotShotBlock,
@@ -1848,7 +1844,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	// This is roughly equivalent to the amount of messages in the transaction streamer - the number of messages in the batch.
 	// It might be slightly inaccurate compared to nitros default method, but this only affects the batch compression
 	// and gas estimation, so a best effort estimate is fine.
-	unpostedMessages := b.espressoStreamer.GetMessageCount()
+	var unpostedMessages arbutil.MessageIndex
+	if b.espressoStreamer != nil {
+		unpostedMessages = arbutil.MessageIndex(b.espressoStreamer.GetMessageCount()) - b.building.msgCount
+	} else {
+		unpostedMessages = msgCount - b.building.msgCount
+	}
 	messagesPerBatch := b.messagesPerBatch.Average()
 	if messagesPerBatch == 0 {
 		// This should be impossible because we always post at least one message in a batch.
