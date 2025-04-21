@@ -413,6 +413,20 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		//  TODO: tech debt should remove fallback urls in the future
 		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
+		// If hotshot url is set, also set the sequencer inbox
+		if seqInbox == nil {
+			log.Error("espresso mode enabled without a sequencer inbox address")
+			return nil, fmt.Errorf("espresso mode enabled without a sequencer inbox address")
+		}
+		bridgeAddress, err := seqInbox.Bridge(&bind.CallOpts{Context: context.Background()})
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled bridge")
+		}
+		bride, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled without bridge")
+		}
+		opts.Streamer.Brige = bride
 	}
 
 	if lightClientAddr != "" {
