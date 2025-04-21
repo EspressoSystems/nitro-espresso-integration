@@ -1119,32 +1119,36 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 		log.Error("Failed to fetch last header from parent chain")
 		return 0
 	}
+
 	var logIterator *bridgegen.SequencerInboxTEESignatureVerifiedIterator
 	for i := header.Number.Uint64(); i >= b.config().HotShotGenesisBlock; i -= pollingStep {
+		start := i - pollingStep
+		if start < b.config().HotShotGenesisBlock {
+			start = b.config().HotShotGenesisBlock
+		}
 		filterOpts := bind.FilterOpts{
-			Start:   i - pollingStep,
+			Start:   start,
 			End:     &i,
 			Context: ctx,
 		}
-		// Filter logs with the methods provided by espressogen.
-		// Pass in empty arrays so that we don't fail to
+
 		logIterator, err = b.seqInbox.FilterTEESignatureVerified(&filterOpts, []*big.Int{}, []*big.Int{})
 		if err != nil {
 			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i)
 			return 0
 		}
-		log.Info("logIterator.Event", "event", logIterator.Event)
-	}
-	if logIterator == nil {
-		return 0
-	}
-	for {
-		if !logIterator.Next() {
-			// As soon as the iterator returns that it has no logs left, we have the most recent one
-			break
+
+		if logIterator == nil || !logIterator.Next() {
+			continue
 		}
+
+		// Log the event if found
+		log.Info("Found log event", "event", logIterator.Event)
+		return logIterator.Event.HotshotHeight.Uint64()
 	}
-	return logIterator.Event.HotshotHeight.Uint64()
+
+	log.Warn("No logs found for Hotshot block")
+	return 0
 }
 
 func (b *BatchPoster) encodeAddBatch(
