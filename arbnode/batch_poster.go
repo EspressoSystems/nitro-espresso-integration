@@ -443,7 +443,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		nitroVerifier, err := setupNitroVerifier(teeVerifier, opts.L1Reader.Client(), teeType)
 		if err != nil {
-			return nil, fmt.Errorf("failed to setup nitro verifier: %v", err)
+			return nil, err
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
 	}
@@ -508,20 +508,25 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, teeType TEE) (espressotee.EspressoNitroTEEVerifierInterface, error) {
 	if teeType != NITRO {
+		log.Info("nitro verifier not needed", "tee type", teeType)
 		return nil, nil
 	}
+	log.Info("setting up nitro verifier", "tee type", teeType)
 	// Setup nitro contract interface
 	rawCaller := &espressogen.IEspressoTEEVerifierRaw{Contract: teeVerifier}
 	var result []interface{}
 	err := rawCaller.Call(&bind.CallOpts{}, &result, "espressoNitroTEEVerifier", nil)
 	if err != nil || len(result) == 0 {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller", err)
+		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
 	}
 
 	nitroAddr, ok := result[0].(common.Address)
 	if !ok {
-		return nil, fmt.Errorf("failed to convert result to address", err)
+		return nil, fmt.Errorf("failed to convert result to address: %v", err)
 	}
+
+	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
+
 	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
 		nitroAddr,
 		l1Client)
