@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -434,31 +435,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 
-		// Setup nitro contract interface
-		rawCaller := &espressogen.IEspressoTEEVerifierRaw{Contract: teeVerifier}
-		var result []interface{}
-		err = rawCaller.Call(&bind.CallOpts{}, &result, "espressoNitroTEEVerifier", nil)
-		if err != nil || len(result) == 0 {
-			return nil, fmt.Errorf("failed to get nitro tee verifier address from caller", err)
-		}
-
-		nitroAddr, ok := result[0].(common.Address)
-		if !ok {
-			return nil, fmt.Errorf("failed to convert result to address", err)
-		}
-		nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
-			nitroAddr,
-			opts.L1Reader.Client())
-		if err != nil {
-			return nil, err
-		}
-		nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, opts.L1Reader.Client())
-
 		var teeType TEE
 		configTee := opts.Config().EspressoTeeType
 		teeType, err = teeType.FromString(configTee)
 		if err != nil {
 			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
+		}
+		nitroVerifier, err := setupNitroVerifier(teeVerifier, opts.L1Reader.Client(), teeType)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup nitro verifier: %v", err)
 		}
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
 	}
@@ -519,6 +504,32 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		})
 	}
 	return b, nil
+}
+
+func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, teeType TEE) (espressotee.EspressoNitroTEEVerifierInterface, error) {
+	if teeType != NITRO {
+		return nil, nil
+	}
+	// Setup nitro contract interface
+	rawCaller := &espressogen.IEspressoTEEVerifierRaw{Contract: teeVerifier}
+	var result []interface{}
+	err := rawCaller.Call(&bind.CallOpts{}, &result, "espressoNitroTEEVerifier", nil)
+	if err != nil || len(result) == 0 {
+		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller", err)
+	}
+
+	nitroAddr, ok := result[0].(common.Address)
+	if !ok {
+		return nil, fmt.Errorf("failed to convert result to address", err)
+	}
+	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
+		nitroAddr,
+		l1Client)
+	if err != nil {
+		return nil, err
+	}
+	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client)
+	return nitroVerifier, nil
 }
 
 type simulatedBlobReader struct {
