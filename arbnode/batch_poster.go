@@ -435,7 +435,17 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 
 		// Setup nitro contract interface
-		nitroAddr, err := teeVerifier.RetrieveTEEContractAddress(&bind.CallOpts{}, uint8(espressotee.NITRO))
+		rawCaller := &espressogen.IEspressoTEEVerifierRaw{Contract: teeVerifier}
+		var result []interface{}
+		err = rawCaller.Call(&bind.CallOpts{}, &result, "espressoNitroTEEVerifier", nil)
+		if err != nil || len(result) == 0 {
+			return nil, fmt.Errorf("failed to get nitro tee verifier address from caller", err)
+		}
+
+		nitroAddr, ok := result[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("failed to convert result to address", err)
+		}
 		nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
 			nitroAddr,
 			opts.L1Reader.Client())
