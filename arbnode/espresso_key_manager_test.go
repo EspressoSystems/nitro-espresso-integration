@@ -38,9 +38,14 @@ func (m *mockNitroEspressoTEEVerifier) VerifyCert(opts *bind.TransactOpts, certi
 	return common.Hash{}, args.Error(0)
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyAttestationCertificates(attestationBytes []byte, opts *bind.TransactOpts) ([]byte, []byte, error) {
+func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts) ([]byte, []byte, error) {
 	args := m.Called(attestationBytes, opts)
 	return nil, nil, args.Error(0)
+}
+
+func (m *mockNitroEspressoTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
+	args := m.Called(pcr0Hash)
+	return true, args.Error(0)
 }
 
 func TestEspressoKeyManager(t *testing.T) {
@@ -55,7 +60,8 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	mockEspressoNitroTEEVerifier := new(mockNitroEspressoTEEVerifier)
 	mockEspressoNitroTEEVerifier.On("VerifyCert", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(common.Hash{}, nil)
-	mockEspressoNitroTEEVerifier.On("VerifyAttestationCertificates", mock.Anything, mock.Anything).Return(nil, nil, nil)
+	mockEspressoNitroTEEVerifier.On("VerifyAttestationAndCertificates", mock.Anything, mock.Anything).Return(nil, nil, nil)
+	mockEspressoNitroTEEVerifier.On("IsPCR0HashRegistered", mock.Anything).Return(true, nil)
 
 	// Test initialization
 	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
