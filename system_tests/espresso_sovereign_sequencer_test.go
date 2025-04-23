@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
+	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 
 	"github.com/ethereum/go-ethereum/common"
 )
