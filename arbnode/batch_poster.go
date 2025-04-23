@@ -129,6 +129,7 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList                func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	bytesType                 abi.Type
 	blobsAttestationArguments abi.Arguments
 }
 
@@ -436,6 +437,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		redisLock:                 redisLock,
 		dapReaders:                opts.DAPReaders,
 		blobsAttestationArguments: blobsAttestationArguments,
+		bytesType:                 bytesType,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1151,7 +1153,17 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	kzgBlobs, err := blobs.EncodeBlobs(l2MessageData)
 	_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
 	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
-	// This will allow us to get the attestation quote on the hash of the data
+	// This will allow us to get the attestation quote on the hash of the dataPoster
+	var blobHashList []byte
+	for _, blobHash := range blobHashes {
+		blobHashList = append(blobHashList, blobHash.Bytes()...)
+	}
+	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytesType}}.Pack(blobHashList)
+
+	if err != nil {
+		return nil, err
+	}
+
 	args = append(args, seqNum)
 	args = append(args, new(big.Int).SetUint64(delayedMsg))
 	args = append(args, b.config().gasRefunder)
@@ -1159,14 +1171,15 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
 	// pack remaining data for the attestation quote.
 	attestationQuoteArgs := args
-	attestationQuoteArgs = append(attestationQuoteArgs, blobHashes)
+	attestationQuoteArgs = append(attestationQuoteArgs, encodedBlobs)
 	// Generate the attestation quote over the method args, and the blob hashes.
 	packedData, err := b.blobsAttestationArguments.Pack(attestationQuoteArgs...)
 	if err != nil {
 		return nil, err
 	}
 	// Log info for debugging / generating test data
-	log.Info("Packed attestationQuote data", "packedData", packedData, "blobHashes", blobHashes)
+	log.Info("Packed attestationQuote data", "packedData", packedData)
+	log.Info("blob hashes", "hashes", blobHashes)
 	log.Info("Args:", "seqNum", seqNum)
 	log.Info("Args:", "delayedMsg", delayedMsg)
 	log.Info("Args:", "gasRefunder", b.config().gasRefunder)
