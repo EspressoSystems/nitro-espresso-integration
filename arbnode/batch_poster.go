@@ -190,8 +190,8 @@ type BatchPosterConfig struct {
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	HotShotBlock                uint64        `koanf:"hotshot-block"`
 	HotShotGenesisBlock         uint64        `koanf:"hotshot-genesis-block"`
-	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
+	EspressoRetryTime           time.Duration `koanf:"retry-time"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	EspressoEventPollingStep    uint64        `koanf:"espresso-event-polling-step"`
 	EspressoTeeType             uint8         `koanf:"espresso-tee-type"`
@@ -276,7 +276,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
-	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
+	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Duration(prefix+".espresso-retry-time", DefaultBatchPosterConfig.EspressoRetryTime, "retry time threshold after which a transaction fetch failure")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Uint8(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "specifies the espresso tee type")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
@@ -314,8 +315,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	ReorgResistanceMargin:          10 * time.Minute,
 	CheckBatchCorrectness:          true,
-	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Second,
+	EspressoRetryTime:              100 * time.Millisecond,
 	ResubmitEspressoTxDeadline:     10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
@@ -359,8 +360,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	UseAccessLists:                 true,
 	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
 	CheckBatchCorrectness:          true,
-	UseEscapeHatch:                 false,
 	EspressoTxnsPollingInterval:    time.Second,
+	EspressoRetryTime:              100 * time.Millisecond,
 	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
@@ -432,7 +433,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		opts.Streamer.lightClientReader = lightClientReader
-		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
@@ -461,6 +461,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			opts.Streamer.espressoClient,
 			false,
 			batchPosterAddress,
+			opts.Config().EspressoTxnsPollingInterval,
+			opts.Config().EspressoRetryTime,
 		)
 	}
 
@@ -1455,11 +1457,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	if err != nil {
-
-		return false, err
-	}
-
 	config := b.config()
 	forcePostBatch := config.MaxDelay <= 0
 
@@ -1563,9 +1560,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	} else {
 		addMessageLoop = func() bool { return true }
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg, err := b.espressoStreamer.Next(ctx)
-			if err != nil {
-				return nil, err
+			espressoMsg := b.espressoStreamer.Next(ctx)
+			if espressoMsg == nil {
+				return nil, errors.New("not in the buffer")
 			}
 			if b.building.hotshotHeight == 0 {
 				// store the hotshot height associated with the first message
@@ -1925,6 +1922,9 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 	b.dataPoster.Start(ctxIn)
 	b.redisLock.Start(ctxIn)
 	b.StopWaiter.Start(ctxIn, b)
+	if b.espressoStreamer != nil {
+		b.espressoStreamer.Start(ctxIn)
+	}
 	b.LaunchThread(b.pollForReverts)
 	b.LaunchThread(b.pollForL1PriceData)
 	commonEphemeralErrorHandler := util.NewEphemeralErrorHandler(time.Minute, "", 0)

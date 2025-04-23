@@ -87,10 +87,7 @@ type TransactionStreamer struct {
 	espressoMaxTransactionSize   int64
 	resubmitEspressoTxDeadline   time.Duration
 	lastSubmitFailureAt          *time.Time
-	// Public these fields for testing
-	EscapeHatchEnabled bool
-	UseEscapeHatch     bool
-	EspressoKeyManager EspressoKeyManagerInterface
+	EspressoKeyManager           EspressoKeyManagerInterface
 }
 
 type TransactionStreamerConfig struct {
@@ -149,7 +146,6 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
-		EscapeHatchEnabled: false,
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1646,33 +1642,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 	return nil
 }
 
-// Make sure useEscapeHatch is true
-func (s *TransactionStreamer) checkEspressoLiveness() error {
-	live, err := s.lightClientReader.IsHotShotLive(s.maxBlockLagBeforeEscapeHatch)
-	if err != nil {
-		return err
-	}
-	// If escape hatch is activated, the only thing is to check if hotshot is live again
-	if s.EscapeHatchEnabled {
-		if live {
-			log.Info("HotShot is up, disabling the escape hatch")
-			s.EscapeHatchEnabled = false
-		}
-		return nil
-	}
-
-	// If escape hatch is disabled, hotshot is live, everything is fine
-	if live {
-		return nil
-	}
-
-	// If escape hatch is on, and hotshot is down
-	log.Warn("enabling the escape hatch, hotshot is down")
-	s.EscapeHatchEnabled = true
-
-	return nil
-}
-
 var espressoMerkleProofEphemeralErrorHandler = util.NewEphemeralErrorHandler(80*time.Minute, EspressoValidationErr.Error(), 15*time.Minute)
 var espressoTransactionEphemeralErrorHandler = util.NewEphemeralErrorHandler(3*time.Minute, EspressoFetchTransactionErr.Error(), 15*time.Minute)
 
@@ -1732,7 +1701,7 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
-	return !s.EscapeHatchEnabled
+	return true
 }
 
 func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Context, submittedTxns []arbutil.SubmittedEspressoTx) bool {

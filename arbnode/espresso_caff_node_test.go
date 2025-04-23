@@ -29,15 +29,15 @@ func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockEspressoStreamer) Peek(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
-	return nil, nil
+func (m *MockEspressoStreamer) Peek(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
+	return nil
 }
 
 func (m *MockEspressoStreamer) Advance() {
 	m.currrPos++
 }
 
-func (m *MockEspressoStreamer) Next(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (m *MockEspressoStreamer) Next(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
 	var delayedCnt uint64 = 1
 	if m.delayedPos == m.currrPos {
 		delayedCnt = 2
@@ -52,7 +52,7 @@ func (m *MockEspressoStreamer) Next(ctx context.Context) (*espressostreamer.Mess
 	}
 	m.currrPos++
 	m.currHotShot++
-	return &result, nil
+	return &result
 }
 
 func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {

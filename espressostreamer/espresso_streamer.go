@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
@@ -19,6 +20,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -27,17 +29,12 @@ const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
 
-// This module is responsible for fetching hotshot blocks and parsing messages
-// when users invoke the `Peek` and `Next` methods. Unlike `arbnode`, it does
-// not have a `Start` method to run a task asynchronously. As a result, we have
-// to pass a timeout to the `Next` and `Peek` methods to avoid infinite loop
-// and the caller is responsible for handling the timeout.
 type EspressoStreamerInterface interface {
-	Next(ctx context.Context) (*MessageWithMetadataAndPos, error)
+	Start(ctx context.Context) error
+	Next(ctx context.Context) *MessageWithMetadataAndPos
 	// Peek returns the next message in the streamer's buffer. If the message is not
-	// in the buffer, it will fetch next hotshot blocks and parse them until the next
-	// message is found or any error occurs.
-	Peek(ctx context.Context) (*MessageWithMetadataAndPos, error)
+	// in the buffer, it will return nil.
+	Peek(ctx context.Context) *MessageWithMetadataAndPos
 	// Advance moves the current message position to the next message.
 	Advance()
 	// Reset sets the current message position and the next hotshot block number.
@@ -65,6 +62,10 @@ type EspressoStreamer struct {
 	messageWithMetadataAndPos []*MessageWithMetadataAndPos
 	legacyVerifier            espressotee.LegacySGXVerifierInterface
 
+	messageLock            sync.Mutex
+	retryTime              time.Duration
+	hotshotPollingInterval time.Duration
+
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
 }
@@ -76,6 +77,8 @@ func NewEspressoStreamer(
 	espressoClient espressoClient.EspressoClient,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
+	hotshotPollingInterval time.Duration,
+	retryTime time.Duration,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -84,12 +87,14 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:      espressoClient,
-		nextHotshotBlockNum: nextHotshotBlockNum,
-		namespace:           namespace,
-		legacyVerifier:      legacyVerifier,
-		PerfRecorder:        PerfRecorder,
-		batchPosterAddr:     batchPosterAddr,
+		espressoClient:         espressoClient,
+		nextHotshotBlockNum:    nextHotshotBlockNum,
+		namespace:              namespace,
+		legacyVerifier:         legacyVerifier,
+		PerfRecorder:           PerfRecorder,
+		batchPosterAddr:        batchPosterAddr,
+		hotshotPollingInterval: hotshotPollingInterval,
+		retryTime:              retryTime,
 	}
 }
 
@@ -111,19 +116,22 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
 
-func (s *EspressoStreamer) Next(ctx context.Context) (*MessageWithMetadataAndPos, error) {
-	result, err := s.Peek(ctx)
-	if err != nil {
-		return nil, err
+func (s *EspressoStreamer) Next(ctx context.Context) *MessageWithMetadataAndPos {
+	result := s.Peek(ctx)
+	if result == nil {
+		return nil
 	}
 
 	// Advance the current message position, so that the next call to
 	// `Peek` or `Next` will return the next message
 	s.Advance()
-	return result, nil
+	return result
 }
 
-func (s *EspressoStreamer) Peek(ctx context.Context) (*MessageWithMetadataAndPos, error) {
+func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos {
+	s.messageLock.Lock()
+	defer s.messageLock.Unlock()
+
 	compareMessageWithCurrentPos := func(msg *MessageWithMetadataAndPos) int {
 		if msg.Pos == s.currentMessagePos {
 			return FilterAndFind_Target
@@ -137,29 +145,10 @@ func (s *EspressoStreamer) Peek(ctx context.Context) (*MessageWithMetadataAndPos
 	messageIndex := FilterAndFind(&s.messageWithMetadataAndPos, compareMessageWithCurrentPos)
 
 	if messageIndex >= 0 {
-		return s.messageWithMetadataAndPos[messageIndex], nil
+		return s.messageWithMetadataAndPos[messageIndex]
 	}
 
-	condition := func(messages []*MessageWithMetadataAndPos) bool {
-		for _, message := range messages {
-			if message.Pos == s.currentMessagePos {
-				return true
-			}
-		}
-		return false
-	}
-
-	err := s.QueueMessagesFromHotShotUntil(ctx, s.parseEspressoTransaction, condition)
-	if err != nil {
-		return nil, err
-	}
-
-	messageIndex = FilterAndFind(&s.messageWithMetadataAndPos, compareMessageWithCurrentPos)
-
-	if messageIndex >= 0 {
-		return s.messageWithMetadataAndPos[messageIndex], nil
-	}
-	return nil, fmt.Errorf("message not found, please check the condition")
+	return nil
 }
 
 // Call this function to advance the streamer to the next message
@@ -171,26 +160,23 @@ func (s *EspressoStreamer) Advance() {
 // It is a do-while loop, which means it will always execute at least once.
 //
 // Expose the *parseHotShotPayloadFn* to the caller for testing purposes
-func (s *EspressoStreamer) QueueMessagesFromHotShotUntil(
+func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	ctx context.Context,
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error),
-	condition func(messages []*MessageWithMetadataAndPos) bool,
 ) error {
-	for {
-		messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
-		if err != nil {
-			return err
-		}
+	s.messageLock.Lock()
+	defer s.messageLock.Unlock()
 
-		if len(messages) > 0 {
-			s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
-		}
-		s.nextHotshotBlockNum += 1
-
-		if condition(messages) {
-			return nil
-		}
+	messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
+	if err != nil {
+		return err
 	}
+
+	if len(messages) > 0 {
+		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
+	}
+	s.nextHotshotBlockNum += 1
+	return nil
 }
 
 func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userDataHash [32]byte) error {
@@ -357,4 +343,24 @@ func fetchNextHotshotBlock(
 		result = append(result, messages...)
 	}
 	return result, nil
+}
+
+func (s *EspressoStreamer) Start(ctxIn context.Context) error {
+	s.StopWaiter.Start(ctxIn, s)
+
+	ephemeralErrorHandler := util.NewEphemeralErrorHandler(3*time.Minute, FailedToFetchTransactionsErr.Error(), 1*time.Minute)
+	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		err := s.QueueMessagesFromHotshot(ctx, s.parseEspressoTransaction)
+		if err != nil {
+			logLevel := log.Error
+			logLevel = ephemeralErrorHandler.LogLevel(err, logLevel)
+			logLevel("error while queueing messages from hotshot", "err", err)
+			return s.retryTime
+		} else {
+			ephemeralErrorHandler.Reset()
+		}
+		log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
+		return s.hotshotPollingInterval
+	})
+	return err
 }
