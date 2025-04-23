@@ -191,7 +191,7 @@ type BatchPosterConfig struct {
 	HotShotBlock                uint64        `koanf:"hotshot-block"`
 	HotShotGenesisBlock         uint64        `koanf:"hotshot-genesis-block"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
-	EspressoRetryTime           time.Duration `koanf:"retry-time"`
+	EspressoRetryTime           time.Duration `koanf:"espresso-retry-time"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	EspressoEventPollingStep    uint64        `koanf:"espresso-event-polling-step"`
 	EspressoTeeType             uint8         `koanf:"espresso-tee-type"`
@@ -276,7 +276,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
-	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".espresso-retry-time", DefaultBatchPosterConfig.EspressoRetryTime, "retry time threshold after which a transaction fetch failure")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Uint8(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "specifies the espresso tee type")
@@ -461,7 +460,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			opts.Streamer.espressoClient,
 			false,
 			batchPosterAddress,
-			opts.Config().EspressoTxnsPollingInterval,
 			opts.Config().EspressoRetryTime,
 		)
 	}

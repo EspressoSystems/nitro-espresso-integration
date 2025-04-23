@@ -77,7 +77,6 @@ func NewEspressoStreamer(
 	espressoClient espressoClient.EspressoClient,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
-	hotshotPollingInterval time.Duration,
 	retryTime time.Duration,
 ) *EspressoStreamer {
 
@@ -87,14 +86,13 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:         espressoClient,
-		nextHotshotBlockNum:    nextHotshotBlockNum,
-		namespace:              namespace,
-		legacyVerifier:         legacyVerifier,
-		PerfRecorder:           PerfRecorder,
-		batchPosterAddr:        batchPosterAddr,
-		hotshotPollingInterval: hotshotPollingInterval,
-		retryTime:              retryTime,
+		espressoClient:      espressoClient,
+		nextHotshotBlockNum: nextHotshotBlockNum,
+		namespace:           namespace,
+		legacyVerifier:      legacyVerifier,
+		PerfRecorder:        PerfRecorder,
+		batchPosterAddr:     batchPosterAddr,
+		retryTime:           retryTime,
 	}
 }
 
@@ -360,7 +358,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 			ephemeralErrorHandler.Reset()
 		}
 		log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
-		return s.hotshotPollingInterval
+		return 0
 	})
 	return err
 }
