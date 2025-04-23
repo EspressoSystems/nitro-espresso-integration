@@ -114,7 +114,7 @@ func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byt
 			return nil, nil, common.Address{}, fmt.Errorf("nitro signing failed: %w", err)
 		}
 
-		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationCertificates(
+		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
 			attestationBytes,
 			k.batchPosterOpts,
 		)

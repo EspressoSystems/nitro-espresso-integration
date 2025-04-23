@@ -2,9 +2,9 @@ package espressotee
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +18,8 @@ import (
 
 type EspressoNitroTEEVerifierInterface interface {
 	VerifyCert(opts *bind.TransactOpts, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error)
-	VerifyAttestationCertificates(attestationBytes []byte, opts *bind.TransactOpts) ([]byte, []byte, error)
+	VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts) ([]byte, []byte, error)
+	IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error)
 }
 
 type EspressoNitroTEEVerifier struct {
@@ -28,6 +29,10 @@ type EspressoNitroTEEVerifier struct {
 
 func NewEspressoNitroTEEVerifier(contract *espressogen.IEspressoNitroTEEVerifier, l1Client *ethclient.Client) *EspressoNitroTEEVerifier {
 	return &EspressoNitroTEEVerifier{contract: contract, l1Client: l1Client}
+}
+
+func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
+	return e.contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash)
 }
 
 /**
@@ -66,10 +71,11 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, certifica
 
 /**
  * This function validates parses the attestation result we received from AWS Nitro Secure Module (NSM) then validates the following on-chain
- * 1. The CA certificate chain
- * 2. The client certificate
+ * 1. The PCR0 hash is registered in the contracts
+ * 2. The CA certificate chain
+ * 3. The client certificate
  */
-func (e *EspressoNitroTEEVerifier) VerifyAttestationCertificates(attestationBytes []byte, opts *bind.TransactOpts) (attestation, data []byte, err error) {
+func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts) (attestation []byte, data []byte, err error) {
 	// Unmarshal attestation document
 	var res nitrite.Result
 	err = json.Unmarshal(attestationBytes, &res)
@@ -77,7 +83,19 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationCertificates(attestationByte
 		return nil, nil, err
 	}
 
-	log.Info("successfully got attestation", "pcr0 hash", "0x"+hex.EncodeToString(crypto.Keccak256(res.Document.PCRs[0])))
+	pcr0Hash := crypto.Keccak256Hash(res.Document.PCRs[0])
+	log.Info("successfully got attestation", "pcr0 hash", pcr0Hash)
+
+	// Before verifying certificates on chain, check if the pcr0 hash is registered to save gas
+	verified, err := e.IsPCR0HashRegistered(pcr0Hash)
+	if err != nil {
+		log.Error("failed to check if pcr0 hash is verified", "pcr0 hash", pcr0Hash)
+		return nil, nil, err
+	}
+
+	if !verified {
+		return nil, nil, fmt.Errorf("prc0 hash is not registered: %x", pcr0Hash)
+	}
 
 	// Verify CA certificate chain
 	if len(res.Document.CABundle) == 0 {
