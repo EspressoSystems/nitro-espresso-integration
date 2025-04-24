@@ -266,6 +266,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
 	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
+	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
@@ -441,10 +442,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
 		}
-		nitroVerifier, err := setupNitroVerifier(teeVerifier, opts.L1Reader.Client(), teeType)
-		if err != nil {
-			return nil, err
+
+		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+		if teeType == NITRO {
+			log.Info("setting up nitro verifier", "tee type", teeType)
+			nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
+			if err != nil {
+				return nil, err
+			}
 		}
+
 		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
 	}
 
@@ -506,13 +513,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	return b, nil
 }
 
-func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, teeType TEE) (espressotee.EspressoNitroTEEVerifierInterface, error) {
-	if teeType != NITRO {
-		log.Info("nitro verifier not needed", "tee type", teeType)
-		return nil, nil
-	}
-	log.Info("setting up nitro verifier", "tee type", teeType)
-
+func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {
 	// Setup nitro contract interface
 	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
 	if err != nil {
