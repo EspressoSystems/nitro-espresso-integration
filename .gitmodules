@@ -39,4 +39,4 @@
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
-	branch = integration
+	branch = blobs-support-integration
