@@ -24,6 +24,7 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
+<<<<<<< HEAD
 	Enable                 bool                    `koanf:"enable"`
 	HotShotUrls            []string                `koanf:"hotshot-urls"`
 	NextHotshotBlock       uint64                  `koanf:"next-hotshot-block"`
@@ -125,9 +126,9 @@ func NewEspressoCaffNode(
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
 	// hotshot transactions using SGX quote. Therefore we create a SGX TEE verifier here.
-	legacyVerifier, err := espressotee.NewLegacySGXVerifier(
+	sgxVerifier, err := espressotee.NewEspressoSGXVerifier(
 		l1Reader.Client(),
-		common.HexToAddress(configFetcher().LegacySGXVerifierAddr),
+		common.HexToAddress(configFetcher().EspressoSGXVerifierAddr),
 	)
 	if err != nil {
 		log.Crit("failed to create espressoTEEVerifier", "err", err)
@@ -139,7 +140,7 @@ func NewEspressoCaffNode(
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
 		configFetcher().HotshotPollingTimeout,
-		legacyVerifier,
+		sgxVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),

@@ -26,6 +26,10 @@ import (
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
+	"github.com/hf/nitrite"
+	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -1968,11 +1972,23 @@ func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Con
 	return true
 }
 
+func (s *TransactionStreamer) RegisterSigner() error {
+	teeType := s.EspressoKeyManager.TeeType()
+	switch teeType {
+	case SGX:
+		return s.EspressoKeyManager.Register(s.getAttestationQuote)
+	case NITRO:
+		return s.EspressoKeyManager.Register(s.getNitroAttestation)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
+}
+
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := s.EspressoKeyManager.Register(s.getAttestationQuote)
+		err := s.RegisterSigner()
 		if err != nil {
 			log.Error("failed to register espresso key manager", "err", err)
 			return err
@@ -2031,26 +2047,44 @@ func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, erro
 	return attestationQuote, nil
 }
 
-func (s *TransactionStreamer) Start(ctxIn context.Context) error {
-	s.StopWaiter.Start(ctxIn, s)
-	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
+/**
+ * This function gets the attestation document for AWS Nitro Enclaves
+ * We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
+ * After we retrieve, we verify the attestation, where we retrieve the result
+ * Which will contain the complete attestation which we serialize for further processing
+ */
+func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error) {
 
-	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollToResubmitEspressoTransactions, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-	} else {
-		log.Warn("light client reader or espresso client not set, skipping espresso verification")
+	sess, err := nsm.OpenDefaultSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open nsm session: %v", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Send(&request.Attestation{
+		PublicKey: pubKey,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send attestation request: %v", err)
 	}
 
-	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
+	if res.Error != "" {
+		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
+	}
+
+	if res.Attestation == nil || res.Attestation.Document == nil {
+		return nil, fmt.Errorf("no attestation document returned")
+	}
+
+	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify attestation")
+	}
+
+	attestationBytes, err := json.Marshal(attestation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal attestation")
+	}
+	return attestationBytes, nil
 }
