@@ -1,83 +1,50 @@
 package arbnode
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
+)
+
+type TEE = espressotee.TEE
+
+const (
+	SGX   = espressotee.SGX
+	NITRO = espressotee.NITRO
 )
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() (bool, error)
-	Register(signFunc func([]byte) ([]byte, error)) error
+	Register(getAttestationFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
+	TeeType() TEE
 }
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
-type EspressoTEEVerifierInterface interface {
-	RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error
-	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
-}
-
-type EspressoTEEVerifier struct {
-	contract *espressogen.IEspressoTEEVerifier
-	l1Client *ethclient.Client
-}
-
-func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) *EspressoTEEVerifier {
-	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
-}
-
-func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, addr []byte, teeType uint8) error {
-	tx, err := e.contract.RegisterSigner(opts, attestation, addr, teeType)
-	if err != nil {
-		return err
-	}
-
-	log.Info("Waiting for register signer tx to be mined", "tx", tx.Hash())
-
-	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
-	if err != nil {
-		return err
-	}
-
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		return errors.New("transaction failed")
-	}
-
-	log.Info("Register signer tx succeeded", "signer address", addr, "tx", tx.Hash())
-
-	return nil
-}
-
-func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8) (bool, error) {
-	return e.contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
-}
-
 type EspressoKeyManager struct {
-	espressoTEEVerifierCaller EspressoTEEVerifierInterface
+	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface
+	espressoNitroTEEVerifier  espressotee.EspressoNitroTEEVerifierInterface
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
 	batchPosterOpts   *bind.TransactOpts
 	batchPosterSigner signature.DataSignerFunc
+	teeType           TEE
 
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterface, opts *BatchPosterOpts) *EspressoKeyManager {
+func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
@@ -102,7 +69,9 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller EspressoTEEVerifierInterfac
 		privKey:                   privKey,
 		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
+		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		batchPosterOpts:           opts.TransactOpts,
+		teeType:                   teeType,
 	}
 }
 
@@ -112,32 +81,71 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, 0)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType))
 	if err != nil {
 		return false, err
 	}
 	return ok, nil
 }
 
-func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) error {
+/*
+ * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
+ */
+func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
+	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	switch k.teeType {
+	case SGX:
+		addr := signerAddr.Bytes()
+		log.Info("sgx signing address", "addr", signerAddr)
+
+		attestationQuote, err := getAttestationFunc(addr)
+		if err != nil {
+			return nil, nil, fmt.Errorf("sgx signing failed: %w", err)
+		}
+		return attestationQuote, addr, nil
+
+	case NITRO:
+		pubKeyBytes := crypto.FromECDSAPub(k.pubKey)
+		log.Info("nitro signing address", "addr", signerAddr)
+
+		attestationBytes, err := getAttestationFunc(pubKeyBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("nitro signing failed: %w", err)
+		}
+
+		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
+			attestationBytes,
+			k.batchPosterOpts,
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
+		}
+		return attestation, data, nil
+
+	default:
+		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
+	}
+}
+
+func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) error {
 	if k.hasRegistered {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}
 
-	addr := crypto.PubkeyToAddress(*k.pubKey)
-	addrBytes := addr.Bytes()
-
-	log.Info("Signing address", "addr", addrBytes)
-	attestation, err := signFunc(addrBytes)
+	// Get the attestation and data needed to register the signer
+	attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
 	if err != nil {
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, addrBytes, 0)
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType))
 	if err != nil {
 		return err
 	}
+
+	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	log.Info("Register signer succeeded", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
 	hasRegistered, err := k.HasRegistered()
@@ -153,6 +161,10 @@ func (k *EspressoKeyManager) Register(signFunc func([]byte) ([]byte, error)) err
 
 func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
 	return k.pubKey
+}
+
+func (k *EspressoKeyManager) TeeType() TEE {
+	return k.teeType
 }
 
 func (k *EspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) {
