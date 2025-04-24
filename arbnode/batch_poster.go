@@ -87,8 +87,8 @@ const (
 	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
 	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
-	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs1"
-	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
 	espressoTransactionSizeLimit             = 900 * 1024
 )
 
@@ -1170,8 +1170,10 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
 	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
 	// pack remaining data for the attestation quote.
-	attestationQuoteArgs := args
-	attestationQuoteArgs = append(attestationQuoteArgs, encodedBlobs)
+
+	newArgs := make([]any, len(args), len(args)+1)        // Create a new slice with same length
+	copy(newArgs, args)                                   // Copy existing elements
+	attestationQuoteArgs := append(newArgs, encodedBlobs) // Append without affecting `args`
 	// Generate the attestation quote over the method args, and the blob hashes.
 	packedData, err := b.blobsAttestationArguments.Pack(attestationQuoteArgs...)
 	if err != nil {
@@ -1186,7 +1188,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	log.Info("Args:", "prevMsgNum", prevMsgNum)
 	log.Info("Args:", "newMsgNum", newMsgNum)
 	// Generate attestation quote
-	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
+	attestationQuote, err := b.streamer.getAttestationQuote([]byte{1})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
 	}
@@ -1194,6 +1196,12 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	log.Info("Attestation Quote:", "quote", attestationQuote)
 	// Construct the calldata with attestation quote
 	args = append(args, attestationQuote)
+
+	// check if length of attestation quote is 0
+	if len(attestationQuote) == 0 {
+		attestationQuote = make([]byte, 32)
+		attestationQuote = []byte{1}
+	}
 
 	calldata, err := method.Inputs.Pack(args...)
 
