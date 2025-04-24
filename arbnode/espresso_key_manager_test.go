@@ -19,9 +19,9 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) (common.Hash, error) {
+func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, pubKey []byte, teeType uint8) error {
 	args := m.Called(opts, attestation, pubKey, teeType)
-	return common.Hash{}, args.Error(0)
+	return args.Error(0)
 }
 
 func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8) (bool, error) {
@@ -66,7 +66,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test initialization
 	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(common.Hash{}, nil)
+		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, opts, SGX)
 		require.NotNil(t, km, "Key manager should not be nil")

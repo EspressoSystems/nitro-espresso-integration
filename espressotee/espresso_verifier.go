@@ -13,7 +13,7 @@ import (
 )
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) (common.Hash, error)
+	RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) error
 	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
 }
 
@@ -26,24 +26,26 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) (common.Hash, error) {
+func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attestation []byte, data []byte, teeType uint8) error {
 	tx, err := e.contract.RegisterSigner(opts, attestation, data, teeType)
 	if err != nil {
-		return common.Hash{}, err
+		return err
 	}
 
 	log.Info("Waiting for register signer tx to be mined", "tx", tx.Hash())
 
 	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
 	if err != nil {
-		return common.Hash{}, err
+		return err
 	}
 
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		return common.Hash{}, errors.New("transaction failed")
+		return errors.New("transaction failed")
 	}
 
-	return tx.Hash(), nil
+	log.Info("Register signer tx succeeded", "tx", tx.Hash().Hex())
+
+	return nil
 }
 
 func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8) (bool, error) {
