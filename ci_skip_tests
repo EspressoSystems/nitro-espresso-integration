@@ -1,0 +1,63 @@
+# This file is used for filtering CI tests.
+# These tests are prone to fail in the CI
+# environment. To run tests locally, please run:
+# ```
+# ./scripts/espresso-ci-local
+# ```
+# To see how we use this file, please check scripts/espresso-run-test-ci
+#
+# Note that if a substring of the test function name is listed here, it will be skipped.
+TestChallengeManagerFullAsserterCorrect
+TestChallengeManagerFullAsserterIncorrect
+TestLiveNodeConfig
+TestProgramActivateTwice
+TestProgramArbitratorEvmData
+TestProgramCallSimple
+TestProgramEvmData
+TestProgramLogs
+TestProgramLogsWithTracing
+TestRPCStore
+TestProgramTransientStorage
+TestProgramCalls
+TestProgramMemory
+TestProgramErrors
+TestPeriodicReloadOfLiveNodeConfig
+TestProgramLongArbitratorCall
+TestProgramArbitratorCalls
+TestProgramLongCall
+TestProgramArbitratorActivateTwice
+TestProgramArbitratorMemory
+TestProgramArbitratorLogs
+TestProgramArbitratorTransientStorage
+TestProgramArbitratorErrors
+TestBlockValidatorSimpleJITOnchain
+TestMockChallengeManagerAsserterIncorrect
+TestChallengeStakersFaultyHonestActive
+TestChallengeManagerFullAsserterCorrectWithPublishedMachine
+TestRedisProduce
+TestBlockValidatorSimpleOnchainWithPublishedMachine
+TestChallengeToFailedOSP
+TestChallengeToTimeout
+TestStylusUpgrade
+TestChallengeToFailedTooFar
+TestTwoNodesLong
+TestStylusOpcodeTraceEquivalence
+
+# These tests are skipped because of invalid long paths of temporary directory
+# in CI environment. Currently we don't have methods to modify the
+# `GITHUB_WORKSPACE` https://github.com/actions/runner/issues/1676
+# See: /system_tests/forwarder_test.go:tmpPath
+# https://github.com/ethereum/go-ethereum/issues/16342
+TestArbTraceForwarding
+TestIpcRpc
+TestRedisForwarder
+TestRedisForwarderFallbackNoRedis
+TestStaticForwarder
+
+# This test is failing and it is a bit complicated.
+# Since BOLD is an alpha feature, we will fix it later
+TestChallengeProtocolBOLDNearLastVirtualBlock
+TestChallengeProtocolBOLDFirstVirtualBlock
+# These tests are specific to Espresso and we have a dedicated
+# CI workflow for them. See: .github/workflows/espresso-e2e.yml
+TestEspresso

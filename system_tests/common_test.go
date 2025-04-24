@@ -264,6 +264,8 @@ type NodeBuilder struct {
 	L1 *TestClient
 	L2 *TestClient
 	L3 *TestClient
+
+	useL1StackConfig bool // don't overwrite the L1 stack config when building
 }
 
 type NitroConfig struct {
@@ -420,7 +422,13 @@ func (b *NodeBuilder) CheckConfig(t *testing.T) {
 
 func (b *NodeBuilder) BuildL1(t *testing.T) {
 	b.L1 = NewTestClient(b.ctx)
-	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack = createTestL1BlockChain(t, b.L1Info)
+
+	var l1StackConfig *node.Config
+	if b.useL1StackConfig {
+		l1StackConfig = b.l1StackConfig
+	}
+
+	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, l1StackConfig)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	b.addresses, b.initMessage = deployOnParentChain(
@@ -608,7 +616,6 @@ func (b *NodeBuilder) BuildL2OnL1(t *testing.T) func() {
 // Requires precompiles.AllowDebugPrecompiles = true
 func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	b.L2 = NewTestClient(b.ctx)
-
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
 	var chainDb ethdb.Database
@@ -651,6 +658,40 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 		_, err = EnsureTxSucceeded(b.ctx, b.L2.Client, tx)
 		Require(t, err)
 	}
+
+	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
+
+	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
+	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	return func() { b.L2.cleanup() }
+}
+
+func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T) func() {
+	b.L2 = NewTestClient(b.ctx)
+	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
+
+	var chainDb ethdb.Database
+	var arbDb ethdb.Database
+	var blockchain *core.BlockChain
+	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
+		t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
+
+	Require(t, b.execConfig.Validate())
+	execConfig := b.execConfig
+	execConfigFetcher := func() *gethexec.Config { return execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher)
+	Require(t, err)
+
+	fatalErrChan := make(chan error, 10)
+	b.L2.ConsensusNode, err = arbnode.CreateNode(
+		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+		nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil)
+	Require(t, err)
+
+	err = b.L2.ConsensusNode.Start(b.ctx)
+	Require(t, err)
+
+	b.L2.Client = ClientForStack(t, b.L2.Stack)
 
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
@@ -1197,11 +1238,19 @@ func AddValNode(t *testing.T, ctx context.Context, nodeConfig *arbnode.Config, u
 	configByValidationNode(nodeConfig, valStack)
 }
 
+// nolint:unused
 func createTestL1BlockChain(t *testing.T, l1info info) (info, *ethclient.Client, *eth.Ethereum, *node.Node) {
+	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()))
+}
+
+func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackConfig *node.Config) (info, *ethclient.Client, *eth.Ethereum, *node.Node) {
 	if l1info == nil {
 		l1info = NewL1TestInfo(t)
 	}
-	stackConfig := testhelpers.CreateStackConfigForTest(t.TempDir())
+
+	if stackConfig == nil {
+		stackConfig = testhelpers.CreateStackConfigForTest(t.TempDir())
+	}
 	l1info.GenerateAccount("Faucet")
 
 	chainConfig := chaininfo.ArbitrumDevTestChainConfig()
@@ -1314,6 +1363,13 @@ func deployOnParentChain(
 
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
+
+	//  Deploy a espressoTEEVerifierMock contract
+	espressoTEEVerifierAddress, tx, _, err := mocksgen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+	Require(t, err)
+
+	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+	Require(t, err)
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := boldMocksgen.DeployTestWETH9(
@@ -1363,6 +1419,7 @@ func deployOnParentChain(
 			NumBigStepLevel:              3,
 			ChallengeGracePeriodBlocks:   3,
 			BufferConfig:                 bufferConfig,
+			EspressoTEEVerifier:          espressoTEEVerifierAddress,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(
@@ -1398,7 +1455,7 @@ func deployOnParentChain(
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			arbnode.GenerateRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}),
+			arbnode.GenerateRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
@@ -1409,6 +1466,7 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
+	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }

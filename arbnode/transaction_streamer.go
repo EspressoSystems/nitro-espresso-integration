@@ -10,17 +10,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
+	"os"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"errors"
+
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -30,8 +34,10 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
+	"github.com/offchainlabs/nitro/espressocrypto"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
@@ -53,9 +59,12 @@ type TransactionStreamer struct {
 	config         TransactionStreamerConfigFetcher
 	snapSyncConfig *SnapSyncConfig
 
-	insertionMutex     sync.Mutex // cannot be acquired while reorgMutex is held
-	reorgMutex         sync.RWMutex
-	newMessageNotifier chan struct{}
+	insertionMutex                  sync.Mutex // cannot be acquired while reorgMutex is held
+	reorgMutex                      sync.RWMutex
+	espressoTxnsStateInsertionMutex sync.Mutex
+
+	newMessageNotifier     chan struct{}
+	newSovereignTxNotifier chan struct{}
 
 	nextAllowedFeedReorgLog time.Time
 
@@ -67,15 +76,12 @@ type TransactionStreamer struct {
 	broadcastServer *broadcaster.Broadcaster
 	inboxReader     *InboxReader
 	delayedBridge   *DelayedBridge
-
-	trackBlockMetadataFrom arbutil.MessageIndex
 }
 
 type TransactionStreamerConfig struct {
 	MaxBroadcasterQueueSize int           `koanf:"max-broadcaster-queue-size"`
 	MaxReorgResequenceDepth int64         `koanf:"max-reorg-resequence-depth" reload:"hot"`
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
-	TrackBlockMetadataFrom  uint64        `koanf:"track-block-metadata-from"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -84,7 +90,6 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxBroadcasterQueueSize: 50_000,
 	MaxReorgResequenceDepth: 1024,
 	ExecuteMessageLoopDelay: time.Millisecond * 100,
-	TrackBlockMetadataFrom:  0,
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
@@ -98,7 +103,6 @@ func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-broadcaster-queue-size", DefaultTransactionStreamerConfig.MaxBroadcasterQueueSize, "maximum cache of pending broadcaster messages")
 	f.Int64(prefix+".max-reorg-resequence-depth", DefaultTransactionStreamerConfig.MaxReorgResequenceDepth, "maximum number of messages to attempt to resequence on reorg (0 = never resequence, -1 = always resequence)")
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
-	f.Uint64(prefix+".track-block-metadata-from", DefaultTransactionStreamerConfig.TrackBlockMetadataFrom, "this is the block number starting from which blockmetadata is being tracked in the local disk and is being published to the feed. This is also the starting position for bulk syncing of missing blockmetadata. Setting to zero (default value) disables this")
 }
 
 func NewTransactionStreamer(
@@ -110,6 +114,12 @@ func NewTransactionStreamer(
 	config TransactionStreamerConfigFetcher,
 	snapSyncConfig *SnapSyncConfig,
 ) (*TransactionStreamer, error) {
+
+	// Check that chainId is within u32 range
+	if chainConfig.ChainID.Uint64() > math.MaxUint32 {
+		return nil, fmt.Errorf("chainId %d is out of range for u32", chainConfig.ChainID.Uint64())
+	}
+
 	streamer := &TransactionStreamer{
 		exec:               exec,
 		chainConfig:        chainConfig,
@@ -119,7 +129,9 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
+		EscapeHatchEnabled: false,
 	}
+
 	err := streamer.cleanupInconsistentState()
 	if err != nil {
 		return nil, err
@@ -145,7 +157,7 @@ const (
 	FailedToGetMsgResultFromDB = "Reading message result remotely."
 )
 
-// Encodes a uint64 as bytes in a lexically sortable manner for database iteration.
+// Encodes an uint64 as bytes in a lexically sortable manner for database iteration.
 // Generally this is only used for database keys, which need sorted.
 // A shorter RLP encoding is usually used for database values.
 func uint64ToKey(x uint64) []byte {
@@ -331,7 +343,7 @@ func (s *TransactionStreamer) reorg(batch ethdb.Batch, count arbutil.MessageInde
 				// oldMessage, accumulator stored in tracker, and the message re-read from l1
 				expectedAcc, err := s.inboxReader.tracker.GetDelayedAcc(delayedSeqNum)
 				if err != nil {
-					if !strings.Contains(err.Error(), "not found") {
+					if !dbutil.IsErrNotFound(err) {
 						log.Error("reorg-resequence: failed to read expected accumulator", "err", err)
 					}
 					continue
@@ -959,7 +971,7 @@ func (s *TransactionStreamer) addMessagesAndEndBatchImpl(messageStartPos arbutil
 	}
 
 	if clearQueueOnSuccess {
-		// Check if new messages were added at the end of cache, if they were, then dont remove those particular messages
+		// Check if new messages were added at the end of cache, if they were, then don't remove those particular messages
 		if len(s.broadcasterQueuedMessages) > cacheClearLen {
 			s.broadcasterQueuedMessages = s.broadcasterQueuedMessages[cacheClearLen:]
 			// #nosec G115
@@ -990,6 +1002,7 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	msgResult execution.MessageResult,
 	blockMetadata common.BlockMetadata,
 ) error {
+
 	if err := s.ExpectChosenSequencer(); err != nil {
 		return err
 	}
@@ -1123,6 +1136,28 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	if err != nil {
 		return err
 	}
+
+	//  If light client reader and espresso client are set, then we need to store the pos in the database
+	//  to be used later to submit the message to hotshot for finalization.
+	if s.lightClientReader != nil && s.espressoClient != nil {
+		//  Only submit the transaction if escape hatch is not enabled
+		if s.shouldSubmitEspressoTransaction() {
+			for i := range messages {
+				idx, err := safecast.ToUint64(i)
+				if err != nil {
+					return err
+				}
+				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
+				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
+				if err != nil {
+					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
+					return err
+				}
+				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
+			}
+		}
+	}
+
 	err = batch.Write()
 	if err != nil {
 		return err
@@ -1134,27 +1169,6 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	}
 
 	return nil
-}
-
-func (s *TransactionStreamer) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
-	if count == 0 {
-		return nil, nil
-	}
-	pos := count - 1
-
-	if s.trackBlockMetadataFrom == 0 || pos < s.trackBlockMetadataFrom {
-		return nil, nil
-	}
-
-	key := dbKey(blockMetadataInputFeedPrefix, uint64(pos))
-	blockMetadata, err := s.db.Get(key)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return blockMetadata, nil
 }
 
 func (s *TransactionStreamer) ResultAtCount(count arbutil.MessageIndex) (*execution.MessageResult, error) {
@@ -1206,22 +1220,7 @@ func (s *TransactionStreamer) checkResult(pos arbutil.MessageIndex, msgResult *e
 			"expected", msgAndBlockInfo.BlockHash,
 			"actual", msgResult.BlockHash,
 		)
-		// Try deleting the existing blockMetadata for this block in arbDB and set it as missing
-		if msgAndBlockInfo.BlockMetadata != nil &&
-			s.trackBlockMetadataFrom != 0 && pos >= s.trackBlockMetadataFrom {
-			batch := s.db.NewBatch()
-			if err := batch.Delete(dbKey(blockMetadataInputFeedPrefix, uint64(pos))); err != nil {
-				log.Error("error deleting blockMetadata of block whose BlockHash from feed doesn't match locally computed hash", "msgSeqNum", pos, "err", err)
-				return
-			}
-			if err := batch.Put(dbKey(missingBlockMetadataInputFeedPrefix, uint64(pos)), nil); err != nil {
-				log.Error("error marking deleted blockMetadata as missing in arbDB for a block whose BlockHash from feed doesn't match locally computed hash", "msgSeqNum", pos, "err", err)
-				return
-			}
-			if err := batch.Write(); err != nil {
-				log.Error("error writing batch that deletes blockMetadata of the block whose BlockHash from feed doesn't match locally computed hash", "msgSeqNum", pos, "err", err)
-			}
-		}
+		return
 	}
 }
 
@@ -1319,72 +1318,42 @@ func (s *TransactionStreamer) executeMessages(ctx context.Context, ignored struc
 	return s.config().ExecuteMessageLoopDelay
 }
 
-func (s *TransactionStreamer) backfillTrackersForMissingBlockMetadata(ctx context.Context) {
-	if s.trackBlockMetadataFrom == 0 {
-		return
-	}
-	msgCount, err := s.GetMessageCount()
-	if err != nil {
-		log.Error("Error getting message count from arbDB", "err", err)
-		return
-	}
-	if s.trackBlockMetadataFrom >= msgCount {
-		return // We dont need to back fill if trackBlockMetadataFrom is in the future
-	}
-
-	wasKeyFound := func(pos uint64) bool {
-		searchWithPrefix := func(prefix []byte) bool {
-			key := dbKey(prefix, pos)
-			_, err := s.db.Get(key)
-			if err == nil {
-				return true
-			}
-			if !dbutil.IsErrNotFound(err) {
-				log.Error("Error reading key in arbDB while back-filling trackers for missing blockMetadata", "key", key, "err", err)
-			}
-			return false
-		}
-		return searchWithPrefix(blockMetadataInputFeedPrefix) || searchWithPrefix(missingBlockMetadataInputFeedPrefix)
-	}
-
-	start := s.trackBlockMetadataFrom
-	if wasKeyFound(uint64(start)) {
-		return // back-filling not required
-	}
-	finish := msgCount - 1
-	for start < finish {
-		mid := (start + finish + 1) / 2
-		if wasKeyFound(uint64(mid)) {
-			finish = mid - 1
-		} else {
-			start = mid
-		}
-	}
-	lastNonExistent := start
-
-	// We back-fill in reverse to avoid fragmentation in case of any failures
-	batch := s.db.NewBatch()
-	for i := lastNonExistent; i >= s.trackBlockMetadataFrom; i-- {
-		if err := batch.Put(dbKey(missingBlockMetadataInputFeedPrefix, uint64(i)), nil); err != nil {
-			log.Error("Error marking blockMetadata as missing while back-filling", "pos", i, "err", err)
-			return
-		}
-		// If we reached the ideal batch size, commit and reset
-		if batch.ValueSize() >= ethdb.IdealBatchSize {
-			if err := batch.Write(); err != nil {
-				log.Error("Error writing batch with missing trackers to db while back-filling", "err", err)
-				return
-			}
-			batch.Reset()
-		}
-	}
-	if err := batch.Write(); err != nil {
-		log.Error("Error writing batch with missing trackers to db while back-filling", "err", err)
-	}
-}
-
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
-	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
+}
+
+/**
+ * This function generates the attestation quote for the user data.
+ * The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
+ * The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
+ * The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
+ */
+func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, error) {
+
+	if (t.config().UserDataAttestationFile == "") || (t.config().QuoteFile == "") {
+		return []byte{}, nil
+	}
+	// keccak256 hash of userData
+	userDataHash := crypto.Keccak256(userData)
+
+	// Add 32 bytes of padding to the user data hash
+	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
+	for i := 0; i < 32; i += 1 {
+		userDataHash = append(userDataHash, 0)
+	}
+
+	// Write the message to "/dev/attestation/user_report_data" in SGX
+	err := os.WriteFile(t.config().UserDataAttestationFile, userDataHash, 0600)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
+	}
+
+	// Read the quote from "/dev/attestation/quote" in SGX
+	attestationQuote, err := os.ReadFile(t.config().QuoteFile)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
+	}
+
+	return attestationQuote, nil
 }
