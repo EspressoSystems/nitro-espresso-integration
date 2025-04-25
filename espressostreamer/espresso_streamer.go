@@ -60,7 +60,7 @@ type EspressoStreamer struct {
 	currentMessagePos         uint64
 	namespace                 uint64
 	messageWithMetadataAndPos []*MessageWithMetadataAndPos
-	legacyVerifier            espressotee.LegacySGXVerifierInterface
+	espressoSGXVerifier       espressotee.EspressoSGXVerifierInterface
 
 	messageLock            sync.Mutex
 	retryTime              time.Duration
@@ -73,7 +73,7 @@ type EspressoStreamer struct {
 func NewEspressoStreamer(
 	namespace uint64,
 	nextHotshotBlockNum uint64,
-	legacyVerifier espressotee.LegacySGXVerifierInterface,
+	espressoSGXVerifier espressotee.EspressoSGXVerifierInterface,
 	espressoClient espressoClient.EspressoClient,
 	recordPerformance bool,
 	batchPosterAddr common.Address,
@@ -89,7 +89,7 @@ func NewEspressoStreamer(
 		espressoClient:      espressoClient,
 		nextHotshotBlockNum: nextHotshotBlockNum,
 		namespace:           namespace,
-		legacyVerifier:      legacyVerifier,
+		espressoSGXVerifier: espressoSGXVerifier,
 		PerfRecorder:        PerfRecorder,
 		batchPosterAddr:     batchPosterAddr,
 		retryTime:           retryTime,
@@ -201,8 +201,7 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
-
-	_, err := s.legacyVerifier.Verify(nil, attestation, signature)
+	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature)
 	if err != nil {
 		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
 	}
@@ -232,7 +231,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 		log.Warn("failed to verify batch poster signature", "err", err)
 	}
 
-	if !success && s.legacyVerifier != nil {
+	if !success && s.espressoSGXVerifier != nil {
 		err = s.verifyLegacy(signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)

@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 )
 
-func createDummyHotShotHeightAndSignature(t *testing.T) []byte {
+func createDummyEspressoMetadata(t *testing.T) []byte {
 	hotshotHeight := new(big.Int).SetUint64(1)
 	signature := make([]byte, 32)
 	teeType := uint8(0)
@@ -27,7 +27,7 @@ func createDummyHotShotHeightAndSignature(t *testing.T) []byte {
 		t.Fatal("failed to create uint8 type")
 	}
 
-	hotshotNumberAndSignature, err := abi.Arguments{
+	espressoMetadata, err := abi.Arguments{
 		{Type: uint256Type},
 		{Type: bytesType},
 		{Type: uint8Type},
@@ -36,5 +36,5 @@ func createDummyHotShotHeightAndSignature(t *testing.T) []byte {
 		t.Fatal("failed to pack hotshot height and signature")
 	}
 
-	return hotshotNumberAndSignature
+	return espressoMetadata
 }
