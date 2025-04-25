@@ -81,6 +81,39 @@ type SequencerConfig struct {
 	Timeboost                    TimeboostConfig `koanf:"timeboost"`
 	expectedSurplusSoftThreshold int
 	expectedSurplusHardThreshold int
+
+	// Espresso specific flags
+	CaffNodeConfig CaffNodeConfig `koanf:"caff-node-config" reload:"hot"`
+	// Caff Node creates blocks with finalized hotshot transactions
+	EnableCaffNode bool `koanf:"enable-caff-node"`
+}
+
+type DangerousConfig struct {
+	Timeboost TimeboostConfig `koanf:"timeboost"`
+}
+
+type TimeboostConfig struct {
+	Enable                    bool          `koanf:"enable"`
+	AuctionContractAddress    string        `koanf:"auction-contract-address"`
+	AuctioneerAddress         string        `koanf:"auctioneer-address"`
+	ExpressLaneAdvantage      time.Duration `koanf:"express-lane-advantage"`
+	SequencerHTTPEndpoint     string        `koanf:"sequencer-http-endpoint"`
+	EarlySubmissionGrace      time.Duration `koanf:"early-submission-grace"`
+	MaxQueuedTxCount          int           `koanf:"max-queued-tx-count"`
+	MaxFutureSequenceDistance uint64        `koanf:"max-future-sequence-distance"`
+	RedisUrl                  string        `koanf:"redis-url"`
+}
+
+var DefaultTimeboostConfig = TimeboostConfig{
+	Enable:                    false,
+	AuctionContractAddress:    "",
+	AuctioneerAddress:         "",
+	ExpressLaneAdvantage:      time.Millisecond * 200,
+	SequencerHTTPEndpoint:     "http://localhost:8547",
+	EarlySubmissionGrace:      time.Second * 2,
+	MaxQueuedTxCount:          10,
+	MaxFutureSequenceDistance: 100,
+	RedisUrl:                  "unset",
 }
 
 type TimeboostConfig struct {
@@ -156,6 +189,36 @@ func (c *SequencerConfig) Validate() error {
 
 type SequencerConfigFetcher func() *SequencerConfig
 
+type CaffNodeConfig struct {
+	HotShotUrls             []string            `koanf:"hotshot-urls"`
+	FallbackUrls            []string            `koanf:"fallback-urls"`
+	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
+	Namespace               uint64              `koanf:"namespace"`
+	RetryTime               time.Duration       `koanf:"retry-time"`
+	HotshotPollingInterval  time.Duration       `koanf:"hotshot-polling-interval"`
+	ParentChainReader       headerreader.Config `koanf:"parent-chain-reader" reload:"hot"`
+	ParentChainNodeUrl      string              `koanf:"parent-chain-node-url"`
+	EspressoTEEVerifierAddr string              `koanf:"espresso-tee-verifier-addr"`
+	// See how it is used in cmd/nitro/nitro.go
+	// search for "caff-node-config.forwarding"
+	Forwarding        bool `koanf:"forwarding"`
+	RecordPerformance bool `koanf:"record-performance"`
+}
+
+var DefaultCaffNodeConfig = CaffNodeConfig{
+	HotShotUrls:             []string{},
+	FallbackUrls:            []string{},
+	NextHotshotBlock:        1,
+	Namespace:               0,
+	RetryTime:               time.Second * 2,
+	HotshotPollingInterval:  time.Millisecond * 100,
+	ParentChainReader:       headerreader.DefaultConfig,
+	ParentChainNodeUrl:      "",
+	EspressoTEEVerifierAddr: "",
+	Forwarding:              true,
+	RecordPerformance:       false,
+}
+
 var DefaultSequencerConfig = SequencerConfig{
 	Enable:                      false,
 	MaxBlockSpeed:               time.Millisecond * 250,
@@ -175,6 +238,22 @@ var DefaultSequencerConfig = SequencerConfig{
 	ExpectedSurplusHardThreshold: "default",
 	EnableProfiling:              false,
 	Timeboost:                    DefaultTimeboostConfig,
+	EnableCaffNode:               false,
+	CaffNodeConfig:               DefaultCaffNodeConfig,
+}
+
+func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
+	f.StringSlice(prefix+".hotshot-urls", DefaultCaffNodeConfig.HotShotUrls, "hotshot urls")
+	f.StringSlice(prefix+".fallback-urls", DefaultCaffNodeConfig.FallbackUrls, "fallback urls")
+	f.Uint64(prefix+".next-hotshot-block", DefaultCaffNodeConfig.NextHotshotBlock, "the hotshot block number from which the caff node will read")
+	f.Uint64(prefix+".namespace", DefaultCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
+	f.Duration(prefix+".retry-time", DefaultCaffNodeConfig.RetryTime, "retry time after a failure")
+	f.Duration(prefix+".hotshot-polling-interval", DefaultCaffNodeConfig.HotshotPollingInterval, "time after a success")
+	headerreader.AddOptions(prefix+".parent-chain-reader", f)
+	f.String(prefix+".parent-chain-node-url", DefaultCaffNodeConfig.ParentChainNodeUrl, "the parent chain url")
+	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
+	f.Bool(prefix+".forwarding", DefaultCaffNodeConfig.Forwarding, "forward transactions to the sequencer")
+	f.Bool(prefix+".record-performance", DefaultCaffNodeConfig.RecordPerformance, "record performance of the caff node")
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -195,6 +274,26 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".expected-surplus-soft-threshold", DefaultSequencerConfig.ExpectedSurplusSoftThreshold, "if expected surplus is lower than this value, warnings are posted")
 	f.String(prefix+".expected-surplus-hard-threshold", DefaultSequencerConfig.ExpectedSurplusHardThreshold, "if expected surplus is lower than this value, new incoming transactions will be denied")
 	f.Bool(prefix+".enable-profiling", DefaultSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
+
+	// Espresso specific flags
+	f.Bool(prefix+".enable-caff-node", DefaultSequencerConfig.EnableCaffNode, "enable caff node")
+	CaffNodeConfigAddOptions(prefix+".caff-node-config", f)
+}
+
+func TimeboostAddOptions(prefix string, f *flag.FlagSet) {
+	f.Bool(prefix+".enable", DefaultTimeboostConfig.Enable, "enable timeboost based on express lane auctions")
+	f.String(prefix+".auction-contract-address", DefaultTimeboostConfig.AuctionContractAddress, "Address of the proxy pointing to the ExpressLaneAuction contract")
+	f.String(prefix+".auctioneer-address", DefaultTimeboostConfig.AuctioneerAddress, "Address of the Timeboost Autonomous Auctioneer")
+	f.Duration(prefix+".express-lane-advantage", DefaultTimeboostConfig.ExpressLaneAdvantage, "specify the express lane advantage")
+	f.String(prefix+".sequencer-http-endpoint", DefaultTimeboostConfig.SequencerHTTPEndpoint, "this sequencer's http endpoint")
+	f.Duration(prefix+".early-submission-grace", DefaultTimeboostConfig.EarlySubmissionGrace, "period of time before the next round where submissions for the next round will be queued")
+	f.Int(prefix+".max-queued-tx-count", DefaultTimeboostConfig.MaxQueuedTxCount, "maximum allowed number of express lane txs with future sequence number to be queued. Set 0 to disable this check and a negative value to prevent queuing of any future sequence number transactions")
+	f.Uint64(prefix+".max-future-sequence-distance", DefaultTimeboostConfig.MaxFutureSequenceDistance, "maximum allowed difference (in terms of sequence numbers) between a future express lane tx and the current sequence count of a round")
+	f.String(prefix+".redis-url", DefaultTimeboostConfig.RedisUrl, "the Redis URL for expressLaneService to coordinate via")
+}
+
+func DangerousAddOptions(prefix string, f *flag.FlagSet) {
+	TimeboostAddOptions(prefix+".timeboost", f)
 }
 
 func TimeboostAddOptions(prefix string, f *flag.FlagSet) {
@@ -419,6 +518,7 @@ func NewSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderRead
 		}
 		senderWhitelist[common.HexToAddress(address)] = struct{}{}
 	}
+
 	s := &Sequencer{
 		execEngine:                        execEngine,
 		txQueue:                           make(chan txQueueItem, config.QueueSize),
@@ -1181,6 +1281,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		block *types.Block
 		err   error
 	)
+
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, timeboostedTxs)
 	} else {
