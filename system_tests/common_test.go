@@ -389,6 +389,7 @@ func (b *NodeBuilder) WithDelayBuffer(threshold uint64) *NodeBuilder {
 func (b *NodeBuilder) Build(t *testing.T) func() {
 	b.CheckConfig(t)
 	if b.withL1 {
+		log.Info("Building L1 node")
 		b.BuildL1(t)
 		return b.BuildL2OnL1(t)
 	}

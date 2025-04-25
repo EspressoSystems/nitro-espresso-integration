@@ -387,7 +387,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		return nil, err
 	}
 
-	method, ok := seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
+	method, ok := seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
 	}
@@ -1164,16 +1164,19 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, err
 	}
 
+	log.Info("Encoded blobs", "encodedBlobs", encodedBlobs)
+
 	args = append(args, seqNum)
 	args = append(args, new(big.Int).SetUint64(delayedMsg))
 	args = append(args, b.config().gasRefunder)
 	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
 	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-	// pack remaining data for the attestation quote.
 
-	newArgs := make([]any, len(args), len(args)+1)        // Create a new slice with same length
-	copy(newArgs, args)                                   // Copy existing elements
-	attestationQuoteArgs := append(newArgs, encodedBlobs) // Append without affecting `args`
+	var attestationArgs []any
+	attestationArgs = append(attestationArgs, args...)
+	// pack remaining data for the attestation quote.
+	attestationQuoteArgs := append(attestationArgs, encodedBlobs)
+
 	// Generate the attestation quote over the method args, and the blob hashes.
 	packedData, err := b.blobsAttestationArguments.Pack(attestationQuoteArgs...)
 	if err != nil {
@@ -1188,7 +1191,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	log.Info("Args:", "prevMsgNum", prevMsgNum)
 	log.Info("Args:", "newMsgNum", newMsgNum)
 	// Generate attestation quote
-	attestationQuote, err := b.streamer.getAttestationQuote([]byte{1})
+	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
 	}
@@ -1196,12 +1199,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	log.Info("Attestation Quote:", "quote", attestationQuote)
 	// Construct the calldata with attestation quote
 	args = append(args, attestationQuote)
-
-	// check if length of attestation quote is 0
-	if len(attestationQuote) == 0 {
-		attestationQuote = make([]byte, 32)
-		attestationQuote = []byte{1}
-	}
 
 	calldata, err := method.Inputs.Pack(args...)
 
@@ -1251,7 +1248,7 @@ func (b *BatchPoster) encodeAddBatch(
 			return nil, nil, err
 		}
 	case newSequencerBatchPostWithBlobsMethodName:
-		log.Info("Encoding Espresso validated batch via:", "method", methodName)
+		log.Info("Encoding Espresso validated batch via testing:", "method", methodName)
 		fullCalldata, err = b.getCalldataForEspressoBlobBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
 		if err != nil {
 			return nil, nil, err

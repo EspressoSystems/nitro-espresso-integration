@@ -16,6 +16,7 @@ func createL1AndL2Node(
 	ctx context.Context,
 	t *testing.T,
 	delayedSequencer bool,
+	blobsEnabled bool,
 ) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	builder.l1StackConfig.HTTPPort = 8545
@@ -40,9 +41,11 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl, hotShotUrl}
 	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
-  // Enable these for testing blobs
-  builder.nodeConfig.BatchPoster.Post4844Blobs = true
-  builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
+
+	if blobsEnabled {
+		builder.nodeConfig.BatchPoster.Post4844Blobs = true
+		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
+	}
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
@@ -59,6 +62,9 @@ func createL1AndL2Node(
 	builder.execConfig.Caching.StateScheme = "hash"
 	builder.execConfig.Caching.Archive = true
 
+	if blobsEnabled {
+		builder.withL1 = true
+	}
 	cleanup := builder.Build(t)
 
 	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
@@ -76,7 +82,7 @@ func TestEspressoSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)

@@ -184,7 +184,198 @@ func TestEspressoE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
+	defer cleanup()
+
+	err := waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runEspresso()
+	defer shutdown()
+
+	// wait for the builder
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	l2Node := builder.L2
+	l2Info := builder.L2Info
+
+	// Wait for the initial message
+	expected := arbutil.MessageIndex(1)
+	err = waitFor(ctx, func() bool {
+		msgCnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+		if err != nil {
+			panic(err)
+		}
+
+		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
+		return msgCnt >= expected && validatedCnt >= expected
+	})
+	Require(t, err)
+
+	// wait for the latest hotshot block
+	err = waitFor(ctx, func() bool {
+		out, err := exec.Command("curl", "http://127.0.0.1:41000/status/block-height", "-L").Output()
+		if err != nil {
+			return false
+		}
+		h := 0
+		err = json.Unmarshal(out, &h)
+		if err != nil {
+			return false
+		}
+		// Wait for the hotshot to generate some blocks to better simulate the real-world environment.
+		// Chosen based on intuition; no empirical data supports this value.
+		return h > 10
+	})
+	Require(t, err)
+
+	// make light client reader
+
+	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
+	Require(t, err)
+	// wait for hotshot liveness
+
+	err = waitForHotShotLiveness(ctx, lightClientReader)
+	Require(t, err)
+
+	// Check if the tx is executed correctly
+	err = checkTransferTxOnL2(t, ctx, l2Node, "User10", l2Info)
+	Require(t, err)
+
+	// Remember the number of messages
+	var msgCnt arbutil.MessageIndex
+	err = waitFor(ctx, func() bool {
+		cnt, err := l2Node.ConsensusNode.TxStreamer.GetMessageCount()
+		Require(t, err)
+		msgCnt = cnt
+		log.Info("waiting for message count", "cnt", msgCnt)
+		return msgCnt >= 2
+	})
+	Require(t, err)
+
+	// Wait for the number of validated messages to catch up
+	err = waitForWith(ctx, 8*time.Minute, 5*time.Second, func() bool {
+		validatedCnt := l2Node.ConsensusNode.BlockValidator.Validated(t)
+		log.Info("waiting for validation", "validatedCnt", validatedCnt, "msgCnt", msgCnt)
+		return validatedCnt >= msgCnt
+	})
+	Require(t, err)
+
+	newAccount2 := "User11"
+	l2Info.GenerateAccount(newAccount2)
+	addr2 := l2Info.GetAddress(newAccount2)
+
+	// Transfer via the delayed inbox
+	delayedTx := l2Info.PrepareTx("Owner", newAccount2, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+	})
+
+	err = waitForWith(ctx, 180*time.Second, 2*time.Second, func() bool {
+		balance2 := l2Node.GetBalance(t, addr2)
+		log.Info("waiting for balance", "account", newAccount2, "addr", addr2, "balance", balance2)
+		return balance2.Cmp(transferAmount) >= 0
+	})
+	Require(t, err)
+
+	// Test that if espresso node is down, the transaction will be resubmitted once it is back online
+	newAccount3 := "User12"
+	l2Info.GenerateAccount(newAccount3)
+	addr3 := l2Info.GetAddress(newAccount3)
+	tx3 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, tx3, builder.L1Info, "Faucet", 100000),
+	})
+
+	// Wait for 1 second to make sure txn is submitted to Espresso
+	// but shut down before it can be finalized
+	time.Sleep(1 * time.Second)
+
+	log.Info("Pausing espresso node")
+	pauseEspresso := func() {
+		p := exec.Command("docker", "compose", "pause")
+		p.Dir = workingDir
+		err := p.Run()
+		if err != nil {
+			panic(err)
+		}
+		// Disconnect the container from the network to ensure requests to the dev node
+		// don't just hang but actually fail.
+		p = exec.Command(
+			"docker",
+			"network",
+			"disconnect",
+			"espresso-e2e_default",
+			"espresso-e2e-espresso-dev-node-1",
+		)
+		err = p.Run()
+		if err != nil {
+			panic(err)
+		}
+
+	}
+	pauseEspresso()
+
+	log.Info("Waiting for 1 minute before resuming espresso node")
+	time.Sleep(1 * time.Minute)
+
+	log.Info("Resuming espresso node")
+	unpauseEspresso := func() {
+		// reconnect the network first
+		p := exec.Command(
+			"docker",
+			"network",
+			"connect",
+			"espresso-e2e_default",
+			"espresso-e2e-espresso-dev-node-1",
+		)
+		err := p.Run()
+		if err != nil {
+			panic(err)
+		}
+		// resume the dev node
+		p = exec.Command("docker", "compose", "unpause")
+		p.Dir = workingDir
+		err = p.Run()
+		if err != nil {
+			panic(err)
+		}
+	}
+	unpauseEspresso()
+
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	// Wait for the L2 chain to catch up.
+	err = waitForWith(ctx, 180*time.Second, 2*time.Second, func() bool {
+		balance3 := l2Node.GetBalance(t, addr3)
+		log.Info("waiting for balance in", "account", newAccount3, "addr", addr3, "balance", balance3)
+		return balance3.Cmp(transferAmount) >= 0
+	})
+	Require(t, err)
+
+	// Try submitting the another transaction to make sure the transaction is submitted
+	// after espresso processes the resubmitted transaction
+	tx4 := l2Info.PrepareTx("Faucet", newAccount3, 3e7, transferAmount, nil)
+
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, tx4, builder.L1Info, "Faucet", 100000),
+	})
+
+	err = waitForWith(ctx, 180*time.Second, 2*time.Second, func() bool {
+		balance4 := l2Node.GetBalance(t, addr3)
+		log.Info("waiting for balance", "account", newAccount3, "addr", addr3, "balance", balance4)
+		return balance4.Cmp((&big.Int{}).Add(transferAmount, transferAmount)) >= 0
+	})
+	Require(t, err)
+}
+
+func TestEspressoE2EWithBlobs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	builder, cleanup := createL1AndL2Node(ctx, t, true, true)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
