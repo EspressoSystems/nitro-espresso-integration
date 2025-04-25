@@ -84,14 +84,13 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 
 	// Espresso specific fields. These fields are set from batch poster
-	espressoClient               espressoClient.EspressoClient
-	lightClientReader            lightclient.LightClientReaderInterface
-	espressoTxnsPollingInterval  time.Duration
-	maxBlockLagBeforeEscapeHatch uint64
-	espressoMaxTransactionSize   int64
-	resubmitEspressoTxDeadline   time.Duration
-	lastSubmitFailureAt          *time.Time
-	EspressoKeyManager           EspressoKeyManagerInterface
+	espressoClient              espressoClient.EspressoClient
+	lightClientReader           lightclient.LightClientReaderInterface
+	espressoTxnsPollingInterval time.Duration
+	espressoMaxTransactionSize  int64
+	resubmitEspressoTxDeadline  time.Duration
+	lastSubmitFailureAt         *time.Time
+	EspressoKeyManager          EspressoKeyManagerInterface
 }
 
 type TransactionStreamerConfig struct {

@@ -197,27 +197,15 @@ type BatchPosterConfig struct {
 	EspressoRetryTime           time.Duration `koanf:"espresso-retry-time"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	EspressoEventPollingStep    uint64        `koanf:"espresso-event-polling-step"`
-	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
-	// state updates can lag behind before triggering the escape hatch. If the difference
-	// between the current L1 block number and the latest state update's block number
-	// exceeds this value, the escape hatch will be activated.
-	// Default: 350 blocks (~1 hour at 12s block time)
-	MaxBlockLagBeforeEscapeHatch uint64 `koanf:"max-block-lag-before-escape-hatch"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
-	if len(c.HotShotUrls) == 0 {
-		return errors.New("HotShotUrls must not be empty")
-
-	} else {
-		urlsSlice := c.HotShotUrls[1:] // Slice off the first index as it is valid to leave that an empty string
-		// in the first position to avoid constructing an espressoClient in the batch poster.
-		for _, url := range urlsSlice {
-			if url == ("") {
-				return errors.New("An empty address (\"\") was used as a Hotshot url")
-			}
+	for _, url := range c.HotShotUrls {
+		if url == ("") {
+			return errors.New("An empty address (\"\") was used as a Hotshot url")
 		}
 	}
+
 	if len(c.GasRefunderAddress) > 0 && !common.IsHexAddress(c.GasRefunderAddress) {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}
@@ -228,16 +216,28 @@ func (c *BatchPosterConfig) Validate() error {
 	if c.MaxSize <= 40 {
 		return errors.New("MaxBatchSize too small")
 	}
+	// Race test is not happy with the original logic.
+	// Setting the value only when the value needs to be updated avoids race conditions.
 	if c.L1BlockBound == "" {
-		c.l1BlockBound = l1BlockBoundDefault
+		if c.l1BlockBound != l1BlockBoundDefault {
+			c.l1BlockBound = l1BlockBoundDefault
+		}
 	} else if c.L1BlockBound == "safe" {
-		c.l1BlockBound = l1BlockBoundSafe
+		if c.l1BlockBound != l1BlockBoundSafe {
+			c.l1BlockBound = l1BlockBoundSafe
+		}
 	} else if c.L1BlockBound == "finalized" {
-		c.l1BlockBound = l1BlockBoundFinalized
+		if c.l1BlockBound != l1BlockBoundFinalized {
+			c.l1BlockBound = l1BlockBoundFinalized
+		}
 	} else if c.L1BlockBound == "latest" {
-		c.l1BlockBound = l1BlockBoundLatest
+		if c.l1BlockBound != l1BlockBoundLatest {
+			c.l1BlockBound = l1BlockBoundLatest
+		}
 	} else if c.L1BlockBound == "ignore" {
-		c.l1BlockBound = l1BlockBoundIgnore
+		if c.l1BlockBound != l1BlockBoundIgnore {
+			c.l1BlockBound = l1BlockBoundIgnore
+		}
 	} else {
 		return fmt.Errorf("invalid L1 block bound tag \"%v\" (see --help for options)", c.L1BlockBound)
 	}
@@ -282,7 +282,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".espresso-retry-time", DefaultBatchPosterConfig.EspressoRetryTime, "retry time threshold after which a transaction fetch failure")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
-	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -319,9 +318,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoTxnsPollingInterval:    time.Second,
 	EspressoRetryTime:              100 * time.Millisecond,
 	ResubmitEspressoTxDeadline:     10 * time.Minute,
-	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
-	HotShotUrls:                    []string{""},
+	HotShotUrls:                    []string{},
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go,
 	// Try to fill 3 blobs per batch,
@@ -363,9 +361,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	EspressoTxnsPollingInterval:    time.Second,
 	EspressoRetryTime:              100 * time.Millisecond,
-	MaxBlockLagBeforeEscapeHatch:   10,
 	LightClientAddress:             "",
-	HotShotUrls:                    []string{""},
+	HotShotUrls:                    []string{},
 	ResubmitEspressoTxDeadline:     10 * time.Second,
 	HotShotBlock:                   1,
 	HotShotGenesisBlock:            1,
@@ -420,11 +417,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	hotShotUrls := opts.Config().HotShotUrls
 	lightClientAddr := opts.Config().LightClientAddress
-	hotShotUrlsLen := len(hotShotUrls)
 
-	// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
-
-	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
+	if len(hotShotUrls) > 0 {
 		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}
@@ -436,7 +430,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 		opts.Streamer.lightClientReader = lightClientReader
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
-		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
@@ -892,7 +885,6 @@ type buildingBatch struct {
 	segments           *batchSegments
 	startMsgCount      arbutil.MessageIndex
 	msgCount           arbutil.MessageIndex
-	hotshotHeight      uint64
 	haveUsefulMessage  bool
 	use4844            bool
 	muxBackend         *simulatedMuxBackend
@@ -1617,10 +1609,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			espressoMsg := b.espressoStreamer.Next(ctx)
 			if espressoMsg == nil {
 				return nil, errors.New("not in the buffer")
-			}
-			if b.building.hotshotHeight == 0 {
-				// store the hotshot height associated with the first message
-				b.building.hotshotHeight = espressoMsg.HotshotHeight
 			}
 			lastPotentialMsg = &espressoMsg.MessageWithMeta
 			lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
