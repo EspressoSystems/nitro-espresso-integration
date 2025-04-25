@@ -25,9 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -536,24 +534,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		})
 	}
 	return b, nil
-}
-
-func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {
-	// Setup nitro contract interface
-	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
-	}
-	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
-
-	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
-		nitroAddr,
-		l1Client)
-	if err != nil {
-		return nil, err
-	}
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client)
-	return nitroVerifier, nil
 }
 
 type simulatedBlobReader struct {
@@ -1580,6 +1560,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	var breakLoopWhenErrorOccurs bool
 
 	if b.espressoStreamer == nil {
+		// We are not running Espresso mode, so we are using the regular tx streamer
 		msgCount, err := b.streamer.GetMessageCount()
 		if err != nil {
 			log.Error("Error getting message count", "err", err)
@@ -1604,6 +1585,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		breakLoopWhenErrorOccurs = false
 	} else {
+		// We are running Espresso mode, so we will keep adding messages until
+		// espresso streamer returns errors.
 		addMessageLoop = func() bool { return true }
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)
@@ -1614,6 +1597,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
 			return &espressoMsg.MessageWithMeta, nil
 		}
+		// When error occurs, break the loop and continue the rest of the function,
+		// which makes a new batch
 		breakLoopWhenErrorOccurs = true
 	}
 	for addMessageLoop() {
@@ -2103,19 +2088,4 @@ func (b *BoolRing) All(value bool) bool {
 		}
 	}
 	return true
-}
-
-func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, error) {
-	message := make([]byte, 32)
-	signature, err := signer(message)
-	if err != nil {
-		return common.Address{}, err
-	}
-
-	publicKey, err := crypto.SigToPub(message, signature)
-	if err != nil {
-		return common.Address{}, err
-	}
-
-	return crypto.PubkeyToAddress(*publicKey), nil
 }
