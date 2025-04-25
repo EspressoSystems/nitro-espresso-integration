@@ -88,34 +88,6 @@ type SequencerConfig struct {
 	EnableCaffNode bool `koanf:"enable-caff-node"`
 }
 
-type DangerousConfig struct {
-	Timeboost TimeboostConfig `koanf:"timeboost"`
-}
-
-type TimeboostConfig struct {
-	Enable                    bool          `koanf:"enable"`
-	AuctionContractAddress    string        `koanf:"auction-contract-address"`
-	AuctioneerAddress         string        `koanf:"auctioneer-address"`
-	ExpressLaneAdvantage      time.Duration `koanf:"express-lane-advantage"`
-	SequencerHTTPEndpoint     string        `koanf:"sequencer-http-endpoint"`
-	EarlySubmissionGrace      time.Duration `koanf:"early-submission-grace"`
-	MaxQueuedTxCount          int           `koanf:"max-queued-tx-count"`
-	MaxFutureSequenceDistance uint64        `koanf:"max-future-sequence-distance"`
-	RedisUrl                  string        `koanf:"redis-url"`
-}
-
-var DefaultTimeboostConfig = TimeboostConfig{
-	Enable:                    false,
-	AuctionContractAddress:    "",
-	AuctioneerAddress:         "",
-	ExpressLaneAdvantage:      time.Millisecond * 200,
-	SequencerHTTPEndpoint:     "http://localhost:8547",
-	EarlySubmissionGrace:      time.Second * 2,
-	MaxQueuedTxCount:          10,
-	MaxFutureSequenceDistance: 100,
-	RedisUrl:                  "unset",
-}
-
 type TimeboostConfig struct {
 	Enable                       bool          `koanf:"enable"`
 	AuctionContractAddress       string        `koanf:"auction-contract-address"`
@@ -278,22 +250,6 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	// Espresso specific flags
 	f.Bool(prefix+".enable-caff-node", DefaultSequencerConfig.EnableCaffNode, "enable caff node")
 	CaffNodeConfigAddOptions(prefix+".caff-node-config", f)
-}
-
-func TimeboostAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultTimeboostConfig.Enable, "enable timeboost based on express lane auctions")
-	f.String(prefix+".auction-contract-address", DefaultTimeboostConfig.AuctionContractAddress, "Address of the proxy pointing to the ExpressLaneAuction contract")
-	f.String(prefix+".auctioneer-address", DefaultTimeboostConfig.AuctioneerAddress, "Address of the Timeboost Autonomous Auctioneer")
-	f.Duration(prefix+".express-lane-advantage", DefaultTimeboostConfig.ExpressLaneAdvantage, "specify the express lane advantage")
-	f.String(prefix+".sequencer-http-endpoint", DefaultTimeboostConfig.SequencerHTTPEndpoint, "this sequencer's http endpoint")
-	f.Duration(prefix+".early-submission-grace", DefaultTimeboostConfig.EarlySubmissionGrace, "period of time before the next round where submissions for the next round will be queued")
-	f.Int(prefix+".max-queued-tx-count", DefaultTimeboostConfig.MaxQueuedTxCount, "maximum allowed number of express lane txs with future sequence number to be queued. Set 0 to disable this check and a negative value to prevent queuing of any future sequence number transactions")
-	f.Uint64(prefix+".max-future-sequence-distance", DefaultTimeboostConfig.MaxFutureSequenceDistance, "maximum allowed difference (in terms of sequence numbers) between a future express lane tx and the current sequence count of a round")
-	f.String(prefix+".redis-url", DefaultTimeboostConfig.RedisUrl, "the Redis URL for expressLaneService to coordinate via")
-}
-
-func DangerousAddOptions(prefix string, f *flag.FlagSet) {
-	TimeboostAddOptions(prefix+".timeboost", f)
 }
 
 func TimeboostAddOptions(prefix string, f *flag.FlagSet) {
