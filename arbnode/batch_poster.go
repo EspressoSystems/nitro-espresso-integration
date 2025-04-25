@@ -190,7 +190,7 @@ type BatchPosterConfig struct {
 	LightClientAddress          string        `koanf:"light-client-address"`
 	HotShotUrls                 []string      `koanf:"hotshot-urls"`
 	HotShotBlock                uint64        `koanf:"hotshot-block"`
-	HotShotGenesisBlock         uint64        `koanf:"hotshot-genesis-block"`
+	HotShotFirstPostingBlock    uint64        `koanf:"hotshot-first-posting-block"`
 	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
 	EspressoRetryTime           time.Duration `koanf:"espresso-retry-time"`
 	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
@@ -271,7 +271,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringArray(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
-	f.Uint64(prefix+".hotshot-genesis-block", DefaultBatchPosterConfig.HotShotGenesisBlock, "specifies the l1 block number when this rollup started posting to hotshot")
+	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
@@ -321,8 +321,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go,
 	// Try to fill 3 blobs per batch,
-	HotShotBlock:        1,
-	HotShotGenesisBlock: 1,
+	HotShotBlock:             1,
+	HotShotFirstPostingBlock: 1,
 	// The default for this will vary based on restrictions imposed by rpc providers.
 	EspressoEventPollingStep: 2000,
 	EspressoTeeType:          "SGX",
@@ -363,7 +363,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	HotShotUrls:                    []string{},
 	ResubmitEspressoTxDeadline:     10 * time.Second,
 	HotShotBlock:                   1,
-	HotShotGenesisBlock:            1,
+	HotShotFirstPostingBlock:       1,
 	EspressoEventPollingStep:       50,
 	EspressoTeeType:                "SGX",
 }
@@ -1137,10 +1137,10 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 	}
 
 	var logIterator *bridgegen.SequencerInboxTEESignatureVerifiedIterator
-	for i := header.Number.Uint64(); i >= b.config().HotShotGenesisBlock; i -= pollingStep {
+	for i := header.Number.Uint64(); i >= b.config().HotShotFirstPostingBlock; i -= pollingStep {
 		start := i - pollingStep
-		if start < b.config().HotShotGenesisBlock {
-			start = b.config().HotShotGenesisBlock
+		if start < b.config().HotShotFirstPostingBlock {
+			start = b.config().HotShotFirstPostingBlock
 		}
 		filterOpts := bind.FilterOpts{
 			Start:   start,
