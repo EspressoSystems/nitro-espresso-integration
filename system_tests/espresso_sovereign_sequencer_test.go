@@ -45,6 +45,7 @@ func createL1AndL2Node(
 	if blobsEnabled {
 		builder.nodeConfig.BatchPoster.Post4844Blobs = true
 		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
+		builder.nodeConfig.Dangerous.DisableBlobReader = false
 	}
 
 	// validator config

@@ -1151,7 +1151,13 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, errors.New("failed to find add batch method")
 	}
 	kzgBlobs, err := blobs.EncodeBlobs(l2MessageData)
+	if err != nil {
+		return nil, err
+	}
 	_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
+	if err != nil {
+		return nil, err
+	}
 	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
 	// This will allow us to get the attestation quote on the hash of the dataPoster
 	var blobHashList []byte
@@ -1175,10 +1181,10 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	var attestationArgs []any
 	attestationArgs = append(attestationArgs, args...)
 	// pack remaining data for the attestation quote.
-	attestationQuoteArgs := append(attestationArgs, encodedBlobs)
+	attestationArgs = append(attestationArgs, encodedBlobs)
 
 	// Generate the attestation quote over the method args, and the blob hashes.
-	packedData, err := b.blobsAttestationArguments.Pack(attestationQuoteArgs...)
+	packedData, err := b.blobsAttestationArguments.Pack(attestationArgs...)
 	if err != nil {
 		return nil, err
 	}
@@ -1249,6 +1255,10 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 	case newSequencerBatchPostWithBlobsMethodName:
 		log.Info("Encoding Espresso validated batch via testing:", "method", methodName)
+		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
+		}
 		fullCalldata, err = b.getCalldataForEspressoBlobBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
 		if err != nil {
 			return nil, nil, err

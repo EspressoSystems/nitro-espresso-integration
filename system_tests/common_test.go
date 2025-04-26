@@ -1426,6 +1426,7 @@ func deployOnParentChain(
 			EspressoTEEVerifier:          espressoTEEVerifierAddress,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
+		log.Info("Deploying Full rollup stack")
 		boldAddresses, err := setup.DeployFullRollupStack(
 			ctx,
 			wrappedClient,
