@@ -1258,6 +1258,12 @@ func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackCon
 	l1info.GenerateAccount("Faucet")
 
 	chainConfig := chaininfo.ArbitrumDevTestChainConfig()
+	chainConfig.LondonBlock = big.NewInt(0) // EIP-1559
+	cancunTime := uint64(0)
+	chainConfig.CancunTime = &cancunTime
+	// Also ensure Shanghai is activated (prerequisite)
+	shanghaiTime := uint64(0)
+	chainConfig.ShanghaiTime = &shanghaiTime
 	chainConfig.ArbitrumChainParams = params.ArbitrumChainParams{}
 
 	stack, err := node.New(stackConfig)
@@ -1276,7 +1282,6 @@ func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackCon
 	nodeConf.Miner.Etherbase = l1info.GetAddress("Faucet")
 	nodeConf.Miner.PendingFeeRecipient = l1info.GetAddress("Faucet")
 	nodeConf.SyncMode = downloader.FullSync
-
 	l1backend, err := eth.New(stack, &nodeConf)
 	Require(t, err)
 

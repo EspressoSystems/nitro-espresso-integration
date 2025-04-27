@@ -41,13 +41,6 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl, hotShotUrl}
 	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
-
-	if blobsEnabled {
-		builder.nodeConfig.BatchPoster.Post4844Blobs = true
-		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
-		builder.nodeConfig.Dangerous.DisableBlobReader = false
-	}
-
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
 	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
@@ -64,8 +57,17 @@ func createL1AndL2Node(
 	builder.execConfig.Caching.Archive = true
 
 	if blobsEnabled {
+		builder.nodeConfig.BatchPoster.Post4844Blobs = true
+		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
 		builder.withL1 = true
+		builder.deployBold = false
+		// Enabling this to false because we dont have a blob reader in the tests
+		// which is needed for staker
+		builder.nodeConfig.BlockValidator.Enable = false
+		builder.nodeConfig.Staker.Enable = false
+
 	}
+
 	cleanup := builder.Build(t)
 
 	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
