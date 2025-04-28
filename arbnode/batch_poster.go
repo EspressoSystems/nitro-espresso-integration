@@ -88,7 +88,7 @@ const (
 	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
 	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
-	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
+	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
 	espressoTransactionSizeLimit             = 900 * 1024
 )
 
@@ -128,8 +128,11 @@ type BatchPoster struct {
 	nextRevertCheckBlock int64       // the last parent block scanned for reverting batches
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
-	accessList                func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
-	bytesType                 abi.Type
+	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	// Types for packing the blob hashes into the data used to generate the batchers attestation quote.
+	bytesType        abi.Type
+	bytes32ArrayType abi.Type
+
 	blobsAttestationArguments abi.Arguments
 }
 
@@ -386,12 +389,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	if err != nil {
 		return nil, err
 	}
+	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
+	if err != nil {
+		return nil, err
+	}
 
 	method, ok := seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
 	}
-
 	blobsAttestationArguments := method.Inputs
 	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytesType})
 
@@ -436,8 +442,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		dapWriter:                 opts.DAPWriter,
 		redisLock:                 redisLock,
 		dapReaders:                opts.DAPReaders,
-		blobsAttestationArguments: blobsAttestationArguments,
 		bytesType:                 bytesType,
+		bytes32ArrayType:          bytes32ArrayType,
+		blobsAttestationArguments: blobsAttestationArguments,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1160,11 +1167,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
 	// This will allow us to get the attestation quote on the hash of the dataPoster
-	var blobHashList []byte
-	for _, blobHash := range blobHashes {
-		blobHashList = append(blobHashList, blobHash.Bytes()...)
-	}
-	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytesType}}.Pack(blobHashList)
+	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
 
 	if err != nil {
 		return nil, err
@@ -1203,6 +1206,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 
 	log.Info("Attestation Quote:", "quote", attestationQuote)
+	log.Info("Attestation quote hex string", "Hex value", hex.EncodeToString(attestationQuote))
 	// Construct the calldata with attestation quote
 	args = append(args, attestationQuote)
 
