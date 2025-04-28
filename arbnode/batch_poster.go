@@ -1175,8 +1175,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, err
 	}
 
-	log.Info("Encoded blobs", "encodedBlobs", encodedBlobs)
-
 	args = append(args, seqNum)
 	args = append(args, new(big.Int).SetUint64(delayedMsg))
 	args = append(args, b.config().gasRefunder)
@@ -1192,23 +1190,12 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	packedData, err := b.blobsAttestationArguments.Pack(attestationArgs...)
 	if err != nil {
 		return nil, err
-	}
-	// Log info for debugging / generating test data
-	log.Info("Packed attestationQuote data", "packedData", packedData)
-	log.Info("blob hashes", "hashes", blobHashes)
-	log.Info("Args:", "seqNum", seqNum)
-	log.Info("Args:", "delayedMsg", delayedMsg)
-	log.Info("Args:", "gasRefunder", b.config().gasRefunder)
-	log.Info("Args:", "prevMsgNum", prevMsgNum)
-	log.Info("Args:", "newMsgNum", newMsgNum)
+	}	
 	// Generate attestation quote
 	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
-	}
-
-	log.Info("Attestation Quote:", "quote", attestationQuote)
-	log.Info("Attestation quote hex string", "Hex value", hex.EncodeToString(attestationQuote))
+	}	
 	// Construct the calldata with attestation quote
 	args = append(args, attestationQuote)
 
