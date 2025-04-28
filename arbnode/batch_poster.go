@@ -87,6 +87,8 @@ const (
 	sequencerBatchPostWithBlobsMethodName           = "addSequencerL2BatchFromBlobs"
 	sequencerBatchPostDelayProofMethodName          = "addSequencerL2BatchFromOriginDelayProof"
 	sequencerBatchPostWithBlobsDelayProofMethodName = "addSequencerL2BatchFromBlobsDelayProof"
+	oldSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs"
+	newSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs0"
 	espressoTransactionSizeLimit                    = 900 * 1024
 )
 
@@ -127,6 +129,11 @@ type BatchPoster struct {
 	postedFirstBatch     bool        // indicates if batch poster has posted the first batch
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
+	// Types for packing the blob hashes into the data used to generate the batchers attestation quote.
+	bytesType        abi.Type
+	bytes32ArrayType abi.Type
+
+	blobsAttestationArguments abi.Arguments
 }
 
 type l1BlockBound int
@@ -380,7 +387,24 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		return nil, err
 	}
 
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, err
+	}
+	bytes32ArrayType, err := abi.NewType("bytes32[]", "", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	method, ok := seqInboxABI.Methods[oldSequencerBatchPostWithBlobsMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+	blobsAttestationArguments := method.Inputs
+	blobsAttestationArguments = append(blobsAttestationArguments, abi.Argument{Type: bytesType})
+
 	hotShotUrls := opts.Config().HotShotUrls
+
 	lightClientAddr := opts.Config().LightClientAddress
 	hotShotUrlsLen := len(hotShotUrls)
 
@@ -406,20 +430,23 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	b := &BatchPoster{
-		l1Reader:           opts.L1Reader,
-		inbox:              opts.Inbox,
-		streamer:           opts.Streamer,
-		arbOSVersionGetter: opts.VersionGetter,
-		syncMonitor:        opts.SyncMonitor,
-		config:             opts.Config,
-		seqInbox:           seqInbox,
-		seqInboxABI:        seqInboxABI,
-		seqInboxAddr:       opts.DeployInfo.SequencerInbox,
-		gasRefunderAddr:    opts.Config().gasRefunder,
-		bridgeAddr:         opts.DeployInfo.Bridge,
-		dapWriters:         opts.DAPWriters,
-		redisLock:          redisLock,
-		dapReaders:         opts.DAPReaders,
+		l1Reader:                  opts.L1Reader,
+		inbox:                     opts.Inbox,
+		streamer:                  opts.Streamer,
+		arbOSVersionGetter:        opts.VersionGetter,
+		syncMonitor:               opts.SyncMonitor,
+		config:                    opts.Config,
+		seqInbox:                  seqInbox,
+		seqInboxABI:               seqInboxABI,
+		seqInboxAddr:              opts.DeployInfo.SequencerInbox,
+		gasRefunderAddr:           opts.Config().gasRefunder,
+		bridgeAddr:                opts.DeployInfo.Bridge,
+		dapWriters:                opts.DAPWriters,
+		redisLock:                 redisLock,
+		dapReaders:                opts.DAPReaders,
+		bytesType:                 bytesType,
+		bytes32ArrayType:          bytes32ArrayType,
+		blobsAttestationArguments: blobsAttestationArguments,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1069,6 +1096,133 @@ func (s *batchSegments) SetWaitingForValidation() {
 		s.isWaitingForEspressoValidation = true
 	}
 }
+
+func (b *BatchPoster) getCalldataForEspressoBatch(
+	seqNum *big.Int,
+	prevMsgNum arbutil.MessageIndex,
+	newMsgNum arbutil.MessageIndex,
+	l2MessageData []byte,
+	delayedMsg uint64,
+) ([]byte, error) {
+	var args []any
+	method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+	// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
+	// This will allow us to get the attestation quote on the hash of the data
+	args = append(args, seqNum)
+	args = append(args, l2MessageData)
+	args = append(args, new(big.Int).SetUint64(delayedMsg))
+	args = append(args, b.config().gasRefunder)
+	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
+	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+
+	// Later append the delay proof if needed for getting the attestion quote.
+	// If not, only append at the end of the calldata as done below.
+	calldata, err := method.Inputs.Pack(args...)
+	if err != nil {
+		return nil, err
+	}
+
+	attestationQuote, err := b.streamer.getAttestationQuote(calldata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
+	}
+	// Construct the calldata with attestation quote
+	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+	args = append(args, attestationQuote)
+
+	calldata, err = method.Inputs.Pack(args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fullCalldata := append([]byte{}, method.ID...)
+	fullCalldata = append(fullCalldata, calldata...)
+	return fullCalldata, nil
+}
+
+func (b *BatchPoster) getCalldataForEspressoBlobBatch(
+	seqNum *big.Int,
+	prevMsgNum arbutil.MessageIndex,
+	newMsgNum arbutil.MessageIndex,
+	l2MessageData []byte,
+	delayedMsg uint64,
+) ([]byte, error) {
+	var args []any
+	method, ok := b.seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+	kzgBlobs, err := blobs.EncodeBlobs(l2MessageData)
+	if err != nil {
+		return nil, err
+	}
+	_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
+	if err != nil {
+		return nil, err
+	}
+	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
+	// This will allow us to get the attestation quote on the hash of the dataPoster
+	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
+
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Encoded blobs", "encodedBlobs", encodedBlobs)
+
+	args = append(args, seqNum)
+	args = append(args, new(big.Int).SetUint64(delayedMsg))
+	args = append(args, b.config().gasRefunder)
+	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
+	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+
+	var attestationArgs []any
+	attestationArgs = append(attestationArgs, args...)
+	// pack remaining data for the attestation quote.
+	attestationArgs = append(attestationArgs, encodedBlobs)
+
+	// Generate the attestation quote over the method args, and the blob hashes.
+	packedData, err := b.blobsAttestationArguments.Pack(attestationArgs...)
+	if err != nil {
+		return nil, err
+	}
+	// Log info for debugging / generating test data
+	log.Info("Packed attestationQuote data", "packedData", packedData)
+	log.Info("blob hashes", "hashes", blobHashes)
+	log.Info("Args:", "seqNum", seqNum)
+	log.Info("Args:", "delayedMsg", delayedMsg)
+	log.Info("Args:", "gasRefunder", b.config().gasRefunder)
+	log.Info("Args:", "prevMsgNum", prevMsgNum)
+	log.Info("Args:", "newMsgNum", newMsgNum)
+	// Generate attestation quote
+	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
+	}
+
+	log.Info("Attestation Quote:", "quote", attestationQuote)
+	log.Info("Attestation quote hex string", "Hex value", hex.EncodeToString(attestationQuote))
+	// Construct the calldata with attestation quote
+	args = append(args, attestationQuote)
+
+	calldata, err := method.Inputs.Pack(args...)
+
+	if err != nil {
+		return nil, err
+	}
+
+	fullCalldata := append([]byte{}, method.ID...)
+	fullCalldata = append(fullCalldata, calldata...)
+	return fullCalldata, nil
+}
+
 func (b *BatchPoster) encodeAddBatch(
 	seqNum *big.Int,
 	prevMsgNum arbutil.MessageIndex,
@@ -1083,7 +1237,7 @@ func (b *BatchPoster) encodeAddBatch(
 		if delayProof != nil {
 			methodName = sequencerBatchPostWithBlobsDelayProofMethodName
 		} else {
-			methodName = sequencerBatchPostWithBlobsMethodName
+			methodName = newSequencerBatchPostWithBlobsMethodName
 		}
 	} else if delayProof != nil {
 		methodName = sequencerBatchPostDelayProofMethodName
@@ -1098,51 +1252,24 @@ func (b *BatchPoster) encodeAddBatch(
 	var kzgBlobs []kzg4844.Blob
 	var fullCalldata []byte
 	var err error
-	if methodName == newSequencerBatchPostMethodName {
-		log.Info("Coming inside the newSequencerBatchPostMethodName")
-		method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostMethodName]
-		if !ok {
-			return nil, nil, errors.New("failed to find add batch method")
-		}
-		// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
-		// This will allow us to get the attestation quote on the hash of the data
-		args = append(args, seqNum)
-		args = append(args, l2MessageData)
-		args = append(args, new(big.Int).SetUint64(delayedMsg))
-		args = append(args, b.config().gasRefunder)
-		args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-		args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-
-		// Later append the delay proof if needed for getting the attestion quote.
-		// If not, only append at the end of the calldata as done below.
-
-		calldata, err := method.Inputs.Pack(args...)
+	switch methodName {
+	case newSequencerBatchPostMethodName:
+		log.Info("Encoding Espresso validated batch via:", "method", methodName)
+		fullCalldata, err = b.getCalldataForEspressoBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		attestationQuote, err := b.streamer.getAttestationQuote(calldata)
+	case newSequencerBatchPostWithBlobsMethodName:
+		log.Info("Encoding Espresso validated batch via testing:", "method", methodName)
+		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get attestation quote: %w", err)
+			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
 		}
-
-		// Construct the calldata with attestation quote
-		method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
-		if !ok {
-			return nil, nil, errors.New("failed to find add batch method")
-		}
-		args = append(args, attestationQuote)
-
-		calldata, err = method.Inputs.Pack(args...)
-
+		fullCalldata, err = b.getCalldataForEspressoBlobBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
 		if err != nil {
 			return nil, nil, err
 		}
-
-		fullCalldata = append([]byte{}, method.ID...)
-		fullCalldata = append(fullCalldata, calldata...)
-
-	} else {
+	default:
 		log.Info("Coming inside the oldSequencerBatchPostMethodName", "methodName", methodName)
 		args = append(args, seqNum)
 		if use4844 {
@@ -1167,8 +1294,8 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 		fullCalldata = append([]byte{}, method.ID...)
 		fullCalldata = append(fullCalldata, calldata...)
-	}
 
+	}
 	return fullCalldata, kzgBlobs, nil
 }
 
