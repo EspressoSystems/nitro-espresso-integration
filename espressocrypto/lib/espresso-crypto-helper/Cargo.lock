@@ -170,7 +170,7 @@ dependencies = [
 [[package]]
 name = "alloy-compat"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "ethers-core",
@@ -3523,7 +3523,7 @@ source = "git+https://github.com/espressosystems/espresso-systems-common?tag=0.4
 [[package]]
 name = "espresso-types"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "alloy-compat",
@@ -4744,7 +4744,7 @@ dependencies = [
 [[package]]
 name = "hotshot"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4788,7 +4788,7 @@ dependencies = [
 [[package]]
 name = "hotshot-builder-api"
 version = "0.1.7"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "async-trait",
  "clap",
@@ -4808,7 +4808,7 @@ dependencies = [
 [[package]]
 name = "hotshot-contract-adapter"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4832,7 +4832,7 @@ dependencies = [
 [[package]]
 name = "hotshot-example-types"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4858,7 +4858,7 @@ dependencies = [
 [[package]]
 name = "hotshot-fakeapi"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "anyhow",
  "async-lock 3.4.0",
@@ -4877,7 +4877,7 @@ dependencies = [
 [[package]]
 name = "hotshot-libp2p-networking"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4907,7 +4907,7 @@ dependencies = [
 [[package]]
 name = "hotshot-macros"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "derive_builder",
  "proc-macro2",
@@ -4919,7 +4919,7 @@ dependencies = [
 [[package]]
 name = "hotshot-query-service"
 version = "0.1.76"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -4971,7 +4971,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "async-broadcast",
  "async-trait",
@@ -4985,7 +4985,7 @@ dependencies = [
 [[package]]
 name = "hotshot-task-impls"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5021,7 +5021,7 @@ dependencies = [
 [[package]]
 name = "hotshot-testing"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5064,7 +5064,7 @@ dependencies = [
 [[package]]
 name = "hotshot-types"
 version = "0.1.11"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -5124,7 +5124,7 @@ dependencies = [
 [[package]]
 name = "hotshot-utils"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "tracing",
  "workspace-hack",
@@ -5877,8 +5877,8 @@ dependencies = [
 
 [[package]]
 name = "jf-merkle-tree"
-version = "0.2.1"
-source = "git+https://github.com/EspressoSystems/jellyfish?rev=bd6098da2c4a53bf7f4042c96630e2d3cb1d844b#bd6098da2c4a53bf7f4042c96630e2d3cb1d844b"
+version = "0.2.2"
+source = "git+https://github.com/EspressoSystems/jellyfish?tag=jf-merkle-tree-v0.2.2#ab298f4ca35253a1e83f62e2a76bbf3f86560bc0"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -9301,7 +9301,7 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 [[package]]
 name = "sequencer-utils"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "alloy",
  "anyhow",
@@ -11391,7 +11391,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vid"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "anyhow",
  "ark-bn254",
@@ -11401,7 +11401,7 @@ dependencies = [
  "ark-std 0.4.0",
  "displaydoc",
  "jf-crhf 0.1.1",
- "jf-merkle-tree 0.2.1",
+ "jf-merkle-tree 0.2.2",
  "jf-poseidon2",
  "jf-utils",
  "p3-maybe-rayon",
@@ -12064,7 +12064,7 @@ dependencies = [
 [[package]]
 name = "workspace-hack"
 version = "0.1.0"
-source = "git+https://github.com/espressosystems/espresso-network?tag=20250425-dev-node-pos-preview#14be842f19d410fa334845af9e53b4621006f170"
+source = "git+https://github.com/espressosystems/espresso-network?tag=20250428-dev-node-decaf-pos#985e0fb1bfdfddab509d02fb55508caa635ca550"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
