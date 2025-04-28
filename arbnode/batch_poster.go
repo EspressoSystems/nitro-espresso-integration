@@ -88,7 +88,7 @@ const (
 	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
 	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
 	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
-	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
 	espressoTransactionSizeLimit             = 900 * 1024
 )
 
