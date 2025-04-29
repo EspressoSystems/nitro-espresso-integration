@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 )
 
@@ -64,16 +63,16 @@ func TestScheduleArbosUpgrade(t *testing.T) {
 	}
 }
 
-func checkArbOSVersion(t *testing.T, testClient *TestClient, expectedVersion uint64, scenario string) {
-	statedb, err := testClient.ExecNode.Backend.ArbInterface().BlockChain().State()
-	Require(t, err, "could not get statedb", scenario)
-	state, err := arbosState.OpenSystemArbosState(statedb, nil, true)
-	Require(t, err, "could not open ArbOS state", scenario)
-	if state.ArbOSVersion() != expectedVersion {
-		t.Errorf("%s: expected ArbOS version %v, got %v", scenario, expectedVersion, state.ArbOSVersion())
-	}
+// func checkArbOSVersion(t *testing.T, testClient *TestClient, expectedVersion uint64, scenario string) {
+// 	statedb, err := testClient.ExecNode.Backend.ArbInterface().BlockChain().State()
+// 	Require(t, err, "could not get statedb", scenario)
+// 	state, err := arbosState.OpenSystemArbosState(statedb, nil, true)
+// 	Require(t, err, "could not open ArbOS state", scenario)
+// 	if state.ArbOSVersion() != expectedVersion {
+// 		t.Errorf("%s: expected ArbOS version %v, got %v", scenario, expectedVersion, state.ArbOSVersion())
+// 	}
 
-}
+// }
 
 // func TestArbos11To32UpgradeWithMcopy(t *testing.T) {
 // 	t.Parallel()
