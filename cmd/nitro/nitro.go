@@ -245,7 +245,7 @@ func mainImpl() int {
 		log.Error("The Caff node cannot have any type of sequencer enabled, run without a config that enables any form of sequencer.")
 		return 1
 	}
-  if nodeConfig.Node.EspressoCaffNode.Enable && len(nodeConfig.Execution.ForwardingTarget) == 0{
+  if nodeConfig.Node.EspressoCaffNode.Enable && (len(nodeConfig.Execution.ForwardingTarget) == 0 || nodeConfig.Execution.ForwardingTarget == "null"){
     log.Error("Cannot start Caff node with no forwarding target")
     return 1
   }
