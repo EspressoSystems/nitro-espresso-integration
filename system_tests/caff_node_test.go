@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
@@ -10,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*TestClient, func()) {
+func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
@@ -38,7 +39,35 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.ParentChainReader.Enable = true
 
 	cleanup := builder.BuildEspressoCaffNode(t, existing)
-	return builder.L2, cleanup
+	return builder, cleanup
+}
+
+func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
+	nodeConfig := builder.nodeConfig
+	execConfig := builder.execConfig
+
+	// Disable the batch poster because it requires redis if enabled on the 2nd node
+	nodeConfig.BatchPoster.Enable = false
+	nodeConfig.BlockValidator.Enable = false
+	nodeConfig.DelayedSequencer.Enable = false
+	nodeConfig.DelayedSequencer.FinalizeDistance = 1
+	nodeConfig.Sequencer = false
+	nodeConfig.Dangerous.NoSequencerCoordinator = true
+	execConfig.Sequencer.Enable = false
+	execConfig.SecondaryForwardingTarget = []string{}
+	nodeConfig.EspressoCaffNode.Enable = true
+	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
+	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
+
+	// for testing, we can use the same hotshot url for both
+	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
+	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
+	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
+
+	nodeConfig.ParentChainReader.Enable = true
+
+	return builder
 }
 
 func TestEspressoCaffNode(t *testing.T) {
@@ -86,7 +115,8 @@ func TestEspressoCaffNode(t *testing.T) {
 
 	log.Info("Starting the caff node")
 	// start the node
-	builderCaffNode, cleanupCaffNode := createCaffNode(ctx, t, builder)
+	builder, cleanupCaffNode := createCaffNode(ctx, t, builder)
+	builderCaffNode := builder.L2
 	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
@@ -138,4 +168,42 @@ func TestEspressoCaffNode(t *testing.T) {
 	// Send transaction to CaffNode and it should works later
 	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
 	Require(t, err)
+}
+
+// RequireErr:
+// This serves to assert that we should be expecting some error during the test, and if there is not an error, fail the test.
+func RequireErr(t *testing.T, err error, expectedError error) {
+	t.Helper()
+	if err == nil {
+		log.Error("expected an error to occurr", "expected error", expectedError)
+		t.Fatal(err, expectedError)
+	}
+}
+
+// This tests that the caff node config validates that known versions of arb sequencers are not enabled if the caff node is.
+func TestCaffNodeConfig(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	builder := createCaffNodeConfig(ctx, t)
+	err := builder.nodeConfig.Validate()
+	Require(t, err)
+
+	expectedErr := errors.New("cannot start a Caff node with any sequencer enabled")
+	// Test if this node is attempting to be a sequencer
+	builder.nodeConfig.Sequencer = true
+	err = builder.nodeConfig.Validate()
+	RequireErr(t, err, expectedErr)
+	// Test the delayed sequencer
+	builder.nodeConfig.Sequencer = false
+	builder.nodeConfig.DelayedSequencer.Enable = true
+
+	err = builder.nodeConfig.Validate()
+	RequireErr(t, err, expectedErr)
+
+	builder.nodeConfig.DelayedSequencer.Enable = false
+	builder.nodeConfig.SeqCoordinator.Enable = true
+
+	err = builder.nodeConfig.Validate()
+	RequireErr(t, err, expectedErr)
+
 }
