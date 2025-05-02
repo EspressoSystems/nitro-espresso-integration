@@ -51,8 +51,13 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, certifica
 		return certHash, nil
 	}
 
-	// If not verified, try and verify the certificate
-	tx, err := e.contract.VerifyCert(opts, certificate, parentCertHash, isCA)
+	// If not verified, try and verify the certificate either CA or client
+	var tx *types.Transaction
+	if isCA {
+		tx, err = e.contract.VerifyCACert(opts, certificate, parentCertHash)
+	} else {
+		tx, err = e.contract.VerifyClientCert(opts, certificate, parentCertHash)
+	}
 	if err != nil {
 		return certHash, err
 	}
