@@ -954,6 +954,7 @@ func (s *batchSegments) addSegment(segment []byte, isHeader bool) (bool, error) 
 		return false, err
 	}
 	if overflow {
+		log.Info("Batch is full and closed. Adding next message would cause an overflow.")
 		return false, s.close()
 	}
 	s.rawSegments = append(s.rawSegments, segment)
