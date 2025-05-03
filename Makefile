@@ -39,6 +39,7 @@ ifeq ($(UNAME_S), Darwin)
   export CGO_LDFLAGS := -Wl,-no_warn_duplicate_libraries
 endif
 
+
 precompile_names = AddressTable Aggregator BLS Debug FunctionTable GasInfo Info osTest Owner RetryableTx Statistics Sys
 precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 
@@ -154,27 +155,40 @@ stylus_test_hostio-test_src       = $(call get_stylus_test_rust,hostio-test)
 
 stylus_test_wasms = $(stylus_test_keccak_wasm) $(stylus_test_keccak-100_wasm) $(stylus_test_fallible_wasm) $(stylus_test_storage_wasm) $(stylus_test_multicall_wasm) $(stylus_test_log_wasm) $(stylus_test_create_wasm) $(stylus_test_math_wasm) $(stylus_test_sdk-storage_wasm) $(stylus_test_erc20_wasm) $(stylus_test_read-return-data_wasm) $(stylus_test_evm-data_wasm) $(stylus_test_hostio-test_wasm) $(stylus_test_bfs:.b=.wasm)
 stylus_benchmarks = $(wildcard $(stylus_dir)/*.toml $(stylus_dir)/src/*.rs) $(stylus_test_wasms)
+CBROTLI_WASM_BUILD_ARGS ?=-d
 
-espresso_crypto_dir = ./espressocrypto/lib/espresso-crypto-helper
-espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_crypto_dir)/src/*.rs)
-espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper
-espresso_crypto_filename = libespresso_crypto_helper.so
-ifeq ($(UNAME_S), Darwin)
-	espresso_crypto_filename = libespresso_crypto_helper.dylib
-else
-	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
+ESPRESSO_NETWORK_DIR := $(shell go list -m -f '{{.Dir}}' github.com/EspressoSystems/espresso-network-go 2>/dev/null)
+ifeq ($(ESPRESSO_NETWORK_DIR),)
+    $(error Could not find github.com/EspressoSystems/espresso-network-go)
 endif
 
-CBROTLI_WASM_BUILD_ARGS ?=-d
+# Local copy will be at repo root
+LOCAL_ESPRESSO_CRYPTO_DIR := $(CURDIR)/espresso-verification
+LOCAL_ESPRESSO_CRYPTO_FILES := $(wildcard $(LOCAL_ESPRESSO_CRYPTO_DIR)/*.toml $(LOCAL_ESPRESSO_CRYPTO_DIR)/src/*.rs)
+
+espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper
+espresso_crypto_filename = libespresso_crypto_helper.so
+
+ifeq ($(UNAME_S), Darwin)
+    espresso_crypto_filename = libespresso_crypto_helper.dylib
+else
+    export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
+endif
+
+# Copy the verification directory to repo root
+$(LOCAL_ESPRESSO_CRYPTO_DIR): $(DEP_PREDICATE)
+	@mkdir -p $(LOCAL_ESPRESSO_CRYPTO_DIR)
+	@cp -r $(ESPRESSO_NETWORK_DIR)/verification/* $(LOCAL_ESPRESSO_CRYPTO_DIR)/
+	chmod -R 777 $(LOCAL_ESPRESSO_CRYPTO_DIR)
 
 # user targets
 .PHONY: build-espresso-crypto-lib
 build-espresso-crypto-lib: $(espresso_crypto_lib)
 
-$(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
-	mkdir -p `dirname $(espresso_crypto_lib)`
-	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
+$(espresso_crypto_lib): $(LOCAL_ESPRESSO_CRYPTO_DIR) $(LOCAL_ESPRESSO_CRYPTO_FILES)
+	@mkdir -p `dirname $(espresso_crypto_lib)`
+	@cargo build --release --manifest-path $(LOCAL_ESPRESSO_CRYPTO_DIR)/rust/Cargo.toml
+	@install $(LOCAL_ESPRESSO_CRYPTO_DIR)/rust/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
 
 .PHONY: push
 push: lint test-go .make/fmt
@@ -308,8 +322,8 @@ clean:
 	@rm -rf contracts/build contracts/cache solgen/go/
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
-	cargo clean --manifest-path $(espresso_crypto_dir)/Cargo.toml
-
+	@rm -rf $(LOCAL_ESPRESSO_CRYPTO_DIR)
+	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
 # Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib
 	ln -s lib $(output_root)/lib64

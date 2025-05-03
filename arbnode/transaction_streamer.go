@@ -23,7 +23,6 @@ import (
 	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network-go/tagged-base64"
 	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
-	espressoVerification "github.com/EspressoSystems/espresso-network-go/verification"
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
@@ -38,6 +37,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
 	m "github.com/offchainlabs/nitro/broadcaster/message"
+	verification "github.com/offchainlabs/nitro/espresso-verification"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/util"
@@ -1452,7 +1452,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
 
-	ok, err := espressoVerification.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
+	ok, err := verification.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
 	if err.Error() != "" || !ok {
 		log.Error("error validating merkle proof", "root", snapshot.Root, "height", height, "err", err)
 		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d): %w", height, snapshot.Height, err)
@@ -1464,7 +1464,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		return fmt.Errorf("failed to fetch the transactions in block (height: %d): %w", height, err)
 	}
 
-	namespaceOk, err := espressoVerification.VerifyNamespace(
+	namespaceOk, err := verification.VerifyNamespace(
 		s.chainConfig.ChainID.Uint64(),
 		resp.Proof,
 		*header.Header.GetPayloadCommitment(),

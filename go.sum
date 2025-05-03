@@ -30,6 +30,8 @@ github.com/EspressoSystems/espresso-network-go v0.0.36 h1:QzWVoQ85Row5cfCnuwQgSL
 github.com/EspressoSystems/espresso-network-go v0.0.36/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
 github.com/EspressoSystems/espresso-network-go v0.0.37-0.20250501212143-64fbeded042a h1:l0Y6+SAoY6/SAX2/fldxTOm2p/BQmNjCu5uG5MRhDJg=
 github.com/EspressoSystems/espresso-network-go v0.0.37-0.20250501212143-64fbeded042a/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
+github.com/EspressoSystems/espresso-network-go v0.0.37-0.20250503021402-c4100a1cb014 h1:ZNVYehsoj4EHeCr9nnldJwPHngmR6AZeGL67GdFn6u8=
+github.com/EspressoSystems/espresso-network-go v0.0.37-0.20250503021402-c4100a1cb014/go.mod h1:lxD5XYGtL68DXpIF5N8caLZ3ksjxNowLAvf1u1q0jgo=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible h1:1G1pk05UrOh0NlF1oeaaix1x8XzrfjIDK47TY0Zehcw=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=
