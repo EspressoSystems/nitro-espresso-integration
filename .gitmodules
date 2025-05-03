@@ -40,3 +40,7 @@
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
 	branch = integration
+[submodule "espresso-network-go"]
+	path = espresso-network-go
+	url = https://github.com/EspressoSystems/espresso-network-go
+	branch = use-dynamic-without-arch

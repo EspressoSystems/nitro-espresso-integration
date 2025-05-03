@@ -118,6 +118,7 @@ COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
 RUN apt-get update && apt-get install -y cmake
+
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 
 RUN apt-get update && \
@@ -127,8 +128,9 @@ RUN apt-get update && \
     perl \
     perl-modules-5.36 \
     libfindbin-libs-perl
+
+COPY ./espresso-network-go ./espresso-network-go
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-espresso-crypto-lib
-COPY espresso-verification espresso-verification
 
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
@@ -253,6 +255,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y wabt
 COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
+COPY espresso-network-go/go.mod espresso-network-go/go.sum espresso-network-go/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 COPY bold/go.mod bold/go.sum bold/
 RUN go mod download
