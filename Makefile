@@ -46,7 +46,7 @@ precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 output_root=target
 output_latest=$(output_root)/machines/latest
 
-repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das espressocrypto precompiles solgen system_tests util validator wavmio
+repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das  precompiles solgen system_tests util validator wavmio
 go_source.go = $(wildcard $(patsubst %,%/*.go, $(repo_dirs)) $(patsubst %,%/*/*.go, $(repo_dirs)))
 go_source.s  = $(wildcard $(patsubst %,%/*.s, $(repo_dirs)) $(patsubst %,%/*/*.s, $(repo_dirs)))
 go_source = $(go_source.go) $(go_source.s)

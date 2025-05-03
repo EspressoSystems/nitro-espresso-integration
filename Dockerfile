@@ -114,7 +114,6 @@ COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/jit arbitrator/jit
 COPY arbitrator/stylus arbitrator/stylus
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
-COPY espressocrypto espressocrypto
 COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
@@ -129,6 +128,7 @@ RUN apt-get update && \
     perl-modules-5.36 \
     libfindbin-libs-perl
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-espresso-crypto-lib
+COPY espresso-verification espresso-verification
 
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
