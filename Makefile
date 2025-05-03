@@ -175,13 +175,11 @@ else
     export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
 endif
 
-# Copy the verification directory to repo root
 $(LOCAL_ESPRESSO_CRYPTO_DIR): $(DEP_PREDICATE)
 	@mkdir -p $(LOCAL_ESPRESSO_CRYPTO_DIR)
 	@cp -r $(ESPRESSO_NETWORK_DIR)/verification/* $(LOCAL_ESPRESSO_CRYPTO_DIR)/
 	chmod -R 777 $(LOCAL_ESPRESSO_CRYPTO_DIR)
 
-# user targets
 .PHONY: build-espresso-crypto-lib
 build-espresso-crypto-lib: $(espresso_crypto_lib)
 
