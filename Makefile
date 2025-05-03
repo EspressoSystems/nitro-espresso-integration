@@ -179,8 +179,11 @@ $(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
 	mkdir -p `dirname $(espresso_crypto_lib)`
 	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
 	mkdir -p $(espresso_target_lib)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(espresso_target_lib)/$(espresso_crypto_filename)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
+	ls -la ./espresso-network-go/verification/rust/target/release/libespresso_crypto_helper.so
+	install -v $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(espresso_target_lib)/$(espresso_crypto_filename)
+	install -v $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
+	ls -la ./espresso-network-go/target/lib/
+	ls -la target/lib/
 
 .PHONY: push
 push: lint test-go .make/fmt
