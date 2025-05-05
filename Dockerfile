@@ -126,6 +126,7 @@ RUN apt-get update && \
     libssl-dev \
     pkg-config \
     perl \
+    curl \
     perl-modules-5.36 \
     libfindbin-libs-perl
 
@@ -256,6 +257,11 @@ COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 COPY bold/go.mod bold/go.sum bold/
+ARG ESPRESSO_NETWORK_GO_VER=0.0.36
+ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz /source.tgz
+RUN mkdir -p ./espresso-network-go && \
+    tar -xzf /source.tgz --strip-components=1 -C ./espresso-network-go
+COPY ./espresso-network-go/go.mod ./espresso-network-go/go.sum ./espresso-network-go/
 RUN go mod download
 COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/

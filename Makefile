@@ -181,11 +181,6 @@ espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_cryp
 espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper
 espresso_crypto_filename = libespresso_crypto_helper.so
 espresso_target_lib = $(ESPRESSO_DIR)/target/lib
-# ifeq ($(UNAME_S), Darwin)
-# 	espresso_crypto_filename = libespresso_crypto_helper.dylib
-# else
-# 	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
-# endif
 
 
 # Normalize architecture names
@@ -231,7 +226,7 @@ build-espresso-crypto-lib: $(ESPRESSO_DIR)
 	mkdir -p $(espresso_target_lib)
 	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.$(LIB_EXT) \
 		$(espresso_target_lib)/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
+	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
 
 .PHONY: push
 push: lint test-go .make/fmt

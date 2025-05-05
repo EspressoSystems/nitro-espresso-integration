@@ -1453,7 +1453,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	blockMerkleTreeRoot := nextHeader.Header.GetBlockMerkleTreeRoot()
 
 	ok, err := espressoVerification.VerifyMerkleProof(proof.Proof, jsonHeader, *blockMerkleTreeRoot, snapshot.Root)
-	if err.Error() != "" || !ok {
+	if err != nil || !ok {
 		log.Error("error validating merkle proof", "root", snapshot.Root, "height", height, "err", err)
 		return fmt.Errorf("error validating merkle proof (height: %d, snapshot height: %d): %w", height, snapshot.Height, err)
 	}
@@ -1473,7 +1473,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		resp.VidCommon,
 	)
 
-	if err.Error() != "" || !namespaceOk {
+	if err != nil || !namespaceOk {
 		log.Error("error validating namespace proof", "root", snapshot.Root, "height", height, "err", err)
 		return fmt.Errorf("error validating namespace proof (height: %d): %w", height, err)
 	}
