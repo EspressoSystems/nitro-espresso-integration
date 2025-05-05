@@ -32,6 +32,8 @@ ifneq ($(origin GOLANG_LDFLAGS),undefined)
 endif
 
 UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
 
 # In Mac OSX, there are a lot of warnings emitted if these environment variables aren't set.
 ifeq ($(UNAME_S), Darwin)
@@ -158,29 +160,78 @@ stylus_benchmarks = $(wildcard $(stylus_dir)/*.toml $(stylus_dir)/src/*.rs) $(st
 CBROTLI_WASM_BUILD_ARGS ?=-d
 
 
-espresso_crypto_dir = ./espresso-network-go/verification/rust
+ESPRESSO_NETWORK_GO_VER ?= 0.0.36
+ESPRESSO_TAR = espresso-network-go-$(ESPRESSO_NETWORK_GO_VER).tar.gz
+ESPRESSO_URL = https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$(ESPRESSO_NETWORK_GO_VER).tar.gz
+ESPRESSO_DIR = espresso-network-go
+
+# Download the tarball
+$(ESPRESSO_TAR):
+	curl -L -o $@ $(ESPRESSO_URL)
+
+# Extract into target directory (strip the top-level folder)
+$(ESPRESSO_DIR): $(ESPRESSO_TAR)
+	@echo "Extracting $(ESPRESSO_TAR) into $(ESPRESSO_DIR)/..."
+	rm -rf $(ESPRESSO_DIR)
+	mkdir -p $(ESPRESSO_DIR)
+	tar -xzf $(ESPRESSO_TAR) --strip-components=1 -C $(ESPRESSO_DIR)
+
+espresso_crypto_dir = $(ESPRESSO_DIR)/verification/rust
 espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_crypto_dir)/src/*.rs)
 espresso_crypto_lib = $(output_root)/lib/libespresso_crypto_helper
 espresso_crypto_filename = libespresso_crypto_helper.so
-espresso_target_lib = ./espresso-network-go/target/lib
-ifeq ($(UNAME_S), Darwin)
+espresso_target_lib = $(ESPRESSO_DIR)/target/lib
+# ifeq ($(UNAME_S), Darwin)
+# 	espresso_crypto_filename = libespresso_crypto_helper.dylib
+# else
+# 	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
+# endif
+
+
+# Normalize architecture names
+ifeq ($(UNAME_M),arm64)
+    # Apple Silicon reports as arm64, but Rust uses aarch64
+    DETECTED_ARCH := aarch64
+else
+    DETECTED_ARCH := $(UNAME_M)
+endif
+
+# Determine target triple
+ifeq ($(DETECTED_ARCH),aarch64)
+    ifeq ($(UNAME_S),Darwin)
+        TRIPLE := aarch64-apple-darwin
+    else
+        TRIPLE := aarch64-unknown-linux-gnu
+    endif
+else ifeq ($(DETECTED_ARCH),x86_64)
+    ifeq ($(UNAME_S),Darwin)
+        TRIPLE := x86_64-apple-darwin
+    else
+        TRIPLE := x86_64-unknown-linux-gnu
+    endif
+else
+    $(error Architecture $(DETECTED_ARCH) is not supported)
+endif
+
+# Set library extension based on OS
+ifeq ($(UNAME_S),Darwin)
+    LIB_EXT := dylib
 	espresso_crypto_filename = libespresso_crypto_helper.dylib
 else
+    LIB_EXT := so
 	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
 endif
 
-CBROTLI_WASM_BUILD_ARGS ?=-d
 
 # user targets
 .PHONY: build-espresso-crypto-lib
-build-espresso-crypto-lib: $(espresso_crypto_lib)
-
-$(espresso_crypto_lib): $(DEP_PREDICATE) $(espresso_crypto_files)
+build-espresso-crypto-lib: $(ESPRESSO_DIR)
 	mkdir -p `dirname $(espresso_crypto_lib)`
 	cargo build --release --manifest-path $(espresso_crypto_dir)/Cargo.toml
 	mkdir -p $(espresso_target_lib)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(espresso_target_lib)/$(espresso_crypto_filename)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
+	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.$(LIB_EXT) \
+		$(espresso_target_lib)/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
+	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
 
 .PHONY: push
 push: lint test-go .make/fmt
@@ -315,8 +366,8 @@ clean:
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
 	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
-	cargo clean --manifest-path $(espresso_crypto_dir)/Cargo.toml
-	rm -rf $(espresso_target_lib)
+	rm -f $(ESPRESSO_TAR)
+	rm -rf $(ESPRESSO_DIR)
 # Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib
 	ln -s lib $(output_root)/lib64
