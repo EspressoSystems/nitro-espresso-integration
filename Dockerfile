@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim AS brotli-wasm-builder
+FROM debian:bookworm-slim AS brotli-wasm-builder 
 WORKDIR /workspace
 RUN apt-get update && \
     apt-get install -y cmake make git lbzip2 python3 xz-utils && \
@@ -105,7 +105,7 @@ COPY --from=contracts-builder workspace/contracts/node_modules/@offchainlabs/upg
 COPY --from=contracts-builder workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
-FROM rust:1.83.0-slim-bookworm AS prover-header-builder
+FROM rust:1.83.0-slim-bookworm AS prover-header-builder 
 WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
@@ -295,7 +295,33 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "FuzzStateTransition", "--binary-path",
 
 FROM debian:bookworm-slim AS nitro-node-slim
 WORKDIR /home/user
-COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper-aarch64-unknown-linux-gnu.so /usr/local/lib/
+
+# Copy the detected architecture and OS from the detector stage
+COPY --from=nitro-fuzzer /arch.txt /arch.txt
+COPY --from=nitro-fuzzer /os.txt /os.txt
+
+# Set environment variables
+ARG DETECTED_ARCH=$(cat /arch.txt)
+ARG UNAME_S=$(cat /os.txt)
+
+# Now use logic similar to your Makefile
+RUN if [ "$DETECTED_ARCH" = "aarch64" ]; then \
+        if [ "$UNAME_S" = "Darwin" ]; then \
+            TRIPLE="aarch64-apple-darwin"; \
+        else \
+            TRIPLE="aarch64-unknown-linux-gnu"; \
+        fi; \
+    elif [ "$DETECTED_ARCH" = "x86_64" ]; then \
+        if [ "$UNAME_S" = "Darwin" ]; then \
+            TRIPLE="x86_64-apple-darwin"; \
+        else \
+            TRIPLE="x86_64-unknown-linux-gnu"; \
+        fi; \
+    else \
+        echo "Architecture ${DETECTED_ARCH} is not supported" && exit 1; \
+    fi && \
+    echo "TRIPLE=${TRIPLE}" > /etc/triple
+COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper-$(cat /triple.txt).so /usr/local/lib/
 RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
