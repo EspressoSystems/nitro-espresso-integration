@@ -226,7 +226,7 @@ build-espresso-crypto-lib: $(ESPRESSO_DIR)
 	mkdir -p $(espresso_target_lib)
 	install $(espresso_crypto_dir)/target/release/libespresso_crypto_helper.$(LIB_EXT) \
 		$(espresso_target_lib)/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
-	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/$(espresso_crypto_filename)
+	install $(espresso_crypto_dir)/target/release/$(espresso_crypto_filename) $(output_root)/lib/libespresso_crypto_helper-$(TRIPLE).$(LIB_EXT)
 
 .PHONY: push
 push: lint test-go .make/fmt

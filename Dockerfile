@@ -261,7 +261,6 @@ ARG ESPRESSO_NETWORK_GO_VER=0.0.36
 ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
 RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
     mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
-COPY espresso-network-go/go.mod espresso-network-go/go.sum espresso-network-go/
 RUN go mod download
 COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
@@ -288,7 +287,7 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "FuzzStateTransition", "--binary-path",
 
 FROM debian:bookworm-slim AS nitro-node-slim
 WORKDIR /home/user
-COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper.so /usr/local/lib/
+COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper-aarch64-unknown-linux-gnu.so /usr/local/lib/
 RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
