@@ -1100,21 +1100,18 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	//  If light client reader and espresso client are set, then we need to store the pos in the database
 	//  to be used later to submit the message to hotshot for finalization.
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		//  Only submit the transaction if escape hatch is not enabled
-		if s.shouldSubmitEspressoTransaction() {
-			for i := range messages {
-				idx, err := safecast.ToUint64(i)
-				if err != nil {
-					return err
-				}
-				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
-				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
-				if err != nil {
-					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
-					return err
-				}
-				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
+		for i := range messages {
+			idx, err := safecast.ToUint64(i)
+			if err != nil {
+				return err
 			}
+			log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
+			err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
+			if err != nil {
+				log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
+				return err
+			}
+			log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
 		}
 	}
 
@@ -1304,7 +1301,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	batch := s.db.NewBatch()
 	newSubmittedTxns := []arbutil.SubmittedEspressoTx{}
-	lastConfirmedPos := arbutil.MessageIndex(0)
 	for _, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
 		submittedTxHash, err := tagged_base64.Parse(hash)
@@ -1352,18 +1348,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			continue
 		}
 
-		if submittedTx.Pos[len(submittedTx.Pos)-1] > lastConfirmedPos {
-			lastConfirmedPos = submittedTx.Pos[len(submittedTx.Pos)-1]
-		}
-
 	}
 
-	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
-	if err != nil {
-		return fmt.Errorf("failed to set last confirmed pos: %w", err)
-	}
-
-	// this will be remmoved in other PRs
 	err = s.setEspressoSubmittedTxns(batch, newSubmittedTxns)
 	if err != nil {
 		return fmt.Errorf("failed to set espresso submitted txns: %w", err)
@@ -1423,22 +1409,6 @@ func (s *TransactionStreamer) getEspressoSubmittedTxns() ([]arbutil.SubmittedEsp
 	return tx, nil
 }
 
-func (s *TransactionStreamer) getLastConfirmedPos() (*arbutil.MessageIndex, error) {
-	lastConfirmedBytes, err := s.db.Get(espressoLastConfirmedPos)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var lastConfirmed arbutil.MessageIndex
-	err = rlp.DecodeBytes(lastConfirmedBytes, &lastConfirmed)
-	if err != nil {
-		return nil, err
-	}
-	return &lastConfirmed, nil
-}
-
 func (s *TransactionStreamer) getEspressoPendingTxnsPos() ([]arbutil.MessageIndex, error) {
 
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
@@ -1472,19 +1442,6 @@ func (s *TransactionStreamer) setEspressoSubmittedTxns(batch ethdb.KeyValueWrite
 		return err
 	}
 
-	return nil
-}
-
-func (s *TransactionStreamer) setEspressoLastConfirmedPos(batch ethdb.KeyValueWriter, pos *arbutil.MessageIndex) error {
-	posBytes, err := rlp.EncodeToBytes(pos)
-	if err != nil {
-		return err
-	}
-	err = batch.Put(espressoLastConfirmedPos, posBytes)
-	if err != nil {
-		return err
-
-	}
 	return nil
 }
 
@@ -1655,20 +1612,13 @@ func getLogLevel(err error) func(string, ...interface{}) {
 	return logLevel
 }
 
-/**
- * Submits the transactions to espresso if the escape hatch is not enabled
- */
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
 	retryRate := s.espressoTxnsPollingInterval * 2
-	shouldSubmit := s.shouldSubmitEspressoTransaction()
-	// Only submit the transaction if escape hatch is not enabled
-	if shouldSubmit {
-		err := s.submitEspressoTransactions(ctx)
-		if err != nil {
-			log.Error("failed to submit espresso transactions", "err", err)
-			return retryRate
-		}
+	err := s.submitEspressoTransactions(ctx)
+	if err != nil {
+		log.Error("failed to submit espresso transactions", "err", err)
+		return retryRate
 	}
 	return s.espressoTxnsPollingInterval
 }
@@ -1698,13 +1648,6 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 		s.lastSubmitFailureAt = nil
 	}
 	return s.espressoTxnsPollingInterval
-}
-
-func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
-	if s.espressoClient == nil && s.lightClientReader == nil {
-		return false
-	}
-	return true
 }
 
 func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Context, submittedTxns []arbutil.SubmittedEspressoTx) bool {
