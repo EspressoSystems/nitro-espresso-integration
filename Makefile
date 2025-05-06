@@ -163,7 +163,7 @@ CBROTLI_WASM_BUILD_ARGS ?=-d
 ESPRESSO_NETWORK_GO_VER ?= 0.0.36
 ESPRESSO_TAR = espresso-network-go-$(ESPRESSO_NETWORK_GO_VER).tar.gz
 ESPRESSO_URL = https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$(ESPRESSO_NETWORK_GO_VER).tar.gz
-ESPRESSO_DIR = espresso-network-go
+ESPRESSO_DIR = ./espresso-network-go
 
 # Download the tarball
 $(ESPRESSO_TAR):
