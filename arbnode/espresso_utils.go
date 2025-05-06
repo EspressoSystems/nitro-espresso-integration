@@ -8,6 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -44,4 +46,28 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 	}
 	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client)
 	return nitroVerifier, nil
+}
+
+func getMessageForSubmittingToEspresso(
+	pos arbutil.MessageIndex,
+	fetcher func(pos arbutil.MessageIndex) (*arbostypes.MessageWithMetadata, error)) (*arbostypes.MessageWithMetadata, error) {
+	msg, err := fetcher(pos)
+	if err != nil {
+		return nil, err
+	}
+	if pos > 1 {
+		prevMsg, err := fetcher(pos - 1)
+		if err != nil {
+			return nil, err
+		}
+		if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
+			// This message is a delayed message, and it should not be included
+			// in the hotshot payload. The caff node is supposed to fetch the delayed message
+			// from L1.
+			// setting `msg.Message` to `nil` will cause a rlp decode/encode error
+			// so we set `L2msg` to an empty byte slice instead
+			msg.Message.L2msg = []byte{}
+		}
+	}
+	return msg, nil
 }
