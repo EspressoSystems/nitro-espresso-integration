@@ -56,10 +56,8 @@ COPY arbitrator/prover arbitrator/prover
 COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
-ARG ESPRESSO_NETWORK_GO_VER=0.0.36
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
+RUN  make ESPRESSO_DIR=espresso-network-go
+COPY ./espresso-network-go ./espresso-network-go
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
@@ -94,10 +92,7 @@ COPY ./safe-smart-account ./safe-smart-account
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
-ARG ESPRESSO_NETWORK_GO_VER=0.0.36
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
+COPY --from=wasm-libs-builder /workspace/espresso-network-go ./espresso-network-go 
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/precompiles/ contracts/build/contracts/src/precompiles/
@@ -265,10 +260,7 @@ COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 COPY bold/go.mod bold/go.sum bold/
-ARG ESPRESSO_NETWORK_GO_VER=0.0.36
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
+COPY --from=wasm-libs-builder /workspace/espresso-network-go ./espresso-network-go
 RUN go mod download
 COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
@@ -296,28 +288,7 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "FuzzStateTransition", "--binary-path",
 FROM debian:bookworm-slim AS nitro-node-slim
 WORKDIR /home/user
 
-# Copy the detected architecture and OS from the detector stage
-COPY --from=nitro-fuzzer /arch.txt /arch.txt
-COPY --from=nitro-fuzzer /os.txt /os.txt
-
-# Set environment variables
-ARG DETECTED_ARCH=$(cat /arch.txt)
-ARG UNAME_S=$(cat /os.txt)
-
-# Determine architecture and set TRIPLE
-RUN DETECTED_ARCH=$(cat /arch.txt) && \
-    if [ "$DETECTED_ARCH" = "aarch64" ]; then \
-        TRIPLE="aarch64-unknown-linux-gnu"; \
-    elif [ "$DETECTED_ARCH" = "x86_64" ]; then \
-        TRIPLE="x86_64-unknown-linux-gnu"; \
-    else \
-        echo "Architecture ${DETECTED_ARCH} is not supported" && exit 1; \
-    fi && \
-    echo $TRIPLE > /triple.txt
-
-# Copy the library using the determined TRIPLE
-RUN TRIPLE=$(cat /triple.txt) && \
-    cp /workspace/target/lib/libespresso_crypto_helper-${TRIPLE}.so /usr/local/lib/
+COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper-*.so /usr/local/lib/
 RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
