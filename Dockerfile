@@ -132,6 +132,7 @@ RUN apt-get update && \
     apt-get install -y \
     libssl-dev \
     pkg-config \
+    curl \
     perl \
     perl-modules-5.36 \
     libfindbin-libs-perl
