@@ -304,24 +304,20 @@ COPY --from=nitro-fuzzer /os.txt /os.txt
 ARG DETECTED_ARCH=$(cat /arch.txt)
 ARG UNAME_S=$(cat /os.txt)
 
-# Now use logic similar to your Makefile
-RUN if [ "$DETECTED_ARCH" = "aarch64" ]; then \
-        if [ "$UNAME_S" = "Darwin" ]; then \
-            TRIPLE="aarch64-apple-darwin"; \
-        else \
-            TRIPLE="aarch64-unknown-linux-gnu"; \
-        fi; \
+# Determine architecture and set TRIPLE
+RUN DETECTED_ARCH=$(cat /arch.txt) && \
+    if [ "$DETECTED_ARCH" = "aarch64" ]; then \
+        TRIPLE="aarch64-unknown-linux-gnu"; \
     elif [ "$DETECTED_ARCH" = "x86_64" ]; then \
-        if [ "$UNAME_S" = "Darwin" ]; then \
-            TRIPLE="x86_64-apple-darwin"; \
-        else \
-            TRIPLE="x86_64-unknown-linux-gnu"; \
-        fi; \
+        TRIPLE="x86_64-unknown-linux-gnu"; \
     else \
         echo "Architecture ${DETECTED_ARCH} is not supported" && exit 1; \
     fi && \
-    echo "TRIPLE=${TRIPLE}" > /etc/triple
-COPY --from=node-builder /workspace/target/lib/libespresso_crypto_helper-$(cat /triple.txt).so /usr/local/lib/
+    echo $TRIPLE > /triple.txt
+
+# Copy the library using the determined TRIPLE
+RUN TRIPLE=$(cat /triple.txt) && \
+    cp /workspace/target/lib/libespresso_crypto_helper-${TRIPLE}.so /usr/local/lib/
 RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
