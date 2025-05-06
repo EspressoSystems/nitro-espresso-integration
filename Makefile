@@ -171,9 +171,10 @@ $(ESPRESSO_TAR):
 
 # Extract into target directory (strip the top-level folder)
 $(ESPRESSO_DIR): $(ESPRESSO_TAR)
+	@echo "Extracting $(ESPRESSO_TAR) into $(ESPRESSO_DIR)/..."
 	rm -rf $(ESPRESSO_DIR)
-	tar -xzf $(ESPRESSO_TAR)
-	mv espresso-network-go-$(ESPRESSO_NETWORK_GO_VER) $(ESPRESSO_DIR)
+	mkdir -p $(ESPRESSO_DIR)
+	tar -xzf $(ESPRESSO_TAR) --strip-components=1 -C $(ESPRESSO_DIR)
 
 espresso_crypto_dir = $(ESPRESSO_DIR)/verification/rust
 espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_crypto_dir)/src/*.rs)

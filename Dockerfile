@@ -56,7 +56,10 @@ COPY arbitrator/prover arbitrator/prover
 COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
-RUN make ESPRESSO_DIR=espresso-network-go
+ARG ESPRESSO_NETWORK_GO_VER=0.0.36
+ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
+RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
+    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
@@ -91,7 +94,10 @@ COPY ./safe-smart-account ./safe-smart-account
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
-RUN make ESPRESSO_DIR=espresso-network-go
+ARG ESPRESSO_NETWORK_GO_VER=0.0.36
+ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
+RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
+    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/precompiles/ contracts/build/contracts/src/precompiles/
@@ -260,7 +266,10 @@ COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 COPY bold/go.mod bold/go.sum bold/
 COPY ./Makefile .
-RUN make ESPRESSO_DIR=espresso-network-go
+ARG ESPRESSO_NETWORK_GO_VER=0.0.36
+ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
+RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
+    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 RUN go mod download
 COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
