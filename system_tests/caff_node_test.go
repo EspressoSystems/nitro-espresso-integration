@@ -77,15 +77,17 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 
 	return builder
 }
+
 // assertEventOrderingHelper is a simple helper fuction that assists in converting the errors presented by the event functions to booleans and passing them back over the channel
-func assertEventOrderingHelper(channel chan bool, eventFunc func()(error)){
-  err := eventFunc() 
-  if err != nil{
-    channel <- false
-  } else{
-    channel <- true
-  }
+func assertEventOrderingHelper(channel chan bool, eventFunc func() error) {
+	err := eventFunc()
+	if err != nil {
+		channel <- false
+	} else {
+		channel <- true
+	}
 }
+
 // AssertEventOrdering:
 // This function is responsible for asserting that 2 concurrent events happen in a specific order.
 //
@@ -97,38 +99,38 @@ func assertEventOrderingHelper(channel chan bool, eventFunc func()(error)){
 // Parameters:
 // firstEventFunc: A function that can be executed as a goroutine and has an error condition that can be mapped to success vs failure. This should capture the event that should happen first
 // secondEventFunc: A function that can be executed as a goroutine and has an error condition that can be mapped to success vs failure. This should capture the event that should happen second
-func AssertEventOrdering(t *testing.T, firstEventFunc func()(error), secondEventFunc func()(error)){
-  var firstEventSuccess bool
-  var eventOrderSuccess bool
-  firstEvent := make(chan bool)
-  secondEvent := make(chan bool)
-  go assertEventOrderingHelper(firstEvent, firstEventFunc) 
-  go assertEventOrderingHelper(secondEvent, secondEventFunc)
-  for {
-    select{
-      case success := <- firstEvent:
-        if success {
-          firstEventSuccess = true
-        } else {
-          t.Fatal("First event in ordered assert did not succeed")
-        }
-      case success := <- secondEvent:
-        if !success{
-          t.Fatal("Second event in ordered assert did not succeed")
-        }
-        if !firstEventSuccess{
-          t.Fatal("Events occurred in an incorrect order according to the assertion")
-        } else {
-          eventOrderSuccess = true
-          break
-        }
-        
-    }
-    if eventOrderSuccess{
-      break
-    }
-  }
-  log.Info("Exiting for loop in assertEventOrderingHelper")
+func AssertEventOrdering(t *testing.T, firstEventFunc func() error, secondEventFunc func() error) {
+	var firstEventSuccess bool
+	var eventOrderSuccess bool
+	firstEvent := make(chan bool)
+	secondEvent := make(chan bool)
+	go assertEventOrderingHelper(firstEvent, firstEventFunc)
+	go assertEventOrderingHelper(secondEvent, secondEventFunc)
+	for {
+		select {
+		case success := <-firstEvent:
+			if success {
+				firstEventSuccess = true
+			} else {
+				t.Fatal("First event in ordered assert did not succeed")
+			}
+		case success := <-secondEvent:
+			if !success {
+				t.Fatal("Second event in ordered assert did not succeed")
+			}
+			if !firstEventSuccess {
+				t.Fatal("Events occurred in an incorrect order according to the assertion")
+			} else {
+				eventOrderSuccess = true
+				break
+			}
+
+		}
+		if eventOrderSuccess {
+			break
+		}
+	}
+	log.Info("Exiting for loop in assertEventOrderingHelper")
 }
 
 func TestEspressoCaffNode(t *testing.T) {
@@ -231,8 +233,8 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 }
 
-func Setup(t *testing.T)(context.Context, common.Address, info, string , context.CancelFunc, func(), *NodeBuilder, func(), func()){
-  ctx, cancel := context.WithCancel(context.Background())
+func Setup(t *testing.T) (context.Context, common.Address, info, string, context.CancelFunc, func(), *NodeBuilder, func(), func()) {
+	ctx, cancel := context.WithCancel(context.Background())
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 
@@ -251,15 +253,15 @@ func Setup(t *testing.T)(context.Context, common.Address, info, string , context
 	l2Info := builder.L2Info
 	l2Info.GenerateAccount(newAccount)
 	addr := l2Info.GetAddress(newAccount)
-  return ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso
+	return ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso
 }
 
 func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-  defer cancel()
-  defer valNodeCleanup()
-  defer cleanup()
-  defer cleanEspresso()
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
 	// Set caff node config variables
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
@@ -278,41 +280,40 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
 	// Check the caff node RPC for tx. assert that it is not there.
-  _, _, err := builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
+	_, _, err := builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
 	ExpectErr(t, err, ethereum.NotFound)
- 
-  // Create the event function closures for the assert statement.
-  firstEvent := func() error{
-    err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
-	  	header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
-	  	Require(t, err)
-		  return header.Number.Int64() >= tx[0].BlockNumber.Int64()+int64(builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth) // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
-	  })
-    return err
-  }
-  secondEvent := func() error{
-    err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
-		  balance := builderCaffNode.GetBalance(t, addr)
-		  log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
-		  if balance.Cmp(transferAmount) >= 0 {
-			  log.Info("Balance has entered account", "balance", balance, "account", newAccount)
-		  }
-		  return balance.Cmp(transferAmount) >= 0
-	  })
-    return err
-  }
-  // Assert that the delayed message should reach the required block depth before the balance appears on the caff node.
-  AssertEventOrdering(t, firstEvent, secondEvent)
-  log.Info("Concurrent events finished in the correct order!")
-	}
 
+	// Create the event function closures for the assert statement.
+	firstEvent := func() error {
+		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
+			header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
+			Require(t, err)
+			return header.Number.Int64() >= tx[0].BlockNumber.Int64()+int64(builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth) // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
+		})
+		return err
+	}
+	secondEvent := func() error {
+		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+			balance := builderCaffNode.GetBalance(t, addr)
+			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+			if balance.Cmp(transferAmount) >= 0 {
+				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+			}
+			return balance.Cmp(transferAmount) >= 0
+		})
+		return err
+	}
+	// Assert that the delayed message should reach the required block depth before the balance appears on the caff node.
+	AssertEventOrdering(t, firstEvent, secondEvent)
+	log.Info("Concurrent events finished in the correct order!")
+}
 
 func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-  defer cancel()
-  defer valNodeCleanup()
-  defer cleanup()
-  defer cleanEspresso()
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
 
 	// Set caff node config vars
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
@@ -331,39 +332,39 @@ func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
 	// Check the caff node RPC for tx. assert that it is not there.
-  _, _, err := builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
+	_, _, err := builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
 	ExpectErr(t, err, ethereum.NotFound)
 	// Wait for the tx header to be finalized.
 
-  firstEvent := func() error {
-    err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
-		  header, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
-		  Require(t, err)
-		  return header.Number.Int64() >= tx[0].BlockNumber.Int64()
-	  })
-    return err
-  }
-  secondEvent := func() error{
-    err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
-		  balance := builderCaffNode.GetBalance(t, addr)
-		  log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
-		  if balance.Cmp(transferAmount) >= 0 {
-			  log.Info("Balance has entered account", "balance", balance, "account", newAccount)
-		  }
-		  return balance.Cmp(transferAmount) >= 0
-	  })
-    return err
-  }
-  AssertEventOrdering(t, firstEvent, secondEvent)
-  log.Info("Concurrent events finished in the correct order!")
+	firstEvent := func() error {
+		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
+			header, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			Require(t, err)
+			return header.Number.Int64() >= tx[0].BlockNumber.Int64()
+		})
+		return err
+	}
+	secondEvent := func() error {
+		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+			balance := builderCaffNode.GetBalance(t, addr)
+			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+			if balance.Cmp(transferAmount) >= 0 {
+				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+			}
+			return balance.Cmp(transferAmount) >= 0
+		})
+		return err
+	}
+	AssertEventOrdering(t, firstEvent, secondEvent)
+	log.Info("Concurrent events finished in the correct order!")
 }
 
 func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-  defer cancel()
-  defer valNodeCleanup()
-  defer cleanup()
-  defer cleanEspresso()
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
 	// set caff node config vars
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
@@ -381,7 +382,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 		WrapL2ForDelayed(t, delayedTx3, builder.L1Info, "Faucet", 100000),
 	})
 	// Wait for the tx to appear on the caff node
-  err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+	err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
 		balance := builderCaffNode.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
 		if balance.Cmp(transferAmount) >= 0 {
@@ -395,7 +396,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	if tx3[0].BlockNumber.Int64() <= finalizedHeader.Number.Int64() {
 		t.Fatal("Tx finalized before appearing in the caff node")
 	}
-  Require(t, err)
+	Require(t, err)
 }
 
 // RequireErr:
