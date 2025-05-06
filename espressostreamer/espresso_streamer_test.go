@@ -25,6 +25,88 @@ import (
 )
 
 func TestEspressoStreamer(t *testing.T) {
+	t.Run("Peek should not change the current position", func(t *testing.T) {
+		ctx := context.Background()
+		mockEspressoClient := new(mockEspressoClient)
+		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{}, 1*time.Second)
+
+		streamer.Reset(1, 3)
+
+		before := streamer.currentMessagePos
+		r := streamer.Peek(ctx)
+		assert.Nil(t, r)
+		assert.Equal(t, before, streamer.currentMessagePos)
+
+		streamer.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{
+			{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             1,
+				HotshotHeight:   3,
+			},
+			{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             2,
+				HotshotHeight:   4,
+			},
+		}
+
+		r = streamer.Peek(ctx)
+		assert.Equal(t, streamer.messageWithMetadataAndPos[0], r)
+		assert.Equal(t, before, streamer.currentMessagePos)
+		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 2)
+	})
+	t.Run("Next should consume a message if it is in buffer", func(t *testing.T) {
+		ctx := context.Background()
+		mockEspressoClient := new(mockEspressoClient)
+		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{}, 1*time.Second)
+
+		streamer.Reset(1, 3)
+
+		// Empty buffer. Should not change anything
+		initialPos := streamer.currentMessagePos
+		r := streamer.Next(ctx)
+		assert.Nil(t, r)
+		assert.Equal(t, initialPos, streamer.currentMessagePos)
+
+		streamer.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{
+			{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             1,
+				HotshotHeight:   3,
+			},
+			{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             2,
+				HotshotHeight:   4,
+			},
+		}
+
+		r = streamer.Next(ctx)
+		assert.Equal(t, streamer.messageWithMetadataAndPos[0], r)
+		assert.Equal(t, initialPos+1, streamer.currentMessagePos)
+		// Buffer should still have 2 messages.
+		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 2)
+
+		// Second message
+		// Peek would cleanup the outdated messages as well
+		peekMessage := streamer.Peek(ctx)
+		assert.NotNil(t, peekMessage)
+		assert.Equal(t, initialPos+1, streamer.currentMessagePos)
+		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
+
+		newMessage := streamer.Next(ctx)
+		assert.Equal(t, peekMessage, newMessage)
+		assert.Equal(t, initialPos+2, streamer.currentMessagePos)
+
+		// Empty message should not alter the current position
+		third := streamer.Next(ctx)
+		assert.Nil(t, third)
+		assert.Equal(t, initialPos+2, streamer.currentMessagePos)
+	})
 	t.Run("Test should pop messages in order", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
