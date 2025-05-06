@@ -15,6 +15,9 @@ import (
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
+// We should be able to get the address as soon as we have the signer.
+// We don't want to change a lot of code to make this work since we are working on a forked repo.
+// This function is not costly and it should be called only once.
 func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, error) {
 	message := make([]byte, 32)
 	signature, err := signer(message)

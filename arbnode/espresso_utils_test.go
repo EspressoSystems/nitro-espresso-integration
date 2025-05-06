@@ -4,9 +4,25 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/util/signature"
 )
+
+func TestRecoverAddressFromSigner(t *testing.T) {
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	address, err := recoverAddressFromSigner(signature.DataSignerFromPrivateKey(privateKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address != crypto.PubkeyToAddress(privateKey.PublicKey) {
+		t.Fatalf("expected address %v, got %v", crypto.PubkeyToAddress(privateKey.PublicKey), address)
+	}
+}
 
 func TestGetMessageForSubmittingToEspresso(t *testing.T) {
 
