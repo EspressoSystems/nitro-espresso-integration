@@ -43,7 +43,6 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
-
 	nodeConfig.ParentChainReader.Enable = true
 
 	cleanup := builder.BuildEspressoCaffNode(t, existing)
@@ -130,7 +129,6 @@ func AssertEventOrdering(t *testing.T, firstEventFunc func() error, secondEventF
 			break
 		}
 	}
-	log.Info("Exiting for loop in assertEventOrderingHelper")
 }
 
 func TestEspressoCaffNode(t *testing.T) {
@@ -177,14 +175,16 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	log.Info("Starting the caff node")
+	// don't make the caff node wait for finalization during the default test.
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
 	builder, cleanupCaffNode := createCaffNode(ctx, t, builder)
 	builderCaffNode := builder.L2
 	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User14"))
-		balance2 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		balance1 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User15"))
 		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
 		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
 	})
@@ -229,7 +229,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	}
 
 	// Send transaction to CaffNode and it should works later
-	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
+	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", l2Info)
 	Require(t, err)
 }
 
