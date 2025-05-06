@@ -57,7 +57,6 @@ COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
 RUN  make ESPRESSO_DIR=espresso-network-go
-COPY ./espresso-network-go ./espresso-network-go
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
