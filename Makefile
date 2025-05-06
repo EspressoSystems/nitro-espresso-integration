@@ -163,7 +163,7 @@ CBROTLI_WASM_BUILD_ARGS ?=-d
 ESPRESSO_NETWORK_GO_VER ?= 0.0.36
 ESPRESSO_TAR = espresso-network-go-$(ESPRESSO_NETWORK_GO_VER).tar.gz
 ESPRESSO_URL = https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$(ESPRESSO_NETWORK_GO_VER).tar.gz
-ESPRESSO_DIR = ./espresso-network-go
+ESPRESSO_DIR = espresso-network-go
 
 # Download the tarball
 $(ESPRESSO_TAR):
@@ -171,10 +171,9 @@ $(ESPRESSO_TAR):
 
 # Extract into target directory (strip the top-level folder)
 $(ESPRESSO_DIR): $(ESPRESSO_TAR)
-	@echo "Extracting $(ESPRESSO_TAR) into $(ESPRESSO_DIR)/..."
 	rm -rf $(ESPRESSO_DIR)
-	mkdir -p $(ESPRESSO_DIR)
-	tar -xzf $(ESPRESSO_TAR) --strip-components=1 -C $(ESPRESSO_DIR)
+	tar -xzf $(ESPRESSO_TAR)
+	mv espresso-network-go-$(ESPRESSO_NETWORK_GO_VER) $(ESPRESSO_DIR)
 
 espresso_crypto_dir = $(ESPRESSO_DIR)/verification/rust
 espresso_crypto_files = $(wildcard $(espresso_crypto_dir)/*.toml $(espresso_crypto_dir)/src/*.rs)
