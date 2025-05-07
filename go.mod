@@ -205,6 +205,7 @@ require (
 )
 
 require (
+	github.com/EspressoSystems/espresso-network-go v0.0.36 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/btcsuite/btcd v0.22.1 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
