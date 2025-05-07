@@ -13,6 +13,7 @@ replace github.com/EspressoSystems/espresso-network-go => ./espresso-network-go
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
+	github.com/EspressoSystems/espresso-network-go v0.0.36
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/alicebob/miniredis/v2 v2.32.1
@@ -204,7 +205,6 @@ require (
 )
 
 require (
-	github.com/EspressoSystems/espresso-network-go v0.0.36 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/btcsuite/btcd v0.22.1 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
