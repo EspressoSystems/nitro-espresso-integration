@@ -515,6 +515,9 @@ func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit u
 	if latestHeader.BaseFee == nil {
 		return nil, nil, nil, fmt.Errorf("latest parent chain block %v missing BaseFee (either the parent chain does not have EIP-1559 or the parent chain node is not synced)", latestHeader.Number)
 	}
+	if (*latestHeader.BaseFee).Cmp(config.MaxBaseFee) > 0 {
+		return nil, nil, nil, fmt.Errorf("latest parent chain block %v BaseFee %v is greater than max base fee %v", latestHeader.Number, latestHeader.BaseFee, config.MaxBaseFee)
+	}
 	currentBlobFee := big.NewInt(0)
 	if latestHeader.ExcessBlobGas != nil && latestHeader.BlobGasUsed != nil {
 		currentBlobFee = eip4844.CalcBlobFee(eip4844.CalcExcessBlobGas(*latestHeader.ExcessBlobGas, *latestHeader.BlobGasUsed))
@@ -1270,6 +1273,7 @@ type DataPosterConfig struct {
 	Dangerous              DangerousConfig   `koanf:"dangerous"`
 	ExternalSigner         ExternalSignerCfg `koanf:"external-signer"`
 	MaxFeeCapFormula       string            `koanf:"max-fee-cap-formula" reload:"hot"`
+	MaxBaseFee             *big.Int          `koanf:"max-base-fee" reload:"hot"`
 	ElapsedTimeBase        time.Duration     `koanf:"elapsed-time-base" reload:"hot"`
 	ElapsedTimeImportance  float64           `koanf:"elapsed-time-importance" reload:"hot"`
 	// When set, dataposter will not post new batches, but will keep running to
