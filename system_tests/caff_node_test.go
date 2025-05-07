@@ -23,22 +23,19 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.Sequencer = false
 	nodeConfig.Dangerous.NoSequencerCoordinator = true
 	execConfig.Sequencer.Enable = false
+	execConfig.Sequencer.EnableCaffNode = true
 	execConfig.ForwardingTarget = existing.l2StackConfig.IPCPath
 	execConfig.SecondaryForwardingTarget = []string{}
-	nodeConfig.EspressoCaffNode.Enable = true
-	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	execConfig.Sequencer.CaffNodeConfig.Namespace = builder.chainConfig.ChainID.Uint64()
+	execConfig.Sequencer.CaffNodeConfig.NextHotshotBlock = 1
+	execConfig.Sequencer.CaffNodeConfig.ParentChainNodeUrl = "http://0.0.0.0:8545"
+	execConfig.Sequencer.CaffNodeConfig.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	execConfig.Sequencer.CaffNodeConfig.ParentChainReader.Enable = true
+	execConfig.Sequencer.CaffNodeConfig.ParentChainReader.UseFinalityData = true
+	execConfig.Sequencer.CaffNodeConfig.RecordPerformance = true
+	execConfig.Sequencer.CaffNodeConfig.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 
-	// for testing, we can use the same hotshot url for both
-	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
-	nodeConfig.EspressoCaffNode.FallbackUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
-	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
-	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
-
-	nodeConfig.ParentChainReader.Enable = true
-
-	cleanup := builder.BuildEspressoCaffNode(t, existing)
+	cleanup := builder.BuildEspressoCaffNode(t)
 	return builder.L2, cleanup
 }
 

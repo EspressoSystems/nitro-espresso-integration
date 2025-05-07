@@ -164,7 +164,6 @@ type SequencerConfigFetcher func() *SequencerConfig
 
 type CaffNodeConfig struct {
 	HotShotUrls             []string            `koanf:"hotshot-urls"`
-	FallbackUrls            []string            `koanf:"fallback-urls"`
 	NextHotshotBlock        uint64              `koanf:"next-hotshot-block"`
 	Namespace               uint64              `koanf:"namespace"`
 	RetryTime               time.Duration       `koanf:"retry-time"`
@@ -181,7 +180,6 @@ type CaffNodeConfig struct {
 
 var DefaultCaffNodeConfig = CaffNodeConfig{
 	HotShotUrls:             []string{},
-	FallbackUrls:            []string{},
 	NextHotshotBlock:        1,
 	Namespace:               0,
 	RetryTime:               time.Second * 2,
@@ -216,6 +214,19 @@ var DefaultSequencerConfig = SequencerConfig{
 
 var DefaultDangerousConfig = DangerousConfig{
 	Timeboost: DefaultTimeboostConfig,
+}
+
+func CaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
+	f.StringSlice(prefix+".hotshot-urls", DefaultCaffNodeConfig.HotShotUrls, "hotshot urls")
+	f.Uint64(prefix+".next-hotshot-block", DefaultCaffNodeConfig.NextHotshotBlock, "the hotshot block number from which the caff node will read")
+	f.Uint64(prefix+".namespace", DefaultCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
+	f.Duration(prefix+".retry-time", DefaultCaffNodeConfig.RetryTime, "retry time after a failure")
+	f.Duration(prefix+".hotshot-polling-interval", DefaultCaffNodeConfig.HotshotPollingInterval, "time after a success")
+	headerreader.AddOptions(prefix+".parent-chain-reader", f)
+	f.String(prefix+".parent-chain-node-url", DefaultCaffNodeConfig.ParentChainNodeUrl, "the parent chain url")
+	f.String(prefix+".espresso-tee-verifier-addr", "", "tee verifier address")
+	f.Bool(prefix+".forwarding", DefaultCaffNodeConfig.Forwarding, "forward transactions to the sequencer")
+	f.Bool(prefix+".record-performance", DefaultCaffNodeConfig.RecordPerformance, "record performance of the caff node")
 }
 
 func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
