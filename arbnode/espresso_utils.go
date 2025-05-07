@@ -58,7 +58,7 @@ func getMessageForSubmittingToEspresso(
 	if err != nil {
 		return nil, err
 	}
-	if pos > 1 {
+	if pos >= 1 {
 		prevMsg, err := fetcher(pos - 1)
 		if err != nil {
 			return nil, err

@@ -319,8 +319,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{},
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
-	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go,
-	// Try to fill 3 blobs per batch,
+
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	// The default for this will vary based on restrictions imposed by rpc providers.
@@ -1585,9 +1584,21 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		breakLoopWhenErrorOccurs = false
 	} else {
-		// We are running Espresso mode, so we will keep adding messages until
-		// espresso streamer returns errors.
-		addMessageLoop = func() bool { return true }
+		// We are running Espresso mode. We first get the message count in the Espresso streamer and call
+		// Next() until we encounter errors or reach the estimated message count.
+		// That means, even the Espresso streamer is fetching new hotshot blocks, the loop will
+		// still finish in short time.
+		// Unlike the transaction streamer which guarantees the order of messages and is unlikely
+		// to have any errors when adding messages, the Espresso streamer may miss some messages
+		// for a time.
+		// So when error occurs, we break the loop and continue the rest of the function to see
+		// if we can make a new batch.
+		bufferCount := b.espressoStreamer.GetMessageCount()
+		i := uint64(0)
+		addMessageLoop = func() bool {
+			defer func() { i++ }()
+			return i < bufferCount
+		}
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)
 			if espressoMsg == nil {
@@ -1597,8 +1608,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
 			return &espressoMsg.MessageWithMeta, nil
 		}
-		// When error occurs, break the loop and continue the rest of the function,
-		// which makes a new batch
 		breakLoopWhenErrorOccurs = true
 	}
 	for addMessageLoop() {
