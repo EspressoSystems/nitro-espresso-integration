@@ -1131,11 +1131,11 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 	pollingStep := b.config().EspressoEventPollingStep
 	header, err := b.l1Reader.LastHeader(ctx)
 	if err != nil {
-		log.Error("Failed to fetch last header from parent chain")
+		log.Error("Failed to fetch last header from parent chain", "err", err)
 		return 0
 	}
 
-	var logIterator *bridgegen.SequencerInboxTEESignatureVerifiedIterator
+	var lastHotshotHeight uint64 = 0
 	for i := header.Number.Uint64(); i >= b.config().HotShotFirstPostingBlock; i -= pollingStep {
 		start := i - pollingStep
 		if start < b.config().HotShotFirstPostingBlock {
@@ -1147,19 +1147,23 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 			Context: ctx,
 		}
 
-		logIterator, err = b.seqInbox.FilterTEESignatureVerified(&filterOpts, []*big.Int{}, []*big.Int{})
+		logIterator, err := b.seqInbox.FilterTEESignatureVerified(&filterOpts, []*big.Int{}, []*big.Int{})
 		if err != nil {
-			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i)
-			return 0
-		}
-
-		if logIterator == nil || !logIterator.Next() {
+			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i, "err", err)
 			continue
 		}
 
-		// Log the event if found
-		log.Info("Found log event", "event", logIterator.Event)
-		return logIterator.Event.HotshotHeight.Uint64()
+		if logIterator == nil {
+			continue
+		}
+
+		for logIterator.Next() {
+			lastHotshotHeight = logIterator.Event.HotshotHeight.Uint64()
+		}
+
+		if lastHotshotHeight > 0 {
+			return lastHotshotHeight
+		}
 	}
 
 	log.Warn("No logs found for Hotshot block")
