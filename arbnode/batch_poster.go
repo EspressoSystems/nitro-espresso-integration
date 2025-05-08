@@ -1136,8 +1136,10 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 	}
 
 	var lastHotshotHeight uint64 = 0
-	for i := header.Number.Uint64(); i >= b.config().HotShotFirstPostingBlock; i -= pollingStep {
-		start := i - pollingStep
+	// Prevent unsigned integer underflow: in Go, subtracting a larger value
+	// from a smaller uint64 will wrap around to a very large number.
+	for i := header.Number.Uint64(); i >= b.config().HotShotFirstPostingBlock; i -= min(i, pollingStep) {
+		start := i - min(i, pollingStep)
 		if start < b.config().HotShotFirstPostingBlock {
 			start = b.config().HotShotFirstPostingBlock
 		}
@@ -1606,7 +1608,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)
 			if espressoMsg == nil {
-				return nil, errors.New("not in the buffer")
+				return nil, errors.New("The Espresso streamer has no more messages currently")
 			}
 			lastPotentialMsg = &espressoMsg.MessageWithMeta
 			lastPotentialMsgPos = arbutil.MessageIndex(espressoMsg.Pos)
