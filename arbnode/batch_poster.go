@@ -1,5 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/nitro/blob/master/LICENSE
+
 package arbnode
 
 import (
@@ -129,8 +130,7 @@ type BatchPoster struct {
 
 	accessList func(SequencerInboxAccs, AfterDelayedMessagesRead uint64) types.AccessList
 
-	espressoStreamer                        *espressostreamer.EspressoStreamer
-	hotshotBlockNumberFromConfigOrRecentMsg uint64
+	espressoStreamer *espressostreamer.EspressoStreamer
 }
 
 type l1BlockBound int
@@ -292,7 +292,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	DisableDapFallbackStoreDataOnChain: false,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
 	MaxSize: 100000,
-	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go, MaxSize: 100000, Try to fill 3 blobs per batch,
+	// Try to fill 3 blobs per batch
 	Max4844BatchSize:               blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
 	PollInterval:                   time.Second * 10,
 	ErrorDelay:                     time.Second * 10,
@@ -439,7 +439,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, err
 		}
-
 		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
 
 		var teeType TEE
@@ -860,6 +859,7 @@ type batchSegments struct {
 	trailingHeaders       int // how many trailing segments are headers
 	isDone                bool
 }
+
 type buildingBatch struct {
 	segments           *batchSegments
 	startMsgCount      arbutil.MessageIndex

@@ -25,7 +25,7 @@ func (m *mockEspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, attest
 }
 
 func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8) (bool, error) {
-	args := m.Called(addr)
+	args := m.Called(addr, teeType)
 	return args.Bool(0), nil
 }
 

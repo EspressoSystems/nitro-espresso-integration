@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/offchainlabs/nitro/espressotee"
@@ -37,7 +36,6 @@ type EspressoKeyManager struct {
 	espressoNitroTEEVerifier  espressotee.EspressoNitroTEEVerifierInterface
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
-	address                   *common.Address
 
 	batchPosterOpts   *bind.TransactOpts
 	batchPosterSigner signature.DataSignerFunc
@@ -46,7 +44,12 @@ type EspressoKeyManager struct {
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
+func NewEspressoKeyManager(
+	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface,
+	espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface,
+	opts *BatchPosterOpts,
+	teeType TEE,
+) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
@@ -57,8 +60,6 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 	if !ok {
 		panic("failed to get public key")
 	}
-
-	address := crypto.PubkeyToAddress(*pubKey)
 
 	if opts.TransactOpts == nil {
 		panic("TransactOpts is nil")
@@ -71,7 +72,6 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
 		privKey:                   privKey,
-		address:                   &address,
 		batchPosterSigner:         opts.DataSigner,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
