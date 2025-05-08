@@ -14,7 +14,7 @@ import (
 )
 
 type MockEspressoStreamer struct {
-	currrPos    uint64
+	currPos     uint64
 	currHotShot uint64
 
 	delayedPos uint64
@@ -31,7 +31,7 @@ func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 
 func (m *MockEspressoStreamer) Peek(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
 	var delayedCnt uint64 = 1
-	if m.delayedPos == m.currrPos {
+	if m.delayedPos == m.currPos {
 		delayedCnt = 2
 	}
 	result := espressostreamer.MessageWithMetadataAndPos{
@@ -39,14 +39,14 @@ func (m *MockEspressoStreamer) Peek(ctx context.Context) *espressostreamer.Messa
 			DelayedMessagesRead: delayedCnt,
 			Message:             &arbostypes.EmptyTestIncomingMessage,
 		},
-		Pos:           m.currrPos,
+		Pos:           m.currPos,
 		HotshotHeight: m.currHotShot,
 	}
 	return &result
 }
 
 func (m *MockEspressoStreamer) Advance() {
-	m.currrPos++
+	m.currPos++
 	m.currHotShot++
 }
 
@@ -57,7 +57,7 @@ func (m *MockEspressoStreamer) Next(ctx context.Context) *espressostreamer.Messa
 }
 
 func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
-	m.currrPos = currentMessagePos
+	m.currPos = currentMessagePos
 	m.currHotShot = currentHostshotBlock
 }
 
@@ -98,7 +98,7 @@ func (m *MockDelayedMessageFetcher) reset(parentChainBlockNum uint64, seqNum uin
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
 	caffNode := EspressoCaffNode{}
-	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, currrPos: 0}
+	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, currPos: 0}
 	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
 	ctx := context.Background()
 	msg1, err := caffNode.peekMessage(ctx)
@@ -136,5 +136,5 @@ func TestEspressoCaffNodeShouldResetToLastStoredHotshotBlock(t *testing.T) {
 
 	espressoStreamer, _ := caffNode.espressoStreamer.(*MockEspressoStreamer)
 	require.Equal(t, espressoStreamer.currHotShot, uint64(10))
-	require.Equal(t, espressoStreamer.currrPos, uint64(3))
+	require.Equal(t, espressoStreamer.currPos, uint64(3))
 }
