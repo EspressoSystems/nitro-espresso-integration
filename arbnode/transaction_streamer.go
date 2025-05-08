@@ -1063,10 +1063,6 @@ func (s *TransactionStreamer) WriteMessageFromSequencer(
 	if s.trackBlockMetadataFrom == 0 || pos < s.trackBlockMetadataFrom {
 		msgWithBlockInfo.BlockMetadata = nil
 	}
-<<<<<<< HEAD
-=======
-
->>>>>>> celestia-integration
 	s.broadcastMessages([]arbostypes.MessageWithMetadataAndBlockInfo{msgWithBlockInfo}, pos)
 
 	return nil
@@ -1460,7 +1456,7 @@ func (s *TransactionStreamer) backfillTrackersForMissingBlockMetadata(ctx contex
 	}
 }
 
-	// Check if the latest submitted transaction has been finalized on L1 and verify it.
+// Check if the latest submitted transaction has been finalized on L1 and verify it.
 // Return a bool indicating whether a new transaction can be submitted to HotShot
 func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
