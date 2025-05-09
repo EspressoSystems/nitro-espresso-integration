@@ -7,7 +7,7 @@
   <h3 align="center">Arbitrum Nitro</h3>
 
   <p align="center">
-    <a href="https://developer.arbitrum.io/"><strong>Next Generation Ethereum L2 Technology »</strong></a>
+    <a href="https://docs.arbitrum.io/"><strong>Next Generation Ethereum L2 Technology »</strong></a>
     <br />
   </p>
 </p>
@@ -20,7 +20,7 @@ Nitro is the latest iteration of the Arbitrum technology. It is a fully integrat
 layer 2 optimistic rollup system, including fraud proofs, the sequencer, the token bridges,
 advanced calldata compression, and more.
 
-See the live docs-site [here](https://developer.arbitrum.io/) (or [here](https://github.com/OffchainLabs/arbitrum-docs) for markdown docs source.)
+See the live docs-site [here](https://docs.arbitrum.io/) (or [here](https://github.com/OffchainLabs/arbitrum-docs) for markdown docs source.)
 
 See [here](https://docs.arbitrum.io/audit-reports) for security audit reports.
 
@@ -39,7 +39,7 @@ and compression system to minimize L1 costs.
 Essentially, Nitro runs Geth at layer 2 on top of Ethereum, and can prove fraud over the core engine of Geth
 compiled to WASM.
 
-Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on 8/31/22. (See [state migration](https://developer.arbitrum.io/migration/state-migration) and [dapp migration](https://developer.arbitrum.io/migration/dapp_migration) for more info).
+Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on 8/31/22. (See [state migration](https://docs.arbitrum.io//migration/state-migration) and [dapp migration](https://docs.arbitrum.io//migration/dapp_migration) for more info).
 
 ## Running E2E Tests
 
