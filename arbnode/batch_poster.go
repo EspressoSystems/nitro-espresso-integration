@@ -1899,7 +1899,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	// and gas estimation, so a best effort estimate is fine.
 	var unpostedMessages arbutil.MessageIndex
 	if b.espressoStreamer != nil {
-		unpostedMessages = arbutil.MessageIndex(b.espressoStreamer.GetMessageCount()) - b.building.msgCount
+		unpostedMessages = b.espressoStreamer.GetMessageCount()
 	} else {
 		unpostedMessages = msgCount - b.building.msgCount
 	}
