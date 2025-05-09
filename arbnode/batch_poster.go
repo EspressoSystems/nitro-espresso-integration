@@ -158,6 +158,8 @@ type BatchPosterConfig struct {
 	WaitForMaxDelay bool `koanf:"wait-for-max-delay" reload:"hot"`
 	// Batch post polling interval.
 	PollInterval time.Duration `koanf:"poll-interval" reload:"hot"`
+	// After batch post polling interval.
+	PollIntervalAfterBatchPost time.Duration `koanf:"poll-interval-after-batch-post" reload:"hot"`
 	// Batch posting error delay.
 	ErrorDelay                     time.Duration               `koanf:"error-delay" reload:"hot"`
 	CompressionLevel               int                         `koanf:"compression-level" reload:"hot"`
@@ -238,6 +240,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".max-delay", DefaultBatchPosterConfig.MaxDelay, "maximum batch posting delay")
 	f.Bool(prefix+".wait-for-max-delay", DefaultBatchPosterConfig.WaitForMaxDelay, "wait for the max batch delay, even if the batch is full")
 	f.Duration(prefix+".poll-interval", DefaultBatchPosterConfig.PollInterval, "how long to wait after no batches are ready to be posted before checking again")
+	f.Duration(prefix+".poll-interval-after-batch-post", DefaultBatchPosterConfig.PollIntervalAfterBatchPost, "how long to wait after batch post before checking again")
 	f.Duration(prefix+".error-delay", DefaultBatchPosterConfig.ErrorDelay, "how long to delay after error posting batch")
 	f.Int(prefix+".compression-level", DefaultBatchPosterConfig.CompressionLevel, "batch compression level")
 	f.Duration(prefix+".das-retention-period", DefaultBatchPosterConfig.DASRetentionPeriod, "In AnyTrust mode, the period which DASes are requested to retain the stored batches.")
@@ -274,6 +277,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// Try to fill 3 blobs per batch
 	Max4844BatchSize:               blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
 	PollInterval:                   time.Second * 10,
+	PollIntervalAfterBatchPost:     time.Second * 10,
 	ErrorDelay:                     time.Second * 10,
 	MaxDelay:                       time.Hour,
 	WaitForMaxDelay:                false,
@@ -315,6 +319,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	MaxSize:                        100000,
 	Max4844BatchSize:               DefaultBatchPosterConfig.Max4844BatchSize,
 	PollInterval:                   time.Millisecond * 10,
+	PollIntervalAfterBatchPost:     time.Millisecond * 10,
 	ErrorDelay:                     time.Millisecond * 10,
 	MaxDelay:                       0,
 	WaitForMaxDelay:                false,
@@ -1872,7 +1877,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			batchPosterFailureCounter.Inc(1)
 			return b.config().ErrorDelay
 		} else if posted {
-			return 0
+			return b.config().PollIntervalAfterBatchPost
 		} else {
 			return b.config().PollInterval
 		}
