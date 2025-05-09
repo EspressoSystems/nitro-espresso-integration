@@ -348,6 +348,7 @@ func TestDASBatchPosterFallback(t *testing.T) {
 	builder.nodeConfig.DataAvailability.RestAggregator.Enable = true
 	builder.nodeConfig.DataAvailability.RestAggregator.Urls = []string{restServerUrl}
 	builder.nodeConfig.DataAvailability.ParentChainNodeURL = "none"
+	builder.nodeConfig.DAPreference = []string{"anytrust"}
 	builder.nodeConfig.BatchPoster.DisableDapFallbackStoreDataOnChain = true // Disable DAS fallback
 	builder.nodeConfig.BatchPoster.ErrorDelay = time.Millisecond * 250       // Increase error delay because we expect errors
 	builder.L2Info = NewArbTestInfo(t, builder.chainConfig.ChainID)
