@@ -1882,6 +1882,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			batchPosterFailureCounter.Inc(1)
 			return b.config().ErrorDelay
 		} else if posted {
+			log.Info("Will wait for next batch post", "delay", b.config().PollIntervalAfterBatchPost)
 			return b.config().PollIntervalAfterBatchPost
 		} else {
 			return b.config().PollInterval
