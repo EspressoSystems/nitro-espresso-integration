@@ -44,7 +44,12 @@ type EspressoKeyManager struct {
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
+func NewEspressoKeyManager(
+	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface,
+	espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface,
+	opts *BatchPosterOpts,
+	teeType TEE,
+) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {

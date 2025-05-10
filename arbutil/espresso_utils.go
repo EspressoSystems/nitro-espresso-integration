@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	espressoTypes "github.com/EspressoSystems/espresso-sequencer-go/types"
+	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
 	"github.com/ccoveille/go-safecast"
 
 	"github.com/ethereum/go-ethereum/crypto"

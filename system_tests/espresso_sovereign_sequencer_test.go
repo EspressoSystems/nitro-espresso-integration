@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	lightclient "github.com/EspressoSystems/espresso-sequencer-go/light-client"
+	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -39,7 +39,6 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.LightClientAddress = lightClientAddress
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl}
-	builder.nodeConfig.BatchPoster.UseEscapeHatch = false
 	builder.nodeConfig.BatchPoster.EspressoTeeVerifierAddress = "0xA46C59ce2FCaF445F96f66F0411e06A94D34BF45"
 
 	// validator config

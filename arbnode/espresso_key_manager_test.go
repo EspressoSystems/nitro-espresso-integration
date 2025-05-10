@@ -29,6 +29,15 @@ func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType
 	return args.Bool(0), nil
 }
 
+func (m *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, userDataHash []byte, reportDataHash [32]byte) (bool, error) {
+	args := m.Called(opts, userDataHash, reportDataHash)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockEspressoTEEVerifier) GetTeeType() uint8 {
+	return 0
+}
+
 type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
