@@ -428,7 +428,7 @@ func ExpectErr(t *testing.T, err error, expectedError error) {
 }
 
 // This tests that the caff node config validates that known versions of arb sequencers are not enabled if the caff node is.
-func TestCaffNodeConfig(t *testing.T) {
+func TestEspressoCaffNodeConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	builder := createCaffNodeConfig(ctx, t)
@@ -455,7 +455,7 @@ func TestCaffNodeConfig(t *testing.T) {
 
 }
 
-func TestCaffNodeDangerousConfig(t *testing.T) {
+func TestEspressoCaffNodeDangerousConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
