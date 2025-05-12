@@ -16,11 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-<<<<<<< HEAD
 func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, dangerous bool) (*NodeBuilder, func(), error) {
-=======
-func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*NodeBuilder, func()) {
->>>>>>> e865504649aaaf308b28360d3d6ec73c9855d35e
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
@@ -50,10 +46,14 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
 
-	cleanup := builder.BuildEspressoCaffNode(t, existing)
-	return builder, cleanup
-}
+	if dangerous {
+		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
+		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
+	}
 
+	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
+	return builder, cleanup, err
+}
 
 func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
@@ -245,7 +245,7 @@ func Setup(t *testing.T) (context.Context, common.Address, info, string, context
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 
 	err := waitForL1Node(ctx)
 	Require(t, err)
@@ -460,7 +460,7 @@ func TestEspressoCaffNodeDangerousConfig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
 
 	// start the node
