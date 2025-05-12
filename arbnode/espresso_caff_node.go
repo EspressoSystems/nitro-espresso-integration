@@ -120,6 +120,8 @@ func NewEspressoCaffNode(
 		espressoTEEVerifierCaller,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
+		common.HexToAddress(configFetcher().BatchPosterAddr),
+	)
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
 

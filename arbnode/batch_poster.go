@@ -411,8 +411,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
 
 	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
-		//  TODO: tech debt should remove fallback urls in the future
-		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls, hotShotUrls)
+		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}
 
@@ -1190,12 +1189,12 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	packedData, err := b.blobsAttestationArguments.Pack(attestationArgs...)
 	if err != nil {
 		return nil, err
-	}	
+	}
 	// Generate attestation quote
 	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
-	}	
+	}
 	// Construct the calldata with attestation quote
 	args = append(args, attestationQuote)
 
