@@ -20,7 +20,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/EspressoSystems/nitro-contracts.git
-	branch = feat-stateless-batcher-v1
+	branch = release-v2.1.3-6ffebef
 [submodule "arbitrator/langs/rust"]
 	path = arbitrator/langs/rust
 	url = https://github.com/OffchainLabs/stylus-sdk-rs.git
@@ -39,4 +39,5 @@
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
-	branch = blobs-support-integration
+	branch = integration
+
