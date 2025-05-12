@@ -16,7 +16,11 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+<<<<<<< HEAD
 func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, dangerous bool) (*NodeBuilder, func(), error) {
+=======
+func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*NodeBuilder, func()) {
+>>>>>>> e865504649aaaf308b28360d3d6ec73c9855d35e
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
@@ -35,21 +39,21 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, da
 	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	// reuse the caff node settings so we can set them outside this function.
+	nodeConfig.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.EspressoCaffNode.WaitForFinalization
+	nodeConfig.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.EspressoCaffNode.WaitForConfirmations
+	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
-
 	nodeConfig.ParentChainReader.Enable = true
 
-	if dangerous {
-		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
-		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
-	}
-	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
-	return builder, cleanup, err
+	cleanup := builder.BuildEspressoCaffNode(t, existing)
+	return builder, cleanup
 }
+
 
 func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
@@ -140,7 +144,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
@@ -177,6 +181,8 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	log.Info("Starting the caff node")
+	// don't make the caff node wait for finalization during the default test.
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
 	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
 	Require(t, err)
@@ -184,8 +190,8 @@ func TestEspressoCaffNode(t *testing.T) {
 	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User14"))
-		balance2 := builderCaffNode.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		balance1 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User15"))
 		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
 		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
 	})
@@ -230,7 +236,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	}
 
 	// Send transaction to CaffNode and it should works later
-	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
+	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", l2Info)
 	Require(t, err)
 }
 
