@@ -411,7 +411,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
 		//  TODO: tech debt should remove fallback urls in the future
-		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls, hotShotUrls)
+		hotShotClient := hotshotClient.NewMultipleNodesClient(hotShotUrls)
 		opts.Streamer.espressoClient = hotShotClient
 	}
 

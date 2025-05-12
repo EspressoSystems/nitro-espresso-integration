@@ -241,7 +241,7 @@ func mainImpl() int {
 	if nodeConfig.Execution.Sequencer.Enable && !nodeConfig.Execution.Sequencer.Timeboost.Enable && nodeConfig.Node.TransactionStreamer.TrackBlockMetadataFrom != 0 {
 		log.Warn("Sequencer node's track-block-metadata-from is set but timeboost is not enabled")
 	}
-	if nodeConfig.Node.EspressoCaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Dangerous.Timeboost.Enable) {
+	if nodeConfig.Node.EspressoCaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Timeboost.Enable) {
 		log.Error("The Caff node cannot have any type of sequencer enabled, run without a config that enables any form of sequencer.")
 		return 1
 	}

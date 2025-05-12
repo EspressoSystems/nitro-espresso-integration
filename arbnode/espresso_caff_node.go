@@ -118,7 +118,7 @@ func NewEspressoCaffNode(
 		configFetcher().RetryTime,
 		configFetcher().HotshotPollingInterval,
 		espressoTEEVerifierCaller,
-		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls, configFetcher().HotShotUrls),
+		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 	)
