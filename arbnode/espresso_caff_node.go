@@ -24,7 +24,6 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
-<<<<<<< HEAD
 	Enable                 bool                    `koanf:"enable"`
 	HotShotUrls            []string                `koanf:"hotshot-urls"`
 	NextHotshotBlock       uint64                  `koanf:"next-hotshot-block"`
