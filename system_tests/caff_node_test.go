@@ -73,7 +73,6 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 
-	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 
 	// for testing, we can use the same hotshot url for both
