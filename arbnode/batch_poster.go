@@ -1208,7 +1208,6 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	l2MessageData []byte,
 	delayedMsg uint64,
 ) ([]byte, error) {
-	var args []any
 	method, ok := b.seqInboxABI.Methods[oldSequencerBatchPostMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
@@ -1221,19 +1220,27 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
 	}
 
-	// initially constructing the calldata using the old oldSequencerBatchPostMethodName method
-	// This will allow us to get the attestation quote on the hash of the data
-	args = append(args, seqNum)
-	args = append(args, l2MessageData)
-	args = append(args, new(big.Int).SetUint64(delayedMsg))
-	args = append(args, b.config().gasRefunder)
-	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-	args = append(args, hotshotBlockNumber)
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
+
+	var arguments abi.Arguments
+	arguments = append(arguments, method.Inputs...)
+	arguments = append(arguments, abi.Argument{Type: uint256Type})
+
+	calldata, err := arguments.Pack(
+		seqNum,
+		l2MessageData,
+		new(big.Int).SetUint64(delayedMsg),
+		b.config().gasRefunder,
+		new(big.Int).SetUint64(uint64(prevMsgNum)),
+		new(big.Int).SetUint64(uint64(newMsgNum)),
+		hotshotBlockNumber,
+	)
 
 	// Later append the delay proof if needed for getting the attestion quote.
 	// If not, only append at the end of the calldata as done below.
-	calldata, err := method.Inputs.Pack(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -1266,11 +1273,6 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bytes type: %w", err)
 	}
-
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
-	}
 	uint8Type, err := abi.NewType("uint8", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
@@ -1285,9 +1287,20 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
 	}
-	args = append(args, espressoMetadata)
 
-	calldata, err = method.Inputs.Pack(args...)
+	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
+	if !ok {
+		return nil, errors.New("failed to find add batch method")
+	}
+	calldata, err = method.Inputs.Pack(
+		seqNum,
+		l2MessageData,
+		new(big.Int).SetUint64(delayedMsg),
+		b.config().gasRefunder,
+		new(big.Int).SetUint64(uint64(prevMsgNum)),
+		new(big.Int).SetUint64(uint64(newMsgNum)),
+		espressoMetadata,
+	)
 
 	if err != nil {
 		return nil, err
