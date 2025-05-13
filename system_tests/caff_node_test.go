@@ -34,7 +34,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, da
 	nodeConfig.EspressoCaffNode.Enable = true
 	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 	// reuse the caff node settings so we can set them outside this function.
 	nodeConfig.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.EspressoCaffNode.WaitForFinalization
 	nodeConfig.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.EspressoCaffNode.WaitForConfirmations
