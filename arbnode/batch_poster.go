@@ -48,7 +48,6 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution"
-	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
@@ -324,7 +323,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	MaxBlockLagBeforeEscapeHatch:   350,
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
-	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	EspressoTeeType:                "SGX",
 }
 
@@ -1275,7 +1273,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 	uint8Type, err := abi.NewType("uint8", "", nil)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create uint8 type: %w", err)
+		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
 	}
 
 	espressoMetadata, err := abi.Arguments{
