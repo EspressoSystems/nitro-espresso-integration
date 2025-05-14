@@ -1318,7 +1318,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	l2MessageData []byte,
 	delayedMsg uint64,
 ) ([]byte, error) {
-	var args []any
 	method, ok := b.seqInboxABI.Methods[newSequencerBatchPostWithBlobsMethodName]
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
@@ -1339,31 +1338,87 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, err
 	}
 
-	args = append(args, seqNum)
-	args = append(args, new(big.Int).SetUint64(delayedMsg))
-	args = append(args, b.config().gasRefunder)
-	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
+	hotshotBlockNumber := new(big.Int).SetUint64(0)
+	// Remove this condition once we have get an espresso streamer
+	if b.espressoStreamer != nil {
+		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
+	}
 
-	var attestationArgs []any
-	attestationArgs = append(attestationArgs, args...)
-	// pack remaining data for the attestation quote.
-	attestationArgs = append(attestationArgs, encodedBlobs)
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
 
-	// Generate the attestation quote over the method args, and the blob hashes.
-	packedData, err := b.blobsAttestationArguments.Pack(attestationArgs...)
+	var arguments abi.Arguments
+	arguments = append(arguments, method.Inputs...)
+	arguments = append(arguments, abi.Argument{Type: uint256Type})
+
+	calldata, err := arguments.Pack(
+		seqNum,
+		new(big.Int).SetUint64(delayedMsg),
+		b.config().gasRefunder,
+		new(big.Int).SetUint64(uint64(prevMsgNum)),
+		new(big.Int).SetUint64(uint64(newMsgNum)),
+		encodedBlobs,
+		hotshotBlockNumber,
+	)
 	if err != nil {
 		return nil, err
 	}
-	// Generate attestation quote
-	attestationQuote, err := b.streamer.getAttestationQuote(packedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get attestation quote: %w", err)
-	}
-	// Construct the calldata with attestation quote
-	args = append(args, attestationQuote)
 
-	calldata, err := method.Inputs.Pack(args...)
+	var signature []byte
+	teeType := SGX
+	if b.streamer.EspressoKeyManager != nil {
+		signature, err = b.streamer.EspressoKeyManager.SignBatch(calldata)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
+		}
+
+		sigLength := len(signature)
+		if sigLength > 0 {
+			// Get the last byte (v)
+			vIndex := sigLength - 1
+			v := signature[vIndex]
+
+			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+			// https://github.com/ethereum/go-ethereum/issues/19751
+			if v == 0 || v == 1 {
+				signature[vIndex] = v + 27
+			}
+		}
+		teeType = b.streamer.EspressoKeyManager.TeeType()
+	}
+
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+	}
+
+	uint8Type, err := abi.NewType("uint8", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
+	}
+
+	espressoMetadata, err := abi.Arguments{
+		{Type: uint256Type},
+		{Type: bytesType},
+		{Type: uint8Type},
+	}.Pack(hotshotBlockNumber, signature, teeType)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
+	}
+
+	calldata, err = method.Inputs.Pack(
+		seqNum,
+		new(big.Int).SetUint64(delayedMsg),
+		b.config().gasRefunder,
+		new(big.Int).SetUint64(uint64(prevMsgNum)),
+		new(big.Int).SetUint64(uint64(newMsgNum)),
+		espressoMetadata,
+	)
 
 	if err != nil {
 		return nil, err
