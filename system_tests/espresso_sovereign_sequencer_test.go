@@ -86,7 +86,7 @@ func TestEspressoSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true, false, false)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
