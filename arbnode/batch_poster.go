@@ -1175,7 +1175,6 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
-	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
 		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
@@ -1200,8 +1199,6 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		hotshotBlockNumber,
 	)
 
-	// Later append the delay proof if needed for getting the attestion quote.
-	// If not, only append at the end of the calldata as done below.
 	if err != nil {
 		return nil, err
 	}
@@ -1291,8 +1288,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	if err != nil {
 		return nil, err
 	}
-	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
-	// This will allow us to get the attestation quote on the hash of the dataPoster
+
 	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
 
 	if err != nil {
@@ -1300,7 +1296,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
-	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
 		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
