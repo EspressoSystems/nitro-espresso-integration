@@ -44,6 +44,7 @@ import (
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/dbutil"
+	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -94,6 +95,7 @@ type TransactionStreamer struct {
 	EscapeHatchEnabled bool
 	UseEscapeHatch     bool
 	Brige              *bridgegen.Bridge
+	l1Reader           *headerreader.HeaderReader
 }
 
 type TransactionStreamerConfig struct {
@@ -1173,8 +1175,14 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 			if err != nil {
 				return err
 			}
-			if s.shouldSubmitEspressoTransaction(&idx) {
+			indexToSubmit := (pos + arbutil.MessageIndex(idx))
 
+			// convert to uint64
+			indexToSubmitUint64, err := safecast.ToUint64(indexToSubmit)
+			if err != nil {
+				return err
+			}
+			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
 				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
 				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
 				if err != nil {
@@ -1656,8 +1664,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	return nil
 }
 
-func (s *TransactionStreamer) resubmitEspressoTransactions(ctx context.Context, tx arbutil.SubmittedEspressoTx) (*tagged_base64.TaggedBase64, error) {
-	log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
+func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, tx arbutil.SubmittedEspressoTx) (*tagged_base64.TaggedBase64, error) {
 	txHash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 		Payload:   tx.Payload,
 		Namespace: s.chainConfig.ChainID.Uint64(),
@@ -1676,7 +1683,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-
 	if len(pendingTxnsPos) > 0 {
 		fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
 			msg, err := s.GetMessage(pos)
@@ -1703,7 +1709,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			}
 			return b, nil
 		}
-
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		if msgCnt == 0 {
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
@@ -1840,6 +1845,7 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
 		err := s.submitEspressoTransactions(ctx)
+
 		if err != nil {
 			log.Error("failed to submit espresso transactions", "err", err)
 			return retryRate
@@ -1862,7 +1868,8 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	shouldResubmit := s.shouldResubmitEspressoTransactions(ctx, submittedTxns)
 	if shouldResubmit {
 		for _, tx := range submittedTxns {
-			txHash, err := s.resubmitEspressoTransactions(ctx, tx)
+			log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
+			txHash, err := s.ResubmitEspressoTransactions(ctx, tx)
 			if err != nil {
 				log.Warn("failed to resubmit espresso transactions", "err", err)
 				return retryRate
@@ -1879,19 +1886,28 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool 
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
-	// SequencerInbox is not nil and pos is not nil
-	// check if the pos has already been posted on L1
-	if s.Brige != nil && pos != nil {
+	if s.Brige != nil && pos != nil && s.l1Reader != nil {
 		// check if the pos is already finalized on L1
+		// and get the current finalized block number from L1
+		finalizedBlockNumber, err := s.l1Reader.LatestFinalizedBlockNr(context.Background())
+		if err != nil {
+			log.Error("failed to get finalized block number", "err", err)
+			// In case of an error, we choose the safe path and still send to espresso
+			return true
+		}
+
 		sequencerMessageCount, err := s.Brige.SequencerReportedSubMessageCount(&bind.CallOpts{
-			Pending: false,
+			BlockNumber: big.NewInt(int64(finalizedBlockNumber)),
 		})
 		if err != nil {
 			log.Error("failed to get sequencerMessageCount", "err", err)
-			return false
+			// In case of an error, we choose the safe path and still send to espresso
+			return true
 		}
 		// This means the pos has already been posted on L1
+
 		if *pos < sequencerMessageCount.Uint64() {
+			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", sequencerMessageCount)
 			return false
 		}
 	}

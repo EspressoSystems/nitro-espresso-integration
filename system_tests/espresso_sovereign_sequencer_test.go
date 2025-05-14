@@ -51,6 +51,7 @@ func createL1AndL2Node(
 	// sequencer config
 	builder.nodeConfig.Sequencer = true
 	builder.nodeConfig.ParentChainReader.Enable = true // This flag is necessary to enable sequencing transactions with espresso behavior
+	builder.nodeConfig.ParentChainReader.UseFinalityData = true
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Caching.StateScheme = "hash"
@@ -85,7 +86,7 @@ func TestEspressoSovereignSequencer(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false, false)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
