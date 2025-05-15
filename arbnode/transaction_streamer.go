@@ -1883,8 +1883,8 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool 
 		return false
 	}
 	if pos != nil {
-		if *pos < s.FinalizedSequencerMessageCount.Uint64() {
-			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", s.FinalizedSequencerMessageCount)
+		if *pos < s.InitialFinalizedSequencerMessageCount.Uint64() {
+			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", s.InitialFinalizedSequencerMessageCount)
 			return false
 		}
 	}
