@@ -70,7 +70,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         id: install-rust
         with:
-          toolchain: "1.84.1"
+          toolchain: "1.85.0"
           targets: "wasm32-wasip1, wasm32-unknown-unknown"
           components: "llvm-tools-preview, rustfmt, clippy"
 
@@ -142,8 +142,6 @@ jobs:
           go version
           rustc --version
           cargo --version
-          wasm-opt --version
-          wasmtime --version || echo "wasmtime not installed"
 
       - name: Build
         run: make build build-replay-env -j
