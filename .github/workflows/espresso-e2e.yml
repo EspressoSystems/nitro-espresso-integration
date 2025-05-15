@@ -144,7 +144,10 @@ jobs:
           cargo --version
 
       - name: Build
-        run: make build build-replay-env -j
+        run: |
+          RUSTFLAGS="-C target-feature=+atomics,+bulk-memory" \
+          cargo build --target wasm32-wasi --release
+          make build-replay-env -j
 
       - name: Install docker-compose
         uses: KengoTODA/actions-setup-docker-compose@v1.2.1
