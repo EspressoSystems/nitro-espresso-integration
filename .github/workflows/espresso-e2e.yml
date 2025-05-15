@@ -139,6 +139,7 @@ jobs:
       
       - name: Check tool versions
         run: |
+          rustup default 1.85.0
           go version
           rustc --version
           cargo --version
