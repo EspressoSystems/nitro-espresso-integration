@@ -142,11 +142,15 @@ jobs:
           go version
           rustc --version
           cargo --version
+          
+      - name: Patch WASM Imports
+        run: |
+          cargo install wasm-tools
+          wasm-tools strip target/machines/latest/user_host.wasm \
+            --remove-import "wasi_snapshot_preview1.fd_tell"
 
       - name: Build
         run: |
-          RUSTFLAGS="-C target-feature=+atomics,+bulk-memory" \
-          cargo build --target wasm32-wasi --release
           make build-replay-env -j
 
       - name: Install docker-compose
