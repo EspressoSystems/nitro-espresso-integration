@@ -32,7 +32,7 @@ jobs:
       - name: Install cmake
         uses: jwlawson/actions-setup-cmake@v2
         with:
-          cmake-version: '3.31.6'
+          cmake-version: "3.31.6"
 
       - name: Install latest gotestsum
         uses: autero1/action-gotestsum@v2.0.0
@@ -68,10 +68,11 @@ jobs:
 
       - name: Install rust stable
         uses: dtolnay/rust-toolchain@stable
+        id: install-rust
         with:
           # TODO: remove pinning: https://github.com/EspressoSystems/nitro-espresso-integration/issues/257
-          toolchain: "1.81.0"
-          targets: "wasm32-unknown-unknown, wasm32-wasi"
+          targets: "wasm32-wasip1, wasm32-unknown-unknown"
+          components: "llvm-tools-preview, rustfmt, clippy"
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -80,9 +81,12 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
         id: install-rust-nightly
         with:
-          toolchain: "nightly-2024-10-06"
-          targets: "wasm32-wasi, wasm32-unknown-unknown"
+          toolchain: "nightly-2025-02-14"
+          targets: "wasm32-wasip1, wasm32-unknown-unknown"
           components: "rust-src, rustfmt, clippy"
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
 
       - name: Install cbindgen
         run: cargo install cbindgen
