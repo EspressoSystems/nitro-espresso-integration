@@ -136,6 +136,14 @@ jobs:
 
       - name: Install solidty dependencies
         run: cd contracts && yarn install && forge install
+      
+      - name: Check tool versions
+        run: |
+          go version
+          rustc --version
+          cargo --version
+          wasm-opt --version
+          wasmtime --version || echo "wasmtime not installed"
 
       - name: Build
         run: make build build-replay-env -j
