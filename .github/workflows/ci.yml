@@ -122,21 +122,21 @@ jobs:
           sudo apt-get update && sudo apt-get install -y lld-14
           sudo ln -s /usr/bin/wasm-ld-14 /usr/local/bin/wasm-ld
 
-      - name: Install rust stable
-        uses: dtolnay/rust-toolchain@stable
-        id: install-rust
-        with:
-          toolchain: "1.81.0"
-          targets: "wasm32-wasi, wasm32-unknown-unknown"
-          components: "llvm-tools-preview, rustfmt, clippy"
-
+          - name: Install rust stable
+          uses: dtolnay/rust-toolchain@stable
+          id: install-rust
+          with:
+            toolchain: '1.84.1'
+            targets: 'wasm32-wasip1, wasm32-unknown-unknown'
+            components: 'llvm-tools-preview, rustfmt, clippy'
+  
       - name: Install rust nightly
         uses: dtolnay/rust-toolchain@nightly
         id: install-rust-nightly
         with:
-          toolchain: "nightly-2024-10-06"
-          targets: "wasm32-wasi, wasm32-unknown-unknown"
-          components: "rust-src, rustfmt, clippy"
+          toolchain: 'nightly-2025-02-14'
+          targets: 'wasm32-wasip1, wasm32-unknown-unknown'
+          components: 'rust-src, rustfmt, clippy'
 
       - name: Install cbindgen
         run: cargo install cbindgen
