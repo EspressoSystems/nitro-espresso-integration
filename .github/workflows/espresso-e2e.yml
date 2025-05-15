@@ -146,6 +146,7 @@ jobs:
       - name: Patch WASM Imports
         run: |
           echo "Checking WASI imports in user_host.wasm..."
+          wasm-objdump -x target/machines/latest/user_host.wasm | grep wasi_snapshot_preview1
           echo "Converting user_host.wasm to WAT..."
           wasm2wat target/machines/latest/user_host.wasm -o user_host.wat
           echo "Removing fd_tell import..."
