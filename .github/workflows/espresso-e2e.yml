@@ -145,9 +145,16 @@ jobs:
           
       - name: Patch WASM Imports
         run: |
-          cargo install wasm-tools
-          wasm-tools strip target/machines/latest/user_host.wasm \
-            --remove-import "wasi_snapshot_preview1.fd_tell"
+          echo "Checking WASI imports in user_host.wasm..."
+          echo "Converting user_host.wasm to WAT..."
+          wasm2wat target/machines/latest/user_host.wasm -o user_host.wat
+          echo "Removing fd_tell import..."
+          sed -i '/(import "wasi_snapshot_preview1" "fd_tell"/d' user_host.wat
+          echo "Converting back to WASM..."
+          wat2wasm user_host.wat -o target/machines/latest/user_host.wasm
+          rm user_host.wat
+          echo "Verifying updated imports..."
+          wasm-objdump -x target/machines/latest/user_host.wasm | grep wasi_snapshot_preview1
 
       - name: Build
         run: |
