@@ -421,12 +421,25 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, fmt.Errorf("espresso mode enabled bridge")
 		}
-		bride, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
+		bridge, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
 		if err != nil {
 			return nil, fmt.Errorf("espresso mode enabled without bridge")
 		}
-		opts.Streamer.Brige = bride
-		opts.Streamer.l1Reader = opts.L1Reader
+
+		// check if the pos is already finalized on L1
+		// and get the current finalized block number from L1
+		finalizedBlockNumber, err := opts.L1Reader.LatestFinalizedBlockNr(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get finalized block number: %w", err)
+		}
+
+		sequencerMessageCount, err := bridge.SequencerReportedSubMessageCount(&bind.CallOpts{
+			BlockNumber: new(big.Int).SetUint64(finalizedBlockNumber),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
+		}
+		opts.Streamer.InitialFinalizedSequencerMessageCount = sequencerMessageCount
 	}
 
 	if lightClientAddr != "" {

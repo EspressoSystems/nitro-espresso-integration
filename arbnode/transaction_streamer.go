@@ -26,7 +26,6 @@ import (
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -34,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcaster"
@@ -44,7 +42,6 @@ import (
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/dbutil"
-	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -92,10 +89,9 @@ type TransactionStreamer struct {
 	resubmitEspressoTxDeadline   time.Duration
 	lastSubmitFailureAt          *time.Time
 	// Public these fields for testing
-	EscapeHatchEnabled bool
-	UseEscapeHatch     bool
-	Brige              *bridgegen.Bridge
-	l1Reader           *headerreader.HeaderReader
+	EscapeHatchEnabled                    bool
+	UseEscapeHatch                        bool
+	InitialFinalizedSequencerMessageCount *big.Int
 }
 
 type TransactionStreamerConfig struct {
@@ -1886,28 +1882,9 @@ func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool 
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
-	if s.Brige != nil && pos != nil && s.l1Reader != nil {
-		// check if the pos is already finalized on L1
-		// and get the current finalized block number from L1
-		finalizedBlockNumber, err := s.l1Reader.LatestFinalizedBlockNr(context.Background())
-		if err != nil {
-			log.Error("failed to get finalized block number", "err", err)
-			// In case of an error, we choose the safe path and still send to espresso
-			return true
-		}
-
-		sequencerMessageCount, err := s.Brige.SequencerReportedSubMessageCount(&bind.CallOpts{
-			BlockNumber: big.NewInt(int64(finalizedBlockNumber)),
-		})
-		if err != nil {
-			log.Error("failed to get sequencerMessageCount", "err", err)
-			// In case of an error, we choose the safe path and still send to espresso
-			return true
-		}
-		// This means the pos has already been posted on L1
-
-		if *pos < sequencerMessageCount.Uint64() {
-			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", sequencerMessageCount)
+	if pos != nil {
+		if *pos < s.FinalizedSequencerMessageCount.Uint64() {
+			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", s.FinalizedSequencerMessageCount)
 			return false
 		}
 	}
