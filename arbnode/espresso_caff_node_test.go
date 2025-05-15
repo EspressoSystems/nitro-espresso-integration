@@ -14,7 +14,7 @@ import (
 )
 
 type MockEspressoStreamer struct {
-	currrPos    uint64
+	currPos     uint64
 	currHotShot uint64
 
 	delayedPos uint64
@@ -29,17 +29,9 @@ func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockEspressoStreamer) Peek(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
-	return nil, nil
-}
-
-func (m *MockEspressoStreamer) Advance() {
-	m.currrPos++
-}
-
-func (m *MockEspressoStreamer) Next(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (m *MockEspressoStreamer) Peek(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
 	var delayedCnt uint64 = 1
-	if m.delayedPos == m.currrPos {
+	if m.delayedPos == m.currPos {
 		delayedCnt = 2
 	}
 	result := espressostreamer.MessageWithMetadataAndPos{
@@ -47,16 +39,25 @@ func (m *MockEspressoStreamer) Next(ctx context.Context) (*espressostreamer.Mess
 			DelayedMessagesRead: delayedCnt,
 			Message:             &arbostypes.EmptyTestIncomingMessage,
 		},
-		Pos:           m.currrPos,
+		Pos:           m.currPos,
 		HotshotHeight: m.currHotShot,
 	}
-	m.currrPos++
+	return &result
+}
+
+func (m *MockEspressoStreamer) Advance() {
+	m.currPos++
 	m.currHotShot++
-	return &result, nil
+}
+
+func (m *MockEspressoStreamer) Next(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
+	result := m.Peek(ctx)
+	m.Advance()
+	return result
 }
 
 func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
-	m.currrPos = currentMessagePos
+	m.currPos = currentMessagePos
 	m.currHotShot = currentHostshotBlock
 }
 
@@ -79,6 +80,16 @@ func (m *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber ui
 }
 
 func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == 2 {
+		return &espressostreamer.MessageWithMetadataAndPos{
+			MessageWithMeta: arbostypes.MessageWithMetadata{
+				Message:             arbostypes.InvalidL1Message,
+				DelayedMessagesRead: messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead,
+			},
+			Pos:           messageWithMetadataAndPos.Pos,
+			HotshotHeight: messageWithMetadataAndPos.HotshotHeight,
+		}, nil
+	}
 	return messageWithMetadataAndPos, nil
 }
 
@@ -87,29 +98,36 @@ func (m *MockDelayedMessageFetcher) reset(parentChainBlockNum uint64, seqNum uin
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
 	caffNode := EspressoCaffNode{}
-	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3}
+	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, currPos: 0}
 	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
 	ctx := context.Background()
-	msg1, err := caffNode.peekMessage(context.Background())
+	msg1, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 
 	require.Equal(t, msg1.MessageWithMeta.DelayedMessagesRead, uint64(1))
 	require.Equal(t, msg1.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
+	require.Equal(t, msg1.Pos, uint64(0))
+	caffNode.espressoStreamer.Advance()
 
 	msg2, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg2.MessageWithMeta.DelayedMessagesRead, uint64(1))
 	require.Equal(t, msg2.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
+	require.Equal(t, msg2.Pos, uint64(1))
+	caffNode.espressoStreamer.Advance()
 
 	msg3, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg3.MessageWithMeta.DelayedMessagesRead, uint64(1))
 	require.Equal(t, msg3.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
+	require.Equal(t, msg3.Pos, uint64(2))
+	caffNode.espressoStreamer.Advance()
 
 	msg4, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg4.MessageWithMeta.DelayedMessagesRead, uint64(2))
-	require.Equal(t, msg4.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
+	require.Equal(t, msg4.MessageWithMeta.Message, arbostypes.InvalidL1Message)
+	require.Equal(t, msg4.Pos, uint64(3))
 }
 
 func TestEspressoCaffNodeShouldResetToLastStoredHotshotBlock(t *testing.T) {
@@ -117,6 +135,6 @@ func TestEspressoCaffNodeShouldResetToLastStoredHotshotBlock(t *testing.T) {
 	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, dbHotShot: 10}
 
 	espressoStreamer, _ := caffNode.espressoStreamer.(*MockEspressoStreamer)
-	require.Equal(t, espressoStreamer.currHotShot, uint64(10))
-	require.Equal(t, espressoStreamer.currrPos, uint64(3))
+	require.Equal(t, espressoStreamer.dbHotShot, uint64(10))
+	require.Equal(t, espressoStreamer.delayedPos, uint64(3))
 }
