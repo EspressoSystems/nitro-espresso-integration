@@ -8,6 +8,8 @@ replace github.com/ethereum/go-ethereum => ./go-ethereum
 
 replace github.com/offchainlabs/bold => ./bold
 
+replace github.com/EspressoSystems/espresso-network-go => ./espresso-network-go
+
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
