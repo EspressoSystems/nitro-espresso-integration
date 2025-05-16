@@ -83,7 +83,7 @@ jobs:
         with:
           toolchain: "nightly-2024-10-06"
           targets: "wasm32-wasi, wasm32-unknown-unknown"
-          components: "rust-src, rustfmt, clippy
+          components: "rust-src, rustfmt, clippy"
 
       - name: Install cbindgen
         run: cargo install cbindgen
