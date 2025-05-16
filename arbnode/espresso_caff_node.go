@@ -139,13 +139,11 @@ func NewEspressoCaffNode(
 	}
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
-		configFetcher().RetryTime,
-		configFetcher().HotshotPollingInterval,
-		configFetcher().HotshotPollingTimeout,
 		sgxVerifier,
 		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
+		configFetcher().RetryTime,
 	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
@@ -171,16 +169,13 @@ func NewEspressoCaffNode(
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
-	messageWithMetadataAndPos, err := n.espressoStreamer.Peek(ctx)
-	if err != nil {
-		return nil, err
-	}
+	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
 
 	if messageWithMetadataAndPos == nil {
 		return nil, nil
 	}
 
-	messageWithMetadataAndPos, err = n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
+	messageWithMetadataAndPos, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
 	if err != nil {
 		log.Error("unable to get the next delayed message", "err", err)
 		return nil, err
@@ -258,6 +253,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
+	n.espressoStreamer.Start(ctx)
 
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
