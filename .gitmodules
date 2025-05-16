@@ -39,5 +39,5 @@
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
-	branch = 55c6b6d7daacb856dd877c1ce7c870d7d7b831cf
+	branch = release-v3.5.6-55c6b6d7
 
