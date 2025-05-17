@@ -28,6 +28,7 @@ import (
 const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
+var PayloadHadNoMessagesErr = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
 
 type EspressoStreamerInterface interface {
 	Start(ctx context.Context) error
@@ -213,6 +214,9 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 	if err != nil {
 		log.Warn("failed to parse hotshot payload", "err", err)
 		return nil, err
+	}
+	if len(messages) == 0 {
+		return nil, PayloadHadNoMessagesErr
 	}
 	// if attestation verification fails, we should skip this transaction
 	// Parse the messages
