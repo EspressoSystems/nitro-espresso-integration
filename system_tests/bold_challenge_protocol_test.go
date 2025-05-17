@@ -901,15 +901,15 @@ func makeBoldBatch(
 	seqNum.Sub(seqNum, common.Big1)
 	uint256Type, err := abi.NewType("uint256", "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+		panic(fmt.Sprintf("failed to create uint256 type: %v", err))
 	}
 	bytesType, err := abi.NewType("bytes", "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+		panic(fmt.Sprintf("failed to create bytes type: %v", err))
 	}
 	uint8Type, err := abi.NewType("uint8", "", nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
+		panic(fmt.Sprintf("failed to create uint8 type: %v", err))
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
@@ -920,6 +920,9 @@ func makeBoldBatch(
 		{Type: bytesType},
 		{Type: uint8Type},
 	}.Pack(hotshotBlockNumber, signature, teeType)
+	if err != nil {
+		panic(fmt.Sprintf("ABI packing failed: %v", err))
+	}
 	tx, err := seqInbox.AddSequencerL2BatchFromOrigin37501551(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), espressoMetadata)
 	Require(t, err)
 	receipt, err := EnsureTxSucceeded(ctx, backend, tx)
