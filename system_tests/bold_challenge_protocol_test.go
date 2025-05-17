@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
@@ -898,7 +899,28 @@ func makeBoldBatch(
 
 	seqNum := new(big.Int).Lsh(common.Big1, 256)
 	seqNum.Sub(seqNum, common.Big1)
-	tx, err := seqInbox.AddSequencerL2BatchFromOrigin37501551(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), []byte{})
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+	}
+	uint8Type, err := abi.NewType("uint8", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
+	}
+
+	hotshotBlockNumber := new(big.Int).SetUint64(0)
+	signature := "0x"
+	teeType := uint8(0)
+	espressoMetadata, err := abi.Arguments{
+		{Type: uint256Type},
+		{Type: bytesType},
+		{Type: uint8Type},
+	}.Pack(hotshotBlockNumber, signature, teeType)
+	tx, err := seqInbox.AddSequencerL2BatchFromOrigin37501551(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), espressoMetadata)
 	Require(t, err)
 	receipt, err := EnsureTxSucceeded(ctx, backend, tx)
 	Require(t, err)
