@@ -913,7 +913,7 @@ func makeBoldBatch(
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
-	signature := "0x"
+	signature := []byte("0x0")
 	teeType := uint8(0)
 	espressoMetadata, err := abi.Arguments{
 		{Type: uint256Type},
