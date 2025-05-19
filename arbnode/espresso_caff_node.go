@@ -140,7 +140,7 @@ func NewEspressoCaffNode(
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
 		sgxVerifier,
-		espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls),
+		client,
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 		configFetcher().RetryTime,

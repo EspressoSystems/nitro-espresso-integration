@@ -240,7 +240,7 @@ func ExpectErr(t *testing.T, err error, expectedError error) {
 func TestEspressoEmptyTransaction(t *testing.T) {
 	mockEspressoClient := new(mockEspressoClient)
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-	streamer := NewEspressoStreamer(1, 1, time.Millisecond, time.Millisecond, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{})
+	streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{}, time.Millisecond)
 	// This determines the contents of the message. For this test the contents of the message needs to be empty (not 0's) to properly test the behavior
 	msgFetcher := func(arbutil.MessageIndex) ([]byte, error) {
 		return []byte{}, nil
