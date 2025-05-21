@@ -1619,7 +1619,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	for addMessageLoop() {
 		msg, err := getNextMessage()
 		if err != nil {
-			if breakLoopWhenErrorOccurs {
+			if breakLoopWhenErrorOccurs && lastPotentialMsg != nil {
 				log.Error("Error getting next message", "err", err, "pos", b.building.msgCount)
 				break
 			}
