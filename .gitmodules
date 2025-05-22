@@ -14,7 +14,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/EspressoSystems/nitro-contracts.git
-	branch = celestia-integration-aws-nitro
+	branch = develop-aws-nitro
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
@@ -39,5 +39,5 @@
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
-	branch = celestia-aws-nitro
+	branch = integration-aws-nitro
 
