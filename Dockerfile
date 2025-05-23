@@ -56,10 +56,6 @@ COPY arbitrator/prover arbitrator/prover
 COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
-ARG ESPRESSO_NETWORK_GO_VER=0.0.37
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
@@ -94,10 +90,6 @@ COPY ./safe-smart-account ./safe-smart-account
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
-ARG ESPRESSO_NETWORK_GO_VER=0.0.37
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder workspace/contracts/build/contracts/src/precompiles/ contracts/build/contracts/src/precompiles/
@@ -124,6 +116,7 @@ COPY arbitrator/stylus arbitrator/stylus
 COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
+COPY scripts/prepare-espresso-crypto-helper scripts/
 COPY brotli brotli
 RUN apt-get update && apt-get install -y cmake
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
@@ -242,7 +235,7 @@ RUN ./download-machine.sh consensus-v30 0xb0de9cb89e4d944ae6023a3b62276e54804c24
 RUN ./download-machine.sh consensus-v31 0x260f5fa5c3176a856893642e149cf128b5a8de9f828afec8d11184415dd8dc69
 RUN ./download-machine.sh consensus-v32 0x184884e1eb9fefdc158f6c8ac912bb183bf3cf83f0090317e0bc4ac5860baa39
 
-FROM golang:1.23.4-bookworm AS node-builder
+FROM golang:1.24.3-bookworm AS node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""
@@ -264,10 +257,6 @@ COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
 COPY bold/go.mod bold/go.sum bold/
-ARG ESPRESSO_NETWORK_GO_VER=0.0.37
-ADD https://github.com/EspressoSystems/espresso-network-go/archive/refs/tags/v$ESPRESSO_NETWORK_GO_VER.tar.gz .
-RUN tar -xzf v${ESPRESSO_NETWORK_GO_VER}.tar.gz && \
-    mv espresso-network-go-${ESPRESSO_NETWORK_GO_VER} espresso-network-go
 RUN go mod download
 COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
