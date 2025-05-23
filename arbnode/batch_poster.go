@@ -576,7 +576,7 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 	// Setup nitro contract interface
 	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
+		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
 	}
 	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
 

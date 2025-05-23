@@ -253,7 +253,10 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	n.espressoStreamer.Start(ctx)
+	err := n.espressoStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start espresso streamer: %w", err)
+	}
 
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
