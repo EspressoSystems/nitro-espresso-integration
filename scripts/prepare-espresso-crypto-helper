@@ -47,7 +47,7 @@ url="https://github.com/EspressoSystems/espresso-network/releases/download/${lat
 
 echo "downloading from $url"
 
-mkdir -p ./target
-curl -L "$url" -o ./target/$fileName
+mkdir -p ./target/lib
+curl -L "$url" -o ./target/lib/$fileName
 
-$SUDO go run github.com/EspressoSystems/espresso-network/sdks/go/download link -c $checksum -f ./target/$fileName
+$SUDO go run github.com/EspressoSystems/espresso-network/sdks/go/download link -c $checksum -f ./target/lib/$fileName
