@@ -2,12 +2,16 @@ package arbtest
 
 import (
 	"context"
+	"math/big"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 )
 
 func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*TestClient, func()) {
@@ -139,4 +143,84 @@ func TestEspressoCaffNode(t *testing.T) {
 	// Send transaction to CaffNode and it should works later
 	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
 	Require(t, err)
+}
+
+func TestEspressoForceInclusionChecker(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
+	cleanup := builder.Build(t)
+	defer cleanup()
+
+	addr := builder.addresses.SequencerInbox
+	seqInbox, err := bridgegen.NewSequencerInbox(addr, builder.L1.Client)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mockSeqInbox := &MockSeqInbox{
+		MaxDelayBlocks:  big.NewInt(20),
+		MaxDelaySeconds: big.NewInt(200),
+		seqInbox:        seqInbox,
+	}
+
+	config := arbnode.ForceInclusionCheckerConfig{
+		RetryTime:                time.Second * 2,
+		PollingInterval:          time.Second * 1,
+		BlockThresholdTolerance:  20,
+		SecondThresholdTolerance: 200,
+	}
+
+	delayedBridge, err := arbnode.NewDelayedBridge(builder.L1.Client, builder.addresses.Bridge, builder.addresses.DeployedAt)
+
+	reader := builder.L2.ConsensusNode.L1Reader
+
+	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
+		delayedBridge,
+		reader,
+		builder.L2.ConsensusNode.ArbDB,
+		100,
+		false,
+		false,
+		10,
+	)
+
+	fatalErrChan := make(chan error)
+
+	forceInclusionChecker := arbnode.NewForceInclusionChecker(mockSeqInbox, config, reader, delayedMessageFetcher, fatalErrChan)
+	forceInclusionChecker.Start(ctx)
+
+	delayedTx := builder.L2Info.PrepareTx("Faucet", "Owner", 3e7, transferAmount, nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+	})
+
+	select {
+	case err := <-fatalErrChan:
+		if err == nil {
+			t.Fatal("expected an error from fatalErrChan, got nil")
+		} else {
+			t.Logf("received error as expected: %v", err)
+		}
+	case <-time.After(100 * time.Second):
+		t.Fatal("did not receive error from fatalErrChan within timeout")
+	}
+}
+
+// MockSeqInbox is a mock implementation of the sequencer inbox interface,
+// allowing customizable time variation values for testing purposes.
+// This is useful because the real contract hardcodes MaxTimeVariation when deployBold is disabled.
+type MockSeqInbox struct {
+	MaxDelayBlocks  *big.Int
+	MaxDelaySeconds *big.Int
+	seqInbox        *bridgegen.SequencerInbox
+}
+
+func (m *MockSeqInbox) MaxTimeVariation(ctx context.Context) (*big.Int, *big.Int, *big.Int, *big.Int, error) {
+	return m.MaxDelayBlocks, nil, m.MaxDelaySeconds, nil, nil
+}
+
+func (m *MockSeqInbox) TotalDelayedMessagesRead(ctx context.Context) (*big.Int, error) {
+	return m.seqInbox.TotalDelayedMessagesRead(&bind.CallOpts{Context: ctx})
 }
