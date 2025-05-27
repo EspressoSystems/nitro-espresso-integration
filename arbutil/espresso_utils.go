@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+// MaxL2MessageSize value from arbos/arbostypes/incomingmessage.go
+const MAX_L2_MESSAGE_SIZE int = 256 * 1024
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 const LEN_SIZE int = 8
 const INDEX_SIZE int = 8
@@ -35,6 +37,11 @@ func BuildRawHotShotPayload(
 		msgBytes, err := msgFetcher(p)
 		if err != nil {
 			log.Warn("failed to fetch the message", "pos", p)
+			break
+		}
+
+		if len(msgBytes) >= MAX_L2_MESSAGE_SIZE {
+			log.Warn("message too large", "pos", p, "size", len(msgBytes))
 			break
 		}
 
