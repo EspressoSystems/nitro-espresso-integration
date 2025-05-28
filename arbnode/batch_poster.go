@@ -441,11 +441,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, fmt.Errorf("failed to get finalized block number: %w", err)
 		}
 
-		sequencerMessageCount, err := bridge.SequencerReportedSubMessageCount(&bind.CallOpts{
-			BlockNumber: new(big.Int).SetUint64(finalizedBlockNumber),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
+		sequencerMessageCount := new(big.Int).SetUint64(0)
+
+		if finalizedBlockNumber > opts.DeployInfo.DeployedAt {
+			sequencerMessageCount, err = bridge.SequencerReportedSubMessageCount(&bind.CallOpts{
+				BlockNumber: new(big.Int).SetUint64(finalizedBlockNumber),
+			})
+			if err != nil {
+				log.Error("failed to get sequencerMessageCount", "err", err)
+				return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
+			}
 		}
 		opts.Streamer.InitialFinalizedSequencerMessageCount = sequencerMessageCount
 	}
