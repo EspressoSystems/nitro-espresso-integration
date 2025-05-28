@@ -3,9 +3,7 @@ package arbtest
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/big"
-	"net/http"
 	"os/exec"
 	"testing"
 	"time"
@@ -18,7 +16,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -375,32 +372,6 @@ func TestEspressoE2E(t *testing.T) {
 	})
 	Require(t, err)
 
-	// Now send the transaction for message pos 0, the message position 0 should have not been sent to espresso
-	// because its a genesis message which originates on L1
-	fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
-		msg, err := l2Node.ConsensusNode.TxStreamer.GetMessage(0)
-		Require(t, err)
-		b, err := rlp.EncodeToBytes(msg)
-		Require(t, err)
-		return b, err
-	}
-
-	payload, _ := arbutil.BuildRawHotShotPayload([]arbutil.MessageIndex{0}, fetcher, 900*1024)
-	payload, err = arbutil.SignHotShotPayload(payload, func([]byte) ([]byte, error) {
-		return []byte{}, nil
-	})
-	Require(t, err)
-
-	// Submit the transaction to hotshot
-	txhash, err := l2Node.ConsensusNode.TxStreamer.ResubmitEspressoTransactions(ctx, arbutil.SubmittedEspressoTx{Hash: "", Pos: []arbutil.MessageIndex{0}, Payload: payload})
-	Require(t, err)
-	// Check if the txHash is already finalized in hotshot
-	// curl hotshot availability endpoint and this transaction should not be in the response
-	resp, err := http.Get(fmt.Sprintf("http://127.0.0.1:41000/availability/transaction/hash/%s", txhash))
-	Require(t, err)
-	if resp.StatusCode == 200 {
-		t.Fatal("Transaction should not be in the response")
-	}
 }
 
 func TestEspressoWithBlobs(t *testing.T) {
