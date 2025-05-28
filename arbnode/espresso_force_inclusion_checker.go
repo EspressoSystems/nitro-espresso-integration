@@ -37,7 +37,7 @@ func EspressoForceInclusionConfigAddOptions(prefix string, f *flag.FlagSet) {
 }
 
 // SeqInboxInterface defines an interface for interacting with the sequencer inbox contract.
-// Note: When `deployBold` is disabled, the [MaxTimeVariation](cci:1://file:///Users/jeremyhe/work/nitro-espresso-integration/arbnode/espresso_force_inclusion_checker.go:14:1-14:78) values are hardcoded,
+// Note: When `deployBold` is disabled, the [MaxTimeVariation](arbnode/espresso_force_inclusion_checker.go:14:1-14:78) values are hardcoded,
 // which makes this interface difficult to mock in tests.
 type SeqInboxInterface interface {
 	MaxTimeVariation(context.Context) (*big.Int, *big.Int, *big.Int, *big.Int, error)
