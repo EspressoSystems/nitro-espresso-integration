@@ -1150,6 +1150,12 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 		batch = s.db.NewBatch()
 	}
 	for i, msg := range messages {
+		if len(msg.MessageWithMeta.Message.L2msg) > arbostypes.MaxL2MessageSize {
+			// #nosec G115
+			log.Warn("message too large", "pos", pos+arbutil.MessageIndex(i), "size", len(msg.MessageWithMeta.Message.L2msg))
+			continue
+		}
+
 		// #nosec G115
 		err := s.writeMessage(pos+arbutil.MessageIndex(i), msg, batch)
 		if err != nil {
