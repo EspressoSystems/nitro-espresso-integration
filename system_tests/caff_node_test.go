@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strconv"
 	"testing"
@@ -41,6 +42,8 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 
 	nodeConfig.ParentChainReader.Enable = true
+
+	builder.l2StackConfig.HTTPPort = 8946
 
 	cleanup := builder.BuildEspressoCaffNode(t, existing)
 	return builder.L2, cleanup
@@ -143,6 +146,45 @@ func TestEspressoCaffNode(t *testing.T) {
 	// Send transaction to CaffNode and it should works later
 	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
 	Require(t, err)
+
+	// start the trusted node
+	trustedPort := 9000
+	trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
+	defer trustedCleanup()
+
+	fatalErrChan := make(chan error)
+	// Check the state checker
+	port := builder.l2StackConfig.HTTPPort
+	// Set the trusted node url to the L1 node
+	// This is to simulate the trusted url returning a different block
+	stateChecker := arbnode.NewStateChecker(
+		arbnode.StateCheckerConfig{
+			Enable:          true,
+			PollingInterval: time.Second * 1,
+			TrustedNodeUrl:  fmt.Sprintf("http://localhost:%d", trustedPort),
+		},
+		port,
+		fatalErrChan,
+	)
+	stateChecker.Start(ctx)
+	select {
+	case err := <-fatalErrChan:
+		if err == nil {
+			t.Fatal("expected an error from fatalErrChan, got nil")
+		} else {
+			t.Logf("received error as expected: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("did not receive error from fatalErrChan within timeout")
+	}
+}
+
+func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
+	builder.l2StackConfig.HTTPPort = port
+	builder.l2StackConfig.HTTPHost = "0.0.0.0"
+	builder.useL2StackConfig = true
+	return builder.BuildL2(t)
 }
 
 func TestEspressoForceInclusionChecker(t *testing.T) {

@@ -41,6 +41,7 @@ type EspressoCaffNodeConfig struct {
 
 	// Force Inclusion Checker
 	ForceInclusionCheckerConfig ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
+	StateCheckerConfig          StateCheckerConfig          `koanf:"state-checker"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -77,6 +78,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
+	EspressoStateCheckerConfigAddOptions(prefix+".state-checker", f)
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -95,7 +97,7 @@ type EspressoCaffNode struct {
 	l1Reader *headerreader.HeaderReader
 
 	forceInclusionChecker *ForceInclusionChecker
-	fatalErrChan          chan error
+	stateChecker          *StateChecker
 }
 
 func NewEspressoCaffNode(
@@ -108,6 +110,7 @@ func NewEspressoCaffNode(
 	blocksToRead uint64,
 	seqInboxAddr common.Address,
 	fatalErrChan chan error,
+	httpPort int,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -115,6 +118,11 @@ func NewEspressoCaffNode(
 
 	if l1Reader == nil {
 		log.Crit("l1Reader is nil")
+		return nil
+	}
+
+	if httpPort == 0 {
+		log.Crit("httpPort is 0")
 		return nil
 	}
 
@@ -155,6 +163,15 @@ func NewEspressoCaffNode(
 		fatalErrChan,
 	)
 
+	var stateChecker *StateChecker
+	if configFetcher().StateCheckerConfig.Enable {
+		stateChecker = NewStateChecker(
+			configFetcher().StateCheckerConfig,
+			httpPort,
+			fatalErrChan,
+		)
+	}
+
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
@@ -163,6 +180,7 @@ func NewEspressoCaffNode(
 		db:                    db,
 		l1Reader:              l1Reader,
 		forceInclusionChecker: forceInclusionChecker,
+		stateChecker:          stateChecker,
 	}
 }
 
@@ -264,6 +282,9 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	err := n.forceInclusionChecker.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start force inclusion checker: %w", err)
+	}
+	if n.stateChecker != nil {
+		n.stateChecker.Start(ctx)
 	}
 
 	// This is +1 because the current block is the block after the last processed block
