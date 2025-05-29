@@ -451,7 +451,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			BlockNumber: new(big.Int).SetUint64(blockNumber),
 		})
 		if err != nil {
-			log.Error("failed to get sequencerMessageCount", "err", err)
 			return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
 		}
 

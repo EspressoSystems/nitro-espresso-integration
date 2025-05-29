@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -400,7 +401,6 @@ func TestEspressoE2E(t *testing.T) {
 	if resp.StatusCode == 200 {
 		t.Fatal("Transaction should not be in the response")
 	}
-
 }
 
 func TestEspressoWithBlobs(t *testing.T) {
