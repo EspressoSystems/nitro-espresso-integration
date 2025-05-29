@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 )
 
@@ -64,4 +65,72 @@ func TestTimeboostBackfillingsTrackersForMissingBlockMetadata(t *testing.T) {
 
 	// Backfill trackers for missing data and verify that 5, 6, 7, 8, 9 get added to already existing 10, 11, 16, 17, 18, 19 keys
 	backfillAndVerifyCorrectness(5, []uint64{5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 19})
+}
+
+func TestWriteMessagesSkipsOversizedMessages(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	arbDb := rawdb.NewMemoryDatabase()
+	Require(t, setMessageCount(arbDb, 0))
+
+	txStreamer := &TransactionStreamer{
+		db: arbDb,
+	}
+	txStreamer.StopWaiter.Start(ctx, txStreamer)
+
+	numMessages := 5
+	oversizedIndex := 2
+	messages := make([]arbostypes.MessageWithMetadataAndBlockInfo, numMessages)
+
+	for i := 0; i < numMessages; i++ {
+		var msgData []byte
+		if i == oversizedIndex {
+			msgData = make([]byte, arbostypes.MaxL2MessageSize+1)
+		} else {
+			msgData = make([]byte, 100+i*10)
+		}
+
+		for j := range msgData {
+			msgData[j] = byte(i + 1)
+		}
+
+		messages[i] = arbostypes.MessageWithMetadataAndBlockInfo{
+			MessageWithMeta: arbostypes.MessageWithMetadata{
+				Message: &arbostypes.L1IncomingMessage{
+					Header: &arbostypes.L1IncomingMessageHeader{
+						Kind: arbostypes.L1MessageType_L2Message,
+					},
+					L2msg: msgData,
+				},
+			},
+		}
+	}
+
+	err := txStreamer.writeMessages(0, messages, nil)
+	Require(t, err)
+
+	msgCount, err := txStreamer.GetMessageCount()
+	Require(t, err)
+	if msgCount != arbutil.MessageIndex(numMessages) {
+		t.Fatalf("Expected message count %d, got %d", numMessages, msgCount)
+	}
+
+	for i := 0; i < numMessages; i++ {
+		msg, err := txStreamer.GetMessage(arbutil.MessageIndex(i))
+		Require(t, err)
+
+		if i == oversizedIndex {
+			if len(msg.Message.L2msg) != 0 {
+				t.Fatalf("Expected message %d to be empty", i)
+			}
+		} else {
+
+			if len(msg.Message.L2msg) == 0 {
+				t.Fatalf("Normal message %d should not be empty", i)
+			}
+		}
+	}
 }
