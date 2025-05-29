@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -13,12 +15,13 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hf/nitrite"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
 
 type EspressoNitroTEEVerifierInterface interface {
-	VerifyCert(opts *bind.TransactOpts, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error)
-	VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts) ([]byte, []byte, error)
+	VerifyCert(opts *bind.TransactOpts, dataPoster *dataposter.DataPoster, nitroAddr common.Address, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error)
+	VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts, dataPoster *dataposter.DataPoster, nitroAddr common.Address) ([]byte, []byte, error)
 	IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error)
 }
 
@@ -39,7 +42,7 @@ func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool
  * This functions checks and verifies a certificate on-chain.
  * It first checks if the certificate is already verified by its hash. If not, it submits a verification transaction.
  */
-func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error) {
+func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, dataPoster *dataposter.DataPoster, nitroAddr common.Address, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error) {
 	// Get certificate hash, see and see if its already verified on chain
 	certHash := crypto.Keccak256Hash(certificate)
 	verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
@@ -48,19 +51,33 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, certifica
 	}
 	if verified {
 		log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
-		return certHash, nil
+		// return certHash, nil
 	}
 
 	// If not verified, try and verify the certificate either CA or client
-	var tx *types.Transaction
+	contractABI, err := abi.JSON(strings.NewReader(espressogen.IEspressoNitroTEEVerifierMetaData.ABI))
+	if err != nil {
+		return certHash, err
+	}
+
+	// Pack the function arguments (attestation, data, teeType)
+	var calldata []byte
 	if isCA {
-		tx, err = e.contract.VerifyCACert(opts, certificate, parentCertHash)
+		calldata, err = contractABI.Pack("verifyCACert", certificate, parentCertHash)
 	} else {
-		tx, err = e.contract.VerifyClientCert(opts, certificate, parentCertHash)
+		calldata, err = contractABI.Pack("verifyClientCert", certificate, parentCertHash)
 	}
 	if err != nil {
 		return certHash, err
 	}
+
+	tx, err := dataPoster.PostSimpleTransaction(
+		context.Background(),
+		nitroAddr,
+		calldata,
+		opts.GasLimit,
+		opts.Value,
+	)
 
 	log.Info("Waiting for cert tx to be mined", "tx", tx.Hash(), "isCA", isCA)
 	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
@@ -80,7 +97,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, certifica
  * 2. The CA certificate chain
  * 3. The client certificate
  */
-func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts) (attestation []byte, data []byte, err error) {
+func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, opts *bind.TransactOpts, dataPoster *dataposter.DataPoster, nitroAddr common.Address) (attestation []byte, data []byte, err error) {
 	// Unmarshal attestation document
 	var res nitrite.Result
 	err = json.Unmarshal(attestationBytes, &res)
@@ -112,7 +129,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationB
 	for i := 0; i < len(res.Document.CABundle); i++ {
 		cert := res.Document.CABundle[i]
 		// Verify current certificate against parent hash in NitroEspressoTEEVerifier contracts
-		certHash, err := e.VerifyCert(opts, cert, parentCertHash, true)
+		certHash, err := e.VerifyCert(opts, dataPoster, nitroAddr, cert, parentCertHash, true)
 		if err != nil {
 			log.Error("failed to get CA cert verified", "index", i, "err", err)
 			return nil, nil, err
@@ -123,7 +140,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationB
 	}
 
 	// Verify client certificate
-	_, err = e.VerifyCert(opts, res.Document.Certificate, parentCertHash, false)
+	_, err = e.VerifyCert(opts, dataPoster, nitroAddr, res.Document.Certificate, parentCertHash, false)
 	if err != nil {
 		log.Error("failed to get client cert verified", "err", err)
 		return nil, nil, err

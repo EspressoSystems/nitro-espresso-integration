@@ -7,8 +7,10 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
 )
@@ -37,14 +39,17 @@ type EspressoKeyManager struct {
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
-	batchPosterOpts   *bind.TransactOpts
-	batchPosterSigner signature.DataSignerFunc
-	teeType           TEE
+	batchPosterOpts            *bind.TransactOpts
+	batchPosterSigner          signature.DataSignerFunc
+	dataPoster                 *dataposter.DataPoster
+	espressoTEEVerifierAddress common.Address
+	nitroAddr                  common.Address
+	teeType                    TEE
 
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
+func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoTEEVerifierAddress common.Address, dataPoster *dataposter.DataPoster, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, nitroAddr common.Address, opts *BatchPosterOpts, teeType TEE) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
@@ -56,7 +61,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("failed to get public key")
 	}
 
-	if opts.TransactOpts == nil {
+	if dataPoster.Auth() == nil {
 		panic("TransactOpts is nil")
 	}
 
@@ -65,13 +70,16 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 	}
 
 	return &EspressoKeyManager{
-		pubKey:                    pubKey,
-		privKey:                   privKey,
-		batchPosterSigner:         opts.DataSigner,
-		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
-		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
-		batchPosterOpts:           opts.TransactOpts,
-		teeType:                   teeType,
+		pubKey:                     pubKey,
+		privKey:                    privKey,
+		batchPosterSigner:          opts.DataSigner,
+		espressoTEEVerifierCaller:  espressoTEEVerifierCaller,
+		espressoNitroTEEVerifier:   espressoNitroTEEVerifier,
+		dataPoster:                 dataPoster,
+		batchPosterOpts:            opts.TransactOpts,
+		espressoTEEVerifierAddress: espressoTEEVerifierAddress,
+		nitroAddr:                  nitroAddr,
+		teeType:                    teeType,
 	}
 }
 
@@ -116,6 +124,8 @@ func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byt
 		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
 			attestationBytes,
 			k.batchPosterOpts,
+			k.dataPoster,
+			k.nitroAddr,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
@@ -139,7 +149,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, attestation, data, uint8(k.teeType))
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.batchPosterOpts, k.espressoTEEVerifierAddress, k.dataPoster, attestation, data, uint8(k.teeType))
 	if err != nil {
 		return err
 	}
