@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -30,7 +31,7 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 }
 
 func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, to common.Address, poster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error {
-	contractABI, err := abi.JSON(strings.NewReader(espressogen.EspressoTEEVerifierMockMetaData.ABI))
+	contractABI, err := abi.JSON(strings.NewReader(espressogen.IEspressoTEEVerifierMetaData.ABI))
 	if err != nil {
 		return err
 	}
@@ -40,9 +41,20 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, to common.
 	if err != nil {
 		return err
 	}
-	log.Info("help", "opts", opts, "to", to)
-	tx, err := poster.PostSimpleTransaction(context.Background(), to, calldata, 240000, opts.Value)
-	// tx, err = e.contract.RegisterSigner(opts, attestation, data, teeType)
+	msg := ethereum.CallMsg{
+		From:  opts.From,
+		To:    &to,
+		Data:  calldata,
+		Value: opts.Value,
+	}
+
+	estimate, err := e.l1Client.EstimateGas(context.Background(), msg)
+	if err != nil {
+		return err
+	}
+	log.Info("estimate", "e", estimate)
+	higher := estimate + 9000000
+	tx, err := poster.PostSimpleTransaction(context.Background(), to, calldata, higher, opts.Value)
 	if err != nil {
 		return err
 	}

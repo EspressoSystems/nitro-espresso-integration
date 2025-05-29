@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -61,7 +62,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("failed to get public key")
 	}
 
-	if dataPoster.Auth() == nil {
+	if opts.TransactOpts == nil {
 		panic("TransactOpts is nil")
 	}
 
@@ -158,9 +159,23 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	log.Info("Register signer succeeded", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
-	hasRegistered, err := k.HasRegistered()
-	if err != nil {
-		return err
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+	var hasRegistered bool
+	for i := 0; i < maxRetries; i++ {
+		hasRegistered, err = k.HasRegistered()
+		if err != nil {
+			return err
+		}
+
+		if hasRegistered {
+			break
+		}
+
+		if i < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
+		log.Info("address not registered in contract again, retrying...")
 	}
 	if !hasRegistered {
 		return errors.New("address is not registered in contract")

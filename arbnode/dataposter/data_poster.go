@@ -432,8 +432,8 @@ func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight ui
 		if err := p.canPostWithNonce(ctx, nextNonce, thisWeight); err != nil {
 			return 0, nil, false, 0, err
 		}
-		log.Info("here", "meta", lastQueueItem.Meta)
-		return nextNonce, lastQueueItem.Meta, true, lastQueueItem.CumulativeWeight(), nil
+		value := len(lastQueueItem.Meta) > 0
+		return nextNonce, lastQueueItem.Meta, value, lastQueueItem.CumulativeWeight(), nil
 	}
 
 	if err := p.updateNonce(ctx); err != nil {
@@ -717,12 +717,11 @@ func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit u
 func (p *DataPoster) PostSimpleTransaction(ctx context.Context, to common.Address, calldata []byte, gasLimit uint64, value *big.Int) (*types.Transaction, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	nonce, meta, _, _, err := p.getNextNonceAndMaybeMeta(ctx, 1)
-	log.Info("meta", "m", meta)
+	nonce, _, _, _, err := p.getNextNonceAndMaybeMeta(ctx, 1)
 	if err != nil {
 		return nil, err
 	}
-	return p.postTransactionWithMutex(ctx, time.Now(), nonce, meta, to, calldata, gasLimit, value, nil, nil)
+	return p.postTransactionWithMutex(ctx, time.Now(), nonce, nil, to, calldata, gasLimit, value, nil, nil)
 }
 
 func (p *DataPoster) PostTransaction(ctx context.Context, dataCreatedAt time.Time, nonce uint64, meta []byte, to common.Address, calldata []byte, gasLimit uint64, value *big.Int, kzgBlobs []kzg4844.Blob, accessList types.AccessList) (*types.Transaction, error) {
@@ -1133,7 +1132,6 @@ const minWait = time.Second * 10
 
 // Tries to acquire redis lock, updates balance and nonce,
 func (p *DataPoster) Start(ctxIn context.Context) {
-	log.Info("started")
 	p.StopWaiter.Start(ctxIn, p)
 	p.CallIteratively(func(ctx context.Context) time.Duration {
 		p.mutex.Lock()

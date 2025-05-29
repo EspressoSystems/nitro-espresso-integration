@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -61,6 +62,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, dataPoste
 	}
 
 	// Pack the function arguments (attestation, data, teeType)
+	log.Info("gas limit", "limit", opts.GasLimit)
 	var calldata []byte
 	if isCA {
 		calldata, err = contractABI.Pack("verifyCACert", certificate, parentCertHash)
@@ -70,15 +72,28 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(opts *bind.TransactOpts, dataPoste
 	if err != nil {
 		return certHash, err
 	}
-
+	msg := ethereum.CallMsg{
+		From:  opts.From,
+		To:    &nitroAddr,
+		Data:  calldata,
+		Value: opts.Value,
+	}
+	estimate, err := e.l1Client.EstimateGas(context.Background(), msg)
+	if err != nil {
+		return certHash, err
+	}
+	log.Info("gas limit", "estimate", estimate)
+	higher := estimate + 9000000
 	tx, err := dataPoster.PostSimpleTransaction(
 		context.Background(),
 		nitroAddr,
 		calldata,
-		opts.GasLimit,
+		higher,
 		opts.Value,
 	)
-
+	if err != nil {
+		return certHash, err
+	}
 	log.Info("Waiting for cert tx to be mined", "tx", tx.Hash(), "isCA", isCA)
 	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
 	if err != nil {
