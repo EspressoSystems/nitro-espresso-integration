@@ -22,7 +22,7 @@
           yarn = (prev.yarn.override { inherit nodejs; });
           pnpm = (prev.pnpm.override { inherit nodejs; });
           golangci-lint = prev.golangci-lint.overrideAttrs (old: rec {
-            version = "1.63.8";
+            version = "1.64.8";
             src = prev.fetchFromGitHub {
               owner = "golangci";
               repo = "golangci-lint";
