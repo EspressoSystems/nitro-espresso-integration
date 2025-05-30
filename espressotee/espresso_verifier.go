@@ -53,6 +53,8 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	}
 	log.Info("estimate", "e", estimate)
 	higher := estimate + 9000000
+	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
+	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, higher, dataPoster.Auth().Value)
 	if err != nil {
 		return err

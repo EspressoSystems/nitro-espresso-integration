@@ -43,7 +43,7 @@ func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool
  * Always verify certificate on chain, if certificate is already verified it is very cheap to verify again on chain
  */
 func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error) {
-	// Get certificate hash, see and see if its already verified on chain
+	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
 	verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
 	if err != nil {
@@ -53,13 +53,13 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 		log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
 	}
 
-	// If not verified, try and verify the certificate either CA or client
+	// Try and verify the certificate either CA or client
 	contractABI, err := espressogen.IEspressoNitroTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return certHash, err
 	}
 
-	// Pack the function arguments (attestation, data, teeType)
+	// Pack the function arguments (cerificate, parentCertHash)
 	var calldata []byte
 	if isCA {
 		calldata, err = contractABI.Pack("verifyCACert", certificate, parentCertHash)
@@ -81,6 +81,8 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	}
 	log.Info("gas limit", "estimate", estimate)
 	higher := estimate + 9000000
+	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
+	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(
 		context.Background(),
 		e.address,
@@ -105,7 +107,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 
 /**
  * This function validates parses the attestation result we received from AWS Nitro Secure Module (NSM) then validates the following on-chain
- * 1. The PCR0 hash is registered in the contracts
+ * 1. The PCR0 hash is registered in the espresso nitro tee verifier contract
  * 2. The CA certificate chain
  * 3. The client certificate
  */
