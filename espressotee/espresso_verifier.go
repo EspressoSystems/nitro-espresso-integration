@@ -3,10 +3,8 @@ package espressotee
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -17,21 +15,22 @@ import (
 )
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(opts *bind.TransactOpts, to common.Address, poster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error
+	RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error
 	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
 }
 
 type EspressoTEEVerifier struct {
 	contract *espressogen.IEspressoTEEVerifier
 	l1Client *ethclient.Client
+	address  common.Address
 }
 
-func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) *EspressoTEEVerifier {
-	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client}
+func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, address common.Address) *EspressoTEEVerifier {
+	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client, address: address}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, to common.Address, poster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error {
-	contractABI, err := abi.JSON(strings.NewReader(espressogen.IEspressoTEEVerifierMetaData.ABI))
+func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error {
+	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
 	}
@@ -42,10 +41,10 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, to common.
 		return err
 	}
 	msg := ethereum.CallMsg{
-		From:  opts.From,
-		To:    &to,
+		From:  dataPoster.Auth().From,
+		To:    &e.address,
 		Data:  calldata,
-		Value: opts.Value,
+		Value: dataPoster.Auth().Value,
 	}
 
 	estimate, err := e.l1Client.EstimateGas(context.Background(), msg)
@@ -54,7 +53,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(opts *bind.TransactOpts, to common.
 	}
 	log.Info("estimate", "e", estimate)
 	higher := estimate + 9000000
-	tx, err := poster.PostSimpleTransaction(context.Background(), to, calldata, higher, opts.Value)
+	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, higher, dataPoster.Auth().Value)
 	if err != nil {
 		return err
 	}

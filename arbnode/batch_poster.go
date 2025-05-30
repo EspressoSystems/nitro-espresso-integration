@@ -517,7 +517,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, err
 		}
-		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
+		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espressoTeeVerifierAddress)
 
 		var teeType TEE
 		configTee := opts.Config().EspressoTeeType
@@ -527,27 +527,28 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		}
 
 		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-		var nitroAddr common.Address
 		if teeType == NITRO {
 			log.Info("setting up nitro verifier", "tee type", teeType)
-			nitroVerifier, nitroAddr, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
+			nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		b.streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, espressoTeeVerifierAddress, b.dataPoster, nitroVerifier, nitroAddr, opts, teeType)
+		if b.dataPoster.Auth() == nil {
+			panic("TransactOpts is nil")
+		}
+		b.streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType)
 	}
 
 	return b, nil
 }
 
-func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, common.Address, error) {
+func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {
 	// Setup nitro contract interface
-	nitroAddr := common.Address{}
 	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
 	if err != nil {
-		return nil, nitroAddr, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
+		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
 	}
 	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
 
@@ -555,10 +556,10 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 		nitroAddr,
 		l1Client)
 	if err != nil {
-		return nil, nitroAddr, err
+		return nil, err
 	}
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client)
-	return nitroVerifier, nitroAddr, nil
+	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client, nitroAddr)
+	return nitroVerifier, nil
 }
 
 type simulatedBlobReader struct {
