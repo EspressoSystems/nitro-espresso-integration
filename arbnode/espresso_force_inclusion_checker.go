@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/node_interfacegen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -90,7 +92,10 @@ func (f *ForceInclusionChecker) checkIfMessageCanBeForceIncluded(ctx context.Con
 	}
 
 	// Get the earliest block number that is without the force inclusion tolerance
-	badBlockNumber := f.getForceInclusionToleranceBlockNumber(ctx)
+	badBlockNumber, err := f.getForceInclusionToleranceBlockNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting force inclusion tolerance block number: %w", err)
+	}
 	// Check the delayed message count at this block number
 	count, err := f.delayedMessageFetcher.getDelayedMessageCountAtBlock(badBlockNumber)
 	if err != nil {
@@ -120,21 +125,42 @@ func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 	})
 }
 
-func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx context.Context) uint64 {
+func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx context.Context) (uint64, error) {
 	maxTimeVariationDelayBlocks, _, maxTimeVariationDelaySeconds, _, err := f.seqInbox.MaxTimeVariation(ctx)
 	if err != nil {
-		return 0
-	}
-	currentParentChainBlock, err := f.l1Reader.Client().BlockByNumber(ctx, nil)
-	if err != nil {
-		return 0
+		return 0, err
 	}
 
-	lastBadBlockNumber := arbmath.SaturatingUSub(f.config.BlockThresholdTolerance+currentParentChainBlock.NumberU64(), arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
-	lastBadBlockTime := arbmath.SaturatingUSub(f.config.SecondThresholdTolerance+currentParentChainBlock.Time(), arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+	parentLatestHeader, err := f.l1Reader.LastHeader(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	l1BlockNumber := parentLatestHeader.Number.Uint64()
+	l1TimeStamp := parentLatestHeader.Time
+
+	if f.l1Reader.IsParentChainArbitrum() {
+		headerInfo := types.DeserializeHeaderExtraInformation(parentLatestHeader)
+		l1BlockNumber = headerInfo.L1BlockNumber
+	}
+
+	lastBadBlockNumber := arbmath.SaturatingUSub(f.config.BlockThresholdTolerance+l1BlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+	lastBadBlockTime := arbmath.SaturatingUSub(f.config.SecondThresholdTolerance+l1TimeStamp, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+
+	if f.l1Reader.IsParentChainArbitrum() {
+		n, err := node_interfacegen.NewNodeInterface(types.NodeInterfaceAddress, f.l1Reader.Client())
+		if err != nil {
+			return 0, err
+		}
+		rng, err := n.L2BlockRangeForL1(&bind.CallOpts{Context: ctx}, lastBadBlockNumber)
+		if err != nil {
+			return 0, err
+		}
+		lastBadBlockNumber = rng.LastBlock
+	}
 
 	lastBadBlock := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
-	return lastBadBlock
+	return lastBadBlock, nil
 }
 
 func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Context, lastBadBlockNumber uint64, lastBadBlockTime uint64) uint64 {
