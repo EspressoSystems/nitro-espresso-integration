@@ -93,10 +93,6 @@ func TestWriteMessagesSkipsOversizedMessages(t *testing.T) {
 			msgData = make([]byte, 100+i*10)
 		}
 
-		for j := range msgData {
-			msgData[j] = byte(i + 1)
-		}
-
 		messages[i] = arbostypes.MessageWithMetadataAndBlockInfo{
 			MessageWithMeta: arbostypes.MessageWithMetadata{
 				Message: &arbostypes.L1IncomingMessage{
