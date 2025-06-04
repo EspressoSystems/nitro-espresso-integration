@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
+	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -53,6 +53,7 @@ func createL1AndL2Node(
 	// sequencer config
 	builder.nodeConfig.Sequencer = true
 	builder.nodeConfig.ParentChainReader.Enable = true // This flag is necessary to enable sequencing transactions with espresso behavior
+	builder.nodeConfig.ParentChainReader.UseFinalityData = true
 	builder.nodeConfig.Dangerous.NoSequencerCoordinator = true
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Caching.StateScheme = "hash"
