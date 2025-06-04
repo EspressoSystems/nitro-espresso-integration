@@ -61,8 +61,8 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	if err == nil {
 		log.Info("registering signer: dataposter next nonce", "nonce", dataPosterNonce)
 	}
-	// Add a 25% buffer to the estimate for the gas limit
-	gasLimit := estimate * 125 / 10
+	// Add a 20% buffer to the estimate for the gas limit
+	gasLimit := estimate * 12 / 10
 	log.Info("register signer gas limit", "gas limit", gasLimit)
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
