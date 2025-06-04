@@ -22,6 +22,8 @@ type ForceInclusionCheckerConfig struct {
 	PollingInterval          time.Duration `koanf:"polling-interval"`
 	BlockThresholdTolerance  uint64        `koanf:"block-threshold-tolerance"`
 	SecondThresholdTolerance uint64        `koanf:"second-threshold-tolerance"`
+
+	ErrorToleranceDuration time.Duration `koanf:"error-tolerance-duration"`
 }
 
 var DefaultEspressoForceInclusionCheckerConfig = ForceInclusionCheckerConfig{
@@ -29,6 +31,7 @@ var DefaultEspressoForceInclusionCheckerConfig = ForceInclusionCheckerConfig{
 	PollingInterval:          time.Second * 100,
 	BlockThresholdTolerance:  20,
 	SecondThresholdTolerance: 200,
+	ErrorToleranceDuration:   time.Hour * 1,
 }
 
 func EspressoForceInclusionConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -36,6 +39,7 @@ func EspressoForceInclusionConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".polling-interval", DefaultEspressoForceInclusionCheckerConfig.PollingInterval, "time after a success")
 	f.Uint64(prefix+".block-threshold-tolerance", DefaultEspressoForceInclusionCheckerConfig.BlockThresholdTolerance, "block threshold tolerance")
 	f.Uint64(prefix+".second-threshold-tolerance", DefaultEspressoForceInclusionCheckerConfig.SecondThresholdTolerance, "second threshold tolerance")
+	f.Duration(prefix+".error-tolerance-duration", DefaultEspressoForceInclusionCheckerConfig.ErrorToleranceDuration, "error tolerance duration")
 }
 
 // SeqInboxInterface defines an interface for interacting with the sequencer inbox contract.
@@ -114,13 +118,20 @@ func (f *ForceInclusionChecker) checkIfMessageCanBeForceIncluded(ctx context.Con
 
 func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 	f.StopWaiter.Start(ctx, f)
+	var firstErrFound time.Time
 
 	return f.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := f.checkIfMessageCanBeForceIncluded(ctx)
 		if err != nil {
+			if firstErrFound.IsZero() {
+				firstErrFound = time.Now()
+			} else if time.Since(firstErrFound) > f.config.ErrorToleranceDuration {
+				f.fatalErrChan <- err
+			}
 			log.Error("error checking force inclusion", "err", err)
 			return f.config.RetryTime
 		}
+		firstErrFound = time.Time{}
 		return f.config.PollingInterval
 	})
 }
@@ -153,10 +164,34 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 			return 0, err
 		}
 		rng, err := n.L2BlockRangeForL1(&bind.CallOpts{Context: ctx}, lastBadBlockNumber)
-		if err != nil {
-			return 0, err
+		if err == nil {
+			lastBadBlockNumber = rng.LastBlock
+		} else {
+			genesis, err := n.NitroGenesisBlock(&bind.CallOpts{Context: ctx})
+			if err != nil {
+				return 0, err
+			}
+			target := lastBadBlockNumber
+			start := genesis.Uint64()
+			end := parentLatestHeader.Number.Uint64()
+			lastBadBlockNumber, err = binarySearchForBlockNumber(ctx, start, end, func(ctx context.Context, blockNumber uint64) (int, error) {
+				block, err := f.l1Reader.Client().BlockByNumber(ctx, arbmath.UintToBig(blockNumber))
+				if err != nil {
+					return 0, err
+				}
+				l1Block := types.DeserializeHeaderExtraInformation(block.Header()).L1BlockNumber
+				if l1Block < target {
+					return binarySearch_LessThanTarget, nil
+				} else if l1Block > target {
+					return binarySearch_GreaterThanTarget, nil
+				} else {
+					return binarySearch_EqualToTarget, nil
+				}
+			})
+			if err != nil {
+				return 0, err
+			}
 		}
-		lastBadBlockNumber = rng.LastBlock
 	}
 
 	lastBadBlock := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
