@@ -19,10 +19,10 @@ import (
 	"testing"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network-go/client"
-	lightclient "github.com/EspressoSystems/espresso-network-go/light-client"
-	tagged_base64 "github.com/EspressoSystems/espresso-network-go/tagged-base64"
-	espressoTypes "github.com/EspressoSystems/espresso-network-go/types"
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
+	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
 	flag "github.com/spf13/pflag"
 
@@ -93,9 +93,10 @@ type TransactionStreamer struct {
 	resubmitEspressoTxDeadline   time.Duration
 	lastSubmitFailureAt          *time.Time
 	// Public these fields for testing
-	EscapeHatchEnabled bool
-	UseEscapeHatch     bool
-	EspressoKeyManager EspressoKeyManagerInterface
+	EscapeHatchEnabled                    bool
+	UseEscapeHatch                        bool
+	EspressoKeyManager                    EspressoKeyManagerInterface
+	InitialFinalizedSequencerMessageCount *big.Int
 }
 
 type TransactionStreamerConfig struct {
@@ -1170,12 +1171,19 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	//  to be used later to submit the message to hotshot for finalization.
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		//  Only submit the transaction if escape hatch is not enabled
-		if s.shouldSubmitEspressoTransaction() {
-			for i := range messages {
-				idx, err := safecast.ToUint64(i)
-				if err != nil {
-					return err
-				}
+		for i := range messages {
+			idx, err := safecast.ToUint64(i)
+			if err != nil {
+				return err
+			}
+			indexToSubmit := (pos + arbutil.MessageIndex(idx))
+
+			// convert to uint64
+			indexToSubmitUint64, err := safecast.ToUint64(indexToSubmit)
+			if err != nil {
+				return err
+			}
+			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
 				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
 				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
 				if err != nil {
@@ -1184,6 +1192,7 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 				}
 				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
 			}
+
 		}
 	}
 
@@ -1709,8 +1718,7 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 	return nil
 }
 
-func (s *TransactionStreamer) resubmitEspressoTransactions(ctx context.Context, tx arbutil.SubmittedEspressoTx) (*tagged_base64.TaggedBase64, error) {
-	log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
+func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, tx arbutil.SubmittedEspressoTx) (*tagged_base64.TaggedBase64, error) {
 	txHash, err := s.espressoClient.SubmitTransaction(ctx, espressoTypes.Transaction{
 		Payload:   tx.Payload,
 		Namespace: s.chainConfig.ChainID.Uint64(),
@@ -1729,7 +1737,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 	if err != nil {
 		return err
 	}
-
 	if len(pendingTxnsPos) > 0 {
 		fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
 			msg, err := s.GetMessage(pos)
@@ -1756,7 +1763,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			}
 			return b, nil
 		}
-
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		if msgCnt == 0 {
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
@@ -1891,10 +1897,11 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
 	retryRate := s.espressoTxnsPollingInterval * 2
-	shouldSubmit := s.shouldSubmitEspressoTransaction()
+	shouldSubmit := s.shouldSubmitEspressoTransaction(nil)
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
 		err := s.submitEspressoTransactions(ctx)
+
 		if err != nil {
 			log.Error("failed to submit espresso transactions", "err", err)
 			return retryRate
@@ -1917,7 +1924,8 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	shouldResubmit := s.shouldResubmitEspressoTransactions(ctx, submittedTxns)
 	if shouldResubmit {
 		for _, tx := range submittedTxns {
-			txHash, err := s.resubmitEspressoTransactions(ctx, tx)
+			log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
+			txHash, err := s.ResubmitEspressoTransactions(ctx, tx)
 			if err != nil {
 				log.Warn("failed to resubmit espresso transactions", "err", err)
 				return retryRate
@@ -1930,10 +1938,17 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 	return s.espressoTxnsPollingInterval
 }
 
-func (s *TransactionStreamer) shouldSubmitEspressoTransaction() bool {
+func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool {
 	if s.espressoClient == nil && s.lightClientReader == nil {
 		return false
 	}
+	if pos != nil {
+		if *pos < s.InitialFinalizedSequencerMessageCount.Uint64() {
+			log.Warn("not submitting transaction to espresso due to it being finalized", "pos", *pos, "sequencerMessageCount", s.InitialFinalizedSequencerMessageCount)
+			return false
+		}
+	}
+
 	return !s.EscapeHatchEnabled
 }
 
