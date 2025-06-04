@@ -1651,13 +1651,16 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.batchReverted.Load() {
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
-	registered, err := b.streamer.EspressoKeyManager.HasRegistered()
-	if err != nil {
-		return false, err
+	if b.streamer.EspressoKeyManager != nil {
+		registered, err := b.streamer.EspressoKeyManager.HasRegistered()
+		if err != nil {
+			return false, err
+		}
+		if !registered {
+			return false, fmt.Errorf("ephemeral keys are not yet registed in Espresso TEE Contract")
+		}
 	}
-	if !registered {
-		return false, fmt.Errorf("ephemeral keys are not yet registed in Espresso TEE Contract")
-	}
+
 	nonce, batchPositionBytes, err := b.dataPoster.GetNextNonceAndMeta(ctx)
 	if err != nil {
 		return false, err
