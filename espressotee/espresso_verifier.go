@@ -3,6 +3,8 @@ package espressotee
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -51,19 +53,34 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	if err != nil {
 		return err
 	}
-	log.Info("estimate", "e", estimate)
-	higher := estimate + 9000000
+	nonce, err := e.l1Client.NonceAt(context.Background(), dataPoster.Sender(), nil)
+	if err == nil {
+		log.Info("registering signer: on chain nonce", "nonce", nonce)
+	}
+	dataPosterNonce, _, err := dataPoster.GetNextNonceAndMeta(context.Background())
+	if err == nil {
+		log.Info("registering signer: dataposter next nonce", "nonce", dataPosterNonce)
+	}
+	// Add a 25% buffer to the estimate for the gas limit
+	gasLimit := estimate * 125 / 10
+	log.Info("register signer gas limit", "gas limit", gasLimit)
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
-	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, higher, dataPoster.Auth().Value)
+	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, gasLimit, dataPoster.Auth().Value)
 	if err != nil {
 		return err
 	}
 
-	log.Info("Waiting for register signer tx to be mined", "tx", tx.Hash())
+	timeout := 2 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", timeout)
 
-	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
+	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("register signer timed out after 2 minutes waiting for tx %s to be mined", tx.Hash().Hex())
+		}
 		return err
 	}
 
@@ -71,7 +88,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 		return errors.New("transaction failed")
 	}
 
-	log.Info("Register signer tx succeeded", "tx", tx.Hash().Hex())
+	log.Info("register signer tx succeeded", "tx", tx.Hash().Hex())
 
 	return nil
 }

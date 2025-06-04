@@ -73,6 +73,9 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 }
 
 func (k *EspressoKeyManager) HasRegistered() (bool, error) {
+	if k.hasRegistered {
+		return true, nil
+	}
 	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
 	if !ok {
 		panic("failed to get public key")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -45,12 +46,37 @@ func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool
 func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool) (common.Hash, error) {
 	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
-	verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
+	maxRetries := 5
+	retryDelay := 5 * time.Second
+
+	// Avoid race conditions where we make a readonly call to the contract to see if cert is verified
+	// So give some retries
+	var err error
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
+
+		if err == nil {
+			// Always reverify the certificate, this is cheap once verified
+			if verified {
+				log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
+			}
+			break
+		}
+
+		log.Error("cert verification failed, retrying...",
+			"attempt", attempt+1,
+			"maxRetries", maxRetries,
+			"err", err,
+		)
+
+		// Sleep before retry (unless this was the last attempt)
+		if attempt < maxRetries-1 {
+			time.Sleep(retryDelay)
+		}
+	}
+
 	if err != nil {
 		return certHash, err
-	}
-	if verified {
-		log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
 	}
 
 	// Try and verify the certificate either CA or client
@@ -70,7 +96,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 		return certHash, err
 	}
 	msg := ethereum.CallMsg{
-		From:  dataPoster.Auth().From,
+		From:  dataPoster.Sender(),
 		To:    &e.address,
 		Data:  calldata,
 		Value: dataPoster.Auth().Value,
@@ -79,23 +105,44 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	if err != nil {
 		return certHash, err
 	}
-	log.Info("gas limit", "estimate", estimate)
-	higher := estimate + 9000000
+	nonce, err := e.l1Client.NonceAt(context.Background(), dataPoster.Sender(), nil)
+	if err == nil {
+		log.Info("verify cert: on chain nonce", "nonce", nonce)
+	}
+	dataPosterNonce, _, err := dataPoster.GetNextNonceAndMeta(context.Background())
+	if err == nil {
+		log.Info("verify cert: dataposter next nonce", "nonce", dataPosterNonce)
+	}
+	// Add a 25% buffer to the estimate for the gas limit
+	gasLimit := estimate * 125 / 10
+	log.Info("verify cert gas limit", "gas limit", gasLimit)
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(
 		context.Background(),
 		e.address,
 		calldata,
-		higher,
+		gasLimit,
 		dataPoster.Auth().Value,
 	)
 	if err != nil {
 		return certHash, err
 	}
-	log.Info("Waiting for cert tx to be mined", "tx", tx.Hash(), "isCA", isCA)
-	receipt, err := bind.WaitMined(context.Background(), e.l1Client, tx)
+	timeout := 2 * time.Minute
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	log.Info("Waiting for cert tx to be mined",
+		"tx", tx.Hash().Hex(),
+		"isCA", isCA,
+		"timeout", timeout,
+	)
+
+	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return certHash, fmt.Errorf("cert verification timed out after 2 minutes waiting for tx %s to be mined", tx.Hash().Hex())
+		}
 		return certHash, err
 	}
 
