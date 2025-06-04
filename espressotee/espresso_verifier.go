@@ -43,7 +43,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 		return err
 	}
 	msg := ethereum.CallMsg{
-		From:  dataPoster.Auth().From,
+		From:  dataPoster.Sender(),
 		To:    &e.address,
 		Data:  calldata,
 		Value: dataPoster.Auth().Value,
