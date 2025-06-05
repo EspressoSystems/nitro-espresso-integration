@@ -2,6 +2,7 @@ package arbnode
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -15,6 +16,10 @@ import (
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 	flag "github.com/spf13/pflag"
+)
+
+const (
+	ForceInclusionErr = errors.New("force inclusion is going to happen")
 )
 
 type ForceInclusionCheckerConfig struct {
@@ -111,28 +116,36 @@ func (f *ForceInclusionChecker) checkIfMessageCanBeForceIncluded(ctx context.Con
 		return nil
 	}
 	// Force inclusion is going to happen, panic the node.
-	err = fmt.Errorf("force inclusion is going to happen")
-	f.fatalErrChan <- err
-	return err
+	return ForceInclusionErr
 }
 
 func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 	f.StopWaiter.Start(ctx, f)
 	var firstErrFound time.Time
 
+	// Do the check first before caff node starts
+	err := f.checkIfMessageCanBeForceIncluded(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check force inclusion: %w", err)
+	}
+
 	return f.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := f.checkIfMessageCanBeForceIncluded(ctx)
-		if err != nil {
-			if firstErrFound.IsZero() {
-				firstErrFound = time.Now()
-			} else if time.Since(firstErrFound) > f.config.ErrorToleranceDuration {
-				f.fatalErrChan <- err
-			}
-			log.Error("error checking force inclusion", "err", err)
-			return f.config.RetryTime
+		if err == nil {
+			firstErrFound = time.Time{}
+			return f.config.PollingInterval
 		}
-		firstErrFound = time.Time{}
-		return f.config.PollingInterval
+		if errors.Is(err, ForceInclusionErr) {
+			f.fatalErrChan <- err
+			return 0
+		}
+		if firstErrFound.IsZero() {
+			firstErrFound = time.Now()
+		} else if time.Since(firstErrFound) > f.config.ErrorToleranceDuration {
+			f.fatalErrChan <- err
+		}
+		log.Error("error checking force inclusion", "err", err)
+		return f.config.RetryTime
 	})
 }
 
