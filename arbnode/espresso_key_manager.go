@@ -94,9 +94,9 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 		}
 
 		if i < maxRetries-1 {
+			log.Info("address not registered in contract again, retrying...")
 			time.Sleep(retryDelay)
 		}
-		log.Info("address not registered in contract again, retrying...")
 	}
 	return false, nil
 }

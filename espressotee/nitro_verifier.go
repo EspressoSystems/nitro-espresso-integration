@@ -63,14 +63,13 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 			break
 		}
 
-		log.Error("cert verification failed, retrying...",
-			"attempt", attempt+1,
-			"maxRetries", maxRetries,
-			"err", err,
-		)
-
 		// Sleep before retry (unless this was the last attempt)
 		if attempt < maxRetries-1 {
+			log.Info("failed to check if cert is verified, retrying...",
+				"attempt", attempt+1,
+				"maxRetries", maxRetries,
+				"err", err,
+			)
 			time.Sleep(retryDelay)
 		}
 	}
@@ -177,7 +176,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationB
 	}
 
 	if !verified {
-		return nil, nil, fmt.Errorf("prc0 hash is not registered: %x", pcr0Hash)
+		return nil, nil, fmt.Errorf("prc0 hash is not registered in espresso tee verifier contract")
 	}
 
 	// Verify CA certificate chain
