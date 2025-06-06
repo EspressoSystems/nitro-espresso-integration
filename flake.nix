@@ -147,7 +147,6 @@
                 cargo-with-nightly
                 stableToolchain
                 openssl
-                pkg-config
 
                 llvmPkgs.clang
                 llvmPkgs.bintools # provides wasm-ld

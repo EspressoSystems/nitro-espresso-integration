@@ -41,3 +41,6 @@
 	url = https://github.com/EspressoSystems/bold.git
 	branch = release-v3.5.6-2e27869
 
+[submodule "aws-nitro-enclaves-nsm-api"]
+	path = aws-nitro-enclaves-nsm-api
+	url = https://github.com/aws/aws-nitro-enclaves-nsm-api.git

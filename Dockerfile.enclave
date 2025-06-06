@@ -1,0 +1,29 @@
+FROM amazonlinux:2023 AS socat-builder
+RUN yum install wget tar gcc -y
+RUN wget http://www.dest-unreach.org/socat/download/socat-1.7.4.4.tar.gz
+RUN echo "0f8f4b9d5c60b8c53d17b60d79ababc4a0f51b3bb6d2bd3ae8a6a4b9d68f195e socat-1.7.4.4.tar.gz" | sha256sum -c -
+RUN tar -xzf socat-1.7.4.4.tar.gz && \
+    cd socat-1.7.4.4 && \
+    ./configure && \
+    make && \
+    make install
+
+FROM amazonlinux:2023
+COPY --from=socat-builder /usr/local/bin/socat /usr/local/bin/
+RUN yum install aws-nitro-enclaves-cli aws-nitro-enclaves-cli-devel jq python3-pip -y
+RUN pip3 install supervisor
+COPY output/nitro.eif /home
+COPY ./run.sh  /home
+RUN chmod +x /home/run.sh
+
+ENV CPU_COUNT=4
+ENV MEMORY_MIB=8192
+ENV AWS_REGION="us-east-1"
+ENV ENCLAVE_CID=16
+ENV L1_NODE="127.0.0.1:8546"
+ENV L1_BEACON_NODE="127.0.0.1:3500"
+ENV NFS_SERVER="127.0.0.1:2049"
+ENV RPC_HTTP_PORT=8547
+ENV RPC_WS_PORT=8548
+
+ENTRYPOINT [ "/home/run.sh" ]
