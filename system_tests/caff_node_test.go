@@ -170,6 +170,7 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 		PollingInterval:          time.Second * 1,
 		BlockThresholdTolerance:  20,
 		SecondThresholdTolerance: 200,
+		ErrorToleranceDuration:   time.Minute * 10,
 	}
 
 	delayedBridge, err := arbnode.NewDelayedBridge(builder.L1.Client, builder.addresses.Bridge, builder.addresses.DeployedAt)
