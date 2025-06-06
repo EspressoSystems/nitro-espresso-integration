@@ -18,7 +18,7 @@ import (
 	flag "github.com/spf13/pflag"
 )
 
-const (
+var (
 	ForceInclusionErr = errors.New("force inclusion is going to happen")
 )
 
@@ -180,6 +180,9 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 		if err == nil {
 			lastBadBlockNumber = rng.LastBlock
 		} else {
+			// If the L2 block range for L1 call fails, we will use binary search
+			// The start block number should be the genesis block
+			// Reference: https://github.com/OffchainLabs/arbitrum-sdk/blob/792a7ee3ccf09842653bc49b771671706894cbb4/src/lib/inbox/inbox.ts#L104-L113
 			genesis, err := n.NitroGenesisBlock(&bind.CallOpts{Context: ctx})
 			if err != nil {
 				return 0, err

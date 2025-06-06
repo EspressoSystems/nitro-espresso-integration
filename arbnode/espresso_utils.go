@@ -30,7 +30,6 @@ func binarySearchForBlockNumber(
 ) (uint64, error) {
 	for start < end {
 		mid := (start + end) / 2
-		fmt.Println("mid", mid)
 		result, err := f(ctx, mid)
 		if err != nil {
 			return 0, err
