@@ -33,10 +33,10 @@ type ForceInclusionCheckerConfig struct {
 
 var DefaultEspressoForceInclusionCheckerConfig = ForceInclusionCheckerConfig{
 	RetryTime:                time.Second * 2,
-	PollingInterval:          time.Second * 100,
+	PollingInterval:          time.Minute * 8,
 	BlockThresholdTolerance:  20,
 	SecondThresholdTolerance: 200,
-	ErrorToleranceDuration:   time.Hour * 1,
+	ErrorToleranceDuration:   time.Minute * 8,
 }
 
 func EspressoForceInclusionConfigAddOptions(prefix string, f *flag.FlagSet) {
