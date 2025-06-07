@@ -29,7 +29,7 @@ func (t TEE) FromString(s string) (TEE, error) {
 type EspressoRegisterSignerConfig struct {
 	MaxTxnWaitTime                time.Duration `koanf:"max-txn-wait-time"`
 	RetryDelay                    time.Duration `koanf:"retry-delay"`
-	MaxRetries                    int           `koanf:"max-retries"`
+	MaxRetries                    uint8         `koanf:"max-retries"`
 	GasLimitBufferIncreasePercent uint64        `koanf:"gas-limit-buffer-increase-percent"`
 }
 
@@ -50,6 +50,6 @@ type EspressoRegisterSignerOpts struct {
 func AddEspressoRegisterSignerConfigOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".max-txn-wait-time", DefaultEspressoRegisterSignerConfig.MaxTxnWaitTime, "max transaction wait time when calling espresso tee verifier contracts")
 	f.Duration(prefix+".retry-delay", DefaultEspressoRegisterSignerConfig.RetryDelay, "delay in between verification calls to espresso tee contracts")
-	f.Int(prefix+".max-retries", DefaultEspressoRegisterSignerConfig.MaxRetries, "how many times to check if we have data in our espresso tee contracts")
+	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterSignerConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
 	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterSignerConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
 }

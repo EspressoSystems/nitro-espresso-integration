@@ -87,7 +87,12 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		dataPoster:                dataPoster,
 		teeType:                   teeType,
-		registerSignerOpts:        espressotee.EspressoRegisterSignerOpts(registerSignerConfig),
+		registerSignerOpts: espressotee.EspressoRegisterSignerOpts{
+			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
+			MaxRetries:                    int(registerSignerConfig.MaxRetries),
+			RetryDelay:                    registerSignerConfig.RetryDelay,
+			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
+		},
 	}
 }
 
