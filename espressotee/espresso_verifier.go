@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -17,7 +16,7 @@ import (
 )
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error
+	RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error
 	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
 }
 
@@ -31,7 +30,7 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client, address: address}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error {
+func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error {
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
@@ -61,8 +60,8 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	if err == nil {
 		log.Info("registering signer: dataposter next nonce", "nonce", dataPosterNonce)
 	}
-	// Add a 20% buffer to the estimate for the gas limit
-	gasLimit := estimate * 12 / 10
+	// Add a buffer to the estimate for the gas limit
+	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
@@ -71,15 +70,14 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 		return err
 	}
 
-	timeout := 2 * time.Minute
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), registerSignerOpts.MaxTxnWaitTime)
 	defer cancel()
-	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", timeout)
+	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", registerSignerOpts.MaxTxnWaitTime)
 
 	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("register signer timed out after 2 minutes waiting for tx %s to be mined", tx.Hash().Hex())
+			return fmt.Errorf("register signer timed out after %v minutes waiting for tx %s to be mined", registerSignerOpts.MaxTxnWaitTime, tx.Hash().Hex())
 		}
 		return err
 	}

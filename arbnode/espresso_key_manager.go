@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -38,14 +39,15 @@ type EspressoKeyManager struct {
 	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
-	batchPosterSigner signature.DataSignerFunc
-	dataPoster        *dataposter.DataPoster
-	teeType           TEE
+	batchPosterSigner  signature.DataSignerFunc
+	dataPoster         *dataposter.DataPoster
+	teeType            TEE
+	registerSignerOpts espressotee.EspressoRegisterSignerOpts
 
 	hasRegistered bool
 }
 
-func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, dataPoster *dataposter.DataPoster, signerFunc signature.DataSignerFunc, teeType TEE) *EspressoKeyManager {
+func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface, espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface, dataPoster *dataposter.DataPoster, signerFunc signature.DataSignerFunc, teeType TEE, registerSignerConfig espressotee.EspressoRegisterSignerConfig) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
 	if err != nil {
@@ -61,6 +63,22 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("DataSigner is nil")
 	}
 
+	if registerSignerConfig.GasLimitBufferIncreasePercent > 20 {
+		panic("Gas limit buffer increase should not be greater than 20 percent")
+	}
+
+	if registerSignerConfig.MaxRetries > 10 {
+		panic("Max retries cannot be more than 10")
+	}
+
+	if registerSignerConfig.MaxTxnWaitTime > 5*time.Minute {
+		panic("Max txn wait time cannot be more than 5 minutes")
+	}
+
+	if registerSignerConfig.RetryDelay > 20*time.Second {
+		panic("Retry delay cannot be more than 20 seconds")
+	}
+
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
 		privKey:                   privKey,
@@ -69,6 +87,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		dataPoster:                dataPoster,
 		teeType:                   teeType,
+		registerSignerOpts:        espressotee.EspressoRegisterSignerOpts(registerSignerConfig),
 	}
 }
 
@@ -81,9 +100,7 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	maxRetries := 5
-	retryDelay := 5 * time.Second
-	for i := 0; i < maxRetries; i++ {
+	for i := 0; i < k.registerSignerOpts.MaxRetries; i++ {
 		ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType))
 		if err != nil {
 			return false, err
@@ -93,9 +110,9 @@ func (k *EspressoKeyManager) HasRegistered() (bool, error) {
 			return ok, nil
 		}
 
-		if i < maxRetries-1 {
+		if i < k.registerSignerOpts.MaxRetries-1 {
 			log.Info("address not registered in contract again, retrying...")
-			time.Sleep(retryDelay)
+			time.Sleep(k.registerSignerOpts.RetryDelay)
 		}
 	}
 	return false, nil
@@ -129,6 +146,7 @@ func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byt
 		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
 			attestationBytes,
 			k.dataPoster,
+			k.registerSignerOpts,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
@@ -152,7 +170,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType))
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType), k.registerSignerOpts)
 	if err != nil {
 		return err
 	}

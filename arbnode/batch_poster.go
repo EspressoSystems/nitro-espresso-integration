@@ -200,13 +200,14 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
-	EspressoTeeType             string        `koanf:"espresso-tee-type"`
-	LightClientAddress          string        `koanf:"light-client-address"`
-	HotShotUrls                 []string      `koanf:"hotshot-urls"`
-	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
-	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
-	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
+	EspressoTeeVerifierAddress   string                                   `koanf:"espresso-tee-verifier-address"`
+	EspressoTeeType              string                                   `koanf:"espresso-tee-type"`
+	EspressoRegisterSignerConfig espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
+	LightClientAddress           string                                   `koanf:"light-client-address"`
+	HotShotUrls                  []string                                 `koanf:"hotshot-urls"`
+	UseEscapeHatch               bool                                     `koanf:"use-escape-hatch"`
+	EspressoTxnsPollingInterval  time.Duration                            `koanf:"espresso-txns-polling-interval"`
+	ResubmitEspressoTxDeadline   time.Duration                            `koanf:"resubmit-espresso-tx-deadline"`
 	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
 	// state updates can lag behind before triggering the escape hatch. If the difference
 	// between the current L1 block number and the latest state update's block number
@@ -282,6 +283,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
+	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+"espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -324,6 +326,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
 	EspressoTeeType:                "SGX",
+	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -364,6 +367,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:     10 * time.Second,
 	HotShotUrls:                    []string{},
 	EspressoTeeType:                "SGX",
+	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 type BatchPosterOpts struct {
@@ -577,7 +581,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if b.dataPoster.Auth() == nil {
 			panic("TransactOpts is nil")
 		}
-		b.streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType)
+		b.streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, b.config().EspressoRegisterSignerConfig)
 	}
 
 	return b, nil
