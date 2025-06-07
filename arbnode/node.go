@@ -568,6 +568,8 @@ func createNodeImpl(
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
+				deployInfo.SequencerInbox,
+				fatalErrChan,
 			)
 
 			return &Node{

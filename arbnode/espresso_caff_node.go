@@ -18,6 +18,7 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -37,6 +38,9 @@ type EspressoCaffNodeConfig struct {
 	WaitForConfirmations    bool          `koanf:"wait-for-confirmations"`
 	RequiredBlockDepth      uint64        `koanf:"required-block-depth"`
 	BlocksToRead            uint64        `koanf:"blocks-to-read"`
+
+	// Force Inclusion Checker
+	ForceInclusionCheckerConfig ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -71,6 +75,8 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
 	f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
+
+	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -87,6 +93,9 @@ type EspressoCaffNode struct {
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
 	l1Reader *headerreader.HeaderReader
+
+	forceInclusionChecker *ForceInclusionChecker
+	fatalErrChan          chan error
 }
 
 func NewEspressoCaffNode(
@@ -97,6 +106,8 @@ func NewEspressoCaffNode(
 	db ethdb.Database,
 	recordPerformance bool,
 	blocksToRead uint64,
+	seqInboxAddr common.Address,
+	fatalErrChan chan error,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -130,6 +141,20 @@ func NewEspressoCaffNode(
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
 
+	seqInbox, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
+	if err != nil {
+		log.Crit("failed to create sequencer inbox", "err", err)
+		return nil
+	}
+
+	forceInclusionChecker := NewForceInclusionChecker(
+		&SeqInbox{seqInbox: seqInbox},
+		configFetcher().ForceInclusionCheckerConfig,
+		l1Reader,
+		delayedMessageFetcher,
+		fatalErrChan,
+	)
+
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
@@ -137,6 +162,7 @@ func NewEspressoCaffNode(
 		espressoStreamer:      espressoStreamer,
 		db:                    db,
 		l1Reader:              l1Reader,
+		forceInclusionChecker: forceInclusionChecker,
 	}
 }
 
@@ -235,6 +261,10 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
 	n.espressoStreamer.Start(ctx)
+	err := n.forceInclusionChecker.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start force inclusion checker: %w", err)
+	}
 
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
