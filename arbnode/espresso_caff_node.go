@@ -122,7 +122,7 @@ func NewEspressoCaffNode(
 	}
 
 	if httpPort == 0 {
-		log.Crit("httpPort is 0")
+		log.Crit("l2 stack is not enabled while caff node is enabled")
 		return nil
 	}
 

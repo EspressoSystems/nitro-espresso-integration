@@ -159,9 +159,10 @@ func TestEspressoCaffNode(t *testing.T) {
 	// This is to simulate the trusted url returning a different block
 	stateChecker := arbnode.NewStateChecker(
 		arbnode.StateCheckerConfig{
-			Enable:          true,
-			PollingInterval: time.Second * 1,
-			TrustedNodeUrl:  fmt.Sprintf("http://localhost:%d", trustedPort),
+			Enable:                 true,
+			PollingInterval:        time.Second * 1,
+			TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", trustedPort),
+			ErrorToleranceDuration: time.Second * 100,
 		},
 		port,
 		fatalErrChan,
