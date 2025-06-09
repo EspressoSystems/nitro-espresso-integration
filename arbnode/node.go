@@ -1026,10 +1026,6 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error populating feed backlog on startup: %w", err)
 		}
 	}
-	err = n.TxStreamer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("error starting transaction streamer: %w", err)
-	}
 	if n.InboxReader != nil {
 		err = n.InboxReader.Start(ctx)
 		if err != nil {
@@ -1056,6 +1052,10 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if n.BatchPoster != nil {
 		n.BatchPoster.Start(ctx)
+	}
+	err = n.TxStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting transaction streamer: %w", err)
 	}
 	if n.MessagePruner != nil {
 		n.MessagePruner.Start(ctx)

@@ -200,13 +200,14 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress  string        `koanf:"espresso-tee-verifier-address"`
-	EspressoTeeType             string        `koanf:"espresso-tee-type"`
-	LightClientAddress          string        `koanf:"light-client-address"`
-	HotShotUrls                 []string      `koanf:"hotshot-urls"`
-	UseEscapeHatch              bool          `koanf:"use-escape-hatch"`
-	EspressoTxnsPollingInterval time.Duration `koanf:"espresso-txns-polling-interval"`
-	ResubmitEspressoTxDeadline  time.Duration `koanf:"resubmit-espresso-tx-deadline"`
+	EspressoTeeVerifierAddress   string                                   `koanf:"espresso-tee-verifier-address"`
+	EspressoTeeType              string                                   `koanf:"espresso-tee-type"`
+	EspressoRegisterSignerConfig espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
+	LightClientAddress           string                                   `koanf:"light-client-address"`
+	HotShotUrls                  []string                                 `koanf:"hotshot-urls"`
+	UseEscapeHatch               bool                                     `koanf:"use-escape-hatch"`
+	EspressoTxnsPollingInterval  time.Duration                            `koanf:"espresso-txns-polling-interval"`
+	ResubmitEspressoTxDeadline   time.Duration                            `koanf:"resubmit-espresso-tx-deadline"`
 	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
 	// state updates can lag behind before triggering the escape hatch. If the difference
 	// between the current L1 block number and the latest state update's block number
@@ -282,6 +283,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
+	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -324,6 +326,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:             "",
 	HotShotUrls:                    []string{""},
 	EspressoTeeType:                "SGX",
+	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -364,6 +367,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:     10 * time.Second,
 	HotShotUrls:                    []string{},
 	EspressoTeeType:                "SGX",
+	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 type BatchPosterOpts struct {
@@ -488,36 +492,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline
 	}
 
-	if opts.Config().EspressoTeeVerifierAddress != "" {
-		// Setup tee verifier interface
-		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
-		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-			espressoTeeVerifierAddress,
-			opts.L1Reader.Client())
-		if err != nil {
-			return nil, err
-		}
-		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client())
-
-		var teeType TEE
-		configTee := opts.Config().EspressoTeeType
-		teeType, err = teeType.FromString(configTee)
-		if err != nil {
-			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
-		}
-
-		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-		if teeType == NITRO {
-			log.Info("setting up nitro verifier", "tee type", teeType)
-			nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		opts.Streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, opts, teeType)
-	}
-
 	b := &BatchPoster{
 		l1Reader:                  opts.L1Reader,
 		inbox:                     opts.Inbox,
@@ -576,6 +550,40 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			AfterDelayedMessagesRead: AfterDelayedMessagesRead,
 		})
 	}
+
+	if opts.Config().EspressoTeeVerifierAddress != "" {
+		// Setup tee verifier interface
+		espressoTeeVerifierAddress := common.HexToAddress(opts.Config().EspressoTeeVerifierAddress)
+		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
+			espressoTeeVerifierAddress,
+			opts.L1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+		verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espressoTeeVerifierAddress)
+
+		var teeType TEE
+		configTee := opts.Config().EspressoTeeType
+		teeType, err = teeType.FromString(configTee)
+		if err != nil {
+			return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
+		}
+
+		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+		if teeType == NITRO {
+			log.Info("setting up nitro verifier", "tee type", teeType)
+			nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		if b.dataPoster.Auth() == nil {
+			panic("TransactOpts is nil")
+		}
+		b.streamer.EspressoKeyManager = NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, b.config().EspressoRegisterSignerConfig)
+	}
+
 	return b, nil
 }
 
@@ -593,7 +601,7 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 	if err != nil {
 		return nil, err
 	}
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client)
+	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client, nitroAddr)
 	return nitroVerifier, nil
 }
 
@@ -1652,6 +1660,16 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.batchReverted.Load() {
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
+	if b.streamer.EspressoKeyManager != nil {
+		registered, err := b.streamer.EspressoKeyManager.HasRegistered()
+		if err != nil {
+			return false, err
+		}
+		if !registered {
+			return false, fmt.Errorf("ephemeral keys are not yet registed in Espresso TEE Contract")
+		}
+	}
+
 	nonce, batchPositionBytes, err := b.dataPoster.GetNextNonceAndMeta(ctx)
 	if err != nil {
 		return false, err
