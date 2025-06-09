@@ -36,6 +36,14 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 
+	nodeConfig.EspressoCaffNode.ForceInclusionCheckerConfig = arbnode.ForceInclusionCheckerConfig{
+		RetryTime:                time.Second * 2,
+		PollingInterval:          time.Second * 1,
+		BlockThresholdTolerance:  20,
+		SecondThresholdTolerance: 200,
+		ErrorToleranceDuration:   time.Minute * 10,
+	}
+
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
@@ -167,7 +175,17 @@ func TestEspressoCaffNode(t *testing.T) {
 		port,
 		fatalErrChan,
 	)
-	stateChecker.Start(ctx)
+	// When state checker starts, it should check states first. If states are unmatched,
+	// it should shut down
+	err = stateChecker.Start(ctx)
+	if err == nil {
+		t.Fatal(err)
+	}
+	// Start the monitoring task without initial checking
+	err = stateChecker.StartMonitoring(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case err := <-fatalErrChan:
 		if err == nil {

@@ -78,13 +78,17 @@ func NewStateChecker(
 
 func (s *StateChecker) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
-	var firstErrFound time.Time
 
 	err := s.checkState(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to check state when initializing: %w", err)
 	}
 
+	return s.StartMonitoring(ctx)
+}
+
+func (s *StateChecker) StartMonitoring(ctx context.Context) error {
+	var firstErrFound time.Time
 	return s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.checkState(ctx)
 		if err == nil {

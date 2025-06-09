@@ -284,7 +284,10 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start force inclusion checker: %w", err)
 	}
 	if n.stateChecker != nil {
-		n.stateChecker.Start(ctx)
+		err = n.stateChecker.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to start state checker: %w", err)
+		}
 	}
 
 	// This is +1 because the current block is the block after the last processed block
