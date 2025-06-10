@@ -24,7 +24,7 @@
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
-	branch = celestia-aws-nitro
+	branch = release-v3.5.6-celestia-5880acf
 [submodule "arbitrator/langs/rust"]
 	path = arbitrator/langs/rust
 	url = https://github.com/OffchainLabs/stylus-sdk-rs.git
