@@ -18,7 +18,6 @@ var (
 )
 
 type StateCheckerConfig struct {
-	Enable                 bool          `koanf:"enable"`
 	PollingInterval        time.Duration `koanf:"polling-interval"`
 	ErrorToleranceDuration time.Duration `koanf:"error-tolerance-duration"`
 
@@ -27,13 +26,11 @@ type StateCheckerConfig struct {
 }
 
 var DefaultStateCheckerConfig = StateCheckerConfig{
-	Enable:                 false,
 	PollingInterval:        time.Second * 100,
 	ErrorToleranceDuration: time.Minute * 10,
 }
 
 func EspressoStateCheckerConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultStateCheckerConfig.Enable, "enable state checker")
 	f.Duration(prefix+".polling-interval", DefaultStateCheckerConfig.PollingInterval, "time after a success")
 	f.Duration(prefix+".error-tolerance-duration", DefaultStateCheckerConfig.ErrorToleranceDuration, "error tolerance duration")
 	f.String(prefix+".trusted-node-url", DefaultStateCheckerConfig.TrustedNodeUrl, "http endpoint of the trusted node")
@@ -79,11 +76,6 @@ func NewStateChecker(
 func (s *StateChecker) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
 
-	err := s.checkState(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check state when initializing: %w", err)
-	}
-
 	return s.StartMonitoring(ctx)
 }
 
@@ -94,6 +86,10 @@ func (s *StateChecker) StartMonitoring(ctx context.Context) error {
 		if err == nil {
 			firstErrFound = time.Time{}
 			return s.config.PollingInterval
+		}
+		if strings.Contains(err.Error(), "connection refused") && strings.Contains(err.Error(), "my node") {
+			// The node haven't started yet
+			return 0
 		}
 		if strings.Contains(err.Error(), StateUnmatchedErr.Error()) {
 			log.Error("shutting down due to state unmatched", "err", err)
@@ -118,6 +114,20 @@ func (s *StateChecker) checkState(ctx context.Context) error {
 		return fmt.Errorf("failed to get latest block through trusted node: %w", err)
 	}
 	blockNumber := block.Number()
+	myLatestBlock, err := s.myClient.BlockByNumber(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get latest block through my node: %w", err)
+	}
+	myLatestBlockNumber := myLatestBlock.Number()
+
+	if myLatestBlockNumber.Cmp(blockNumber) < 0 {
+		log.Info("my node is behind the trusted node", "myBlockNumber", myLatestBlockNumber, "trustedBlockNumber", blockNumber)
+		block, err = s.trustedClient.BlockByNumber(ctx, myLatestBlockNumber)
+		if err != nil {
+			return fmt.Errorf("failed to get block by number through trusted node: %w", err)
+		}
+		blockNumber = myLatestBlockNumber
+	}
 	myBlock, err := s.myClient.BlockByNumber(ctx, blockNumber)
 	if err != nil {
 		return fmt.Errorf("failed to get block by number through my node: %w", err)

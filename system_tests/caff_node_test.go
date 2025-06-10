@@ -35,6 +35,11 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
+	nodeConfig.EspressoCaffNode.StateCheckerConfig = arbnode.StateCheckerConfig{
+		PollingInterval:        time.Second * 1,
+		ErrorToleranceDuration: time.Hour * 1, // Set it to a larger value. That makes the state checker not shut down
+		TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", 8945),
+	}
 
 	nodeConfig.EspressoCaffNode.ForceInclusionCheckerConfig = arbnode.ForceInclusionCheckerConfig{
 		RetryTime:                time.Second * 2,
@@ -167,7 +172,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	// This is to simulate the trusted url returning a different block
 	stateChecker := arbnode.NewStateChecker(
 		arbnode.StateCheckerConfig{
-			Enable:                 true,
 			PollingInterval:        time.Second * 1,
 			TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", trustedPort),
 			ErrorToleranceDuration: time.Second * 100,
@@ -175,14 +179,8 @@ func TestEspressoCaffNode(t *testing.T) {
 		port,
 		fatalErrChan,
 	)
-	// When state checker starts, it should check states first. If states are unmatched,
-	// it should shut down
-	err = stateChecker.Start(ctx)
-	if err == nil {
-		t.Fatal(err)
-	}
 	// Start the monitoring task without initial checking
-	err = stateChecker.StartMonitoring(ctx)
+	err = stateChecker.Start(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
