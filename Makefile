@@ -47,6 +47,11 @@ precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 
 output_root=target
 export PKG_CONFIG_PATH=$(abspath $(output_root)/pkgconfig)
+# For nix pkg-config
+ifdef IN_NIX_SHELL
+  export PKG_CONFIG_PATH_FOR_TARGET := $(abspath $(output_root)/pkgconfig):$(PKG_CONFIG_PATH_FOR_TARGET)
+endif
+
 sed_escaped_output_root:=$(subst /,\/,$(output_root))
 output_latest=$(output_root)/machines/latest
 
