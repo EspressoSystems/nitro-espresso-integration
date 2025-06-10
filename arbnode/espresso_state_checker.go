@@ -87,10 +87,6 @@ func (s *StateChecker) StartMonitoring(ctx context.Context) error {
 			firstErrFound = time.Time{}
 			return s.config.PollingInterval
 		}
-		if strings.Contains(err.Error(), "connection refused") && strings.Contains(err.Error(), "my node") {
-			// The node haven't started yet
-			return 0
-		}
 		if strings.Contains(err.Error(), StateUnmatchedErr.Error()) {
 			log.Error("shutting down due to state unmatched", "err", err)
 			s.fatalErrChan <- err
@@ -101,6 +97,13 @@ func (s *StateChecker) StartMonitoring(ctx context.Context) error {
 		} else if time.Since(firstErrFound) > s.config.ErrorToleranceDuration {
 			log.Error("shutting down due to error tolerance duration exceeded", "err", err)
 			s.fatalErrChan <- err
+		} else if strings.Contains(err.Error(), "connection refused") && strings.Contains(err.Error(), "my node") {
+			// This case is for the situation where the node haven't started yet
+			// returns zero to make sure the state checker checks the state first
+			// before the caff node consuming any messages.
+			//
+			// And if this error lasts for too long, the state checker will shut down
+			return 0
 		}
 
 		log.Error("error checking state", "err", err)
