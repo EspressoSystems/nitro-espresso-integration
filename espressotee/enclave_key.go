@@ -51,7 +51,7 @@ const (
 )
 
 func OpenEnclaveValidatorWallet(description string, walletConfig *genericconf.WalletConfig, chainId *big.Int) (*bind.TransactOpts, error) {
-	awsConfig, err := config.LoadDefaultConfig(context.TODO(), config.WithSharedConfigProfile(awsConfigValidatorProfile))
+	awsConfig, err := config.LoadDefaultConfig(context.Background(), config.WithSharedConfigProfile(awsConfigValidatorProfile))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS validator config: %w", err)
 	}
@@ -94,7 +94,7 @@ func OpenEnclaveValidatorWallet(description string, walletConfig *genericconf.Wa
 		kmsKeyID = string(kmsKeyIDAttestationDoc.UserData)
 	case os.IsNotExist(err):
 		// Create KMS Key
-		getCallerIdentityOutput, err := stsClient.GetCallerIdentity(context.TODO(), &sts.GetCallerIdentityInput{})
+		getCallerIdentityOutput, err := stsClient.GetCallerIdentity(context.Background(), &sts.GetCallerIdentityInput{})
 		if err != nil {
 			return nil, fmt.Errorf("failed to get caller identity: %w", err)
 		}
@@ -109,7 +109,7 @@ func OpenEnclaveValidatorWallet(description string, walletConfig *genericconf.Wa
 			nsm.PCRxCondition(0): hex.EncodeToString(pcr0Actual),
 		})
 
-		createKeyOutput, err := kmsEnclaveClient.CreateKey(context.TODO(), &kms.CreateKeyInput{
+		createKeyOutput, err := kmsEnclaveClient.CreateKey(context.Background(), &kms.CreateKeyInput{
 			// DANGER: The key may become unmanageable
 			BypassPolicyLockoutSafetyCheck: true,
 			Description:                    aws.String("Nitro Enclave Key"),
@@ -147,7 +147,7 @@ func OpenEnclaveValidatorWallet(description string, walletConfig *genericconf.Wa
 		if pcr0Stored, ok := privateKeyAttestationDoc.PCRs[0]; !ok || !bytes.Equal(pcr0Stored, pcr0Actual) {
 			return nil, fmt.Errorf("PCR0 from %s mismatch with actual PCR0 value", privateKeyPath)
 		}
-		decryptResp, err := kmsEnclaveClient.Decrypt(context.TODO(), &kms.DecryptInput{
+		decryptResp, err := kmsEnclaveClient.Decrypt(context.Background(), &kms.DecryptInput{
 			KeyId:          aws.String(kmsKeyID),
 			CiphertextBlob: privateKeyAttestationDoc.UserData,
 			Recipient: &kmstypes.RecipientInfo{
@@ -164,7 +164,7 @@ func OpenEnclaveValidatorWallet(description string, walletConfig *genericconf.Wa
 		}
 	case os.IsNotExist(err):
 		// Create private key
-		generateDataKeyPairResp, err := kmsEnclaveClient.GenerateDataKeyPair(context.TODO(), &kms.GenerateDataKeyPairInput{
+		generateDataKeyPairResp, err := kmsEnclaveClient.GenerateDataKeyPair(context.Background(), &kms.GenerateDataKeyPairInput{
 			KeyId:       aws.String(kmsKeyID),
 			KeyPairSpec: kmstypes.DataKeyPairSpecEccSecgP256k1,
 			Recipient: &kmstypes.RecipientInfo{
