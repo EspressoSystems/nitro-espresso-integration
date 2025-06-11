@@ -67,7 +67,7 @@ func TestTimeboostBackfillingsTrackersForMissingBlockMetadata(t *testing.T) {
 	backfillAndVerifyCorrectness(5, []uint64{5, 6, 7, 8, 9, 10, 11, 15, 16, 17, 19})
 }
 
-func TestWriteMessagesSkipsOversizedMessages(t *testing.T) {
+func TestWriteOversizedMessages(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -81,8 +81,8 @@ func TestWriteMessagesSkipsOversizedMessages(t *testing.T) {
 	}
 	txStreamer.StopWaiter.Start(ctx, txStreamer)
 
-	numMessages := 5
-	oversizedIndex := 2
+	numMessages := 4
+	oversizedIndex := 3
 	messages := make([]arbostypes.MessageWithMetadataAndBlockInfo, numMessages)
 
 	for i := 0; i < numMessages; i++ {
@@ -106,28 +106,24 @@ func TestWriteMessagesSkipsOversizedMessages(t *testing.T) {
 	}
 
 	err := txStreamer.writeMessages(0, messages, nil)
-	Require(t, err)
+	if err == nil {
+		t.Fatal("expected error writing oversized message")
+	}
 
 	msgCount, err := txStreamer.GetMessageCount()
 	Require(t, err)
 	// #nosec G115
-	if msgCount != arbutil.MessageIndex(uint64(numMessages)) {
-		t.Fatalf("Expected message count %d, got %d", numMessages, msgCount)
+	if msgCount != arbutil.MessageIndex(uint64(oversizedIndex)) {
+		t.Fatalf("Expected message count %d, got %d", oversizedIndex, msgCount)
 	}
 
-	for i := 0; i < numMessages; i++ {
+	for i := 0; i < oversizedIndex; i++ {
 		msg, err := txStreamer.GetMessage(arbutil.MessageIndex(uint64(i))) // #nosec G115
 		Require(t, err)
 
-		if i == oversizedIndex {
-			if len(msg.Message.L2msg) != 0 {
-				t.Fatalf("Expected message %d to be empty", i)
-			}
-		} else {
-
-			if len(msg.Message.L2msg) == 0 {
-				t.Fatalf("Normal message %d should not be empty", i)
-			}
+		expectedMsgData := messages[i].MessageWithMeta.Message.L2msg
+		if !bytes.Equal(msg.Message.L2msg, expectedMsgData) {
+			t.Fatalf("mismatched message content for message %d", i)
 		}
 	}
 }
