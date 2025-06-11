@@ -107,7 +107,10 @@ func TestWriteOversizedMessages(t *testing.T) {
 
 	err := txStreamer.writeMessages(0, messages, nil)
 	if err == nil {
-		t.Fatal("expected error writing oversized message")
+		t.Fatal("Expected an error writing oversized message, got nil")
+	}
+	if err.Error() != "L2 message is too large" {
+		t.Fatalf("Unexpected error: %v", err)
 	}
 
 	msgCount, err := txStreamer.GetMessageCount()
@@ -123,7 +126,7 @@ func TestWriteOversizedMessages(t *testing.T) {
 
 		expectedMsgData := messages[i].MessageWithMeta.Message.L2msg
 		if !bytes.Equal(msg.Message.L2msg, expectedMsgData) {
-			t.Fatalf("mismatched message content for message %d", i)
+			t.Fatalf("Mismatched message content for message %d", i)
 		}
 	}
 }
