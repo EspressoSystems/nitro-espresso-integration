@@ -51,7 +51,6 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 
 	// Avoid race conditions where we make a readonly call to the contract to see if cert is verified
 	// So give some retries
-	var err error
 	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
 		verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
 
@@ -70,11 +69,9 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 				"err", err,
 			)
 			time.Sleep(registerSignerOpts.RetryDelay)
+		} else {
+			return certHash, err
 		}
-	}
-
-	if err != nil {
-		return certHash, err
 	}
 
 	// Try and verify the certificate either CA or client
