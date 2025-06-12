@@ -128,14 +128,6 @@ func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 	f.StopWaiter.Start(ctx, f)
 	var firstErrFound time.Time
 
-	// Do the check first before caff node starts
-	log.Info("Checking the first time if the message can be force included")
-	err := f.checkIfMessageCanBeForceIncluded(ctx)
-	if err != nil {
-		log.Error("Failed to check if the message can be force included", "err", err)
-		return fmt.Errorf("failed to check force inclusion: %w", err)
-	}
-
 	return f.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := f.checkIfMessageCanBeForceIncluded(ctx)
 		if err == nil {
