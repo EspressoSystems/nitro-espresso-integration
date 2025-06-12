@@ -231,25 +231,30 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 		}
 	}
 
-	lastBadBlock := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
+	lastBadBlock, err := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
+	if err != nil {
+		log.Error("Error finding first parent chain block below", "err", err)
+		return 0, err
+	}
 	return lastBadBlock, nil
 }
 
-func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Context, lastBadBlockNumber uint64, lastBadBlockTime uint64) uint64 {
+func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Context, lastBadBlockNumber uint64, lastBadBlockTime uint64) (uint64, error) {
 	client := f.l1Reader.Client()
 	blockNumber := lastBadBlockNumber
 
 	for blockNumber > 0 {
 		block, err := client.BlockByNumber(ctx, arbmath.UintToBig(blockNumber))
 		if err != nil {
-			return 0
+			log.Error("Error getting block", "blockNumber", blockNumber, "err", err)
+			return 0, err
 		}
 		if block.NumberU64() <= lastBadBlockNumber || block.Time() <= lastBadBlockTime {
 			log.Info("Block number is less than or equal to last bad block number or time", "blockNumber", block.NumberU64(), "lastBadBlockNumber", lastBadBlockNumber, "lastBadBlockTime", lastBadBlockTime)
-			return block.NumberU64()
+			return block.NumberU64(), nil
 		}
 		log.Info("Block number Decreasing", "blockNumber", blockNumber)
 		blockNumber--
 	}
-	return 0
+	return 0, fmt.Errorf("no parent block found")
 }
