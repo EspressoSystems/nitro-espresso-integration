@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"os"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -24,13 +23,9 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
-	"github.com/hf/nitrite"
-	"github.com/hf/nsm"
-	"github.com/hf/nsm/request"
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -46,6 +41,7 @@ import (
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
+	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -91,10 +87,10 @@ type TransactionStreamer struct {
 	espressoMaxTransactionSize   int64
 	resubmitEspressoTxDeadline   time.Duration
 	lastSubmitFailureAt          *time.Time
+	espressoDataSigner           signature.DataSignerFunc
 	// Public these fields for testing
 	EscapeHatchEnabled                    bool
 	UseEscapeHatch                        bool
-	EspressoKeyManager                    EspressoKeyManagerInterface
 	InitialFinalizedSequencerMessageCount *big.Int
 }
 
@@ -1765,7 +1761,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
 
-		payload, err = arbutil.SignHotShotPayload(payload, s.EspressoKeyManager.SignHotShotPayload)
+		payload, err = arbutil.SignHotShotPayload(payload, s.espressoDataSigner)
 		if err != nil {
 			return fmt.Errorf("failed to sign the hotshot payload %w", err)
 		}
@@ -1984,29 +1980,12 @@ func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Con
 	return true
 }
 
-func (s *TransactionStreamer) RegisterSigner() error {
-	teeType := s.EspressoKeyManager.TeeType()
-	switch teeType {
-	case SGX:
-		return s.EspressoKeyManager.Register(s.getAttestationQuote)
-	case NITRO:
-		return s.EspressoKeyManager.Register(s.getNitroAttestation)
-	default:
-		return fmt.Errorf("unsupported tee Type: %d", teeType)
-	}
-}
-
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := s.RegisterSigner()
-		if err != nil {
-			log.Error("failed to register espresso key manager", "err", err)
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}
@@ -2023,81 +2002,4 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	}
 
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
-}
-
-/**
- * This function generates the attestation quote for the user data.
- * The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
- * The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
- * The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
- */
-func (t *TransactionStreamer) getAttestationQuote(userData []byte) ([]byte, error) {
-
-	if (t.config().UserDataAttestationFile == "") || (t.config().QuoteFile == "") {
-		return []byte{}, nil
-	}
-	// keccak256 hash of userData
-	userDataHash := crypto.Keccak256(userData)
-
-	// Add 32 bytes of padding to the user data hash
-	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
-	for i := 0; i < 32; i += 1 {
-		userDataHash = append(userDataHash, 0)
-	}
-
-	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(t.config().UserDataAttestationFile, userDataHash, 0600)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
-	}
-
-	// Read the quote from "/dev/attestation/quote" in SGX
-	attestationQuote, err := os.ReadFile(t.config().QuoteFile)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
-	}
-
-	return attestationQuote, nil
-}
-
-/**
- * This function gets the attestation document for AWS Nitro Enclaves
- * We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
- * After we retrieve, we verify the attestation, where we retrieve the result
- * Which will contain the complete attestation which we serialize for further processing
- */
-func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error) {
-
-	sess, err := nsm.OpenDefaultSession()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open nsm session: %w", err)
-	}
-	defer sess.Close()
-
-	res, err := sess.Send(&request.Attestation{
-		PublicKey: pubKey,
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to send attestation request: %w", err)
-	}
-
-	if res.Error != "" {
-		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
-	}
-
-	if res.Attestation == nil || res.Attestation.Document == nil {
-		return nil, fmt.Errorf("no attestation document returned")
-	}
-
-	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify attestation")
-	}
-
-	attestationBytes, err := json.Marshal(attestation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal attestation")
-	}
-	return attestationBytes, nil
 }

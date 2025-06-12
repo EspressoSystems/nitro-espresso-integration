@@ -62,7 +62,8 @@ func SignHotShotPayload(
 	unsigned []byte,
 	signer func([]byte) ([]byte, error),
 ) ([]byte, error) {
-	quote, err := signer(unsigned)
+	hash := crypto.Keccak256Hash(unsigned)
+	quote, err := signer(hash.Bytes())
 	if err != nil {
 		return nil, err
 	}
