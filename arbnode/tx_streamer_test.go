@@ -115,18 +115,8 @@ func TestWriteOversizedMessages(t *testing.T) {
 
 	msgCount, err := txStreamer.GetMessageCount()
 	Require(t, err)
-	// #nosec G115
-	if msgCount != arbutil.MessageIndex(uint64(oversizedIndex)) {
-		t.Fatalf("Expected message count %d, got %d", oversizedIndex, msgCount)
-	}
 
-	for i := 0; i < oversizedIndex; i++ {
-		msg, err := txStreamer.GetMessage(arbutil.MessageIndex(uint64(i))) // #nosec G115
-		Require(t, err)
-
-		expectedMsgData := messages[i].MessageWithMeta.Message.L2msg
-		if !bytes.Equal(msg.Message.L2msg, expectedMsgData) {
-			t.Fatalf("Mismatched message content for message %d", i)
-		}
+	if msgCount != 0 {
+		t.Fatalf("Expected message count 0 on oversized message error, got %d", msgCount)
 	}
 }
