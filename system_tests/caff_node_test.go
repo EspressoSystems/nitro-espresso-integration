@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"strconv"
 	"testing"
@@ -34,6 +35,19 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
+	nodeConfig.EspressoCaffNode.StateCheckerConfig = arbnode.StateCheckerConfig{
+		PollingInterval:        time.Second * 1,
+		ErrorToleranceDuration: time.Hour * 1, // Set it to a larger value. That makes the state checker not shut down
+		TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", 8945),
+	}
+
+	nodeConfig.EspressoCaffNode.ForceInclusionCheckerConfig = arbnode.ForceInclusionCheckerConfig{
+		RetryTime:                time.Second * 2,
+		PollingInterval:          time.Second * 1,
+		BlockThresholdTolerance:  20,
+		SecondThresholdTolerance: 200,
+		ErrorToleranceDuration:   time.Minute * 10,
+	}
 
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
@@ -41,6 +55,8 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder) (*
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 
 	nodeConfig.ParentChainReader.Enable = true
+
+	builder.l2StackConfig.HTTPPort = 8946
 
 	cleanup := builder.BuildEspressoCaffNode(t, existing)
 	return builder.L2, cleanup
@@ -143,6 +159,49 @@ func TestEspressoCaffNode(t *testing.T) {
 	// Send transaction to CaffNode and it should works later
 	err = checkTransferTxOnL2(t, ctx, builderCaffNode, "User17", builder.L2Info)
 	Require(t, err)
+
+	// start the trusted node
+	trustedPort := 9000
+	trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
+	defer trustedCleanup()
+
+	fatalErrChan := make(chan error)
+	// Check the state checker
+	port := builder.l2StackConfig.HTTPPort
+	// Set the trusted node url to the L1 node
+	// This is to simulate the trusted url returning a different block
+	stateChecker := arbnode.NewStateChecker(
+		arbnode.StateCheckerConfig{
+			PollingInterval:        time.Second * 1,
+			TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", trustedPort),
+			ErrorToleranceDuration: time.Second * 100,
+		},
+		port,
+		fatalErrChan,
+	)
+	// Start the monitoring task without initial checking
+	err = stateChecker.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-fatalErrChan:
+		if err == nil {
+			t.Fatal("expected an error from fatalErrChan, got nil")
+		} else {
+			t.Logf("received error as expected: %v", err)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("did not receive error from fatalErrChan within timeout")
+	}
+}
+
+func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
+	builder.l2StackConfig.HTTPPort = port
+	builder.l2StackConfig.HTTPHost = "0.0.0.0"
+	builder.useL2StackConfig = true
+	return builder.BuildL2(t)
 }
 
 func TestEspressoForceInclusionChecker(t *testing.T) {

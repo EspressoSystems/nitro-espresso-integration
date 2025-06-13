@@ -570,6 +570,7 @@ func createNodeImpl(
 				config.EspressoCaffNode.BlocksToRead,
 				deployInfo.SequencerInbox,
 				fatalErrChan,
+				stack.Config().HTTPPort,
 			)
 
 			return &Node{
