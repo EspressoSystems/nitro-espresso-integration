@@ -51,17 +51,9 @@ func NewDelayedMessageFetcher(
 	waitForFinalization bool,
 	waitForConfirmations bool,
 	requiredBlockDepth uint64,
+	fromBlock uint64,
 ) *DelayedMessageFetcher {
-	var fromBlock uint64
-	fromBlock, err := readCurrentL1BlockFromDb(db)
-	if err != nil {
-		log.Crit("failed to read l1 block from db", "err", err)
-		return nil
-	}
 
-	if fromBlock == 0 {
-		fromBlock = delayedBridge.fromBlock
-	}
 	delayedCount, err := readDelayedMessageCount(db)
 	if err != nil && !dbutil.IsErrNotFound(err) {
 		log.Crit("failed to read delayed message count from db", "err", err)

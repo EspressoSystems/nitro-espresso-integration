@@ -27,6 +27,7 @@ type EspressoCaffNodeConfig struct {
 	Enable                  bool                    `koanf:"enable"`
 	HotShotUrls             []string                `koanf:"hotshot-urls"`
 	NextHotshotBlock        uint64                  `koanf:"next-hotshot-block"`
+	FromBlock               uint64                  `koanf:"from-block"`
 	Namespace               uint64                  `koanf:"namespace"`
 	RetryTime               time.Duration           `koanf:"retry-time"`
 	HotshotPollingInterval  time.Duration           `koanf:"hotshot-polling-interval"`
@@ -42,6 +43,7 @@ type EspressoCaffNodeConfig struct {
 
 type DangerousCaffNodeConfig struct {
 	IgnoreDatabaseHotshotBlock bool `koanf:"ignore-database-hotshot-block"`
+	IgnoreDatabaseFromBlock    bool `koanf:"ignore-database-from-block"`
 }
 
 var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
@@ -63,6 +65,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RequiredBlockDepth:      6,
 	BlocksToRead:            100,
 	Dangerous:               DefaultDangerousCaffNodeConfig,
+	FromBlock:               0,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -79,11 +82,13 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
 	f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
+	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 }
 
 func DangerousCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".ignore-database-hotshot-block", DefaultDangerousCaffNodeConfig.IgnoreDatabaseHotshotBlock, "Ignores the database hotshot block and starts from the next block specified in the config by the user")
+	f.Bool(prefix+".ignore-database-from-block", DefaultDangerousCaffNodeConfig.IgnoreDatabaseFromBlock, "Ignores the database from block and starts from the next block specified in the config by the user")
 }
 
 type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
@@ -142,8 +147,20 @@ func NewEspressoCaffNode(
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 	)
 
+	fromBlock := configFetcher().FromBlock
+	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
+		fromBlock, err = readCurrentL1BlockFromDb(db)
+		if err != nil {
+			log.Crit("failed to read l1 block from db", "err", err)
+			return nil
+		}
+	}
+	if fromBlock == 0 {
+		log.Crit("fromBlock is 0, please provide a valid block number")
+	}
+
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
-		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
+		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
