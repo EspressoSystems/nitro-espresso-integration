@@ -65,7 +65,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RequiredBlockDepth:      6,
 	BlocksToRead:            100,
 	Dangerous:               DefaultDangerousCaffNodeConfig,
-	FromBlock:               0,
+	FromBlock:               1,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -152,11 +152,14 @@ func NewEspressoCaffNode(
 		fromBlock, err = readCurrentL1BlockFromDb(db)
 		if err != nil {
 			log.Crit("failed to read l1 block from db", "err", err)
-			return nil
 		}
 	}
+
 	if fromBlock == 0 {
-		log.Crit("fromBlock is 0, please provide a valid block number")
+		fromBlock = configFetcher().FromBlock
+		if fromBlock == 0 {
+			log.Crit("fromBlock is 0, please provide a valid block number")
+		}
 	}
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
@@ -189,7 +192,6 @@ func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataA
 	}
 
 	if messageWithMetadataAndPos == nil {
-		log.Error("No message found, waiting for the next message")
 		return nil, nil
 	}
 
