@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"sync"
 	"time"
@@ -68,11 +67,12 @@ func (q *synchronizedTimeboostTransactionQueue) Peek() timeboostTransactionQueue
 
 type TimeboostSequencer struct {
 	stopwaiter.StopWaiter
-	config     TimeboostSequencerConfigFetcher
+	config TimeboostSequencerConfigFetcher
+	// TODO: we should read this from the storage
 	txQueue    synchronizedTimeboostTransactionQueue
 	execEngine *ExecutionEngine
 	l1Reader   *headerreader.HeaderReader
-	// TODO: should we store this in storage?
+	// TODO: We should probably also store the txRetryQueue in storage
 	txRetryQueue synchronizedTimeboostTransactionQueue
 	nonceCache   *nonceCache
 }
@@ -124,7 +124,8 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 
 func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 
-	// TODO: how do we handle if the ctx is done
+	// TODO: handle if the context is done
+
 	// First we need to create the current list of transactions that we will process
 	var queueItems []timeboostTransactionQueueItem
 	var totalBlockSize int
@@ -166,10 +167,10 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 			continue
 		}
 
+		// TODO: should this be checked and ignored on the sailfish side?
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			// This tx is too low gas fee
 			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "hash", queueItem.tx.Hash().Hex())
-			// TODO: should this be checked and ignored on the sailfish side?
 			continue
 		}
 
@@ -183,7 +184,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		queueItems = append(queueItems, queueItem)
 	}
 
-	s.nonceCache.Resize(config.NonceCacheSize) // Would probably be better in a config hook but this is basically free
+	s.nonceCache.Resize(config.NonceCacheSize)
 	queueItems = s.precheckNonces(queueItems, totalBlockSize)
 	txes := make([]*types.Transaction, len(queueItems))
 	hooks := s.makeSequencingHooks()
@@ -194,7 +195,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		totalBlockSize = arbmath.SaturatingAdd(totalBlockSize, queueItem.txSize)
 		hooks.ConditionalOptionsForTx[i] = queueItem.options
 	}
-	// TODO: I am not sure about this
+	// TODO: Check if this edge case is even possible?
 	if totalBlockSize > config.MaxTxDataSize {
 		for _, queueItem := range queueItems {
 			s.txRetryQueue.Push(queueItem)
@@ -218,21 +219,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Uint64(), header.Time)
 	if err != nil {
 		return false
-	}
-	l1Timestamp := l1Block.Time()
-
-	if s.l1Reader != nil && (l1Block.NumberU64() == 0 || math.Abs(float64(l1Timestamp)-float64(timestamp)) > config.MaxAcceptableTimestampDelta.Seconds()) {
-		for _, queueItem := range queueItems {
-			s.txRetryQueue.Push(queueItem)
-		}
-		// #nosec G115
-		log.Error(
-			"cannot sequence: unknown L1 block or L1 timestamp too far from local clock time",
-			"l1Block", l1Block,
-			"l1Timestamp", time.Unix(int64(l1Timestamp), 0),
-			"localTimestamp", time.Unix(int64(timestamp), 0),
-		)
-		return true
 	}
 
 	l1IncomingMessageHeader := &arbostypes.L1IncomingMessageHeader{
@@ -311,6 +297,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		if errors.Is(err, core.ErrIntrinsicGas) {
 			// Strip additional information, as it's incorrect due to L1 data gas.
 			err = core.ErrIntrinsicGas
+			log.Error("error sequencing transactions", "err", err)
 		}
 		var nonceError NonceError
 		if errors.As(err, &nonceError) && nonceError.txNonce > nonceError.stateNonce {
@@ -322,7 +309,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 	return madeBlock
 }
 
-func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber uint64, conensusTimestamp uint64) (*types.Block, error) {
+func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber uint64, consensusTimestamp uint64) (*types.Block, error) {
 
 	block, err := s.l1Reader.Client().BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
 	if err != nil {
@@ -330,17 +317,11 @@ func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber u
 	}
 
 	// Only return the header if its less than equal to the consensus timestamp - parent chain finalization time
-	if block.Time() <= conensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
+	if block.Time() <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
 		return block, nil
 	}
 
-	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
-	if err != nil {
-		log.Error("failed to get latest finalized block header", "err", err)
-		return nil, err
-	}
-
-	return s.getL1BlockNumber(ctx, header.Number.Uint64(), conensusTimestamp)
+	return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 }
 
 func (s *TimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
@@ -473,5 +454,4 @@ func (s *TimeboostSequencer) StopAndWait() {
 		s.txQueue.Len() == 0 {
 		return
 	}
-
 }
