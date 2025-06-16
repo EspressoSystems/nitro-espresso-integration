@@ -167,10 +167,12 @@ func NewEspressoCaffNode(
 func (n *EspressoCaffNode) nextMessage() (*espressostreamer.MessageWithMetadataAndPos, error) {
 	messageWithMetadataAndPos, err := n.espressoStreamer.Next()
 	if err != nil {
+		log.Error("unable to get the next message", "err", err)
 		return nil, err
 	}
 
 	if messageWithMetadataAndPos == nil {
+		log.Error("No message found, waiting for the next message")
 		return nil, nil
 	}
 
@@ -195,7 +197,7 @@ func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.Mes
 Creates a block from the next message in the queue.
 */
 func (n *EspressoCaffNode) createBlock() (returnValue bool) {
-
+	log.Debug("Starting new block creation")
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
 
 	messageWithMetadataAndPos, err := n.nextMessage()
@@ -206,8 +208,11 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	if messageWithMetadataAndPos == nil {
 		// No message found, so we need to wait for the next message
+		log.Warn("No message found, waiting for the next message")
 		return false
 	}
+
+	log.Debug("Got the next message", "messageWithMetadataAndPos", messageWithMetadataAndPos)
 
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
 
@@ -305,7 +310,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	// The reason we do the reset here is because database is only initialized after Caff node is initialized
 	// so if we want to read the current position from the database, we need to reset the streamer
 	// during the start of the espresso streamer and caff node
-	log.Debug("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
+	log.Info("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
 	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
 	// Deserialize the current block from the database to get the parent chain block number
