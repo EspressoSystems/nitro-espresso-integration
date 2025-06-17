@@ -96,11 +96,13 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	// Check if the delayed message at index exists in the database
 	msg, err := f.readDelayedMessage(index)
 	if err != nil && !dbutil.IsErrNotFound(err) {
+		log.Error("Failed to read delayed message", "err", err, "msg", msg)
 		return nil, err
 	}
 	// If the delayed message already exists in the database and we have already processed it
 	// the parent block number then we can just return the message
 	if msg != nil && f.fromBlock >= msg.ParentChainBlockNumber {
+		log.Debug("Delayed message already exists in the database and we have already processed it", "msg", msg.ParentChainBlockNumber, "fromBlock", f.fromBlock)
 		return msg.Message, nil
 	}
 
@@ -115,6 +117,8 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		return nil, fmt.Errorf("l1 block number %d is less than from block %d", currL1, f.fromBlock)
 	}
 
+	log.Debug("Current L1 block and from block", "currL1", currL1, "fromBlock", f.fromBlock)
+
 	startBlock := f.fromBlock
 	endBlock := currL1
 	hasFound := false
@@ -125,26 +129,33 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	for startBlock <= endBlock && !hasFound {
 		from := big.NewInt(0).SetUint64(startBlock)
 		to := big.NewInt(0).SetUint64(startBlock + f.blocksToRead)
+		log.Debug("Looking for delayed messages from range", "from", from, "to", to)
 		msgs, err := f.delayedBridge.LookupMessagesInRange(context.Background(), from, to, nil)
 		if err != nil {
+			log.Error("Failed to lookup delayed messages", "err", err)
 			return nil, err
 		}
 		for _, msg := range msgs {
 			seqNum, err := msg.Message.Header.SeqNum()
-
 			if err != nil {
+				log.Error("Failed to get seq num from message", "err", err)
 				return nil, err
 			}
+			log.Debug("Checking if delayed message matches", "seqNum", seqNum, "index", index)
 			if seqNum == index {
+				log.Debug("Found delayed message", "seqNum", seqNum, "index", index)
 				hasFound = true
 			}
 			err = f.storeDelayedMessage(batch, seqNum, *msg)
 			if err != nil {
+				log.Error("Failed to store delayed message", "err", err)
 				return nil, err
 			}
+			log.Debug("Stored delayed message", "seqNum", seqNum, "index", index)
 		}
 		// Read the next `blocksToRead` blocks
 		startBlock = startBlock + f.blocksToRead + 1
+		log.Debug("Reading next block", "startBlock", startBlock)
 	}
 
 	// if startBlock is less than the endBlock this means
@@ -156,10 +167,14 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		f.fromBlock = endBlock + 1
 	}
 
+	log.Debug("Updating from block", "fromBlock", f.fromBlock)
+
 	err = storeCurrentL1Block(batch, f.fromBlock)
 	if err != nil {
+		log.Error("Failed to store current L1 block", "err", err)
 		return nil, err
 	}
+	log.Debug("Stored current L1 block", "fromBlock", f.fromBlock)
 
 	err = batch.Write()
 	if err != nil {
@@ -167,13 +182,16 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	}
 
 	if !hasFound {
+		log.Error("No delayed message found", "index", index)
 		return nil, fmt.Errorf("no message found for pos %d", index)
 	}
 
 	result, err := f.readDelayedMessage(index)
 	if err != nil {
+		log.Error("Failed to read delayed message", "err", err)
 		return nil, err
 	}
+	log.Debug("Read delayed message", "index", index, "result", result)
 	return result.Message, nil
 }
 
@@ -197,16 +215,20 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 		messageWithMetadataAndPos.MessageWithMeta.Message = message
 		isDelayedMessageWithinSafetyTolerance, err := f.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
 		if err != nil {
+			log.Error("Failed to check if delayed message is within safety tolerance", "err", err)
 			return messageWithMetadataAndPos, err
 		}
+		log.Debug("Checked if delayed message is within safety tolerance", "isDelayedMessageWithinSafetyTolerance", isDelayedMessageWithinSafetyTolerance)
 		if !isDelayedMessageWithinSafetyTolerance {
 			return messageWithMetadataAndPos, fmt.Errorf("delayed message was not within safety tolerance parameters, the node needs to wait until it is")
 		}
 		f.delayedCount++
 		err = storeDelayedMessageCount(f.db, f.delayedCount)
 		if err != nil {
+			log.Error("Failed to store delayed message count", "err", err)
 			return messageWithMetadataAndPos, err
 		}
+		log.Debug("Stored delayed message count", "delayedCount", f.delayedCount)
 	}
 
 	return messageWithMetadataAndPos, nil
@@ -237,7 +259,7 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
 			return false, err
 		}
-
+		log.Debug("Safe block number", "safeBlockNumber", safeBlockNumber, "message", message)
 	} else if f.waitForConfirmations {
 		// if we are waiting for block confirmations, get the latest header and subtract the required block depth.
 		latestHeader, err := f.l1Reader.Client().HeaderByNumber(context.Background(), nil)
@@ -246,9 +268,10 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			return false, err
 		}
 		safeBlockNumber = latestHeader.Number.Sub(latestHeader.Number, new(big.Int).SetUint64(f.requiredBlockDepth)).Uint64()
-
+		log.Debug("Safe block number", "safeBlockNumber", safeBlockNumber, "message", message)
 	} else {
 		// If we haven't configured a safety strategy, every delayed message is valid to include in the nodes state.
+		log.Debug("No safety strategy configured, every delayed message is valid")
 		return true, nil
 	}
 
@@ -259,10 +282,11 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 		return false, err
 	}
 	if (message.MessageWithMeta.Message.Header.BlockNumber <= safeBlockNumber) && (message.MessageWithMeta.DelayedMessagesRead <= delayCount) {
+		log.Debug("Delayed message is safe", "message", message)
 		return true, nil
 	}
+	log.Debug("Delayed message is not safe", "message", message)
 	return false, nil
-
 }
 
 /*

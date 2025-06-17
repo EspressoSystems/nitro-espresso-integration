@@ -63,7 +63,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	WaitForFinalization:     true,
 	WaitForConfirmations:    false,
 	RequiredBlockDepth:      6,
-	BlocksToRead:            100,
+	BlocksToRead:            10000,
 	Dangerous:               DefaultDangerousCaffNodeConfig,
 	FromBlock:               1,
 }
