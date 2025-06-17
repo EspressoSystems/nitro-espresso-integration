@@ -161,14 +161,11 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		f.fromBlock = endBlock + 1
 	}
 
-	log.Debug("Updating from block", "fromBlock", f.fromBlock)
-
 	err = storeCurrentL1Block(batch, f.fromBlock)
 	if err != nil {
 		log.Error("Failed to store current L1 block", "err", err)
 		return nil, err
 	}
-	log.Debug("Stored current L1 block", "fromBlock", f.fromBlock)
 
 	err = batch.Write()
 	if err != nil {
@@ -176,7 +173,6 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	}
 
 	if !hasFound {
-		log.Error("No delayed message found", "index", index)
 		return nil, fmt.Errorf("no message found for pos %d", index)
 	}
 
@@ -185,13 +181,14 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		log.Error("Failed to read delayed message", "err", err)
 		return nil, err
 	}
-	log.Debug("Read delayed message", "index", index, "result", result)
+
 	return result.Message, nil
 }
 
 func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 	if delayedMessagesRead > f.delayedCount+1 || delayedMessagesRead < f.delayedCount {
+		log.Error("messages are not processed in order", "delayedMessagesRead", delayedMessagesRead, "delayedCount", f.delayedCount)
 		return nil, fmt.Errorf("delayed message count is greater than the delayed count")
 	}
 	if delayedMessagesRead == f.delayedCount+1 {
@@ -208,10 +205,9 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 		messageWithMetadataAndPos.MessageWithMeta.Message = message
 		isDelayedMessageWithinSafetyTolerance, err := f.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
 		if err != nil {
-			log.Error("Failed to check if delayed message is within safety tolerance", "err", err)
 			return messageWithMetadataAndPos, err
 		}
-		log.Debug("Checked if delayed message is within safety tolerance", "isDelayedMessageWithinSafetyTolerance", isDelayedMessageWithinSafetyTolerance)
+
 		if !isDelayedMessageWithinSafetyTolerance {
 			return messageWithMetadataAndPos, fmt.Errorf("delayed message was not within safety tolerance parameters, the node needs to wait until it is")
 		}
@@ -221,7 +217,6 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 			log.Error("Failed to store delayed message count", "err", err)
 			return messageWithMetadataAndPos, err
 		}
-		log.Debug("Stored delayed message count", "delayedCount", f.delayedCount)
 	}
 
 	return messageWithMetadataAndPos, nil
@@ -252,6 +247,7 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
 			return false, err
 		}
+
 	} else if f.waitForConfirmations {
 		// if we are waiting for block confirmations, get the latest header and subtract the required block depth.
 		latestHeader, err := f.l1Reader.Client().HeaderByNumber(context.Background(), nil)
@@ -260,6 +256,7 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			return false, err
 		}
 		safeBlockNumber = latestHeader.Number.Sub(latestHeader.Number, new(big.Int).SetUint64(f.requiredBlockDepth)).Uint64()
+
 	} else {
 		// If we haven't configured a safety strategy, every delayed message is valid to include in the nodes state.
 		log.Debug("No safety strategy configured, every delayed message is valid")
@@ -276,6 +273,7 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 		return true, nil
 	}
 	return false, nil
+
 }
 
 /*
