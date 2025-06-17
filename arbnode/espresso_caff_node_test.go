@@ -66,7 +66,7 @@ func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAnd
 	return messageWithMetadataAndPos, nil
 }
 
-func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
+func (m *MockDelayedMessageFetcher) reset(parentChainBlockNum uint64, seqNum uint64) {}
 
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
