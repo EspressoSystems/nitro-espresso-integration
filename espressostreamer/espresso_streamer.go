@@ -121,6 +121,7 @@ func (s *EspressoStreamer) Next() (*MessageWithMetadataAndPos, error) {
 		return 1
 	})
 	if !found {
+		log.Debug("Not found the current message pos", "currentMessagePos", s.currentMessagePos)
 		return nil, nil
 	}
 	if message == nil {
@@ -288,6 +289,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 
 	ephemeralErrorHandler := util.NewEphemeralErrorHandler(3*time.Minute, FailedToFetchTransactionsErr.Error(), 1*time.Minute)
+	processedHotshotBlocks := 0
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := s.QueueMessagesFromHotshot(ctx, s.parseEspressoTransaction)
 		if err != nil {
@@ -298,7 +300,13 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		} else {
 			ephemeralErrorHandler.Reset()
 		}
-		log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
+		processedHotshotBlocks += 1
+		if processedHotshotBlocks == 100 {
+			log.Info("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
+			processedHotshotBlocks = 0
+		} else {
+			log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
+		}
 		return s.pollingHotshotPollingInterval
 	})
 	return err

@@ -39,6 +39,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, da
 	nodeConfig.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.EspressoCaffNode.WaitForFinalization
 	nodeConfig.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.EspressoCaffNode.WaitForConfirmations
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
+	nodeConfig.EspressoCaffNode.FromBlock = 1
 
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
@@ -76,7 +77,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.HotShotUrls = []string{hotShotUrl, hotShotUrl, hotShotUrl, hotShotUrl}
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
-
+	nodeConfig.EspressoCaffNode.FromBlock = 1
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
