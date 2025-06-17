@@ -225,7 +225,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 
 	if messageWithMetadataAndPos == nil {
 		// No message found, so we need to wait for the next message
-		log.Warn("No message found, waiting for the next message")
 		return false
 	}
 
