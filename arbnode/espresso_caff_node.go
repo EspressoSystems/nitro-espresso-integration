@@ -11,7 +11,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -332,14 +331,10 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	log.Info("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
 	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
-	// Deserialize the current block from the database to get the parent chain block number
-	// and the delayed messages read. Note: the nonce in the header of the block contains the delayed messages read
-	header := types.DeserializeHeaderExtraInformation(n.executionEngine.Bc().CurrentHeader())
-	parentChainBlockNumber := header.L1BlockNumber
 	// Nonce of the previous block is the number of delayed messages read
 	// Check `NextDelayedMessageNumber` in execution node to confirm this
 	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
-	n.delayedMessageFetcher.reset(parentChainBlockNumber, delayedMessagesRead)
+	n.delayedMessageFetcher.reset(delayedMessagesRead)
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock()

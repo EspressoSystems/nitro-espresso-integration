@@ -26,7 +26,7 @@ var (
 )
 
 type DelayedMessageFetcherInterface interface {
-	reset(parentChainBlockNumber uint64, seqNum uint64)
+	reset(seqNum uint64)
 	getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 }
@@ -77,8 +77,7 @@ func NewDelayedMessageFetcher(
 	}
 }
 
-func (f *DelayedMessageFetcher) reset(parentChainBlockNumber uint64, seqNum uint64) {
-	f.fromBlock = parentChainBlockNumber
+func (f *DelayedMessageFetcher) reset(seqNum uint64) {
 	f.delayedCount = seqNum
 }
 
