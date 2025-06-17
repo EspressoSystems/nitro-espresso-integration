@@ -128,6 +128,7 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	for startBlock <= endBlock && !hasFound {
 		from := big.NewInt(0).SetUint64(startBlock)
 		to := big.NewInt(0).SetUint64(startBlock + f.blocksToRead)
+
 		log.Debug("Looking for delayed messages from range", "from", from, "to", to)
 		msgs, err := f.delayedBridge.LookupMessagesInRange(context.Background(), from, to, nil)
 		if err != nil {
@@ -137,24 +138,18 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		for _, msg := range msgs {
 			seqNum, err := msg.Message.Header.SeqNum()
 			if err != nil {
-				log.Error("Failed to get seq num from message", "err", err)
 				return nil, err
 			}
-			log.Debug("Checking if delayed message matches", "seqNum", seqNum, "index", index)
 			if seqNum == index {
-				log.Debug("Found delayed message", "seqNum", seqNum, "index", index)
 				hasFound = true
 			}
 			err = f.storeDelayedMessage(batch, seqNum, *msg)
 			if err != nil {
-				log.Error("Failed to store delayed message", "err", err)
 				return nil, err
 			}
-			log.Debug("Stored delayed message", "seqNum", seqNum, "index", index)
 		}
 		// Read the next `blocksToRead` blocks
 		startBlock = startBlock + f.blocksToRead + 1
-		log.Debug("Reading next block", "startBlock", startBlock)
 	}
 
 	// if startBlock is less than the endBlock this means
@@ -197,7 +192,6 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 	if delayedMessagesRead > f.delayedCount+1 || delayedMessagesRead < f.delayedCount {
-		log.Error("messages are not processed in order", "delayedMessagesRead", delayedMessagesRead, "delayedCount", f.delayedCount)
 		return nil, fmt.Errorf("delayed message count is greater than the delayed count")
 	}
 	if delayedMessagesRead == f.delayedCount+1 {
@@ -258,7 +252,6 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
 			return false, err
 		}
-		log.Debug("Safe block number", "safeBlockNumber", safeBlockNumber, "message", message)
 	} else if f.waitForConfirmations {
 		// if we are waiting for block confirmations, get the latest header and subtract the required block depth.
 		latestHeader, err := f.l1Reader.Client().HeaderByNumber(context.Background(), nil)
@@ -267,7 +260,6 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 			return false, err
 		}
 		safeBlockNumber = latestHeader.Number.Sub(latestHeader.Number, new(big.Int).SetUint64(f.requiredBlockDepth)).Uint64()
-		log.Debug("Safe block number", "safeBlockNumber", safeBlockNumber, "message", message)
 	} else {
 		// If we haven't configured a safety strategy, every delayed message is valid to include in the nodes state.
 		log.Debug("No safety strategy configured, every delayed message is valid")
@@ -281,10 +273,8 @@ func (f *DelayedMessageFetcher) isDelayedMessageWithinSafetyTolerance(message *e
 		return false, err
 	}
 	if (message.MessageWithMeta.Message.Header.BlockNumber <= safeBlockNumber) && (message.MessageWithMeta.DelayedMessagesRead <= delayCount) {
-		log.Debug("Delayed message is safe", "message", message)
 		return true, nil
 	}
-	log.Debug("Delayed message is not safe", "message", message)
 	return false, nil
 }
 

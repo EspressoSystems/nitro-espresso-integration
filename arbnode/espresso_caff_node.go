@@ -215,7 +215,6 @@ func (n *EspressoCaffNode) reset(messageWithMetadataAndPos *espressostreamer.Mes
 Creates a block from the next message in the queue.
 */
 func (n *EspressoCaffNode) createBlock() (returnValue bool) {
-	log.Debug("Starting new block creation")
 	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
 
 	messageWithMetadataAndPos, err := n.nextMessage()
@@ -229,8 +228,6 @@ func (n *EspressoCaffNode) createBlock() (returnValue bool) {
 		log.Warn("No message found, waiting for the next message")
 		return false
 	}
-
-	log.Debug("Got the next message", "messageWithMetadataAndPos", messageWithMetadataAndPos)
 
 	messageWithMetadata := messageWithMetadataAndPos.MessageWithMeta
 
