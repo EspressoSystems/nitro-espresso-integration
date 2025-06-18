@@ -116,7 +116,7 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 		return nil, fmt.Errorf("l1 block number %d is less than from block %d", currL1, f.fromBlock)
 	}
 
-	log.Debug("Current L1 block and from block", "currL1", currL1, "fromBlock", f.fromBlock)
+	log.Debug("Current L1 block and from block:", "currL1", currL1, "fromBlock", f.fromBlock)
 
 	startBlock := f.fromBlock
 	endBlock := currL1
