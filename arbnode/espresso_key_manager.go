@@ -92,6 +92,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
 			RetryDelay:                    registerSignerConfig.RetryDelay,
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
+			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
 	}
 }

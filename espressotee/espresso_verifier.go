@@ -16,8 +16,6 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
 
-const maxGasLimit = 40000000
-
 type EspressoTEEVerifierInterface interface {
 	RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error
 	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
@@ -66,9 +64,6 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
-	if gasLimit > maxGasLimit {
-		return fmt.Errorf("gas limit is too high: %d, max gas limit is %d", gasLimit, maxGasLimit)
-	}
 
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches

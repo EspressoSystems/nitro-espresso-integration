@@ -31,6 +31,7 @@ type EspressoRegisterSignerConfig struct {
 	RetryDelay                    time.Duration `koanf:"retry-delay"`
 	MaxRetries                    uint8         `koanf:"max-retries"`
 	GasLimitBufferIncreasePercent uint64        `koanf:"gas-limit-buffer-increase-percent"`
+	MaxBaseFee                    uint64        `koanf:"max-base-fee"`
 }
 
 var DefaultEspressoRegisterSignerConfig = EspressoRegisterSignerConfig{
@@ -38,6 +39,7 @@ var DefaultEspressoRegisterSignerConfig = EspressoRegisterSignerConfig{
 	RetryDelay:                    5 * time.Second,
 	MaxRetries:                    5,
 	GasLimitBufferIncreasePercent: 20,
+	MaxBaseFee:                    70000000,
 }
 
 type EspressoRegisterSignerOpts struct {
@@ -45,6 +47,7 @@ type EspressoRegisterSignerOpts struct {
 	RetryDelay                    time.Duration
 	MaxRetries                    int
 	GasLimitBufferIncreasePercent uint64
+	MaxBaseFee                    uint64
 }
 
 func AddEspressoRegisterSignerConfigOptions(prefix string, f *pflag.FlagSet) {
@@ -52,4 +55,5 @@ func AddEspressoRegisterSignerConfigOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".retry-delay", DefaultEspressoRegisterSignerConfig.RetryDelay, "delay in between verification calls to espresso tee contracts")
 	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterSignerConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
 	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterSignerConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
+	f.Uint64(prefix+".max-base-fee", DefaultEspressoRegisterSignerConfig.MaxBaseFee, "max base fee to use when calling espresso tee contracts")
 }
