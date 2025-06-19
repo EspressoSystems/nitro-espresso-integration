@@ -1,5 +1,6 @@
 package das
 
+<<<<<<< HEAD:daprovider/das/google_cloud_storage_service_test.go
 import (
 	"bytes"
 	"context"
@@ -13,6 +14,22 @@ import (
 
 	"github.com/offchainlabs/nitro/daprovider/das/dastree"
 )
+||||||| d81324dae:daprovider/das/google_cloud_storage_service_test.go
+=======
+import (
+	"bytes"
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	googlestorage "cloud.google.com/go/storage"
+
+	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/offchainlabs/nitro/das/dastree"
+)
+>>>>>>> integration:das/google_cloud_storage_service_test.go
 
 type mockGCSClient struct {
 	storage map[string][]byte

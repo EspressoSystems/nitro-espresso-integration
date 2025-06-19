@@ -13,9 +13,14 @@ import (
 // Make sure to never start the key with stream name, as we use patterns like "--check-streams=streamname-*"
 // to scrape stream with redis export.
 // https://github.com/oliver006/redis_exporter/blob/71dbe37fb14a4ae2537c1790a239dc1e568ffba5/main.go#L68
+<<<<<<< HEAD
 func ResultKeyFor(streamName, id string) string {
 	return fmt.Sprintf("result-key:%s.%s", streamName, id)
 }
+||||||| d81324dae
+=======
+func ResultKeyFor(streamName, id string) string { return fmt.Sprintf("%s.%s", streamName, id) }
+>>>>>>> integration
 func ErrorKeyFor(streamName, id string) string {
 	return fmt.Sprintf("error-key:%s.%s.error", streamName, id)
 }

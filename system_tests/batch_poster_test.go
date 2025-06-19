@@ -1,8 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbtest
-
 import (
 	"context"
 	"crypto/rand"
@@ -28,15 +26,12 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"github.com/offchainlabs/nitro/util/redisutil"
 )
-
 func TestBatchPosterParallel(t *testing.T) {
 	testBatchPosterParallel(t, false)
 }
-
 func TestRedisBatchPosterParallel(t *testing.T) {
 	testBatchPosterParallel(t, true)
 }
-
 func addNewBatchPoster(ctx context.Context, t *testing.T, builder *NodeBuilder, address common.Address) {
 	t.Helper()
 	upgradeExecutor, err := upgrade_executorgen.NewUpgradeExecutor(builder.L2.ConsensusNode.DeployInfo.UpgradeExecutor, builder.L1.Client)
@@ -63,7 +58,6 @@ func addNewBatchPoster(ctx context.Context, t *testing.T, builder *NodeBuilder, 
 		t.Fatalf("Error setting batch poster: %v", err)
 	}
 }
-
 func testBatchPosterParallel(t *testing.T, useRedis bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -206,7 +200,6 @@ func testBatchPosterParallel(t *testing.T, useRedis bool) {
 		Fatal(t, "Unexpected zero balance")
 	}
 }
-
 func TestBatchPosterLargeTx(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -236,7 +229,6 @@ func TestBatchPosterLargeTx(t *testing.T) {
 		Fatal(t, "receipt A block hash", receiptA.BlockHash, "does not equal receipt B block hash", receiptB.BlockHash)
 	}
 }
-
 func TestBatchPosterKeepsUp(t *testing.T) {
 	t.Skip("This test is for manual inspection and would be unreliable in CI even if automated")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -279,7 +271,6 @@ func TestBatchPosterKeepsUp(t *testing.T) {
 		fmt.Printf("backlog: %v message\n", haveMessages-postedMessages)
 	}
 }
-
 func testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t *testing.T, enabled bool) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -297,7 +288,7 @@ func testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t *testing.T, e
 	seqInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 	Require(t, err)
 	seqOpts := builder.L1Info.GetDefaultTransactOpts("Sequencer", ctx)
-	tx, err := seqInbox.AddSequencerL2Batch(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10))
+	tx, err := seqInbox.AddSequencerL2Batch99020501(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10), createDummyEspressoMetadata(t))
 	Require(t, err)
 	_, err = builder.L1.EnsureTxSucceeded(tx)
 	Require(t, err)
@@ -343,15 +334,12 @@ func testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t *testing.T, e
 		}
 	}
 }
-
 func TestAllowPostingFirstBatchWhenSequencerMessageCountMismatchEnabled(t *testing.T) {
 	testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t, true)
 }
-
 func TestAllowPostingFirstBatchWhenSequencerMessageCountMismatchDisabled(t *testing.T) {
 	testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t, false)
 }
-
 func GetBatchCount(t *testing.T, builder *NodeBuilder) uint64 {
 	t.Helper()
 	sequenceInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
@@ -360,13 +348,11 @@ func GetBatchCount(t *testing.T, builder *NodeBuilder) uint64 {
 	Require(t, err)
 	return batchCount.Uint64()
 }
-
 func CheckBatchCount(t *testing.T, builder *NodeBuilder, want uint64) {
 	if got := GetBatchCount(t, builder); got != want {
 		t.Fatalf("invalid batch count, want %v, got %v", want, got)
 	}
 }
-
 func testBatchPosterDelayBuffer(t *testing.T, delayBufferEnabled bool) {
 	const messagesPerBatch = 3
 	const numBatches = 3
@@ -435,15 +421,12 @@ func testBatchPosterDelayBuffer(t *testing.T, delayBufferEnabled bool) {
 		}
 	}
 }
-
 func TestBatchPosterDelayBufferEnabled(t *testing.T) {
 	testBatchPosterDelayBuffer(t, true)
 }
-
 func TestBatchPosterDelayBufferDisabled(t *testing.T) {
 	testBatchPosterDelayBuffer(t, false)
 }
-
 func TestBatchPosterDelayBufferDontForceNonDelayedMessages(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -484,7 +467,6 @@ func TestBatchPosterDelayBufferDontForceNonDelayedMessages(t *testing.T) {
 	}
 	CheckBatchCount(t, builder, initialBatchCount+1)
 }
-
 func TestParentChainNonEIP7623(t *testing.T) {
 	t.Parallel()
 
@@ -519,7 +501,6 @@ func TestParentChainNonEIP7623(t *testing.T) {
 		t.Fatal("L3's parent chain should not be using EIP-7623")
 	}
 }
-
 func TestBatchPosterWithDelayProofsAndBacklog(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -571,3 +552,5 @@ func TestBatchPosterWithDelayProofsAndBacklog(t *testing.T) {
 	builder.L1.SendWaitTestTransactions(t, batchPosterTxs)
 	CheckBatchCount(t, builder, initialBatchCount+numBatches)
 }
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md

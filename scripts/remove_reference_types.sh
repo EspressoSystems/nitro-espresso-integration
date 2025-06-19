@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 #!/usr/bin/env bash
+=======
+#!/bin/bash
+>>>>>>> integration
 
 # This script removes reference types from a wasm file
 

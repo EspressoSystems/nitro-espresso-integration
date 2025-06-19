@@ -142,6 +142,7 @@ func (p *Producer[Request, Response]) checkResponses(ctx context.Context) time.D
 			return 0
 		}
 		checked++
+<<<<<<< HEAD
 		// First check if there is an error for this promise
 		errorKey := ErrorKeyFor(p.redisStream, id)
 		errorResponse, err := p.client.Get(ctx, errorKey).Result()
@@ -162,8 +163,15 @@ func (p *Producer[Request, Response]) checkResponses(ctx context.Context) time.D
 		// If we do not find the error key, then check for the result key.
 		resultKey := ResultKeyFor(p.redisStream, id)
 		res, err := p.client.Get(ctx, resultKey).Result()
+||||||| d81324dae
+		res, err := p.client.Get(ctx, id).Result()
+=======
+		resultKey := ResultKeyFor(p.redisStream, id)
+		res, err := p.client.Get(ctx, resultKey).Result()
+>>>>>>> integration
 		if err != nil {
 			if !errors.Is(err, redis.Nil) {
+<<<<<<< HEAD
 				log.Error("Error reading value in redis", "key", resultKey, "error", err)
 			} else if cmpMsgId(id, allowedOldestID) == -1 {
 				// The request this producer is waiting for has been past its TTL or is older than current PEL's lower,
@@ -172,6 +180,18 @@ func (p *Producer[Request, Response]) checkResponses(ctx context.Context) time.D
 				log.Debug("request timed out waiting for response", "msgId", id, "allowedOldestId", allowedOldestID)
 				errored++
 				delete(p.promises, id)
+||||||| d81324dae
+				log.Error("redis producer: Error reading value in redis", "key", id, "error", err)
+=======
+				log.Error("Error reading value in redis", "key", resultKey, "error", err)
+			} else if cmpMsgId(id, allowedOldestID) == -1 {
+				// The request this producer is waiting for has been past its TTL or is older than current PEL's lower,
+				// so safe to error and stop tracking this promise
+				promise.ProduceError(errors.New("error getting response, request has been waiting for too long"))
+				log.Error("error getting response, request has been waiting past its TTL")
+				errored++
+				delete(p.promises, id)
+>>>>>>> integration
 			}
 			continue
 		}

@@ -1,8 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package gethexec
-
 import (
 	"context"
 	"crypto/ecdsa"
@@ -25,9 +23,7 @@ import (
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/redisutil"
 )
-
 var testPriv, testPriv2 *ecdsa.PrivateKey
-
 func init() {
 	privKey, err := crypto.HexToECDSA("93be75cc4df7acbb636b6abe6de2c0446235ac1dc7da9f290a70d83f088b486d")
 	if err != nil {
@@ -40,7 +36,6 @@ func init() {
 	}
 	testPriv2 = privKey2
 }
-
 func defaultTestRoundTimingInfo(offset time.Time) timeboost.RoundTimingInfo {
 	return timeboost.RoundTimingInfo{
 		Offset:            offset,
@@ -49,7 +44,6 @@ func defaultTestRoundTimingInfo(offset time.Time) timeboost.RoundTimingInfo {
 		ReserveSubmission: time.Second * 15,
 	}
 }
-
 func Test_expressLaneService_validateExpressLaneTx(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -222,7 +216,6 @@ func Test_expressLaneService_validateExpressLaneTx(t *testing.T) {
 		})
 	}
 }
-
 func Test_expressLaneService_validateExpressLaneTx_gracePeriod(t *testing.T) {
 	auctionContractAddr := common.HexToAddress("0x2Aef36410182881a4b13664a1E079762D7F716e6")
 	tr := &ExpressLaneTracker{
@@ -259,29 +252,23 @@ func Test_expressLaneService_validateExpressLaneTx_gracePeriod(t *testing.T) {
 	err = tr.ValidateExpressLaneTx(sub2)
 	require.NoError(t, err)
 }
-
 type stubPublisher struct {
 	els              *expressLaneService
 	publishedTxOrder []uint64
 }
-
 func makeStubPublisher(els *expressLaneService) *stubPublisher {
 	return &stubPublisher{
 		els:              els,
 		publishedTxOrder: make([]uint64, 0),
 	}
 }
-
 var emptyTx = types.NewTransaction(0, common.MaxAddress, big.NewInt(0), 0, big.NewInt(0), nil)
-
 type testTransactionPublisher struct {
 	publishFunc func(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error
 }
-
 func (t testTransactionPublisher) PublishTimeboostedTransaction(parentCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
 	return t.publishFunc(parentCtx, tx, options)
 }
-
 func (s *stubPublisher) PublishTimeboostedTransaction(parentCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
 	if tx.Hash() != emptyTx.Hash() {
 		return errors.New("oops, bad tx")
@@ -289,7 +276,6 @@ func (s *stubPublisher) PublishTimeboostedTransaction(parentCtx context.Context,
 	s.publishedTxOrder = append(s.publishedTxOrder, 0)
 	return nil
 }
-
 func Test_expressLaneService_sequenceExpressLaneSubmission_nonceTooLow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -308,7 +294,6 @@ func Test_expressLaneService_sequenceExpressLaneSubmission_nonceTooLow(t *testin
 	err := els.sequenceExpressLaneSubmission(msg)
 	require.ErrorIs(t, err, timeboost.ErrSequenceNumberTooLow)
 }
-
 func Test_expressLaneService_sequenceExpressLaneSubmission_duplicateNonce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -355,7 +340,6 @@ func Test_expressLaneService_sequenceExpressLaneSubmission_duplicateNonce(t *tes
 	}
 	wg.Add(1) // As the goroutine that's still running will call wg.Done() after the test ends
 }
-
 func Test_expressLaneService_sequenceExpressLaneSubmission_outOfOrder(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -416,7 +400,6 @@ func Test_expressLaneService_sequenceExpressLaneSubmission_outOfOrder(t *testing
 	require.Equal(t, 6, len(roundInfo.msgBySequenceNumber))
 	els.roundInfoMutex.Unlock()
 }
-
 func Test_expressLaneService_sequenceExpressLaneSubmission_erroredTx(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -459,7 +442,6 @@ func Test_expressLaneService_sequenceExpressLaneSubmission_erroredTx(t *testing.
 	// Since sequence number 2 failed after submission stage, that nonce is used up
 	require.Equal(t, 3, len(stubPublisher.publishedTxOrder))
 }
-
 func Test_expressLaneService_syncFromRedis(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -557,7 +539,6 @@ func Test_expressLaneService_syncFromRedis(t *testing.T) {
 	}
 	els2.roundInfoMutex.Unlock()
 }
-
 func TestIsWithinAuctionCloseWindow(t *testing.T) {
 	initialTimestamp := time.Date(2024, 8, 8, 15, 0, 0, 0, time.UTC)
 	roundTimingInfo := defaultTestRoundTimingInfo(initialTimestamp)
@@ -603,7 +584,6 @@ func TestIsWithinAuctionCloseWindow(t *testing.T) {
 		})
 	}
 }
-
 func Test_expressLaneService_dontCareSequence(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -646,7 +626,6 @@ func Test_expressLaneService_dontCareSequence(t *testing.T) {
 	require.True(t, mp.processedDontCare)
 	require.Equal(t, tx.Hash(), mp.processedTx.Hash())
 }
-
 // Test_expressLaneService_mixedSequenceNumbersDontCareFirst tests sending dontcare sequence numbers first, then normal sequence numbers
 func Test_expressLaneService_mixedSequenceNumbersDontCareFirst(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -717,7 +696,6 @@ func Test_expressLaneService_mixedSequenceNumbersDontCareFirst(t *testing.T) {
 	require.Equal(t, uint64(2), roundInfo.sequence) // Should be 2 after processing seq 0 and 1
 	els.roundInfoMutex.Unlock()
 }
-
 // Test_expressLaneService_mixedSequenceNumbersNormalFirst tests sending normal sequence numbers first, then dontcare sequence numbers
 func Test_expressLaneService_mixedSequenceNumbersNormalFirst(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -788,7 +766,6 @@ func Test_expressLaneService_mixedSequenceNumbersNormalFirst(t *testing.T) {
 	require.Equal(t, uint64(2), roundInfo.sequence) // Should be 2 after processing seq 0 and 1
 	els.roundInfoMutex.Unlock()
 }
-
 // Test_expressLaneService_mixedSequenceNumbersIntermixed tests sending a mix of normal and dontcare sequence numbers
 func Test_expressLaneService_mixedSequenceNumbersIntermixed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -862,7 +839,6 @@ func Test_expressLaneService_mixedSequenceNumbersIntermixed(t *testing.T) {
 	require.Equal(t, uint64(3), roundInfo.sequence) // Should be 3 after processing seq 0, 1, and 2
 	els.roundInfoMutex.Unlock()
 }
-
 // Test_expressLaneService_dontCareWithQueuedTransactions tests that dontcare transactions are processed immediately
 // even when regular sequence numbers are queued
 func Test_expressLaneService_dontCareWithQueuedTransactions(t *testing.T) {
@@ -945,7 +921,6 @@ func Test_expressLaneService_dontCareWithQueuedTransactions(t *testing.T) {
 	require.Equal(t, uint64(4), roundInfo.sequence) // Should be 4 after processing seq 0, 1, 2, and 3
 	els.roundInfoMutex.Unlock()
 }
-
 func Benchmark_expressLaneService_validateExpressLaneTx(b *testing.B) {
 	b.StopTimer()
 	addr := crypto.PubkeyToAddress(testPriv.PublicKey)
@@ -965,7 +940,6 @@ func Benchmark_expressLaneService_validateExpressLaneTx(b *testing.B) {
 		require.NoError(b, err)
 	}
 }
-
 func buildSignature(privateKey *ecdsa.PrivateKey, data []byte) ([]byte, error) {
 	prefixedData := crypto.Keccak256(append([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(data))), data...))
 	signature, err := crypto.Sign(prefixedData, privateKey)
@@ -974,7 +948,6 @@ func buildSignature(privateKey *ecdsa.PrivateKey, data []byte) ([]byte, error) {
 	}
 	return signature, nil
 }
-
 func buildInvalidSignatureSubmission(
 	t *testing.T,
 	auctionContractAddr common.Address,
@@ -1002,7 +975,6 @@ func buildInvalidSignatureSubmission(
 	b.Signature = signature
 	return b
 }
-
 func buildValidSubmission(
 	t testing.TB,
 	auctionContractAddr common.Address,
@@ -1023,7 +995,6 @@ func buildValidSubmission(
 	b.Signature = signature
 	return b
 }
-
 func buildValidSubmissionWithSeqAndTx(
 	t testing.TB,
 	round uint64,
@@ -1045,3 +1016,5 @@ func buildValidSubmissionWithSeqAndTx(
 	b.Signature = signature
 	return b
 }
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE

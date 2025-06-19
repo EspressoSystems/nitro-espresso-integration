@@ -84,24 +84,47 @@ unsafe fn write_err(output: &mut RustBytes, err: ErrReport) -> UserOutcomeKind {
     UserOutcomeKind::Failure
 }
 
-unsafe fn write_outcome(output: &mut RustBytes, outcome: UserOutcome) -> UserOutcomeKind {
-    let (status, outs) = outcome.into_data();
-    output.write(outs);
-    status
-}
+    unsafe fn write_outcome(output: &mut RustBytes, outcome: UserOutcome) -> UserOutcomeKind {
+        let (status, outs) = outcome.into_data();
+        output.write(outs);
+        status
+    }
 
 /// "activates" a user wasm.
+
+
 ///
+
+
 /// The `output` is either the module or an error string.
+
+
 /// Returns consensus info such as the module hash and footprint on success.
+
+
 ///
+
+
 /// Note that this operation costs gas and is limited by the amount supplied via the `gas` pointer.
+
+
 /// The amount left is written back at the end of the call.
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `output`, `asm_len`, `module_hash`, `footprint`, and `gas` must not be null.
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_activate(
     wasm: GoSliceData,
     page_limit: u16,
@@ -141,14 +164,31 @@ pub unsafe extern "C" fn stylus_activate(
 }
 
 /// "compiles" a user wasm.
+
+
 ///
+
+
 /// The `output` is either the asm or an error string.
+
+
 /// Returns consensus info such as the module hash and footprint on success.
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `output` must not be null.
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_compile(
     wasm: GoSliceData,
     version: u16,
@@ -177,9 +217,16 @@ pub unsafe extern "C" fn stylus_compile(
 }
 
 #[no_mangle]
+
 /// # Safety
+
+
 ///
+
+
 /// `output` must not be null.
+
+
 pub unsafe extern "C" fn wat_to_wasm(wat: GoSliceData, output: *mut RustBytes) -> UserOutcomeKind {
     let output = &mut *output;
     let wasm = match wasmer::wat2wasm(wat.slice()) {
@@ -191,13 +238,28 @@ pub unsafe extern "C" fn wat_to_wasm(wat: GoSliceData, output: *mut RustBytes) -
 }
 
 /// sets target index to a string
+
+
 ///
+
+
 /// String format is: Triple+CpuFeature+CpuFeature..
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `output` must not be null.
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_target_set(
     name: GoSliceData,
     description: GoSliceData,
@@ -223,12 +285,25 @@ pub unsafe extern "C" fn stylus_target_set(
 }
 
 /// Calls an activated user program.
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `module` must represent a valid module produced from `stylus_activate`.
+
+
 /// `output` and `gas` must not be null.
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_call(
     module: GoSliceData,
     calldata: GoSliceData,
@@ -276,19 +351,37 @@ pub unsafe extern "C" fn stylus_call(
 }
 
 /// set lru cache capacity
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_set_cache_lru_capacity(capacity_bytes: u64) {
     InitCache::set_lru_capacity(capacity_bytes);
 }
 
 /// Caches an activated user program.
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `module` must represent a valid module produced from `stylus_activate`.
+
+
 /// arbos_tag: a tag for arbos cache. 0 won't affect real caching
+
+
 /// currently only if tag==1 caching will be affected
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_cache_module(
     module: GoSliceData,
     module_hash: Bytes32,
@@ -302,7 +395,10 @@ pub unsafe extern "C" fn stylus_cache_module(
 }
 
 /// Evicts an activated user program from the init cache.
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_evict_module(
     module_hash: Bytes32,
     version: u16,
@@ -313,39 +409,68 @@ pub extern "C" fn stylus_evict_module(
 }
 
 /// Reorgs the init cache. This will likely never happen.
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_reorg_vm(_block: u64, arbos_tag: u32) {
     InitCache::clear_long_term(arbos_tag);
 }
 
 /// Gets cache metrics.
+
+
 ///
+
+
 /// # Safety
+
+
 ///
+
+
 /// `output` must not be null.
+
+
 #[no_mangle]
+
 pub unsafe extern "C" fn stylus_get_cache_metrics(output: *mut CacheMetrics) {
     let output = &mut *output;
     InitCache::get_metrics(output);
 }
 
 /// Clears lru cache.
+
+
 /// Only used for testing purposes.
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_clear_lru_cache() {
     InitCache::clear_lru_cache()
 }
 
 /// Clears long term cache (for arbos_tag = 1)
+
+
 /// Only used for testing purposes.
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_clear_long_term_cache() {
     InitCache::clear_long_term(1);
 }
 
 /// Gets entry size in bytes.
+
+
 /// Only used for testing purposes.
+
+
 #[no_mangle]
+
 pub extern "C" fn stylus_get_entry_size_estimate_bytes(
     module: GoSliceData,
     version: u16,
@@ -356,3 +481,21 @@ pub extern "C" fn stylus_get_entry_size_estimate_bytes(
         Ok((_, _, entry_size_estimate_bytes)) => entry_size_estimate_bytes.try_into().unwrap(),
     }
 }
+
+/// `output` must not be null.
+
+
+/// Only used for testing purposes.
+
+
+#[no_mangle]
+
+/// Only used for testing purposes.
+
+
+#[no_mangle]
+
+/// Only used for testing purposes.
+
+
+#[no_mangle]

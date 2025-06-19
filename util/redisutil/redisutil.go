@@ -18,7 +18,6 @@ func RedisClientFromURL(redisUrl string) (redis.UniversalClient, error) {
 	client, _, err := RedisClientWithSentinelMasterNameFromURL(redisUrl)
 	return client, err
 }
-
 // RedisClientWithSentinelMasterNameFromURL creates a new Redis client based on the provided URL.
 // If URL scheme is `redis+sentinel`, it returns the sentinel master name as well.
 func RedisClientWithSentinelMasterNameFromURL(redisUrl string) (redis.UniversalClient, string, error) {
@@ -34,7 +33,13 @@ func RedisClientWithSentinelMasterNameFromURL(redisUrl string) (redis.UniversalC
 		if err != nil {
 			return nil, "", err
 		}
+<<<<<<< HEAD
 		return redis.NewFailoverClient(redisOptions), redisOptions.MasterName, nil
+||||||| d81324dae
+		return 
+=======
+		return redis.NewFailoverClient(redisOptions), nil
+>>>>>>> integration
 	}
 	redisOptions, err := redis.ParseURL(redisUrl)
 	if err != nil {
@@ -42,7 +47,6 @@ func RedisClientWithSentinelMasterNameFromURL(redisUrl string) (redis.UniversalC
 	}
 	return redis.NewClient(redisOptions), "", nil
 }
-
 // Designed using https://github.com/redis/go-redis/blob/a8590e987945b7ba050569cc3b94b8ece49e99e3/options.go#L283 as reference
 // Example Usage :
 //
@@ -76,7 +80,6 @@ func parseFailoverRedisUrl(redisUrl string) (*redis.FailoverOptions, error) {
 
 	return setupConnParams(u, o)
 }
-
 func getUserPassword(u *url.URL) (string, string) {
 	var user, password string
 	if u.User != nil {
@@ -87,7 +90,6 @@ func getUserPassword(u *url.URL) (string, string) {
 	}
 	return user, password
 }
-
 func getAddressesWithDefaults(u *url.URL) []string {
 	urlHosts := strings.Split(u.Host, ",")
 	var addresses []string
@@ -106,16 +108,13 @@ func getAddressesWithDefaults(u *url.URL) []string {
 	}
 	return addresses
 }
-
 type queryOptions struct {
 	q   url.Values
 	err error
 }
-
 func (o *queryOptions) has(name string) bool {
 	return len(o.q[name]) > 0
 }
-
 func (o *queryOptions) string(name string) string {
 	vs := o.q[name]
 	if len(vs) == 0 {
@@ -124,7 +123,6 @@ func (o *queryOptions) string(name string) string {
 	delete(o.q, name) // enable detection of unknown parameters
 	return vs[len(vs)-1]
 }
-
 func (o *queryOptions) int(name string) int {
 	s := o.string(name)
 	if s == "" {
@@ -139,7 +137,6 @@ func (o *queryOptions) int(name string) int {
 	}
 	return 0
 }
-
 func (o *queryOptions) duration(name string) time.Duration {
 	s := o.string(name)
 	if s == "" {
@@ -162,7 +159,6 @@ func (o *queryOptions) duration(name string) time.Duration {
 	}
 	return 0
 }
-
 func (o *queryOptions) bool(name string) bool {
 	switch s := o.string(name); s {
 	case "true", "1":
@@ -176,7 +172,6 @@ func (o *queryOptions) bool(name string) bool {
 		return false
 	}
 }
-
 func (o *queryOptions) remaining() []string {
 	if len(o.q) == 0 {
 		return nil
@@ -188,7 +183,6 @@ func (o *queryOptions) remaining() []string {
 	sort.Strings(keys)
 	return keys
 }
-
 func setupConnParams(u *url.URL, o *redis.FailoverOptions) (*redis.FailoverOptions, error) {
 	q := queryOptions{q: u.Query()}
 
@@ -236,3 +230,9 @@ func setupConnParams(u *url.URL, o *redis.FailoverOptions) (*redis.FailoverOptio
 
 	return o, nil
 }
+// RedisClientFromURL creates a new Redis client based on the provided URL.
+// The URL scheme can be either `redis` or `redis+sentinel`.
+// Designed using https://github.com/redis/go-redis/blob/a8590e987945b7ba050569cc3b94b8ece49e99e3/options.go#L283 as reference
+// Example Usage :
+//
+//	redis+sentinel://<user>:<password>@<host1>:<port1>,<host2>:<port2>,<host3>:<port3>/<master_name/><db_number>?dial_timeout=3&db=1&read_timeout=6s&max_retries=2

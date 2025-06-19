@@ -28,7 +28,7 @@ env:
 jobs:
   arbitrator:
     name: Run Arbitrator tests
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
@@ -44,8 +44,13 @@ jobs:
       - name: Install Ubuntu dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
-            build-essential cmake lld-14 libudev-dev
+            build-essential lld-14 libudev-dev
           sudo ln -s /usr/bin/wasm-ld-14 /usr/local/bin/wasm-ld
+
+      - name: Install cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.31.6'
 
       - name: Install go
         uses: actions/setup-go@v4
@@ -127,6 +132,8 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           cache: false
+        with:
+          version: nightly
 
       - name: Cache cbrotli
         uses: actions/cache@v4
@@ -177,6 +184,9 @@ jobs:
 
       - name: Rustfmt
         run: cargo fmt -p arbutil -p prover -p jit -p stylus --manifest-path arbitrator/Cargo.toml -- --check
+
+      - name: Rustfmt - tools/stylus_benchmark
+        run: cargo fmt --all --manifest-path arbitrator/tools/stylus_benchmark/Cargo.toml -- --check
 
       - name: Rustfmt - tools/stylus_benchmark
         run: cargo fmt --all --manifest-path arbitrator/tools/stylus_benchmark/Cargo.toml -- --check

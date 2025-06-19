@@ -123,6 +123,7 @@ func decrementMsgIdByOne(msgId string) string {
 // Consumer first checks it there exists pending message that is claimed by
 // unresponsive consumer, if not then reads from the stream.
 func (c *Consumer[Request, Response]) Consume(ctx context.Context) (*Message[Request], error) {
+<<<<<<< HEAD
 	// First try to XAUTOCLAIM, with start as a random messageID from PEL with MinIdle as IdletimeToAutoclaim
 	// this prioritizes processing PEL messages that have been waiting for more than IdletimeToAutoclaim duration
 	var messages []redis.XMessage
@@ -150,6 +151,47 @@ func (c *Consumer[Request, Response]) Consume(ctx context.Context) (*Message[Req
 		if err != nil {
 			log.Info("error from xautoclaim", "err", err)
 		}
+||||||| d81324dae
+	res, err := c.client.XReadGroup(ctx, &redis.XReadGroupArgs{
+		Group:    c.redisGroup,
+		Consumer: c.id,
+		// Receive only messages that were never delivered to any other consumer,
+		// that is, only new messages.
+		Streams: []string{c.redisStream, ">"},
+		Count:   1,
+		Block:   time.Millisecond, // 0 seems to block the read instead of immediately returning
+	}).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil, nil
+=======
+	// First try to XAUTOCLAIM, with start as a random messageID from PEL with MinIdle as IdletimeToAutoclaim
+	// this prioritizes processing PEL messages that have been waiting for more than IdletimeToAutoclaim duration
+	var messages []redis.XMessage
+	if pendingMsgs, err := c.client.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream: c.redisStream,
+		Group:  c.redisGroup,
+		Start:  "-",
+		End:    "+",
+		Count:  50,
+		Idle:   c.cfg.IdletimeToAutoclaim,
+	}).Result(); err != nil {
+		if !errors.Is(err, redis.Nil) {
+			log.Error("Error from XpendingExt in getting PEL for auto claim", "err", err, "penindlen", len(pendingMsgs))
+		}
+	} else if len(pendingMsgs) > 0 {
+		idx := rand.Intn(len(pendingMsgs))
+		messages, _, err = c.client.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Group:    c.redisGroup,
+			Consumer: c.id,
+			MinIdle:  c.cfg.IdletimeToAutoclaim, // Minimum idle time for messages to claim (in milliseconds)
+			Stream:   c.redisStream,
+			Start:    decrementMsgIdByOne(pendingMsgs[idx].ID),
+			Count:    1,
+		}).Result()
+		if err != nil {
+			log.Info("error from xautoclaim", "err", err)
+		}
+>>>>>>> integration
 	}
 	if len(messages) == 0 {
 		// If we fail to autoclaim then we do not retry but instead fallback to reading new messages
@@ -185,6 +227,7 @@ func (c *Consumer[Request, Response]) Consume(ctx context.Context) (*Message[Req
 	if err := json.Unmarshal([]byte(data), &req); err != nil {
 		return nil, fmt.Errorf("unmarshaling value: %v, error: %w", value, err)
 	}
+<<<<<<< HEAD
 	ackNotifier := make(chan struct{})
 	c.StopWaiter.LaunchThread(func(ctx context.Context) {
 		for {
@@ -220,6 +263,45 @@ func (c *Consumer[Request, Response]) Consume(ctx context.Context) (*Message[Req
 		}
 	})
 	log.Debug("Redis stream consuming", "consumer_id", c.id, "message_id", messages[0].ID)
+||||||| d81324dae
+	log.Debug("Redis stream consuming", "consumer_id", c.id, "message_id", res[0].Messages[0].ID)
+=======
+	ackNotifier := make(chan struct{})
+	c.StopWaiter.LaunchThread(func(ctx context.Context) {
+		for {
+			// Use XClaimJustID so that we would have clear difference between invalid requests that are claimed multiple times due to xautoclaim and
+			// valid requests that are just being claimed in regular intervals to indicate heartbeat
+			if ids, err := c.client.XClaimJustID(ctx, &redis.XClaimArgs{
+				Stream:   c.redisStream,
+				Group:    c.redisGroup,
+				Consumer: c.id,
+				MinIdle:  0,
+				Messages: []string{messages[0].ID},
+			}).Result(); err != nil {
+				log.Error("Error claiming message, it might be possible that other consumers might pick this request", "msgID", messages[0].ID)
+			} else if len(ids) == 0 {
+				log.Warn("XClaimJustID returned empty response when indicating hearbeat", "msgID", messages[0].ID)
+			} else if len(ids) > 1 {
+				log.Error("XClaimJustID returned response with more than entry", "msgIDs", ids)
+			}
+			select {
+			case <-ackNotifier:
+				return
+			case <-ctx.Done():
+				log.Info("Context done while claiming message to indicate hearbeat", "messageID", messages[0].ID, "error", ctx.Err().Error())
+				if c.StopWaiter.GetParentContext().Err() == nil {
+					// Proceeding to set the Idle time of message to IdletimeToAutoclaim to allow it to be picked by other consumers
+					if err := c.client.Do(c.StopWaiter.GetParentContext(), "XCLAIM", c.redisStream, c.redisGroup, c.id, 0, messages[0].ID, "IDLE", c.cfg.IdletimeToAutoclaim.Milliseconds()).Err(); err != nil {
+						log.Error("error when trying to set the idle time of currently worked on message to IdletimeToAutoclaim", "messageID", messages[0].ID, "err", err)
+					}
+				}
+				return
+			case <-time.After(c.cfg.IdletimeToAutoclaim / 10):
+			}
+		}
+	})
+	log.Debug("Redis stream consuming", "consumer_id", c.id, "message_id", messages[0].ID)
+>>>>>>> integration
 	return &Message[Request]{
 		ID:    messages[0].ID,
 		Value: req,
@@ -232,6 +314,7 @@ func (c *Consumer[Request, Response]) SetResult(ctx context.Context, messageID s
 	if err != nil {
 		return fmt.Errorf("marshaling result: %w", err)
 	}
+<<<<<<< HEAD
 	resultKey := ResultKeyFor(c.StreamName(), messageID)
 	log.Debug("consumer: setting result", "cid", c.id, "msgIdInStream", messageID, "resultKeyInRedis", resultKey)
 	acquired, err := c.client.SetNX(ctx, resultKey, resp, c.cfg.ResponseEntryTimeout).Result()
@@ -240,6 +323,18 @@ func (c *Consumer[Request, Response]) SetResult(ctx context.Context, messageID s
 	}
 	if err != nil {
 		return fmt.Errorf("setting result for message with message-id in stream: %v, error: %w", messageID, err)
+||||||| d81324dae
+	log.Debug("consumer: setting result", "cid", c.id, "messageId", messageID)
+	acquired, err := c.client.SetNX(ctx, messageID, resp, c.cfg.ResponseEntryTimeout).Result()
+	if err != nil || !acquired {
+		return fmt.Errorf("setting result for  message: %v, error: %w", messageID, err)
+=======
+	resultKey := ResultKeyFor(c.StreamName(), messageID)
+	log.Debug("consumer: setting result", "cid", c.id, "msgIdInStream", messageID, "resultKeyInRedis", resultKey)
+	acquired, err := c.client.SetNX(ctx, resultKey, resp, c.cfg.ResponseEntryTimeout).Result()
+	if err != nil || !acquired {
+		return fmt.Errorf("setting result for message with message-id in stream: %v, error: %w", messageID, err)
+>>>>>>> integration
 	}
 	log.Debug("consumer: xack", "cid", c.id, "messageId", messageID)
 	if _, err := c.client.XAck(ctx, c.redisStream, c.redisGroup, messageID).Result(); err != nil {

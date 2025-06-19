@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/execution"
@@ -301,6 +302,18 @@ func (v *StatelessBlockValidator) ExecutionSpawners() []validator.ExecutionSpawn
 
 func (v *StatelessBlockValidator) BOLDExecutionSpawners() []validator.BOLDExecutionSpawner {
 	return v.boldExecSpawners
+}
+
+func (v *StatelessBlockValidator) InboxTracker() InboxTrackerInterface {
+	return v.inboxTracker
+}
+
+func (v *StatelessBlockValidator) InboxReader() InboxReaderInterface {
+	return v.inboxReader
+}
+
+func (v *StatelessBlockValidator) InboxStreamer() TransactionStreamerInterface {
+	return v.streamer
 }
 
 func (v *StatelessBlockValidator) readFullBatch(ctx context.Context, batchNum uint64) (bool, *FullBatchInfo, error) {

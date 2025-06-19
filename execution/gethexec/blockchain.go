@@ -40,7 +40,7 @@ type CachingConfig struct {
 	HeadRewindBlocksLimit               uint64        `koanf:"head-rewind-blocks-limit"`
 	MaxNumberOfBlocksToSkipStateSaving  uint32        `koanf:"max-number-of-blocks-to-skip-state-saving"`
 	MaxAmountOfGasToSkipStateSaving     uint64        `koanf:"max-amount-of-gas-to-skip-state-saving"`
-	StylusLRUCacheCapacity              uint32        `koanf:"stylus-lru-cache-capacity"`
+	StylusLRUCacheCapacity                     uint32        `koanf:"stylus-lru-cache-capacity"`
 	DisableStylusCacheMetricsCollection bool          `koanf:"disable-stylus-cache-metrics-collection"`
 	StateScheme                         string        `koanf:"state-scheme"`
 	StateHistory                        uint64        `koanf:"state-history"`

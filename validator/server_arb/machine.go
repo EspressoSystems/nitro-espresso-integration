@@ -1,8 +1,6 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package server_arb
-
 /*
 #cgo CFLAGS: -g -I../../target/include/
 #include "arbitrator.h"
@@ -10,7 +8,6 @@ package server_arb
 ResolvedPreimage preimageResolverC(size_t context, uint8_t preimageType, const uint8_t* hash);
 */
 import "C"
-
 import (
 	"context"
 	"errors"
@@ -28,13 +25,13 @@ import (
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/validator"
 )
-
 type u8 = C.uint8_t
 type u16 = C.uint16_t
 type u32 = C.uint32_t
 type u64 = C.uint64_t
 type usize = C.size_t
 
+type GoPreimageResolver = func(arbutil.PreimageType, common.Hash) ([]byte, error)
 type MachineInterface interface {
 	CloneMachineInterface() MachineInterface
 	GetStepCount() uint64
@@ -49,7 +46,6 @@ type MachineInterface interface {
 	Freeze()
 	Destroy()
 }
-
 // ArbitratorMachine holds an arbitrator machine pointer, and manages its lifetime
 type ArbitratorMachine struct {
 	mutex     sync.Mutex // needed because go finalizers don't synchronize (meaning they aren't thread safe)
@@ -57,13 +53,11 @@ type ArbitratorMachine struct {
 	contextId *int64
 	frozen    bool // does not allow anything that changes machine state, not cloned with the machine
 }
-
 // Assert that ArbitratorMachine implements MachineInterface
 var _ MachineInterface = (*ArbitratorMachine)(nil)
-
 var preimageResolvers containers.SyncMap[int64, goPreimageResolverWithRefCounter]
-var lastPreimageResolverId atomic.Int64 // atomic
-
+var lastPreimageResolverId atomic.Int64
+// atomic
 func dereferenceContextId(contextId *int64) {
 	if contextId != nil {
 		resolverWithRefCounter, ok := preimageResolvers.Load(*contextId)
@@ -79,7 +73,6 @@ func dereferenceContextId(contextId *int64) {
 		}
 	}
 }
-
 // Any future calls to this machine will result in a panic
 func (m *ArbitratorMachine) Destroy() {
 	m.mutex.Lock()
@@ -94,7 +87,6 @@ func (m *ArbitratorMachine) Destroy() {
 	dereferenceContextId(m.contextId)
 	m.contextId = nil
 }
-
 func machineFromPointer(ptr *C.struct_Machine) *ArbitratorMachine {
 	if ptr == nil {
 		return nil
@@ -104,7 +96,6 @@ func machineFromPointer(ptr *C.struct_Machine) *ArbitratorMachine {
 	runtime.SetFinalizer(mach, (*ArbitratorMachine).Destroy)
 	return mach
 }
-
 func LoadSimpleMachine(wasm string, libraries []string, debugChain bool) (*ArbitratorMachine, error) {
 	cWasm := C.CString(wasm)
 	cLibraries := CreateCStringList(libraries)
@@ -117,7 +108,6 @@ func LoadSimpleMachine(wasm string, libraries []string, debugChain bool) (*Arbit
 	}
 	return machineFromPointer(mach), nil
 }
-
 func NewFinishedMachine(gs validator.GoGlobalState) *ArbitratorMachine {
 	mach := C.arbitrator_new_finished(GlobalStateToC(gs))
 	if mach == nil {
@@ -125,11 +115,9 @@ func NewFinishedMachine(gs validator.GoGlobalState) *ArbitratorMachine {
 	}
 	return machineFromPointer(mach)
 }
-
 func (m *ArbitratorMachine) Freeze() {
 	m.frozen = true
 }
-
 // Even if origin is frozen - clone is not
 func (m *ArbitratorMachine) Clone() *ArbitratorMachine {
 	defer runtime.KeepAlive(m)
@@ -149,11 +137,9 @@ func (m *ArbitratorMachine) Clone() *ArbitratorMachine {
 
 	return newMach
 }
-
 func (m *ArbitratorMachine) CloneMachineInterface() MachineInterface {
 	return m.Clone()
 }
-
 func (m *ArbitratorMachine) SetGlobalState(globalState validator.GoGlobalState) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -165,7 +151,6 @@ func (m *ArbitratorMachine) SetGlobalState(globalState validator.GoGlobalState) 
 	C.arbitrator_set_global_state(m.ptr, cGlobalState)
 	return nil
 }
-
 func (m *ArbitratorMachine) GetGlobalState() validator.GoGlobalState {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -173,35 +158,30 @@ func (m *ArbitratorMachine) GetGlobalState() validator.GoGlobalState {
 	cGlobalState := C.arbitrator_global_state(m.ptr)
 	return GlobalStateFromC(cGlobalState)
 }
-
 func (m *ArbitratorMachine) GetStepCount() uint64 {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return uint64(C.arbitrator_get_num_steps(m.ptr))
 }
-
 func (m *ArbitratorMachine) IsRunning() bool {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return C.arbitrator_get_status(m.ptr) == C.ARBITRATOR_MACHINE_STATUS_RUNNING
 }
-
 func (m *ArbitratorMachine) IsErrored() bool {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return C.arbitrator_get_status(m.ptr) == C.ARBITRATOR_MACHINE_STATUS_ERRORED
 }
-
 func (m *ArbitratorMachine) Status() uint8 {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return uint8(C.arbitrator_get_status(m.ptr))
 }
-
 func (m *ArbitratorMachine) ValidForStep(requestedStep uint64) bool {
 	haveStep := m.GetStepCount()
 	if haveStep > requestedStep {
@@ -213,7 +193,6 @@ func (m *ArbitratorMachine) ValidForStep(requestedStep uint64) bool {
 		return !m.IsRunning()
 	}
 }
-
 func manageConditionByte(ctx context.Context) (*u8, func()) {
 	var zero u8
 	conditionByte := &zero
@@ -236,7 +215,6 @@ func manageConditionByte(ctx context.Context) (*u8, func()) {
 
 	return conditionByte, cancel
 }
-
 func (m *ArbitratorMachine) Step(ctx context.Context, count uint64) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -256,7 +234,6 @@ func (m *ArbitratorMachine) Step(ctx context.Context, count uint64) error {
 
 	return ctx.Err()
 }
-
 func (m *ArbitratorMachine) StepUntilHostIo(ctx context.Context) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -276,7 +253,6 @@ func (m *ArbitratorMachine) StepUntilHostIo(ctx context.Context) error {
 
 	return ctx.Err()
 }
-
 func (m *ArbitratorMachine) Hash() (hash common.Hash) {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -287,7 +263,6 @@ func (m *ArbitratorMachine) Hash() (hash common.Hash) {
 	}
 	return
 }
-
 func (m *ArbitratorMachine) GetModuleRoot() (hash common.Hash) {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -298,7 +273,6 @@ func (m *ArbitratorMachine) GetModuleRoot() (hash common.Hash) {
 	}
 	return
 }
-
 func (m *ArbitratorMachine) ProveNextStep() []byte {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -314,7 +288,6 @@ func (m *ArbitratorMachine) ProveNextStep() []byte {
 
 	return proofBytes
 }
-
 func (m *ArbitratorMachine) SerializeState(path string) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -330,7 +303,6 @@ func (m *ArbitratorMachine) SerializeState(path string) error {
 		return nil
 	}
 }
-
 func (m *ArbitratorMachine) DeserializeAndReplaceState(path string) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -350,7 +322,6 @@ func (m *ArbitratorMachine) DeserializeAndReplaceState(path string) error {
 		return nil
 	}
 }
-
 func (m *ArbitratorMachine) AddSequencerInboxMessage(index uint64, data []byte) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -368,7 +339,6 @@ func (m *ArbitratorMachine) AddSequencerInboxMessage(index uint64, data []byte) 
 		return nil
 	}
 }
-
 func (m *ArbitratorMachine) AddDelayedInboxMessage(index uint64, data []byte) error {
 	defer runtime.KeepAlive(m)
 	m.mutex.Lock()
@@ -387,13 +357,24 @@ func (m *ArbitratorMachine) AddDelayedInboxMessage(index uint64, data []byte) er
 		return nil
 	}
 }
-
-type GoPreimageResolver = func(arbutil.PreimageType, common.Hash) ([]byte, error)
 type goPreimageResolverWithRefCounter struct {
 	resolver   GoPreimageResolver
 	refCounter *atomic.Int64
 }
+//export preimageResolver
+// Copyright 2021-2023, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
+/*
+#cgo CFLAGS: -g -I../../target/include/
+#include "arbitrator.h"
 
+ResolvedPreimage preimageResolverC(size_t context, uint8_t preimageType, const uint8_t* hash);
+*/
+// ArbitratorMachine holds an arbitrator machine pointer, and manages its lifetime
+// Assert that ArbitratorMachine implements MachineInterface
+// atomic
+// Any future calls to this machine will result in a panic
+// Even if origin is frozen - clone is not
 //export preimageResolver
 func preimageResolver(context C.size_t, ty C.uint8_t, ptr unsafe.Pointer) C.ResolvedPreimage {
 	var hash common.Hash

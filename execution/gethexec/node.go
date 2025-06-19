@@ -147,9 +147,15 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".tx-lookup-limit", ConfigDefault.TxLookupLimit, "retain the ability to lookup transactions by hash for the past N blocks (0 = all blocks)")
 	f.Bool(prefix+".enable-prefetch-block", ConfigDefault.EnablePrefetchBlock, "enable prefetching of blocks")
 	StylusTargetConfigAddOptions(prefix+".stylus-target", f)
+<<<<<<< HEAD
 	f.Uint64(prefix+".block-metadata-api-cache-size", ConfigDefault.BlockMetadataApiCacheSize, "size (in bytes) of lru cache storing the blockMetadata to service arb_getRawBlockMetadata")
 	f.Uint64(prefix+".block-metadata-api-blocks-limit", ConfigDefault.BlockMetadataApiBlocksLimit, "maximum number of blocks allowed to be queried for blockMetadata per arb_getRawBlockMetadata query. Enabled by default, set 0 to disable the limit")
 	LiveTracingConfigAddOptions(prefix+".vmtrace", f)
+||||||| d81324dae
+=======
+	f.Uint64(prefix+".block-metadata-api-cache-size", ConfigDefault.BlockMetadataApiCacheSize, "size (in bytes) of lru cache storing the blockMetadata to service arb_getRawBlockMetadata")
+	f.Uint64(prefix+".block-metadata-api-blocks-limit", ConfigDefault.BlockMetadataApiBlocksLimit, "maximum number of blocks allowed to be queried for blockMetadata per arb_getRawBlockMetadata query. Enabled by default, set 0 to disable the limit")
+>>>>>>> integration
 }
 
 type LiveTracingConfig struct {
@@ -392,6 +398,7 @@ func (n *ExecutionNode) Initialize(ctx context.Context) error {
 }
 
 // not thread safe
+
 func (n *ExecutionNode) Start(ctx context.Context) error {
 	if n.started.Swap(true) {
 		return errors.New("already started")
@@ -443,21 +450,27 @@ func (n *ExecutionNode) StopAndWait() {
 func (n *ExecutionNode) DigestMessage(num arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) containers.PromiseInterface[*execution.MessageResult] {
 	return containers.NewReadyPromise(n.ExecEngine.DigestMessage(num, msg, msgForPrefetch))
 }
+
 func (n *ExecutionNode) Reorg(newHeadMsgIdx arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) containers.PromiseInterface[[]*execution.MessageResult] {
 	return containers.NewReadyPromise(n.ExecEngine.Reorg(newHeadMsgIdx, newMessages, oldMessages))
 }
+
 func (n *ExecutionNode) HeadMessageIndex() containers.PromiseInterface[arbutil.MessageIndex] {
 	return containers.NewReadyPromise(n.ExecEngine.HeadMessageIndex())
 }
+
 func (n *ExecutionNode) NextDelayedMessageNumber() (uint64, error) {
 	return n.ExecEngine.NextDelayedMessageNumber()
 }
+
 func (n *ExecutionNode) SequenceDelayedMessage(message *arbostypes.L1IncomingMessage, delayedSeqNum uint64) error {
 	return n.ExecEngine.SequenceDelayedMessage(message, delayedSeqNum)
 }
+
 func (n *ExecutionNode) ResultAtMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[*execution.MessageResult] {
 	return containers.NewReadyPromise(n.ExecEngine.ResultAtMessageIndex(msgIdx))
 }
+
 func (n *ExecutionNode) ArbOSVersionForMessageIndex(msgIdx arbutil.MessageIndex) (uint64, error) {
 	return n.ExecEngine.ArbOSVersionForMessageIndex(msgIdx)
 }
@@ -469,9 +482,11 @@ func (n *ExecutionNode) RecordBlockCreation(
 ) (*execution.RecordResult, error) {
 	return n.Recorder.RecordBlockCreation(ctx, pos, msg)
 }
+
 func (n *ExecutionNode) MarkValid(pos arbutil.MessageIndex, resultHash common.Hash) {
 	n.Recorder.MarkValid(pos, resultHash)
 }
+
 func (n *ExecutionNode) PrepareForRecord(ctx context.Context, start, end arbutil.MessageIndex) error {
 	return n.Recorder.PrepareForRecord(ctx, start, end)
 }
@@ -505,10 +520,19 @@ func (n *ExecutionNode) MessageIndexToBlockNumber(messageNum arbutil.MessageInde
 	blockNum := n.ExecEngine.MessageIndexToBlockNumber(messageNum)
 	return containers.NewReadyPromise(blockNum, nil)
 }
+
+<<<<<<< HEAD
 func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) containers.PromiseInterface[arbutil.MessageIndex] {
 	return containers.NewReadyPromise(n.ExecEngine.BlockNumberToMessageIndex(blockNum))
 }
+||||||| d81324dae
+=======
+func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error) {
+	return n.ExecEngine.BlockNumberToMessageIndex(blockNum)
+}
+>>>>>>> integration
 
+<<<<<<< HEAD
 func (n *ExecutionNode) Maintenance() containers.PromiseInterface[struct{}] {
 	trieCapLimitBytes := arbmath.SaturatingUMul(uint64(n.ConfigFetcher().Caching.TrieCapLimit), 1024*1024)
 	err := n.ExecEngine.Maintenance(trieCapLimitBytes)
@@ -519,6 +543,17 @@ func (n *ExecutionNode) Maintenance() containers.PromiseInterface[struct{}] {
 	err = n.ChainDB.Compact(nil, nil)
 	return containers.NewReadyPromise(struct{}{}, err)
 }
+||||||| d81324dae
+=======
+func (n *ExecutionNode) Maintenance() error {
+	trieCapLimitBytes := arbmath.SaturatingUMul(uint64(n.ConfigFetcher().Caching.TrieCapLimit), 1024*1024)
+	err := n.ExecEngine.Maintenance(trieCapLimitBytes)
+	if err != nil {
+		return err
+	}
+	return n.ChainDB.Compact(nil, nil)
+}
+>>>>>>> integration
 
 func (n *ExecutionNode) Synced(ctx context.Context) bool {
 	return n.SyncMonitor.Synced(ctx)

@@ -1,8 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbnode
-
 import (
 	"context"
 	"encoding/binary"
@@ -58,7 +56,6 @@ import (
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/wsbroadcastserver"
 )
-
 type Config struct {
 	Sequencer                bool                           `koanf:"sequencer"`
 	ParentChainReader        headerreader.Config            `koanf:"parent-chain-reader" reload:"hot"`
@@ -82,8 +79,8 @@ type Config struct {
 	ConsensusExecutionSyncer ConsensusExecutionSyncerConfig `koanf:"consensus-execution-syncer"`
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
+	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node"`
 }
-
 func (c *Config) Validate() error {
 	if c.ParentChainReader.Enable && c.Sequencer && !c.DelayedSequencer.Enable {
 		log.Warn("delayed sequencer is not enabled, despite sequencer and l1 reader being enabled")
@@ -97,6 +94,9 @@ func (c *Config) Validate() error {
 		}
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
+	}
+	if c.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
 		return err
@@ -121,7 +121,6 @@ func (c *Config) Validate() error {
 	}
 	return nil
 }
-
 func (c *Config) ValidatorRequired() bool {
 	if c.BlockValidator.Enable {
 		return true
@@ -131,7 +130,6 @@ func (c *Config) ValidatorRequired() bool {
 	}
 	return false
 }
-
 func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feedOutputEnable bool) {
 	f.Bool(prefix+".sequencer", ConfigDefault.Sequencer, "enable sequencer")
 	headerreader.AddOptions(prefix+".parent-chain-reader", f)
@@ -153,8 +151,8 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feed
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
 }
-
 var ConfigDefault = Config{
 	Sequencer:                false,
 	ParentChainReader:        headerreader.DefaultConfig,
@@ -177,8 +175,8 @@ var ConfigDefault = Config{
 	Maintenance:              DefaultMaintenanceConfig,
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
+	EspressoCaffNode:     DefaultEspressoCaffNodeConfig,
 }
-
 func ConfigDefaultL1Test() *Config {
 	config := ConfigDefaultL1NonSequencerTest()
 	config.DelayedSequencer = TestDelayedSequencerConfig
@@ -189,7 +187,6 @@ func ConfigDefaultL1Test() *Config {
 
 	return config
 }
-
 func ConfigDefaultL1NonSequencerTest() *Config {
 	config := ConfigDefault
 	config.Dangerous = TestDangerousConfig
@@ -207,7 +204,6 @@ func ConfigDefaultL1NonSequencerTest() *Config {
 
 	return &config
 }
-
 func ConfigDefaultL2Test() *Config {
 	config := ConfigDefault
 	config.Dangerous = TestDangerousConfig
@@ -226,31 +222,26 @@ func ConfigDefaultL2Test() *Config {
 
 	return &config
 }
-
 type DangerousConfig struct {
 	NoL1Listener           bool `koanf:"no-l1-listener"`
 	NoSequencerCoordinator bool `koanf:"no-sequencer-coordinator"`
 	DisableBlobReader      bool `koanf:"disable-blob-reader"`
 }
-
 var DefaultDangerousConfig = DangerousConfig{
 	NoL1Listener:           false,
 	NoSequencerCoordinator: false,
 	DisableBlobReader:      false,
 }
-
 var TestDangerousConfig = DangerousConfig{
 	NoL1Listener:           false,
 	NoSequencerCoordinator: false,
 	DisableBlobReader:      true,
 }
-
 func DangerousConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".no-l1-listener", DefaultDangerousConfig.NoL1Listener, "DANGEROUS! disables listening to L1. To be used in test nodes only")
 	f.Bool(prefix+".no-sequencer-coordinator", DefaultDangerousConfig.NoSequencerCoordinator, "DANGEROUS! allows sequencing without sequencer-coordinator")
 	f.Bool(prefix+".disable-blob-reader", DefaultDangerousConfig.DisableBlobReader, "DANGEROUS! disables the EIP-4844 blob reader, which is necessary to read batches")
 }
-
 type Node struct {
 	ArbDB                    ethdb.Database
 	Stack                    *node.Node
@@ -280,8 +271,8 @@ type Node struct {
 	configFetcher            ConfigFetcher
 	ctx                      context.Context
 	ConsensusExecutionSyncer *ConsensusExecutionSyncer
+	EspressoCaffNode *EspressoCaffNode
 }
-
 type SnapSyncConfig struct {
 	Enabled                   bool
 	PrevBatchMessageCount     uint64
@@ -290,7 +281,6 @@ type SnapSyncConfig struct {
 	DelayedCount              uint64
 	ParentChainAssertionBlock uint64
 }
-
 var DefaultSnapSyncConfig = SnapSyncConfig{
 	Enabled:                   false,
 	PrevBatchMessageCount:     0,
@@ -299,14 +289,12 @@ var DefaultSnapSyncConfig = SnapSyncConfig{
 	DelayedCount:              0,
 	ParentChainAssertionBlock: 0,
 }
-
 type ConfigFetcher interface {
 	Get() *Config
 	Start(context.Context)
 	StopAndWait()
 	Started() bool
 }
-
 func checkArbDbSchemaVersion(arbDb ethdb.Database) error {
 	var version uint64
 	hasVersion, err := arbDb.Has(dbSchemaVersion)
@@ -346,7 +334,6 @@ func checkArbDbSchemaVersion(arbDb ethdb.Database) error {
 	}
 	return nil
 }
-
 func DataposterOnlyUsedToCreateValidatorWalletContract(
 	ctx context.Context,
 	l1Reader *headerreader.HeaderReader,
@@ -369,7 +356,6 @@ func DataposterOnlyUsedToCreateValidatorWalletContract(
 		},
 	)
 }
-
 func StakerDataposter(
 	ctx context.Context, db ethdb.Database, l1Reader *headerreader.HeaderReader,
 	transactOpts *bind.TransactOpts, cfgFetcher ConfigFetcher, syncMonitor *SyncMonitor,
@@ -407,14 +393,12 @@ func StakerDataposter(
 			ParentChainID:     parentChainID,
 		})
 }
-
 func getSyncMonitor(configFetcher ConfigFetcher) *SyncMonitor {
 	syncConfigFetcher := func() *SyncMonitorConfig {
 		return &configFetcher.Get().SyncMonitor
 	}
 	return NewSyncMonitor(syncConfigFetcher)
 }
-
 func getL1Reader(
 	ctx context.Context,
 	config *Config,
@@ -432,7 +416,6 @@ func getL1Reader(
 	}
 	return l1Reader, nil
 }
-
 func getBroadcastServer(
 	config *Config,
 	configFetcher ConfigFetcher,
@@ -453,7 +436,6 @@ func getBroadcastServer(
 	}
 	return broadcastServer, nil
 }
-
 func getBPVerifier(
 	deployInfo *chaininfo.RollupAddresses,
 	l1client *ethclient.Client,
@@ -470,7 +452,6 @@ func getBPVerifier(
 	}
 	return bpVerifier, nil
 }
-
 func getMaintenanceRunner(
 	arbDb ethdb.Database,
 	configFetcher ConfigFetcher,
@@ -484,7 +465,6 @@ func getMaintenanceRunner(
 	}
 	return maintenanceRunner, nil
 }
-
 func getBroadcastClients(
 	config *Config,
 	configFetcher ConfigFetcher,
@@ -515,7 +495,6 @@ func getBroadcastClients(
 	}
 	return broadcastClients, nil
 }
-
 func getBlockMetadataFetcher(
 	ctx context.Context,
 	configFetcher ConfigFetcher,
@@ -535,7 +514,6 @@ func getBlockMetadataFetcher(
 	}
 	return blockMetadataFetcher, nil
 }
-
 func getDelayedBridgeAndSequencerInbox(
 	deployInfo *chaininfo.RollupAddresses,
 	l1client *ethclient.Client,
@@ -554,7 +532,6 @@ func getDelayedBridgeAndSequencerInbox(
 	}
 	return delayedBridge, sequencerInbox, nil
 }
-
 func getDAS(
 	ctx context.Context,
 	config *Config,
@@ -638,7 +615,6 @@ func getDAS(
 	}
 	return nil, dasServerCloseFn, dapReaders, nil
 }
-
 func getInboxTrackerAndReader(
 	ctx context.Context,
 	arbDb ethdb.Database,
@@ -691,7 +667,6 @@ func getInboxTrackerAndReader(
 
 	return inboxTracker, inboxReader, nil
 }
-
 func getBlockValidator(
 	config *Config,
 	configFetcher ConfigFetcher,
@@ -716,7 +691,6 @@ func getBlockValidator(
 	}
 	return blockValidator, err
 }
-
 func getStaker(
 	ctx context.Context,
 	config *Config,
@@ -804,7 +778,6 @@ func getStaker(
 
 	return stakerObj, messagePruner, stakerAddr, nil
 }
-
 func getTransactionStreamer(
 	ctx context.Context,
 	arbDb ethdb.Database,
@@ -821,7 +794,6 @@ func getTransactionStreamer(
 	}
 	return txStreamer, nil
 }
-
 func getSeqCoordinator(
 	config *Config,
 	dataSigner signature.DataSignerFunc,
@@ -846,7 +818,6 @@ func getSeqCoordinator(
 	}
 	return coordinator, nil
 }
-
 func getStatelessBlockValidator(
 	config *Config,
 	configFetcher ConfigFetcher,
@@ -890,7 +861,6 @@ func getStatelessBlockValidator(
 
 	return statelessBlockValidator, nil
 }
-
 func getBatchPoster(
 	ctx context.Context,
 	config *Config,
@@ -934,6 +904,8 @@ func getBatchPoster(
 			DAPWriter:     dapWriter,
 			ParentChainID: parentChainID,
 			DAPReaders:    dapReaders,
+
+			DataSigner: dataSigner,
 		})
 		if err != nil {
 			return nil, err
@@ -947,7 +919,6 @@ func getBatchPoster(
 
 	return batchPoster, nil
 }
-
 func getDelayedSequencer(
 	l1Reader *headerreader.HeaderReader,
 	inboxReader *InboxReader,
@@ -966,7 +937,6 @@ func getDelayedSequencer(
 	}
 	return delayedSequencer, nil
 }
-
 func getNodeParentChainReaderDisabled(
 	ctx context.Context,
 	arbDb ethdb.Database,
@@ -1012,7 +982,6 @@ func getNodeParentChainReaderDisabled(
 		blockMetadataFetcher:    blockMetadataFetcher,
 	}
 }
-
 func createNodeImpl(
 	ctx context.Context,
 	stack *node.Node,
@@ -1161,7 +1130,6 @@ func createNodeImpl(
 		ConsensusExecutionSyncer: consensusExecutionSyncer,
 	}, nil
 }
-
 func FindBlockContainingBatchCount(ctx context.Context, bridgeAddress common.Address, l1Client *ethclient.Client, parentChainAssertionBlock uint64, batchCount uint64) (uint64, error) {
 	bridge, err := bridgegen.NewIBridge(bridgeAddress, l1Client)
 	if err != nil {
@@ -1208,12 +1176,10 @@ func FindBlockContainingBatchCount(ctx context.Context, bridgeAddress common.Add
 	}
 	return low, nil
 }
-
 func (n *Node) OnConfigReload(_ *Config, _ *Config) error {
 	// TODO
 	return nil
 }
-
 func registerAPIs(currentNode *Node, stack *node.Node) {
 	var apis []rpc.API
 	if currentNode.BlockValidator != nil {
@@ -1246,7 +1212,6 @@ func registerAPIs(currentNode *Node, stack *node.Node) {
 	}
 	stack.RegisterAPIs(apis)
 }
-
 func CreateNodeExecutionClient(
 	ctx context.Context,
 	stack *node.Node,
@@ -1274,7 +1239,6 @@ func CreateNodeExecutionClient(
 	registerAPIs(currentNode, stack)
 	return currentNode, nil
 }
-
 func CreateNodeFullExecutionClient(
 	ctx context.Context,
 	stack *node.Node,
@@ -1305,7 +1269,6 @@ func CreateNodeFullExecutionClient(
 	registerAPIs(currentNode, stack)
 	return currentNode, nil
 }
-
 func (n *Node) Start(ctx context.Context) error {
 	execClient, ok := n.ExecutionClient.(*gethexec.ExecutionNode)
 	if !ok {
@@ -1354,10 +1317,6 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error populating feed backlog on startup: %w", err)
 		}
 	}
-	err = n.TxStreamer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("error starting transaction streamer: %w", err)
-	}
 	if n.InboxReader != nil {
 		err = n.InboxReader.Start(ctx)
 		if err != nil {
@@ -1384,6 +1343,10 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if n.BatchPoster != nil {
 		n.BatchPoster.Start(ctx)
+	}
+	err = n.TxStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting transaction streamer: %w", err)
 	}
 	if n.MessagePruner != nil {
 		n.MessagePruner.Start(ctx)
@@ -1442,13 +1405,18 @@ func (n *Node) Start(ctx context.Context) error {
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
 	n.SyncMonitor.Initialize(n.InboxReader, n.TxStreamer, n.SeqCoordinator)
+	if n.EspressoCaffNode != nil {
+		err = n.EspressoCaffNode.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("error starting espresso caff node: %w", err)
+		}
+	}
 	n.SyncMonitor.Start(ctx)
 	if n.ConsensusExecutionSyncer != nil {
 		n.ConsensusExecutionSyncer.Start(ctx)
 	}
 	return nil
 }
-
 func (n *Node) StopAndWait() {
 	if n.ConsensusExecutionSyncer != nil {
 		n.ConsensusExecutionSyncer.StopAndWait()
@@ -1515,7 +1483,6 @@ func (n *Node) StopAndWait() {
 		log.Error("error on stack close", "err", err)
 	}
 }
-
 func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) containers.PromiseInterface[execution.InboxBatch] {
 	batchNum, found, err := n.InboxTracker.FindInboxBatchContainingMessage(message)
 	inboxBatch := execution.InboxBatch{
@@ -1524,33 +1491,32 @@ func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) con
 	}
 	return containers.NewReadyPromise(inboxBatch, err)
 }
-
 func (n *Node) GetBatchParentChainBlock(seqNum uint64) containers.PromiseInterface[uint64] {
 	return containers.NewReadyPromise(n.InboxTracker.GetBatchParentChainBlock(seqNum))
 }
-
 func (n *Node) FullSyncProgressMap() containers.PromiseInterface[map[string]interface{}] {
 	return containers.NewReadyPromise(n.SyncMonitor.FullSyncProgressMap(), nil)
 }
-
 func (n *Node) Synced() containers.PromiseInterface[bool] {
 	return containers.NewReadyPromise(n.SyncMonitor.Synced(), nil)
 }
-
 func (n *Node) SyncTargetMessageCount() containers.PromiseInterface[arbutil.MessageIndex] {
 	return containers.NewReadyPromise(n.SyncMonitor.SyncTargetMessageCount(), nil)
 }
-
 func (n *Node) WriteMessageFromSequencer(pos arbutil.MessageIndex, msgWithMeta arbostypes.MessageWithMetadata, msgResult execution.MessageResult, blockMetadata common.BlockMetadata) containers.PromiseInterface[struct{}] {
 	err := n.TxStreamer.WriteMessageFromSequencer(pos, msgWithMeta, msgResult, blockMetadata)
 	return containers.NewReadyPromise(struct{}{}, err)
 }
-
 func (n *Node) ExpectChosenSequencer() containers.PromiseInterface[struct{}] {
 	err := n.TxStreamer.ExpectChosenSequencer()
 	return containers.NewReadyPromise(struct{}{}, err)
 }
-
 func (n *Node) BlockMetadataAtMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[common.BlockMetadata] {
 	return containers.NewReadyPromise(n.TxStreamer.BlockMetadataAtMessageIndex(msgIdx))
+}
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+// TODO: switch from pulling to pushing safe/finalized
+func (n *Node) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
+	return n.TxStreamer.BlockMetadataAtCount(count)
 }

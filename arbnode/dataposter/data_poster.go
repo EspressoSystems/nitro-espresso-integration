@@ -1,9 +1,7 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 // Package dataposter implements generic functionality to post transactions.
 package dataposter
-
 import (
 	"bytes"
 	"context"
@@ -23,7 +21,6 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/pflag"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -39,7 +36,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
-
 	"github.com/offchainlabs/nitro/arbnode/dataposter/dbstorage"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/externalsignertest"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/noop"
@@ -53,8 +49,8 @@ import (
 	"github.com/offchainlabs/nitro/util/rpcclient"
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
+	"github.com/ethereum/go-ethereum/core/txpool"
 )
-
 var (
 	latestFinalizedNonceGauge     = metrics.NewRegisteredGauge("arb/dataposter/nonce/finalized", nil)
 	latestSoftConfirmedNonceGauge = metrics.NewRegisteredGauge("arb/dataposter/nonce/softconfirmed", nil)
@@ -62,7 +58,6 @@ var (
 	totalQueueLengthGauge         = metrics.NewRegisteredGauge("arb/dataposter/queue/length", nil)
 	totalQueueWeightGauge         = metrics.NewRegisteredGauge("arb/dataposter/queue/weight", nil)
 )
-
 // Dataposter implements functionality to post transactions on the chain. It
 // is initialized with specified sender/signer and keeps nonce of that address
 // as it posts transactions.
@@ -98,12 +93,10 @@ type DataPoster struct {
 
 	maxFeeCapExpression *govaluate.EvaluableExpression
 }
-
 // signerFn is a signer function callback when a contract requires a method to
 // sign the transaction before submission.
 // This can be local or external, hence the context parameter.
 type signerFn func(context.Context, common.Address, *types.Transaction) (*types.Transaction, error)
-
 type DataPosterOpts struct {
 	Database          ethdb.Database
 	HeaderReader      *headerreader.HeaderReader
@@ -115,7 +108,6 @@ type DataPosterOpts struct {
 	RedisKey          string // Redis storage key
 	ParentChainID     *big.Int
 }
-
 func NewDataPoster(ctx context.Context, opts *DataPosterOpts) (*DataPoster, error) {
 	cfg := opts.Config()
 	useNoOpStorage := cfg.UseNoOpStorage
@@ -195,7 +187,6 @@ func NewDataPoster(ctx context.Context, opts *DataPosterOpts) (*DataPoster, erro
 
 	return dp, nil
 }
-
 func rpcClient(ctx context.Context, opts *ExternalSignerCfg) (*rpc.Client, error) {
 	tlsCfg := &tls.Config{
 		MinVersion: tls.VersionTLS12,
@@ -236,7 +227,6 @@ func rpcClient(ctx context.Context, opts *ExternalSignerCfg) (*rpc.Client, error
 		),
 	)
 }
-
 // TxToSignTxArgs converts transaction to SendTxArgs. This is needed for
 // external signer to specify From field.
 func TxToSignTxArgs(addr common.Address, tx *types.Transaction) (*apitypes.SendTxArgs, error) {
@@ -280,7 +270,6 @@ func TxToSignTxArgs(addr common.Address, tx *types.Transaction) (*apitypes.SendT
 		Proofs:               proofs,
 	}, nil
 }
-
 // externalSigner returns signer function and ethereum address of the signer.
 // Returns an error if address isn't specified or if it can't connect to the
 // signer RPC server.
@@ -321,15 +310,12 @@ func externalSigner(ctx context.Context, opts *ExternalSignerCfg) (signerFn, com
 		return signedTx, nil
 	}, sender, nil
 }
-
 func (p *DataPoster) Auth() *bind.TransactOpts {
 	return p.auth
 }
-
 func (p *DataPoster) Sender() common.Address {
 	return p.auth.From
 }
-
 func (p *DataPoster) MaxMempoolTransactions() uint64 {
 	if p.usingNoOpStorage {
 		return 1
@@ -337,13 +323,10 @@ func (p *DataPoster) MaxMempoolTransactions() uint64 {
 	config := p.config()
 	return arbmath.MinInt(config.MaxMempoolTransactions, config.MaxMempoolWeight)
 }
-
 func (p *DataPoster) UsingNoOpStorage() bool {
 	return p.usingNoOpStorage
 }
-
 var ErrExceedsMaxMempoolSize = errors.New("posting this transaction will exceed max mempool size")
-
 // Does basic check whether posting transaction with specified nonce would
 // result in exceeding maximum queue length or maximum transactions in mempool.
 func (p *DataPoster) canPostWithNonce(ctx context.Context, nextNonce uint64, thisWeight uint64) error {
@@ -419,11 +402,9 @@ func (p *DataPoster) canPostWithNonce(ctx context.Context, nextNonce uint64, thi
 	}
 	return nil
 }
-
 func (p *DataPoster) waitForL1Finality() bool {
 	return p.config().WaitForL1Finality && !p.headerReader.IsParentChainArbitrum()
 }
-
 // Requires the caller hold the mutex.
 // Returns the next nonce, its metadata if stored, a bool indicating if the metadata is present, the cumulative weight, and an error if present.
 // Unlike GetNextNonceAndMeta, this does not call the metadataRetriever if the metadata is not stored in the queue.
@@ -442,7 +423,8 @@ func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight ui
 		if err := p.canPostWithNonce(ctx, nextNonce, thisWeight); err != nil {
 			return 0, nil, false, 0, err
 		}
-		return nextNonce, lastQueueItem.Meta, true, lastQueueItem.CumulativeWeight(), nil
+		value := len(lastQueueItem.Meta) > 0
+		return nextNonce, lastQueueItem.Meta, value, lastQueueItem.CumulativeWeight(), nil
 	}
 
 	if err := p.updateNonce(ctx); err != nil {
@@ -461,7 +443,6 @@ func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight ui
 	}
 	return p.nonce, nil, false, p.nonce, nil
 }
-
 // GetNextNonceAndMeta retrieves generates next nonce, validates that a
 // transaction can be posted with that nonce, and fetches "Meta" either last
 // queued iterm (if queue isn't empty) or retrieves with last block.
@@ -477,10 +458,8 @@ func (p *DataPoster) GetNextNonceAndMeta(ctx context.Context) (uint64, []byte, e
 	}
 	return nonce, meta, err
 }
-
 const minNonBlobRbfIncrease = arbmath.OneInBips * 11 / 10
 const minBlobRbfIncrease = arbmath.OneInBips * 2
-
 // evalMaxFeeCapExpr uses MaxFeeCapFormula from config to calculate the expression's result by plugging in appropriate parameter values
 // backlogOfBatches should already include extraBacklog
 func (p *DataPoster) evalMaxFeeCapExpr(backlogOfBatches uint64, elapsed time.Duration) (*big.Int, error) {
@@ -514,9 +493,7 @@ func (p *DataPoster) evalMaxFeeCapExpr(backlogOfBatches uint64, elapsed time.Dur
 	}
 	return resultBig, nil
 }
-
 var big4 = big.NewInt(4)
-
 // The dataPosterBacklog argument should *not* include extraBacklog (it's added in in this function)
 func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit uint64, numBlobs uint64, lastTx *types.Transaction, dataCreatedAt time.Time, dataPosterBacklog uint64, latestHeader *types.Header) (*big.Int, *big.Int, *big.Int, error) {
 	config := p.config()
@@ -524,6 +501,11 @@ func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit u
 
 	if latestHeader.BaseFee == nil {
 		return nil, nil, nil, fmt.Errorf("latest parent chain block %v missing BaseFee (either the parent chain does not have EIP-1559 or the parent chain node is not synced)", latestHeader.Number)
+	}
+	log.Info("Base fee", "baseFee", latestHeader.BaseFee, "maxBaseFee", (big.NewInt(int64(config.MaxBaseFee))))
+
+	if (*latestHeader.BaseFee).Cmp(big.NewInt(int64(config.MaxBaseFee))) > 0 {
+		return nil, nil, nil, fmt.Errorf("latest parent chain block %v BaseFee %v is greater than max base fee %v", latestHeader.Number, latestHeader.BaseFee, config.MaxBaseFee)
 	}
 	currentBlobFee := big.NewInt(0)
 	if numBlobs > 0 {
@@ -728,7 +710,6 @@ func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit u
 
 	return newBaseFeeCap, newTipCap, newBlobFeeCap, nil
 }
-
 func (p *DataPoster) PostSimpleTransaction(ctx context.Context, to common.Address, calldata []byte, gasLimit uint64, value *big.Int) (*types.Transaction, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
@@ -738,13 +719,11 @@ func (p *DataPoster) PostSimpleTransaction(ctx context.Context, to common.Addres
 	}
 	return p.postTransactionWithMutex(ctx, time.Now(), nonce, nil, to, calldata, gasLimit, value, nil, nil)
 }
-
 func (p *DataPoster) PostTransaction(ctx context.Context, dataCreatedAt time.Time, nonce uint64, meta []byte, to common.Address, calldata []byte, gasLimit uint64, value *big.Int, kzgBlobs []kzg4844.Blob, accessList types.AccessList) (*types.Transaction, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 	return p.postTransactionWithMutex(ctx, dataCreatedAt, nonce, meta, to, calldata, gasLimit, value, kzgBlobs, accessList)
 }
-
 func (p *DataPoster) postTransactionWithMutex(ctx context.Context, dataCreatedAt time.Time, nonce uint64, meta []byte, to common.Address, calldata []byte, gasLimit uint64, value *big.Int, kzgBlobs []kzg4844.Blob, accessList types.AccessList) (*types.Transaction, error) {
 
 	if p.config().DisableNewTx {
@@ -848,7 +827,6 @@ func (p *DataPoster) postTransactionWithMutex(ctx context.Context, dataCreatedAt
 	}
 	return fullTx, p.sendTx(ctx, nil, &queuedTx)
 }
-
 // the mutex must be held by the caller
 func (p *DataPoster) saveTx(ctx context.Context, prevTx, newTx *storage.QueuedTransaction) error {
 	if prevTx != nil {
@@ -875,7 +853,6 @@ func (p *DataPoster) saveTx(ctx context.Context, prevTx, newTx *storage.QueuedTr
 	}
 	return nil
 }
-
 func (p *DataPoster) sendTx(ctx context.Context, prevTx *storage.QueuedTransaction, newTx *storage.QueuedTransaction) error {
 	latestHeader, err := p.client.HeaderByNumber(ctx, nil)
 	if err != nil {
@@ -964,7 +941,6 @@ func (p *DataPoster) sendTx(ctx context.Context, prevTx *storage.QueuedTransacti
 	newerTx.Sent = true
 	return p.saveTx(ctx, newTx, &newerTx)
 }
-
 func updateTxDataGasCaps(data types.TxData, newFeeCap, newTipCap, newBlobFeeCap *big.Int) error {
 	switch data := data.(type) {
 	case *types.DynamicFeeTx:
@@ -990,7 +966,6 @@ func updateTxDataGasCaps(data types.TxData, newFeeCap, newTipCap, newBlobFeeCap 
 		return fmt.Errorf("unexpected transaction data type %T", data)
 	}
 }
-
 func updateGasCaps(tx *types.Transaction, newFeeCap, newTipCap, newBlobFeeCap *big.Int) (*types.Transaction, error) {
 	data := tx.GetInner()
 	err := updateTxDataGasCaps(data, newFeeCap, newTipCap, newBlobFeeCap)
@@ -999,7 +974,6 @@ func updateGasCaps(tx *types.Transaction, newFeeCap, newTipCap, newBlobFeeCap *b
 	}
 	return types.NewTx(data), nil
 }
-
 // The mutex must be held by the caller.
 func (p *DataPoster) replaceTx(ctx context.Context, prevTx *storage.QueuedTransaction, backlogWeight uint64) error {
 	latestHeader, err := p.headerReader.LastHeader(ctx)
@@ -1061,7 +1035,6 @@ func (p *DataPoster) replaceTx(ctx context.Context, prevTx *storage.QueuedTransa
 
 	return p.sendTx(ctx, prevTx, &newTx)
 }
-
 // Gets latest known or finalized block header (depending on config flag),
 // gets the nonce of the dataposter sender and stores it if it has increased.
 // The mutex must be held by the caller.
@@ -1112,7 +1085,6 @@ func (p *DataPoster) updateNonce(ctx context.Context) error {
 	p.nonce = nonce
 	return nil
 }
-
 // Updates dataposter balance to balance at pending block.
 func (p *DataPoster) updateBalance(ctx context.Context) error {
 	// Use the pending (representated as -1) balance because we're looking at batches we'd post,
@@ -1124,9 +1096,7 @@ func (p *DataPoster) updateBalance(ctx context.Context) error {
 	p.balance = balance
 	return nil
 }
-
 const maxConsecutiveIntermittentErrors = 20
-
 func (p *DataPoster) maybeLogError(err error, tx *storage.QueuedTransaction, msg string) {
 	nonce := tx.FullTx.Nonce()
 	if err == nil {
@@ -1153,9 +1123,7 @@ func (p *DataPoster) maybeLogError(err error, tx *storage.QueuedTransaction, msg
 	}
 	logLevel(msg, "err", err, "nonce", nonce, "feeCap", tx.FullTx.GasFeeCap(), "tipCap", tx.FullTx.GasTipCap(), "blobFeeCap", tx.FullTx.BlobGasFeeCap(), "gas", tx.FullTx.Gas())
 }
-
 const minWait = time.Second * 10
-
 // Tries to acquire redis lock, updates balance and nonce,
 func (p *DataPoster) Start(ctxIn context.Context) {
 	p.StopWaiter.Start(ctxIn, p)
@@ -1247,7 +1215,6 @@ func (p *DataPoster) Start(ctxIn context.Context) {
 		return wait
 	})
 }
-
 // Implements queue-alike storage that can
 // - Insert item at specified index
 // - Update item with the condition that existing value equals assumed value
@@ -1271,7 +1238,6 @@ type QueueStorage interface {
 	// Indicates whether queue stored at disk.
 	IsPersistent() bool
 }
-
 type DataPosterConfig struct {
 	RedisSigner            signature.SimpleHmacConfig `koanf:"redis-signer"`
 	ReplacementTimes       []time.Duration            `koanf:"replacement-times"`
@@ -1298,13 +1264,13 @@ type DataPosterConfig struct {
 	Dangerous              DangerousConfig   `koanf:"dangerous"`
 	ExternalSigner         ExternalSignerCfg `koanf:"external-signer"`
 	MaxFeeCapFormula       string            `koanf:"max-fee-cap-formula" reload:"hot"`
+	MaxBaseFee             int64             `koanf:"max-base-fee" reload:"hot"`
 	ElapsedTimeBase        time.Duration     `koanf:"elapsed-time-base" reload:"hot"`
 	ElapsedTimeImportance  float64           `koanf:"elapsed-time-importance" reload:"hot"`
 	// When set, dataposter will not post new batches, but will keep running to
 	// get existing batches confirmed.
 	DisableNewTx bool `koanf:"disable-new-tx" reload:"hot"`
 }
-
 type ExternalSignerCfg struct {
 	// URL of the external signer rpc server, if set this overrides transaction
 	// options and uses external signer
@@ -1325,7 +1291,6 @@ type ExternalSignerCfg struct {
 	// TLS config option, when enabled skips certificate verification of external signer.
 	InsecureSkipVerify bool `koanf:"insecure-skip-verify"`
 }
-
 func ExternalSignerTestCfg(addr common.Address, url string) (*ExternalSignerCfg, error) {
 	cp, err := externalsignertest.CertPaths()
 	if err != nil {
@@ -1340,13 +1305,56 @@ func ExternalSignerTestCfg(addr common.Address, url string) (*ExternalSignerCfg,
 		ClientPrivateKey: cp.ClientKey,
 	}, nil
 }
-
 type DangerousConfig struct {
 	// This should be used with caution, only when dataposter somehow gets in a
 	// bad state and we require clearing it.
 	ClearDBStorage bool `koanf:"clear-dbstorage"`
 }
-
+// ConfigFetcher function type is used instead of directly passing config so
+// that flags can be reloaded dynamically.
+// Copyright 2021-2023, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+// Package dataposter implements generic functionality to post transactions.
+// Dataposter implements functionality to post transactions on the chain. It
+// is initialized with specified sender/signer and keeps nonce of that address
+// as it posts transactions.
+// Transactions are also saved in the queue when it's being sent, and when
+// persistent storage is used for the queue, after restarting the node
+// dataposter will pick up where it left.
+// DataPoster must be RLP serializable and deserializable
+// signerFn is a signer function callback when a contract requires a method to
+// sign the transaction before submission.
+// This can be local or external, hence the context parameter.
+// TxToSignTxArgs converts transaction to SendTxArgs. This is needed for
+// external signer to specify From field.
+// externalSigner returns signer function and ethereum address of the signer.
+// Returns an error if address isn't specified or if it can't connect to the
+// signer RPC server.
+// Does basic check whether posting transaction with specified nonce would
+// result in exceeding maximum queue length or maximum transactions in mempool.
+// Requires the caller hold the mutex.
+// Returns the next nonce, its metadata if stored, a bool indicating if the metadata is present, the cumulative weight, and an error if present.
+// Unlike GetNextNonceAndMeta, this does not call the metadataRetriever if the metadata is not stored in the queue.
+// GetNextNonceAndMeta retrieves generates next nonce, validates that a
+// transaction can be posted with that nonce, and fetches "Meta" either last
+// queued iterm (if queue isn't empty) or retrieves with last block.
+// evalMaxFeeCapExpr uses MaxFeeCapFormula from config to calculate the expression's result by plugging in appropriate parameter values
+// backlogOfBatches should already include extraBacklog
+// The dataPosterBacklog argument should *not* include extraBacklog (it's added in in this function)
+// the mutex must be held by the caller
+// The mutex must be held by the caller.
+// Gets latest known or finalized block header (depending on config flag),
+// gets the nonce of the dataposter sender and stores it if it has increased.
+// The mutex must be held by the caller.
+// Updates dataposter balance to balance at pending block.
+// Tries to acquire redis lock, updates balance and nonce,
+// Implements queue-alike storage that can
+// - Insert item at specified index
+// - Update item with the condition that existing value equals assumed value
+// - Delete all the items up to specified index (prune)
+// - Calculate length
+// Note: one of the implementation of this interface (Redis storage) does not
+// support duplicate values.
 // ConfigFetcher function type is used instead of directly passing config so
 // that flags can be reloaded dynamically.
 type ConfigFetcher func() *DataPosterConfig
@@ -1376,6 +1384,7 @@ func DataPosterConfigAddOptions(prefix string, f *pflag.FlagSet, defaultDataPost
 		"Currently available variables to construct the formula are BacklogOfBatches, UrgencyGWei, ElapsedTime, ElapsedTimeBase, ElapsedTimeImportance, and TargetPriceGWei")
 	f.Duration(prefix+".elapsed-time-base", defaultDataPosterConfig.ElapsedTimeBase, "unit to measure the time elapsed since creation of transaction used for maximum fee cap calculation")
 	f.Float64(prefix+".elapsed-time-importance", defaultDataPosterConfig.ElapsedTimeImportance, "weight given to the units of time elapsed used for maximum fee cap calculation")
+	f.Int64(prefix+".max-base-fee", defaultDataPosterConfig.MaxBaseFee, "maximum base fee")
 
 	signature.SimpleHmacConfigAddOptions(prefix+".redis-signer", f)
 	addDangerousOptions(prefix+".dangerous", f)
@@ -1401,27 +1410,29 @@ var DefaultDataPosterConfig = DataPosterConfig{
 	ReplacementTimes:       []time.Duration{5 * time.Minute, 10 * time.Minute, 20 * time.Minute, 30 * time.Minute, time.Hour, 2 * time.Hour, 4 * time.Hour, 6 * time.Hour, 8 * time.Hour, 12 * time.Hour, 16 * time.Hour, 18 * time.Hour, 20 * time.Hour, 22 * time.Hour},
 	BlobTxReplacementTimes: []time.Duration{5 * time.Minute, 10 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, 8 * time.Hour, 16 * time.Hour, 22 * time.Hour},
 	WaitForL1Finality:      true,
-	TargetPriceGwei:        60.,
-	UrgencyGwei:            2.,
-	MaxMempoolTransactions: 18,
-	MaxMempoolWeight:       18,
-	MinTipCapGwei:          0.05,
-	MinBlobTxTipCapGwei:    1, // default geth minimum, and relays aren't likely to accept lower values given propagation time
+	TargetPriceGwei:        60.
+	UrgencyGwei:            2.
+	MaxMempoolTransactions: 18
+	MaxMempoolWeight:       18
+	MinTipCapGwei:          0.05
+	MinBlobTxTipCapGwei:    1 // default geth minimum, and relays aren't likely to accept lower values given propagation time,
 	MaxTipCapGwei:          1.2,
-	MaxBlobTxTipCapGwei:    1, // lower than normal because 4844 rbf is a minimum of a 2x
-	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
-	NonceRbfSoftConfs:      1,
+	MaxBlobTxTipCapGwei:    1 // lower than normal because 4844 rbf is a minimum of a 2x,
+	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10
+	NonceRbfSoftConfs:      1
 	Post4844Blobs:          false,
-	AllocateMempoolBalance: true,
+	AllocateMempoolBalance: true
 	UseDBStorage:           true,
-	UseNoOpStorage:         false,
-	LegacyStorageEncoding:  false,
+	UseNoOpStorage:         false
+	LegacyStorageEncoding:  false
 	Dangerous:              DangerousConfig{ClearDBStorage: false},
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: false},
-	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
-	ElapsedTimeBase:        10 * time.Minute,
-	ElapsedTimeImportance:  10,
-	DisableNewTx:           false,
+	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei"
+	ElapsedTimeBase:        10 * time.Minute
+	ElapsedTimeImportance:  10
+	DisableNewTx:           false // default geth minimum, and relays aren't likely to accept lower values given propagation time,
+// lower than normal because 4844 rbf is a minimum of a 2x,
+	MaxBaseFee:             5000000000,
 }
 
 var DefaultDataPosterConfigForValidator = func() DataPosterConfig {
@@ -1437,26 +1448,27 @@ var TestDataPosterConfig = DataPosterConfig{
 	BlobTxReplacementTimes: []time.Duration{1 * time.Second, 10 * time.Second, 30 * time.Second, 5 * time.Minute},
 	RedisSigner:            signature.TestSimpleHmacConfig,
 	WaitForL1Finality:      false,
-	TargetPriceGwei:        60.,
-	UrgencyGwei:            2.,
-	MaxMempoolTransactions: 18,
-	MaxMempoolWeight:       18,
-	MinTipCapGwei:          0.05,
-	MinBlobTxTipCapGwei:    1,
+	TargetPriceGwei:        60.
+	UrgencyGwei:            2.
+	MaxMempoolTransactions: 18
+	MaxMempoolWeight:       18
+	MinTipCapGwei:          0.05
+	MinBlobTxTipCapGwei:    1
 	MaxTipCapGwei:          5,
-	MaxBlobTxTipCapGwei:    1,
-	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
-	NonceRbfSoftConfs:      1,
+	MaxBlobTxTipCapGwei:    1
+	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10
+	NonceRbfSoftConfs:      1
 	Post4844Blobs:          false,
-	AllocateMempoolBalance: true,
+	AllocateMempoolBalance: true
 	UseDBStorage:           false,
-	UseNoOpStorage:         false,
-	LegacyStorageEncoding:  false,
+	UseNoOpStorage:         false
+	LegacyStorageEncoding:  false
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: true},
-	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
-	ElapsedTimeBase:        10 * time.Minute,
-	ElapsedTimeImportance:  10,
-	DisableNewTx:           false,
+	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei"
+	ElapsedTimeBase:        10 * time.Minute
+	ElapsedTimeImportance:  10
+	DisableNewTx:           false
+	MaxBaseFee:             5000000000,
 }
 
 var TestDataPosterConfigForValidator = func() DataPosterConfig {

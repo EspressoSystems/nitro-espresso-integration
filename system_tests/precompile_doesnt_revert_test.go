@@ -1,8 +1,6 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbtest
-
 import (
 	"context"
 	"encoding/json"
@@ -18,11 +16,9 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 )
-
 // DoesntRevert tests are useful to check if precompile calls revert due to differences in the
 // return types of a contract between go and solidity.
 // They are not a substitute for unit tests, as they don't test the actual functionality of the precompile.
-
 func TestArbAddressTableDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -76,7 +72,6 @@ func TestArbAddressTableDoesntRevert(t *testing.T) {
 	_, _, err = arbAddressTable.Decompress(callOpts, res, big.NewInt(0))
 	Require(t, err)
 }
-
 func TestArbAggregatorDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -101,7 +96,6 @@ func TestArbAggregatorDoesntRevert(t *testing.T) {
 	_, err = arbAggregator.GetFeeCollector(callOpts, l1pricing.BatchPosterAddress)
 	Require(t, err)
 }
-
 func TestArbosTestDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -120,7 +114,6 @@ func TestArbosTestDoesntRevert(t *testing.T) {
 	err = arbosTest.BurnArbGas(callOpts, big.NewInt(1))
 	Require(t, err)
 }
-
 func TestArbSysDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +134,6 @@ func TestArbSysDoesntRevert(t *testing.T) {
 	_, err = arbSys.MapL1SenderContractAddressToL2Alias(callOpts, addr1, addr2)
 	Require(t, err)
 }
-
 func TestArbOwnerDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -181,7 +173,6 @@ func TestArbOwnerDoesntRevert(t *testing.T) {
 	_, err = builder.L2.EnsureTxSucceeded(tx)
 	Require(t, err)
 }
-
 func TestArbGasInfoDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -228,7 +219,6 @@ func TestArbGasInfoDoesntRevert(t *testing.T) {
 	_, _, _, _, _, _, err = arbGasInfo.GetPricesInWeiWithAggregator(callOpts, addr)
 	Require(t, err)
 }
-
 func TestArbRetryableTxDoesntRevert(t *testing.T) {
 	t.Parallel()
 
@@ -247,3 +237,8 @@ func TestArbRetryableTxDoesntRevert(t *testing.T) {
 	_, err = arbRetryableTx.GetCurrentRedeemer(callOpts)
 	Require(t, err)
 }
+// Copyright 2021-2024, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
+// DoesntRevert tests are useful to check if precompile calls revert due to differences in the
+// return types of a contract between go and solidity.
+// They are not a substitute for unit tests, as they don't test the actual functionality of the precompile.

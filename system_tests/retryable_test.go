@@ -1,8 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbtest
-
 import (
 	"context"
 	"fmt"
@@ -39,7 +37,6 @@ import (
 	"github.com/offchainlabs/nitro/util/testhelpers"
 	"github.com/offchainlabs/nitro/validator/valnode"
 )
-
 func retryableSetup(t *testing.T, modifyNodeConfig ...func(*NodeBuilder)) (
 	*NodeBuilder,
 	*bridgegen.Inbox,
@@ -139,7 +136,6 @@ func retryableSetup(t *testing.T, modifyNodeConfig ...func(*NodeBuilder)) (
 	}
 	return builder, delayedInbox, lookupL2Tx, ctx, teardown
 }
-
 func TestRetryableNoExist(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -155,7 +151,6 @@ func TestRetryableNoExist(t *testing.T) {
 		Fatal(t, "didn't get expected NoTicketWithID error")
 	}
 }
-
 func TestEstimateRetryableTicketWithNoFundsAndZeroGasPrice(t *testing.T) {
 	t.Parallel()
 	builder, _, _, ctx, teardown := retryableSetup(t)
@@ -187,7 +182,6 @@ func TestEstimateRetryableTicketWithNoFundsAndZeroGasPrice(t *testing.T) {
 	)
 	Require(t, err, "failed to estimate retryable submission")
 }
-
 func TestSubmitRetryableImmediateSuccess(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -265,7 +259,6 @@ func TestSubmitRetryableImmediateSuccess(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
-
 func testSubmitRetryableEmptyEscrow(t *testing.T, arbosVersion uint64) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t, func(builder *NodeBuilder) {
@@ -346,15 +339,12 @@ func testSubmitRetryableEmptyEscrow(t *testing.T, arbosVersion uint64) {
 		Fatal(t, "Escrow account existence", escrowExists, "doesn't correspond to ArbOS version", arbosVersion)
 	}
 }
-
 func TestSubmitRetryableEmptyEscrowArbOS20(t *testing.T) {
 	testSubmitRetryableEmptyEscrow(t, 20)
 }
-
 func TestSubmitRetryableEmptyEscrowArbOS30(t *testing.T) {
 	testSubmitRetryableEmptyEscrow(t, 30)
 }
-
 func TestSubmitRetryableFailThenRetry(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -463,7 +453,6 @@ func TestSubmitRetryableFailThenRetry(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
-
 // insertRetriables inserts n retryable transactions into the delayed
 // inbox and returns the receipts for the retryables.
 //
@@ -511,7 +500,6 @@ func insertRetriables(
 	}
 	return receipts
 }
-
 func TestSubmitManyRetryableFailThenRetry(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -673,7 +661,6 @@ func TestSubmitManyRetryableFailThenRetry(t *testing.T) {
 
 	validateBlockRange(t, []uint64{receipt.BlockNumber.Uint64()}, true, builder)
 }
-
 func TestGetLifetime(t *testing.T) {
 	t.Parallel()
 
@@ -695,7 +682,6 @@ func TestGetLifetime(t *testing.T) {
 		t.Fatal("Expected to be ", retryables.RetryableLifetimeSeconds, " but got ", lifetime)
 	}
 }
-
 func warpL1Time(t *testing.T, builder *NodeBuilder, ctx context.Context, currentL1time, advanceTime uint64) uint64 {
 	t.Log("Warping L1 time...")
 	l1LatestHeader, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(int64(rpc.LatestBlockNumber)))
@@ -718,7 +704,7 @@ func warpL1Time(t *testing.T, builder *NodeBuilder, ctx context.Context, current
 	Require(t, err)
 	return newL1Timestamp
 }
-
+<<<<<<< HEAD
 func TestRetryableExpiry(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -785,7 +771,76 @@ func TestRetryableExpiry(t *testing.T) {
 		Fatal(t, "didn't get expected NoTicketWithID error")
 	}
 }
+||||||| d81324dae
+=======
+func TestRetryableExpiry(t *testing.T) {
+	t.Parallel()
+	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
+	defer teardown()
 
+	ownerTxOpts := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
+	usertxopts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	usertxopts.Value = arbmath.BigMul(big.NewInt(1e12), big.NewInt(1e12))
+
+	simpleAddr, _ := builder.L2.DeploySimple(t, ownerTxOpts)
+	simpleABI, err := mocksgen.SimpleMetaData.GetAbi()
+	Require(t, err)
+
+	beneficiaryAddress := builder.L2Info.GetAddress("Beneficiary")
+	l1tx, err := delayedInbox.CreateRetryableTicket(
+		&usertxopts,
+		simpleAddr,
+		common.Big0,
+		big.NewInt(1e16),
+		beneficiaryAddress,
+		beneficiaryAddress,
+		// send enough L2 gas for intrinsic but not compute
+		big.NewInt(int64(params.TxGas+params.TxDataNonZeroGasEIP2028*4)),
+		big.NewInt(l2pricing.InitialBaseFeeWei*2),
+		simpleABI.Methods["incrementRedeem"].ID,
+	)
+	Require(t, err)
+
+	l1Receipt, err := builder.L1.EnsureTxSucceeded(l1tx)
+	Require(t, err)
+	if l1Receipt.Status != types.ReceiptStatusSuccessful {
+		Fatal(t, "l1Receipt indicated failure")
+	}
+
+	waitForL1DelayBlocks(t, builder)
+
+	receipt, err := builder.L2.EnsureTxSucceeded(lookupL2Tx(l1Receipt))
+	Require(t, err)
+	if len(receipt.Logs) != 2 {
+		Fatal(t, len(receipt.Logs))
+	}
+	ticketId := receipt.Logs[0].Topics[1]
+	firstRetryTxId := receipt.Logs[1].Topics[2]
+
+	// make sure it failed
+	receipt, err = WaitForTx(ctx, builder.L2.Client, firstRetryTxId, time.Second*5)
+	Require(t, err)
+	if receipt.Status != types.ReceiptStatusFailed {
+		Fatal(t, receipt.GasUsed)
+	}
+
+	arbRetryableTx, err := precompilesgen.NewArbRetryableTx(common.HexToAddress("6e"), builder.L2.Client)
+	Require(t, err)
+
+	// check that the ticket exists
+	_, err = arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+
+	_ = warpL1Time(t, builder, ctx, 0, retryables.RetryableLifetimeSeconds)
+
+	// check that the ticket no longer exists
+	_, err = arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	if (err == nil) || (err.Error() != "execution reverted: error NoTicketWithID(): NoTicketWithID()") {
+		Fatal(t, "didn't get expected NoTicketWithID error")
+	}
+}
+>>>>>>> integration
+<<<<<<< HEAD
 func TestKeepaliveAndRetryableExpiry(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -875,7 +930,99 @@ func TestKeepaliveAndRetryableExpiry(t *testing.T) {
 		Fatal(t, "didn't get expected NoTicketWithID error")
 	}
 }
+||||||| d81324dae
+=======
+func TestKeepaliveAndRetryableExpiry(t *testing.T) {
+	t.Parallel()
+	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
+	defer teardown()
 
+	ownerTxOpts := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
+	usertxopts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	usertxopts.Value = arbmath.BigMul(big.NewInt(1e12), big.NewInt(1e12))
+
+	simpleAddr, _ := builder.L2.DeploySimple(t, ownerTxOpts)
+	simpleABI, err := mocksgen.SimpleMetaData.GetAbi()
+	Require(t, err)
+
+	beneficiaryAddress := builder.L2Info.GetAddress("Beneficiary")
+	l1tx, err := delayedInbox.CreateRetryableTicket(
+		&usertxopts,
+		simpleAddr,
+		common.Big0,
+		big.NewInt(1e16),
+		beneficiaryAddress,
+		beneficiaryAddress,
+		// send enough L2 gas for intrinsic but not compute
+		big.NewInt(int64(params.TxGas+params.TxDataNonZeroGasEIP2028*4)),
+		big.NewInt(l2pricing.InitialBaseFeeWei*2),
+		simpleABI.Methods["incrementRedeem"].ID,
+	)
+	Require(t, err)
+
+	l1Receipt, err := builder.L1.EnsureTxSucceeded(l1tx)
+	Require(t, err)
+	if l1Receipt.Status != types.ReceiptStatusSuccessful {
+		Fatal(t, "l1Receipt indicated failure")
+	}
+
+	waitForL1DelayBlocks(t, builder)
+
+	receipt, err := builder.L2.EnsureTxSucceeded(lookupL2Tx(l1Receipt))
+	Require(t, err)
+	if len(receipt.Logs) != 2 {
+		Fatal(t, len(receipt.Logs))
+	}
+	ticketId := receipt.Logs[0].Topics[1]
+	firstRetryTxId := receipt.Logs[1].Topics[2]
+
+	// make sure it failed
+	receipt, err = WaitForTx(ctx, builder.L2.Client, firstRetryTxId, time.Second*5)
+	Require(t, err)
+	if receipt.Status != types.ReceiptStatusFailed {
+		Fatal(t, receipt.GasUsed)
+	}
+
+	arbRetryableTx, err := precompilesgen.NewArbRetryableTx(common.HexToAddress("6e"), builder.L2.Client)
+	Require(t, err)
+
+	// checks that the ticket exists and gets current timeout
+	timeoutBeforeKeepalive, err := arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+
+	// checks beneficiary
+	retrievedBeneficiaryAddress, err := arbRetryableTx.GetBeneficiary(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+	if retrievedBeneficiaryAddress != beneficiaryAddress {
+		Fatal(t, "expected beneficiary to be", beneficiaryAddress, "but got", retrievedBeneficiaryAddress)
+	}
+
+	// checks that keepalive increases the timeout as expected
+	_, err = arbRetryableTx.Keepalive(&ownerTxOpts, ticketId)
+	Require(t, err)
+	timeoutAfterKeepalive, err := arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+	expectedTimeoutAfterKeepAlive := arbmath.BigAdd(timeoutBeforeKeepalive, big.NewInt(retryables.RetryableLifetimeSeconds))
+	if timeoutAfterKeepalive.Cmp(expectedTimeoutAfterKeepAlive) != 0 {
+		Fatal(t, "expected timeout after keepalive to be", expectedTimeoutAfterKeepAlive, "but got", timeoutAfterKeepalive)
+	}
+
+	currentL1time := warpL1Time(t, builder, ctx, 0, retryables.RetryableLifetimeSeconds)
+
+	// check that the ticket still exists
+	_, err = arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+
+	_ = warpL1Time(t, builder, ctx, currentL1time, retryables.RetryableLifetimeSeconds)
+
+	// check that the ticket no longer exists
+	_, err = arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	if (err == nil) || (err.Error() != "execution reverted: error NoTicketWithID(): NoTicketWithID()") {
+		Fatal(t, "didn't get expected NoTicketWithID error")
+	}
+}
+>>>>>>> integration
+<<<<<<< HEAD
 func TestKeepaliveAndCancelRetryable(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -964,7 +1111,97 @@ func TestKeepaliveAndCancelRetryable(t *testing.T) {
 		Fatal(t, "didn't get expected NoTicketWithID error")
 	}
 }
+||||||| d81324dae
+=======
+func TestKeepaliveAndCancelRetryable(t *testing.T) {
+	t.Parallel()
+	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
+	defer teardown()
 
+	ownerTxOpts := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
+	usertxopts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	usertxopts.Value = arbmath.BigMul(big.NewInt(1e12), big.NewInt(1e12))
+
+	simpleAddr, _ := builder.L2.DeploySimple(t, ownerTxOpts)
+	simpleABI, err := mocksgen.SimpleMetaData.GetAbi()
+	Require(t, err)
+
+	beneficiaryAddress := builder.L2Info.GetAddress("Beneficiary")
+	l1tx, err := delayedInbox.CreateRetryableTicket(
+		&usertxopts,
+		simpleAddr,
+		common.Big0,
+		big.NewInt(1e16),
+		beneficiaryAddress,
+		beneficiaryAddress,
+		// send enough L2 gas for intrinsic but not compute
+		big.NewInt(int64(params.TxGas+params.TxDataNonZeroGasEIP2028*4)),
+		big.NewInt(l2pricing.InitialBaseFeeWei*2),
+		simpleABI.Methods["incrementRedeem"].ID,
+	)
+	Require(t, err)
+
+	l1Receipt, err := builder.L1.EnsureTxSucceeded(l1tx)
+	Require(t, err)
+	if l1Receipt.Status != types.ReceiptStatusSuccessful {
+		Fatal(t, "l1Receipt indicated failure")
+	}
+
+	waitForL1DelayBlocks(t, builder)
+
+	receipt, err := builder.L2.EnsureTxSucceeded(lookupL2Tx(l1Receipt))
+	Require(t, err)
+	if len(receipt.Logs) != 2 {
+		Fatal(t, len(receipt.Logs))
+	}
+	ticketId := receipt.Logs[0].Topics[1]
+	firstRetryTxId := receipt.Logs[1].Topics[2]
+
+	// make sure it failed
+	receipt, err = WaitForTx(ctx, builder.L2.Client, firstRetryTxId, time.Second*5)
+	Require(t, err)
+	if receipt.Status != types.ReceiptStatusFailed {
+		Fatal(t, receipt.GasUsed)
+	}
+
+	arbRetryableTx, err := precompilesgen.NewArbRetryableTx(common.HexToAddress("6e"), builder.L2.Client)
+	Require(t, err)
+
+	// checks that the ticket exists and gets current timeout
+	timeoutBeforeKeepalive, err := arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+
+	// checks beneficiary
+	retrievedBeneficiaryAddress, err := arbRetryableTx.GetBeneficiary(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+	if retrievedBeneficiaryAddress != beneficiaryAddress {
+		Fatal(t, "expected beneficiary to be", beneficiaryAddress, "but got", retrievedBeneficiaryAddress)
+	}
+
+	// checks that keepalive increases the timeout as expected
+	_, err = arbRetryableTx.Keepalive(&ownerTxOpts, ticketId)
+	Require(t, err)
+	timeoutAfterKeepalive, err := arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	Require(t, err)
+	expectedTimeoutAfterKeepAlive := arbmath.BigAdd(timeoutBeforeKeepalive, big.NewInt(retryables.RetryableLifetimeSeconds))
+	if timeoutAfterKeepalive.Cmp(expectedTimeoutAfterKeepAlive) != 0 {
+		Fatal(t, "expected timeout after keepalive to be", expectedTimeoutAfterKeepAlive, "but got", timeoutAfterKeepalive)
+	}
+
+	// cancel the ticket
+	beneficiaryTxOpts := builder.L2Info.GetDefaultTransactOpts("Beneficiary", ctx)
+	tx, err := arbRetryableTx.Cancel(&beneficiaryTxOpts, ticketId)
+	Require(t, err)
+	_, err = builder.L2.EnsureTxSucceeded(tx)
+	Require(t, err)
+
+	// checks that the ticket no longer exists
+	_, err = arbRetryableTx.GetTimeout(&bind.CallOpts{}, ticketId)
+	if (err == nil) || (err.Error() != "execution reverted: error NoTicketWithID(): NoTicketWithID()") {
+		Fatal(t, "didn't get expected NoTicketWithID error")
+	}
+}
+>>>>>>> integration
 func TestSubmissionGasCosts(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -1127,7 +1364,6 @@ func TestSubmissionGasCosts(t *testing.T) {
 		Fatal(t, "Unexpected network fee paid, want:", expectedNetworkFee, "have:", networkFee)
 	}
 }
-
 func waitForL1DelayBlocks(t *testing.T, builder *NodeBuilder) {
 	// sending l1 messages creates l1 blocks.. make enough to get that delayed inbox message in
 	for i := 0; i < 30; i++ {
@@ -1136,7 +1372,6 @@ func waitForL1DelayBlocks(t *testing.T, builder *NodeBuilder) {
 		})
 	}
 }
-
 func TestDepositETH(t *testing.T) {
 	t.Parallel()
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
@@ -1179,7 +1414,6 @@ func TestDepositETH(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
-
 func TestArbitrumContractTx(t *testing.T) {
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
 	defer teardown()
@@ -1231,7 +1465,6 @@ func TestArbitrumContractTx(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
-
 func TestL1FundedUnsignedTransaction(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -1304,7 +1537,6 @@ func TestL1FundedUnsignedTransaction(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
-
 func TestRetryableSubmissionAndRedeemFees(t *testing.T) {
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
 	defer teardown()
@@ -1475,7 +1707,6 @@ func TestRetryableSubmissionAndRedeemFees(t *testing.T) {
 	}
 	validateBlocks(t, 1, true, builder)
 }
-
 func TestRetryableRedeemBlockGasUsage(t *testing.T) {
 	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
 	defer teardown()
@@ -1578,7 +1809,6 @@ func TestRetryableRedeemBlockGasUsage(t *testing.T) {
 		Fatal(t, "Failed to fit a tx to the same block as redeem and retry")
 	}
 }
-
 // elevateL2Basefee by burning gas exceeding speed limit
 func elevateL2Basefee(t *testing.T, ctx context.Context, builder *NodeBuilder) {
 	baseFeeBefore := builder.L2.GetBaseFee(t)
@@ -1605,7 +1835,6 @@ func elevateL2Basefee(t *testing.T, ctx context.Context, builder *NodeBuilder) {
 	baseFee := builder.L2.GetBaseFee(t)
 	colors.PrintBlue("New base fee: ", baseFee, " diff:", baseFee.Uint64()-baseFeeBefore.Uint64())
 }
-
 func setupFeeAddresses(t *testing.T, ctx context.Context, builder *NodeBuilder) (common.Address, common.Address) {
 	ownerTxOpts := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
 	ownerCallOpts := builder.L2Info.GetDefaultCallOpts("Owner", ctx)
@@ -1640,7 +1869,6 @@ func setupFeeAddresses(t *testing.T, ctx context.Context, builder *NodeBuilder) 
 	t.Log("Network fee account: ", networkFeeAccount)
 	return infraFeeAddr, networkFeeAddr
 }
-
 func testFlatCallTracer(t *testing.T, ctx context.Context, client rpc.ClientInterface) {
 	var blockNumber hexutil.Uint64
 	err := client.CallContext(ctx, &blockNumber, "eth_blockNumber")
@@ -1653,3 +1881,6 @@ func testFlatCallTracer(t *testing.T, ctx context.Context, client rpc.ClientInte
 		Require(t, err)
 	}
 }
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+// elevateL2Basefee by burning gas exceeding speed limit

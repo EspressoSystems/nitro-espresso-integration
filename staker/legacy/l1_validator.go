@@ -45,7 +45,7 @@ const (
 )
 
 type L1Validator struct {
-	rollup         *RollupWatcher
+	rollup         *staker.RollupWatcher
 	rollupAddress  common.Address
 	validatorUtils *rollup_legacy_gen.ValidatorUtils
 	client         *ethclient.Client
@@ -63,8 +63,13 @@ func NewL1Validator(
 	client *ethclient.Client,
 	wallet ValidatorWalletInterface,
 	validatorUtilsAddress common.Address,
+<<<<<<< HEAD
 	rollupAddress common.Address,
 	gasRefunder common.Address,
+||||||| d81324dae
+=======
+	gasRefunder common.Address,
+>>>>>>> integration
 	callOpts bind.CallOpts,
 	inboxTracker staker.InboxTrackerInterface,
 	txStreamer staker.TransactionStreamerInterface,
@@ -74,7 +79,13 @@ func NewL1Validator(
 	if err != nil {
 		return nil, err
 	}
-	rollup, err := NewRollupWatcher(rollupAddress, wallet.L1Client(), callOpts)
+<<<<<<< HEAD
+	rollup, err := staker.NewRollupWatcher(rollupAddress, wallet.L1Client(), callOpts)
+||||||| d81324dae
+	rollup, err := staker.NewRollupWatcher(wallet.RollupAddress(), builder, callOpts)
+=======
+	rollup, err := staker.NewRollupWatcher(wallet.RollupAddress(), wallet.L1Client(), callOpts)
+>>>>>>> integration
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +159,7 @@ func (v *L1Validator) resolveTimedOutChallenges(ctx context.Context) (*types.Tra
 	return v.wallet.TimeoutChallenges(ctx, challengesToEliminate, challengeManagerAddress)
 }
 
-func (v *L1Validator) resolveNextNode(ctx context.Context, info *StakerInfo, latestConfirmedNode *uint64) (bool, error) {
+func (v *L1Validator) resolveNextNode(ctx context.Context, info *staker.StakerInfo, latestConfirmedNode *uint64) (bool, error) {
 	callOpts := v.getCallOpts(ctx)
 	confirmType, err := v.validatorUtils.CheckDecidableNextNode(callOpts, v.rollupAddress)
 	if err != nil {
@@ -204,7 +215,7 @@ func (v *L1Validator) isRequiredStakeElevated(ctx context.Context) (bool, error)
 }
 
 type createNodeAction struct {
-	assertion         *Assertion
+	assertion         *staker.Assertion
 	prevInboxMaxCount *big.Int
 	hash              common.Hash
 }
@@ -221,7 +232,7 @@ type OurStakerInfo struct {
 	LatestStakedNodeHash common.Hash
 	CanProgress          bool
 	StakeExists          bool
-	*StakerInfo
+	*staker.StakerInfo
 }
 
 func (v *L1Validator) generateNodeAction(
@@ -512,7 +523,7 @@ func (v *L1Validator) createNewNodeAction(
 		hasSiblingByte[0] = 1
 	}
 	assertionNumBlocks := uint64(validatedCount - startCount)
-	assertion := &Assertion{
+	assertion := &staker.Assertion{
 		BeforeState: startState,
 		AfterState: &validator.ExecutionState{
 			GlobalState:   validatedGS,
@@ -542,7 +553,7 @@ func (v *L1Validator) createNewNodeAction(
 }
 
 // Returns (execution state, inbox max count, L1 block proposed, parent chain block proposed, error)
-func lookupNodeStartState(ctx context.Context, rollup *RollupWatcher, nodeNum uint64, nodeHash common.Hash) (*validator.ExecutionState, *big.Int, uint64, uint64, error) {
+func lookupNodeStartState(ctx context.Context, rollup *staker.RollupWatcher, nodeNum uint64, nodeHash common.Hash) (*validator.ExecutionState, *big.Int, uint64, uint64, error) {
 	if nodeNum == 0 {
 		creationEvent, err := rollup.LookupCreation(ctx)
 		if err != nil {

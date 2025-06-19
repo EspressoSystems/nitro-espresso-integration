@@ -1,8 +1,7 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package timeboost
-
+<<<<<<< HEAD
 import (
 	"context"
 	"fmt"
@@ -33,11 +32,37 @@ import (
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+||||||| d81324dae
+=======
+import (
+	"context"
+	"fmt"
+	"math/big"
+	"time"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/pflag"
+	"golang.org/x/crypto/sha3"
+
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+
+	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/cmd/util"
+	"github.com/offchainlabs/nitro/pubsub"
+	"github.com/offchainlabs/nitro/solgen/go/express_lane_auctiongen"
+	"github.com/offchainlabs/nitro/util/redisutil"
+	"github.com/offchainlabs/nitro/util/stopwaiter"
+)
+>>>>>>> integration
 // domainValue holds the Keccak256 hash of the string "TIMEBOOST_BID".
 // It is intended to be immutable after initialization.
 var domainValue []byte
-
+<<<<<<< HEAD
 const (
 	AuctioneerNamespace      = "auctioneer"
 	validatedBidsRedisStream = "validated_bids"
@@ -45,22 +70,25 @@ const (
 	// Auctioneer coordination key for failover
 	AUCTIONEER_CHOSEN_KEY = "auctioneer.chosen"
 )
-
+||||||| d81324dae
+=======
+const (
+	AuctioneerNamespace      = "auctioneer"
+	validatedBidsRedisStream = "validated_bids"
+)
+>>>>>>> integration
 var (
 	receivedBidsCounter  = metrics.NewRegisteredCounter("arb/auctioneer/bids/received", nil)
 	validatedBidsCounter = metrics.NewRegisteredCounter("arb/auctioneer/bids/validated", nil)
 	FirstBidValueGauge   = metrics.NewRegisteredGauge("arb/auctioneer/bids/firstbidvalue", nil)
 	SecondBidValueGauge  = metrics.NewRegisteredGauge("arb/auctioneer/bids/secondbidvalue", nil)
 )
-
 func init() {
 	hash := sha3.NewLegacyKeccak256()
 	hash.Write([]byte("TIMEBOOST_BID"))
 	domainValue = hash.Sum(nil)
 }
-
 type AuctioneerServerConfigFetcher func() *AuctioneerServerConfig
-
 type AuctioneerServerConfig struct {
 	Enable         bool                  `koanf:"enable"`
 	RedisURL       string                `koanf:"redis-url"`
@@ -77,14 +105,12 @@ type AuctioneerServerConfig struct {
 	AuctionResolutionWaitTime time.Duration            `koanf:"auction-resolution-wait-time"`
 	S3Storage                 S3StorageServiceConfig   `koanf:"s3-storage"`
 }
-
 var DefaultAuctioneerConsumerConfig = pubsub.ConsumerConfig{
 	// Messages with no heartbeat for over 1s will be reclaimed by the auctioneer
 	IdletimeToAutoclaim: time.Second,
 
 	ResponseEntryTimeout: time.Minute * 5,
 }
-
 var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
 	Enable:                    true,
 	RedisURL:                  "",
@@ -93,7 +119,6 @@ var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
 	AuctionResolutionWaitTime: 2 * time.Second,
 	S3Storage:                 DefaultS3StorageServiceConfig,
 }
-
 var TestAuctioneerServerConfig = AuctioneerServerConfig{
 	Enable:                    true,
 	RedisURL:                  "",
@@ -101,7 +126,6 @@ var TestAuctioneerServerConfig = AuctioneerServerConfig{
 	StreamTimeout:             time.Minute,
 	AuctionResolutionWaitTime: 2 * time.Second,
 }
-
 func AuctioneerServerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultAuctioneerServerConfig.Enable, "enable auctioneer server")
 	f.String(prefix+".redis-url", DefaultAuctioneerServerConfig.RedisURL, "url of redis server to receive bids from bid validators")
@@ -117,7 +141,6 @@ func AuctioneerServerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".auction-resolution-wait-time", DefaultAuctioneerServerConfig.AuctionResolutionWaitTime, "wait time after auction closing before resolving the auction")
 	S3StorageServiceConfigAddOptions(prefix+".s3-storage", f)
 }
-
 // AuctioneerServer is a struct that represents an autonomous auctioneer.
 // It is responsible for receiving bids, validating them, and resolving auctions.
 type AuctioneerServer struct {
@@ -138,16 +161,16 @@ type AuctioneerServer struct {
 	s3StorageService               *S3StorageService
 	unackedBidsMutex               sync.Mutex
 	unackedBids                    map[string]*pubsub.Message[*JsonValidatedBid]
-
 	// Coordination fields
 	redisClient               redis.UniversalClient
 	myId                      string
 	isPrimary                 atomic.Bool
-	lastPrimaryStatus         bool // Track state changes for logging
+	lastPrimaryStatus         bool
+// Track state changes for logging
 	auctioneerLivenessTimeout time.Duration
 }
-
 // NewAuctioneerServer creates a new autonomous auctioneer struct.
+<<<<<<< HEAD
 func NewAuctioneerServer(ctx context.Context, configFetcher AuctioneerServerConfigFetcher) (*AuctioneerServer, error) {
 	cfg := configFetcher()
 	if cfg.RedisURL == "" {
@@ -256,7 +279,104 @@ func NewAuctioneerServer(ctx context.Context, configFetcher AuctioneerServerConf
 		auctioneerLivenessTimeout:      cfg.ConsumerConfig.IdletimeToAutoclaim * 3,
 	}, nil
 }
+||||||| d81324dae
+func NewAuctioneerServer(ctx context.Context, configFetcher AuctioneerServerConfigFetcher) (*AuctioneerServer, error) 
+=======
+func NewAuctioneerServer(ctx context.Context, configFetcher AuctioneerServerConfigFetcher) (*AuctioneerServer, error) {
+	cfg := configFetcher()
+	if cfg.RedisURL == "" {
+		return nil, fmt.Errorf("redis url cannot be empty")
+	}
+	if cfg.AuctionContractAddress == "" {
+		return nil, fmt.Errorf("auction contract address cannot be empty")
+	}
+	if cfg.DbDirectory == "" {
+		return nil, errors.New("database directory is empty")
+	}
+	database, err := NewDatabase(cfg.DbDirectory)
+	if err != nil {
+		return nil, err
+	}
+	var s3StorageService *S3StorageService
+	if cfg.S3Storage.Enable {
+		s3StorageService, err = NewS3StorageService(&cfg.S3Storage, database)
+		if err != nil {
+			return nil, err
+		}
+	}
+	auctionContractAddr := common.HexToAddress(cfg.AuctionContractAddress)
+	redisClient, err := redisutil.RedisClientFromURL(cfg.RedisURL)
+	if err != nil {
+		return nil, err
+	}
+	c, err := pubsub.NewConsumer[*JsonValidatedBid, error](redisClient, validatedBidsRedisStream, &cfg.ConsumerConfig)
+	if err != nil {
+		return nil, fmt.Errorf("creating consumer for validation: %w", err)
+	}
 
+	var endpointManager SequencerEndpointManager
+	if cfg.UseRedisCoordinator {
+		redisCoordinator, err := redisutil.NewRedisCoordinator(cfg.RedisCoordinatorURL)
+		if err != nil {
+			return nil, err
+		}
+		endpointManager = NewRedisEndpointManager(redisCoordinator, cfg.SequencerJWTPath)
+	} else {
+		endpointManager = NewStaticEndpointManager(cfg.SequencerEndpoint, cfg.SequencerJWTPath)
+	}
+
+	rpcClient, _, err := endpointManager.GetSequencerRPC(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sequencerClient := ethclient.NewClient(rpcClient)
+
+	chainId, err := sequencerClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	txOpts, _, err := util.OpenWallet("auctioneer-server", &cfg.Wallet, chainId)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening wallet")
+	}
+	auctionContract, err := express_lane_auctiongen.NewExpressLaneAuction(auctionContractAddr, sequencerClient)
+	if err != nil {
+		return nil, err
+	}
+	domainSeparator, err := auctionContract.DomainSeparator(&bind.CallOpts{
+		Context: ctx,
+	})
+	if err != nil {
+		return nil, err
+	}
+	rawRoundTimingInfo, err := auctionContract.RoundTimingInfo(&bind.CallOpts{})
+	if err != nil {
+		return nil, err
+	}
+	roundTimingInfo, err := NewRoundTimingInfo(rawRoundTimingInfo)
+	if err != nil {
+		return nil, err
+	}
+	if err = roundTimingInfo.ValidateResolutionWaitTime(cfg.AuctionResolutionWaitTime); err != nil {
+		return nil, err
+	}
+	return &AuctioneerServer{
+		txOpts:                         txOpts,
+		endpointManager:                endpointManager,
+		chainId:                        chainId,
+		database:                       database,
+		s3StorageService:               s3StorageService,
+		consumer:                       c,
+		auctionContract:                auctionContract,
+		auctionContractAddr:            auctionContractAddr,
+		auctionContractDomainSeparator: domainSeparator,
+		bidsReceiver:                   make(chan *JsonValidatedBid, 100_000), // TODO(Terence): Is 100k enough? Make this configurable?
+		bidCache:                       newBidCache(domainSeparator),
+		roundTimingInfo:                *roundTimingInfo,
+		auctionResolutionWaitTime:      cfg.AuctionResolutionWaitTime,
+	}, nil
+}
+>>>>>>> integration
 func (a *AuctioneerServer) consumeNextBid(ctx context.Context) time.Duration {
 	// Only consume if we're primary
 	if !a.isPrimary.Load() {
@@ -316,7 +436,6 @@ func (a *AuctioneerServer) consumeNextBid(ctx context.Context) time.Duration {
 
 	return 0
 }
-
 // updateCoordination manages the primary/secondary status of this auctioneer
 func (a *AuctioneerServer) updateCoordination(ctx context.Context) time.Duration {
 	var success bool
@@ -385,7 +504,7 @@ func (a *AuctioneerServer) updateCoordination(ctx context.Context) time.Duration
 	// Needs to be parameterized rather than hardcoded for tests which run more quickly.
 	return a.auctioneerLivenessTimeout / 6
 }
-
+<<<<<<< HEAD
 func (a *AuctioneerServer) Start(ctx_in context.Context) {
 	a.StopWaiter.Start(ctx_in, a)
 	// Start S3 storage service to persist validated bids to s3
@@ -480,8 +599,122 @@ func (a *AuctioneerServer) Start(ctx_in context.Context) {
 		}
 	})
 }
+||||||| d81324dae
+=======
+func (a *AuctioneerServer) Start(ctx_in context.Context) {
+	a.StopWaiter.Start(ctx_in, a)
+	// Start S3 storage service to persist validated bids to s3
+	if a.s3StorageService != nil {
+		a.s3StorageService.Start(ctx_in)
+	}
+	// Channel that consumer uses to indicate its readiness.
+	readyStream := make(chan struct{}, 1)
+	a.consumer.Start(ctx_in)
+	// Channel for single consumer, once readiness is indicated in this,
+	// consumer will start consuming iteratively.
+	ready := make(chan struct{}, 1)
+	a.StopWaiter.LaunchThread(func(ctx context.Context) {
+		for {
+			if pubsub.StreamExists(ctx, a.consumer.StreamName(), a.consumer.RedisClient()) {
+				ready <- struct{}{}
+				readyStream <- struct{}{}
+				return
+			}
+			select {
+			case <-ctx.Done():
+				log.Info("Context done while checking redis stream existance", "error", ctx.Err().Error())
+				return
+			case <-time.After(time.Millisecond * 100):
+			}
+		}
+	})
+	a.StopWaiter.LaunchThread(func(ctx context.Context) {
+		select {
+		case <-ctx.Done():
+			log.Info("Context done while waiting a redis stream to be ready", "error", ctx.Err().Error())
+			return
+		case <-ready: // Wait until the stream exists and start consuming iteratively.
+		}
+		log.Info("Stream exists, now attempting to consume data from it")
+		a.StopWaiter.CallIteratively(func(ctx context.Context) time.Duration {
+			req, err := a.consumer.Consume(ctx)
+			if err != nil {
+				log.Error("Consuming request", "error", err)
+				return 0
+			}
+			if req == nil {
+				// There's nothing in the queue.
+				return time.Millisecond * 250
+			}
+			// Forward the message over a channel for processing elsewhere in
+			// another thread, so as to not block this consumption thread.
+			a.bidsReceiver <- req.Value
 
+			// We received the message, then we ack with a nil error.
+			if err := a.consumer.SetResult(ctx, req.ID, nil); err != nil {
+				log.Error("Error setting result for request", "id", req.ID, "result", nil, "error", err)
+				return 0
+			}
+			req.Ack()
+			return 0
+		})
+	})
+	a.StopWaiter.LaunchThread(func(ctx context.Context) {
+		for {
+			select {
+			case <-readyStream:
+				log.Trace("At least one stream is ready")
+				return // Don't block Start if at least one of the stream is ready.
+			case <-time.After(a.streamTimeout):
+				log.Error("Waiting for redis streams timed out")
+				return
+			case <-ctx.Done():
+				log.Info("Context done while waiting redis streams to be ready, failed to start")
+				return
+			}
+		}
+	})
+
+	// Bid receiver thread.
+	a.StopWaiter.LaunchThread(func(ctx context.Context) {
+		for {
+			select {
+			case bid := <-a.bidsReceiver:
+				log.Info("Consumed validated bid", "bidder", bid.Bidder, "amount", bid.Amount, "round", bid.Round)
+				a.bidCache.add(JsonValidatedBidToGo(bid))
+				// Persist the validated bid to the database as a non-blocking operation.
+				go a.persistValidatedBid(bid)
+			case <-ctx.Done():
+				log.Info("Context done while waiting redis streams to be ready, failed to start")
+				return
+			}
+		}
+	})
+
+	// Auction resolution thread.
+	a.StopWaiter.LaunchThread(func(ctx context.Context) {
+		ticker := newRoundTicker(a.roundTimingInfo)
+		go ticker.tickAtAuctionClose()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Error("Context closed, autonomous auctioneer shutting down")
+				return
+			case auctionClosingTime := <-ticker.c:
+				log.Info("New auction closing time reached", "closingTime", auctionClosingTime, "totalBids", a.bidCache.size())
+				time.Sleep(a.auctionResolutionWaitTime)
+				if err := a.resolveAuction(ctx); err != nil {
+					log.Error("Could not resolve auction for round", "error", err)
+				}
+				// Clear the bid cache.
+				a.bidCache = newBidCache(a.auctionContractDomainSeparator)
+			}
+		}
+	})
+}
+>>>>>>> integration
 // Resolves the auction by calling the smart contract with the top two bids.
+<<<<<<< HEAD
 func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
 	upcomingRound := a.roundTimingInfo.RoundNumber() + 1
 	result := a.bidCache.topTwoBids()
@@ -606,7 +839,104 @@ func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
 	log.Info("Auction resolved successfully", "txHash", tx.Hash().Hex())
 	return nil
 }
+||||||| d81324dae
+func (a *AuctioneerServer) resolveAuction(ctx context.Context) error 
+=======
+func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
+	upcomingRound := a.roundTimingInfo.RoundNumber() + 1
+	result := a.bidCache.topTwoBids()
+	first := result.firstPlace
+	second := result.secondPlace
+	var tx *types.Transaction
+	var err error
+	opts := copyTxOpts(a.txOpts)
+	opts.NoSend = true
 
+	sequencerRpc, newRpc, err := a.endpointManager.GetSequencerRPC(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get sequencer RPC: %w", err)
+	}
+
+	if newRpc {
+		a.auctionContract, err = express_lane_auctiongen.NewExpressLaneAuction(a.auctionContractAddr, ethclient.NewClient(sequencerRpc))
+		if err != nil {
+			return fmt.Errorf("failed to recreate ExpressLaneAuction conctract bindings with new sequencer endpoint: %w", err)
+		}
+	}
+
+	switch {
+	case first != nil && second != nil: // Both bids are present
+		tx, err = a.auctionContract.ResolveMultiBidAuction(
+			opts,
+			express_lane_auctiongen.Bid{
+				ExpressLaneController: first.ExpressLaneController,
+				Amount:                first.Amount,
+				Signature:             first.Signature,
+			},
+			express_lane_auctiongen.Bid{
+				ExpressLaneController: second.ExpressLaneController,
+				Amount:                second.Amount,
+				Signature:             second.Signature,
+			},
+		)
+		FirstBidValueGauge.Update(first.Amount.Int64())
+		SecondBidValueGauge.Update(second.Amount.Int64())
+		log.Info("Resolving auction with two bids", "round", upcomingRound)
+
+	case first != nil: // Single bid is present
+		tx, err = a.auctionContract.ResolveSingleBidAuction(
+			opts,
+			express_lane_auctiongen.Bid{
+				ExpressLaneController: first.ExpressLaneController,
+				Amount:                first.Amount,
+				Signature:             first.Signature,
+			},
+		)
+		FirstBidValueGauge.Update(first.Amount.Int64())
+		log.Info("Resolving auction with single bid", "round", upcomingRound)
+
+	case second == nil: // No bids received
+		log.Info("No bids received for auction resolution", "round", upcomingRound)
+		return nil
+	}
+	if err != nil {
+		log.Error("Error resolving auction", "error", err)
+		return err
+	}
+
+	roundEndTime := a.roundTimingInfo.TimeOfNextRound()
+	retryInterval := 1 * time.Second
+
+	if err := retryUntil(ctx, func() error {
+		if err := sequencerRpc.CallContext(ctx, nil, "auctioneer_submitAuctionResolutionTransaction", tx); err != nil {
+			log.Error("Error submitting auction resolution to sequencer endpoint", "error", err)
+			return err
+		}
+
+		// Wait for the transaction to be mined
+		receipt, err := bind.WaitMined(ctx, ethclient.NewClient(sequencerRpc), tx)
+		if err != nil {
+			log.Error("Error waiting for transaction to be mined", "error", err)
+			return err
+		}
+
+		// Check if the transaction was successful
+		if tx == nil || receipt == nil || receipt.Status != types.ReceiptStatusSuccessful {
+			if tx != nil {
+				log.Error("Transaction failed or did not finalize successfully", "txHash", tx.Hash().Hex())
+			}
+			return errors.New("transaction failed or did not finalize successfully")
+		}
+
+		return nil
+	}, retryInterval, roundEndTime); err != nil {
+		return err
+	}
+
+	log.Info("Auction resolved successfully", "txHash", tx.Hash().Hex())
+	return nil
+}
+>>>>>>> integration
 func (a *AuctioneerServer) acknowledgeAllBids(ctx context.Context, round uint64) {
 	a.unackedBidsMutex.Lock()
 	defer a.unackedBidsMutex.Unlock()
@@ -633,10 +963,10 @@ func (a *AuctioneerServer) acknowledgeAllBids(ctx context.Context, round uint64)
 
 	log.Info("Acknowledged bids in redis stream", "count", acknowledgedCount)
 }
-
 // retryUntil retries a given operation defined by the closure until the specified duration
 // has passed or the operation succeeds. It waits for the specified retry interval between
 // attempts. The function returns an error if all attempts fail.
+<<<<<<< HEAD
 func retryUntil(ctx context.Context, operation func() error, retryInterval time.Duration, endTime time.Time) error {
 	for {
 		if time.Now().After(endTime) {
@@ -656,13 +986,33 @@ func retryUntil(ctx context.Context, operation func() error, retryInterval time.
 	}
 	return errors.New("operation failed after multiple attempts")
 }
+||||||| d81324dae
+=======
+func retryUntil(ctx context.Context, operation func() error, retryInterval time.Duration, endTime time.Time) error {
+	for {
+		// Execute the operation
+		if err := operation(); err == nil {
+			return nil
+		}
 
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
+		if time.Now().After(endTime) {
+			break
+		}
+
+		time.Sleep(retryInterval)
+	}
+	return errors.New("operation failed after multiple attempts")
+}
+>>>>>>> integration
 func (a *AuctioneerServer) persistValidatedBid(bid *JsonValidatedBid) {
 	if err := a.database.InsertBid(JsonValidatedBidToGo(bid)); err != nil {
 		log.Error("Could not persist validated bid to database", "err", err, "bidder", bid.Bidder, "amount", bid.Amount.String())
 	}
 }
-
 func copyTxOpts(opts *bind.TransactOpts) *bind.TransactOpts {
 	if opts == nil {
 		return nil
@@ -692,17 +1042,14 @@ func copyTxOpts(opts *bind.TransactOpts) *bind.TransactOpts {
 	}
 	return copied
 }
-
 // IsPrimary returns whether this auctioneer is currently the primary
 func (a *AuctioneerServer) IsPrimary() bool {
 	return a.isPrimary.Load()
 }
-
 // GetId returns the unique identifier for this auctioneer instance
 func (a *AuctioneerServer) GetId() string {
 	return a.myId
 }
-
 func (a *AuctioneerServer) StopAndWait() {
 	// The AUCTIONEER_CHOSEN_KEY lock will be considered expired by other auctioneers after
 	// auctioneerLivenessTimeout. This timeout gives time for existing messages to  become
@@ -711,3 +1058,29 @@ func (a *AuctioneerServer) StopAndWait() {
 	a.StopWaiter.StopAndWait()
 	a.consumer.StopAndWait()
 }
+// Copyright 2024-2025, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+// domainValue holds the Keccak256 hash of the string "TIMEBOOST_BID".
+// It is intended to be immutable after initialization.
+var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
+	Enable:                    true,
+	RedisURL:                  "",
+	ConsumerConfig:            pubsub.DefaultConsumerConfig,
+	StreamTimeout:             10 * time.Minute,
+	AuctionResolutionWaitTime: 2 * time.Second,
+	S3Storage:                 DefaultS3StorageServiceConfig,
+}
+var TestAuctioneerServerConfig = AuctioneerServerConfig{
+	Enable:                    true,
+	RedisURL:                  "",
+	ConsumerConfig:            pubsub.TestConsumerConfig,
+	StreamTimeout:             time.Minute,
+	AuctionResolutionWaitTime: 2 * time.Second,
+}
+// AuctioneerServer is a struct that represents an autonomous auctioneer.
+// It is responsible for receiving bids, validating them, and resolving auctions.
+// NewAuctioneerServer creates a new autonomous auctioneer struct.
+// Resolves the auction by calling the smart contract with the top two bids.
+// retryUntil retries a given operation defined by the closure until the specified duration
+// has passed or the operation succeeds. It waits for the specified retry interval between
+// attempts. The function returns an error if all attempts fail.

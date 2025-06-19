@@ -63,8 +63,11 @@ func checkMetadataBackendChainId(ctx context.Context, client *rpcclient.RpcClien
 }
 
 // BlockMetadataFetcher looks for missing blockMetadata of block numbers starting from trackBlockMetadataFrom (config option of tx streamer)
+
 // and adds them to arbDB. BlockMetadata is fetched by querying the source's bulk blockMetadata fetching API "arb_getRawBlockMetadata".
+
 // Missing trackers are removed after their corresponding blockMetadata are added to the arbDB
+
 type BlockMetadataFetcher struct {
 	stopwaiter.StopWaiter
 	config                 BlockMetadataFetcherConfig
@@ -73,7 +76,6 @@ type BlockMetadataFetcher struct {
 	exec                   execution.ExecutionClient
 	trackBlockMetadataFrom arbutil.MessageIndex
 	expectedChainId        uint64
-
 	chainIdChecked      bool
 	currentSyncInterval time.Duration
 	lastRequestTime     time.Time
@@ -255,4 +257,11 @@ func (b *BlockMetadataFetcher) Start(ctx context.Context) {
 func (b *BlockMetadataFetcher) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.client.Close()
+}
+
+var DefaultBlockMetadataFetcherConfig = BlockMetadataFetcherConfig{
+	Enable:         false,
+	Source:         rpcclient.DefaultClientConfig,
+	SyncInterval:   time.Minute * 5,
+	APIBlocksLimit: 100,
 }

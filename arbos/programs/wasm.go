@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/arbos/burn"
 	"github.com/offchainlabs/nitro/arbos/util"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -22,13 +23,13 @@ import (
 
 type addr = common.Address
 type hash = common.Hash
-
-// rust types
 type u8 = uint8
 type u16 = uint16
 type u32 = uint32
 type u64 = uint64
 type usize = uintptr
+
+// rust types
 
 // opaque types
 type rustVec byte

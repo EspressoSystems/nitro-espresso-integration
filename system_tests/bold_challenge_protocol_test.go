@@ -1,10 +1,7 @@
 // Copyright 2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 //go:build challengetest && !race
-
 package arbtest
-
 import (
 	"bytes"
 	"context"
@@ -60,11 +57,9 @@ import (
 	"github.com/offchainlabs/nitro/validator/server_common"
 	"github.com/offchainlabs/nitro/validator/valnode"
 )
-
 func TestChallengeProtocolBOLDReadInboxChallenge(t *testing.T) {
 	testChallengeProtocolBOLD(t)
 }
-
 func TestChallengeProtocolBOLDStartStepChallenge(t *testing.T) {
 	opts := []server_arb.SpawnerOption{
 		server_arb.WithWrapper(func(inner server_arb.MachineInterface) server_arb.MachineInterface {
@@ -76,7 +71,6 @@ func TestChallengeProtocolBOLDStartStepChallenge(t *testing.T) {
 	}
 	testChallengeProtocolBOLD(t, opts...)
 }
-
 func testChallengeProtocolBOLD(t *testing.T, spawnerOpts ...server_arb.SpawnerOption) {
 	goodDir, err := os.MkdirTemp("", "good_*")
 	Require(t, err)
@@ -496,7 +490,6 @@ func testChallengeProtocolBOLD(t *testing.T, spawnerOpts ...server_arb.SpawnerOp
 		}
 	}
 }
-
 // Every 3 seconds, send an L1 transaction to keep the chain moving.
 func keepChainMoving(t *testing.T, ctx context.Context, l1Info *BlockchainTestInfo, client *ethclient.Client) {
 	delay := time.Second * 3
@@ -522,7 +515,6 @@ func keepChainMoving(t *testing.T, ctx context.Context, l1Info *BlockchainTestIn
 		}
 	}
 }
-
 func createTestNodeOnL1ForBoldProtocol(
 	t *testing.T,
 	ctx context.Context,
@@ -669,7 +661,6 @@ func createTestNodeOnL1ForBoldProtocol(
 
 	return
 }
-
 func deployContractsOnly(
 	t *testing.T,
 	ctx context.Context,
@@ -778,7 +769,6 @@ func deployContractsOnly(
 		UpgradeExecutor:        addresses.UpgradeExecutor,
 	}
 }
-
 func create2ndNodeWithConfigForBoldProtocol(
 	t *testing.T,
 	ctx context.Context,
@@ -879,7 +869,6 @@ func create2ndNodeWithConfigForBoldProtocol(
 
 	return l2client, l2node, assertionChain
 }
-
 func makeBoldBatch(
 	t *testing.T,
 	l2Node *arbnode.Node,
@@ -926,7 +915,6 @@ func makeBoldBatch(
 	log.Info("Batch metadata", "md", batchMetaData)
 	Require(t, err, "failed to get batch metadata after adding batch:")
 }
-
 func writeTxToBatchBold(writer io.Writer, tx *types.Transaction) error {
 	txData, err := tx.MarshalBinary()
 	if err != nil {
@@ -939,3 +927,7 @@ func writeTxToBatchBold(writer io.Writer, tx *types.Transaction) error {
 	err = rlp.Encode(writer, segment)
 	return err
 }
+// Copyright 2023, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+//go:build challengetest && !race
+// Every 3 seconds, send an L1 transaction to keep the chain moving.

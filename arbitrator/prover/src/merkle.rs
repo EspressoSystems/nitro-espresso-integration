@@ -1,6 +1,5 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 use arbutil::Bytes32;
 use bitvec::prelude::*;
 use core::panic;
@@ -11,10 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::cmp::max;
 use std::convert::{TryFrom, TryInto};
-
 #[cfg(feature = "rayon")]
 use rayon::prelude::*;
-
 mod zerohashes;
 use self::zerohashes::{EMPTY_HASH, ZERO_HASHES};
 #[cfg(feature = "counters")]
@@ -24,7 +21,6 @@ use {
     std::collections::HashMap,
     std::sync::atomic::{AtomicUsize, Ordering},
 };
-
 #[cfg(feature = "counters")]
 fn create_counters_hashmap() -> HashMap<MerkleType, AtomicUsize> {
     let mut map = HashMap::new();
@@ -33,7 +29,6 @@ fn create_counters_hashmap() -> HashMap<MerkleType, AtomicUsize> {
     }
     map
 }
-
 #[cfg(feature = "counters")]
 lazy_static! {
     static ref NEW_COUNTERS: HashMap<MerkleType, AtomicUsize> = create_counters_hashmap();
@@ -41,7 +36,6 @@ lazy_static! {
     static ref SET_COUNTERS: HashMap<MerkleType, AtomicUsize> = create_counters_hashmap();
     static ref RESIZE_COUNTERS: HashMap<MerkleType, AtomicUsize> = create_counters_hashmap();
 }
-
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize, Sequence)]
 pub enum MerkleType {
     Empty,
@@ -53,13 +47,11 @@ pub enum MerkleType {
     TableElement,
     Module,
 }
-
 impl Default for MerkleType {
     fn default() -> Self {
         Self::Empty
     }
 }
-
 #[cfg(feature = "counters")]
 pub fn print_counters() {
     for ty in all::<MerkleType>() {
@@ -76,7 +68,6 @@ pub fn print_counters() {
         );
     }
 }
-
 #[cfg(feature = "counters")]
 pub fn reset_counters() {
     for ty in all::<MerkleType>() {
@@ -89,7 +80,6 @@ pub fn reset_counters() {
         RESIZE_COUNTERS[&ty].store(0, Ordering::Relaxed);
     }
 }
-
 impl MerkleType {
     pub fn get_prefix(self) -> &'static str {
         match self {
@@ -104,28 +94,41 @@ impl MerkleType {
         }
     }
 }
-
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Layers {
     data: Vec<Vec<Bytes32>>,
     dirty_leaf_parents: BitVec,
 }
-
 /// A Merkle tree with a fixed number of layers
+
 ///
+
 /// https://en.wikipedia.org/wiki/Merkle_tree
+
 ///
+
 /// Each instance's leaves contain the hashes of a specific [MerkleType].
+
 /// The tree does not grow in height, but it can be initialized with fewer
+
 /// leaves than the number that could be contained in its layers.
+
 ///
+
 /// When initialized with [Merkle::new], the tree has the minimum depth
+
 /// necessary to hold all the leaves. (e.g. 5 leaves -> 4 layers.)
+
 ///
+
 /// It can be over-provisioned using the [Merkle::new_advanced] method
+
 /// and passing a minimum depth.
+
 ///
+
 /// This structure does not contain the data itself, only the hashes.
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Merkle {
     ty: MerkleType,
@@ -133,7 +136,6 @@ pub struct Merkle {
     layers: Mutex<Layers>,
     min_depth: usize,
 }
-
 fn hash_node(ty: MerkleType, a: impl AsRef<[u8]>, b: impl AsRef<[u8]>) -> Bytes32 {
     let mut h = Keccak256::new();
     h.update(ty.get_prefix());
@@ -141,7 +143,6 @@ fn hash_node(ty: MerkleType, a: impl AsRef<[u8]>, b: impl AsRef<[u8]>) -> Bytes3
     h.update(b);
     h.finalize().into()
 }
-
 const fn empty_hash_at(ty: MerkleType, layer_i: usize) -> &'static Bytes32 {
     match ty {
         MerkleType::Empty => EMPTY_HASH,
@@ -154,7 +155,6 @@ const fn empty_hash_at(ty: MerkleType, layer_i: usize) -> &'static Bytes32 {
         MerkleType::Module => &ZERO_HASHES[6][layer_i],
     }
 }
-
 #[inline]
 #[cfg(feature = "rayon")]
 fn new_layer(ty: MerkleType, layer: &[Bytes32], empty_hash: &'static Bytes32) -> Vec<Bytes32> {
@@ -165,9 +165,6 @@ fn new_layer(ty: MerkleType, layer: &[Bytes32], empty_hash: &'static Bytes32) ->
         .collect_into_vec(&mut new_layer);
     new_layer
 }
-
-#[inline]
-#[cfg(not(feature = "rayon"))]
 fn new_layer(ty: MerkleType, layer: &[Bytes32], empty_hash: &'static Bytes32) -> Vec<Bytes32> {
     let new_layer = layer
         .chunks(2)
@@ -175,6 +172,29 @@ fn new_layer(ty: MerkleType, layer: &[Bytes32], empty_hash: &'static Bytes32) ->
         .collect();
     new_layer
 }
+#[inline]
+// Copyright 2021-2023, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+#[cfg(feature = "rayon")]
+#[cfg(feature = "counters")]
+#[cfg(feature = "counters")]
+#[cfg(feature = "counters")]
+#[cfg(feature = "counters")]
+#[cfg(feature = "counters")]
+///
+
+///
+
+///
+
+///
+
+///
+
+#[inline]
+#[cfg(feature = "rayon")]
+#[inline]
+#[cfg(not(feature = "rayon"))]
 
 impl Clone for Merkle {
     fn clone(&self) -> Self {

@@ -55,10 +55,13 @@ import (
 	"github.com/offchainlabs/bold/solgen/go/rollupgen"
 	"github.com/offchainlabs/bold/testing/setup"
 	butil "github.com/offchainlabs/bold/util"
+	boldMocksgen "github.com/offchainlabs/bold/solgen/go/mocksgen"
+
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/util"
+	"github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/blsSignatures"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
@@ -68,8 +71,10 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
 	"github.com/offchainlabs/nitro/execution/gethexec"
+	"github.com/offchainlabs/nitro/das"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -257,6 +262,8 @@ type NodeBuilder struct {
 	L1 *TestClient
 	L2 *TestClient
 	L3 *TestClient
+
+	useL1StackConfig bool // don't overwrite the L1 stack config when building
 }
 
 type NitroConfig struct {
@@ -377,14 +384,18 @@ func (b *NodeBuilder) WithStylusLongTermCache(enabled bool) *NodeBuilder {
 }
 
 // WithDelayBuffer sets the delay-buffer threshold, which is the number of blocks the batch-poster
+
 // is allowed to delay a batch with a delayed message.
+
 // Setting the threshold to zero disabled the delay buffer (default behaviour).
+
 func (b *NodeBuilder) WithDelayBuffer(threshold uint64) *NodeBuilder {
 	b.delayBufferThreshold = threshold
 	return b
 }
 
 // WithL1ClientWrapper creates a ClientWrapper for the L1 RPC client before passing it to the L2 node.
+
 func (b *NodeBuilder) WithL1ClientWrapper(t *testing.T) *NodeBuilder {
 	if !b.withL1 {
 		Fatal(t, "WithL1ClientWrapper only works when L1 is enabled")
@@ -396,6 +407,7 @@ func (b *NodeBuilder) WithL1ClientWrapper(t *testing.T) *NodeBuilder {
 func (b *NodeBuilder) Build(t *testing.T) func() {
 	b.CheckConfig(t)
 	if b.withL1 {
+		log.Info("Building L1 node")
 		b.BuildL1(t)
 		return b.BuildL2OnL1(t)
 	}
@@ -429,7 +441,13 @@ func (b *NodeBuilder) CheckConfig(t *testing.T) {
 
 func (b *NodeBuilder) BuildL1(t *testing.T) {
 	b.L1 = NewTestClient(b.ctx)
-	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack, b.L1.ClientWrapper = createTestL1BlockChain(t, b.L1Info, b.withL1ClientWrapper)
+
+	var l1StackConfig *node.Config
+	if b.useL1StackConfig {
+		l1StackConfig = b.l1StackConfig
+	}
+
+	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack, b.L1.ClientWrapper = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, b.withL1ClientWrapper)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	b.addresses, b.initMessage = deployOnParentChain(
@@ -622,10 +640,11 @@ func (b *NodeBuilder) BuildL2OnL1(t *testing.T) func() {
 }
 
 // L2 -Only. Enough for tests that needs no interface to L1
+
 // Requires precompiles.AllowDebugPrecompiles = true
+
 func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	b.L2 = NewTestClient(b.ctx)
-
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
 	var chainDb ethdb.Database
@@ -678,7 +697,51 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	return func() { b.L2.cleanup() }
 }
 
+func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder) (func(), error) {
+	b.L2 = NewTestClient(b.ctx)
+	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
+
+	l1Client := existing.L1.Client
+	deployInfo := existing.addresses
+
+	var chainDb ethdb.Database
+	var arbDb ethdb.Database
+	var blockchain *core.BlockChain
+	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
+		t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
+
+	Require(t, b.execConfig.Validate())
+	execConfig := b.execConfig
+	execConfigFetcher := func() *gethexec.Config { return execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher)
+	if err != nil {
+		return nil, err
+	}
+
+	fatalErrChan := make(chan error, 10)
+	b.L2.ConsensusNode, err = arbnode.CreateNode(
+		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = b.L2.ConsensusNode.Start(b.ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	b.L2.Client = ClientForStack(t, b.L2.Stack)
+
+	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
+
+	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
+	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	return func() { b.L2.cleanup() }, nil
+}
+
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
+
 func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
@@ -862,6 +925,7 @@ func TransferBalanceTo(
 }
 
 // if l2client is not nil - will wait until balance appears in l2
+
 func BridgeBalance(
 	t *testing.T, account string, amount *big.Int, l1info info, l2info info, l1client *ethclient.Client, l2client *ethclient.Client, ctx context.Context,
 ) (*types.Transaction, *types.Receipt) {
@@ -920,6 +984,7 @@ func BridgeBalance(
 }
 
 // AdvanceL1 sends dummy transactions to L1 to create blocks.
+
 func AdvanceL1(
 	t *testing.T,
 	ctx context.Context,
@@ -1218,11 +1283,14 @@ func AddValNode(t *testing.T, ctx context.Context, nodeConfig *arbnode.Config, u
 	configByValidationNode(nodeConfig, valStack)
 }
 
-func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
+func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackConfig *node.Config) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
 	if l1info == nil {
 		l1info = NewL1TestInfo(t)
 	}
-	stackConfig := testhelpers.CreateStackConfigForTest(t.TempDir())
+
+	if stackConfig == nil {
+		stackConfig = testhelpers.CreateStackConfigForTest(t.TempDir())
+	}
 	l1info.GenerateAccount("Faucet")
 
 	chainConfig := chaininfo.ArbitrumDevTestChainConfig()
@@ -1244,7 +1312,6 @@ func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (
 	nodeConf.Miner.Etherbase = l1info.GetAddress("Faucet")
 	nodeConf.Miner.PendingFeeRecipient = l1info.GetAddress("Faucet")
 	nodeConf.SyncMode = downloader.FullSync
-
 	l1backend, err := eth.New(stack, &nodeConf)
 	Require(t, err)
 
@@ -1340,9 +1407,15 @@ func deployOnParentChain(
 
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
+	//  Deploy a espressoTEEVerifierMock contract
+	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+	Require(t, err)
+
+	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+	Require(t, err)
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
-		stakeToken, tx, _, err := localgen.DeployTestWETH9(
+		stakeToken, tx, _, err := boldMocksgen.DeployTestWETH9(
 			&parentChainTransactionOpts,
 			parentChainReader.Client(),
 			"Weth",
@@ -1389,8 +1462,10 @@ func deployOnParentChain(
 			NumBigStepLevel:              3,
 			ChallengeGracePeriodBlocks:   3,
 			BufferConfig:                 bufferConfig,
+			EspressoTEEVerifier:          espressoTEEVerifierAddress,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
+		log.Info("Deploying Full rollup stack")
 		boldAddresses, err := setup.DeployFullRollupStack(
 			ctx,
 			wrappedClient,
@@ -1400,7 +1475,6 @@ func deployOnParentChain(
 			setup.RollupStackConfig{
 				UseMockBridge:          false,
 				UseMockOneStepProver:   false,
-				UseBlobs:               chainSupportsBlobs,
 				MinimumAssertionPeriod: 0,
 			},
 		)
@@ -1418,24 +1492,32 @@ func deployOnParentChain(
 			DeployedAt:             boldAddresses.DeployedAt,
 		}
 	} else {
-		addresses, err = deploy.DeployLegacyOnParentChain(
+
+		//  Deploy a espressoTEEVerifierMock contract
+		espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+		Require(t, err)
+		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+		Require(t, err)
+
+		addresses, err = deploy.DeployOnParentChain(
 			ctx,
 			parentChainReader,
 			&parentChainTransactionOpts,
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}),
+			arbnode.GenerateRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
 		)
+		Require(t, err)
 	}
-	Require(t, err)
 	parentChainInfo.SetContract("Bridge", addresses.Bridge)
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
+	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }
@@ -1562,7 +1644,7 @@ func Create2ndNodeWithConfig(
 
 	chainData, err := chainStack.OpenDatabaseWithExtraOptions("l2chaindata", 0, 0, "l2chaindata/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
 	Require(t, err)
-	wasmData, err := chainStack.OpenDatabaseWithExtraOptions("wasm", 0, 0, "wasm/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("wasm"))
+	wasmData, err := chainStack.OpenDatabaseWithExtraOptions("wasm", 0, 0, "wasm", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("wasm"))
 	Require(t, err)
 	chainDb := rawdb.WrapDatabaseWithWasm(chainData, wasmData, wasmCacheTag, execConfig.StylusTarget.WasmTargets())
 
@@ -1880,8 +1962,11 @@ func logParser[T any](t *testing.T, source string, name string) func(*types.Log)
 }
 
 // recordBlock writes a json file with all of the data needed to validate a block.
+
 //
+
 // This can be used as an input to the arbitrator prover to validate a block.
+
 func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...ethdb.WasmTarget) {
 	t.Helper()
 	if !*testflag.RecordBlockInputsEnable {
@@ -1920,6 +2005,38 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...et
 		Fatal(t, "failed to write validation inputs", block, err)
 	}
 }
+
+// WithDelayBuffer sets the delay-buffer threshold, which is the number of blocks the batch-poster
+
+// is allowed to delay a batch with a delayed message.
+
+// Setting the threshold to zero disabled the delay buffer (default behaviour).
+
+// nolint:unused
+
+func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node) {
+	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()))
+}
+
+func createL2BlockChain(
+	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, execConfig *gethexec.Config, wasmCacheTag uint32,
+) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
+	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, execConfig, wasmCacheTag)
+}
+
+var (
+	recordBlockInputsEnable                       = flag.Bool("recordBlockInputs.enable", true, "Whether to record block inputs as a json file")
+	recordBlockInputsWithSlug                     = flag.String("recordBlockInputs.WithSlug", "", "Slug directory for validationInputsWriter")
+	recordBlockInputsWithBaseDir                  = flag.String("recordBlockInputs.WithBaseDir", "", "Base directory for validationInputsWriter")
+	recordBlockInputsWithTimestampDirEnabled      = flag.Bool("recordBlockInputs.WithTimestampDirEnabled", true, "Whether to add timestamp directory while recording block inputs")
+	recordBlockInputsWithBlockIdInFileNameEnabled = flag.Bool("recordBlockInputs.WithBlockIdInFileNameEnabled", true, "Whether to record block inputs using test specific block_id")
+)
+
+// recordBlock writes a json file with all of the data needed to validate a block.
+
+//
+
+// This can be used as an input to the arbitrator prover to validate a block.
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
 	baseDir := t.TempDir()

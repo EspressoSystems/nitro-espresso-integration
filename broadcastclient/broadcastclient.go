@@ -362,8 +362,13 @@ func (bc *BroadcastClient) connect(ctx context.Context, nextSeqNum arbutil.Messa
 
 	bc.connMutex.Lock()
 	bc.conn = conn
+<<<<<<< HEAD
 	bc.compression = compressionNegotiated
 	bc.firstReconnectAttempt = true
+||||||| d81324dae
+=======
+	bc.compression = compressionNegotiated
+>>>>>>> integration
 	bc.connMutex.Unlock()
 	log.Info("Feed connected", "feedServerVersion", feedServerVersion, "chainId", chainId, "requestedSeqNum", nextSeqNum)
 

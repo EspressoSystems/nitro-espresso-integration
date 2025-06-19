@@ -132,6 +132,16 @@ COPY brotli brotli
 RUN apt-get update && apt-get install -y cmake
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 
+RUN apt-get update && \
+    apt-get install -y \
+    libssl-dev \
+    pkg-config \
+    curl \
+    perl \
+    perl-modules-5.36 \
+    libfindbin-libs-perl
+
+
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
 
@@ -240,7 +250,7 @@ RUN ./download-machine.sh consensus-v32 0x184884e1eb9fefdc158f6c8ac912bb183bf3cf
 #RUN ./download-machine.sh consensus-v40-rc.2 0xa8206be13d53e456c7ab061d94bab5b229d674ac57ffe7281216479a8820fcc0
 RUN ./download-machine.sh consensus-v40 0xdb698a2576298f25448bc092e52cf13b1e24141c997135d70f217d674bbeb69a
 
-FROM golang:1.23.1-bookworm AS node-builder
+FROM golang:1.23.4-bookworm AS node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""
@@ -248,9 +258,17 @@ ARG modified=""
 ENV NITRO_VERSION=$version
 ENV NITRO_DATETIME=$datetime
 ENV NITRO_MODIFIED=$modified
+
+# Install Rust and build dependencies
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+RUN apt-get update && \
+    apt-get install -y wabt pkg-config libssl-dev && \
+    apt-get clean
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y wabt
+COPY scripts/prepare-espresso-crypto-helper scripts/
 COPY go.mod go.sum ./
 COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
 COPY fastcache/go.mod fastcache/go.sum fastcache/
@@ -284,6 +302,7 @@ ENTRYPOINT [ "/usr/local/bin/fuzz.bash", "FuzzStateTransition", "--binary-path",
 
 FROM debian:bookworm-slim AS nitro-node-slim
 WORKDIR /home/user
+RUN ldconfig
 COPY --from=node-builder /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/relay /usr/local/bin/
 COPY --from=node-builder /workspace/target/bin/nitro-val /usr/local/bin/

@@ -30,8 +30,12 @@ func main() {
 }
 
 // Checks metrics and PProf flag, runs them if enabled.
+
 // Note: they are separate so one can enable/disable them as they wish, the only
+
 // requirement is that they can't run on the same address and port.
+
+<<<<<<< HEAD
 func startMetrics(cfg *AutonomousAuctioneerConfig) error {
 	mAddr := fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port)
 	pAddr := fmt.Sprintf("%v:%v", cfg.PprofCfg.Addr, cfg.PprofCfg.Port)
@@ -49,6 +53,27 @@ func startMetrics(cfg *AutonomousAuctioneerConfig) error {
 	}
 	return nil
 }
+||||||| d81324dae
+=======
+func startMetrics(cfg *AutonomousAuctioneerConfig) error {
+	mAddr := fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port)
+	pAddr := fmt.Sprintf("%v:%v", cfg.PprofCfg.Addr, cfg.PprofCfg.Port)
+	if cfg.Metrics && !metrics.Enabled {
+		return fmt.Errorf("metrics must be enabled via command line by adding --metrics, json config has no effect")
+	}
+	if cfg.Metrics && cfg.PProf && mAddr == pAddr {
+		return fmt.Errorf("metrics and pprof cannot be enabled on the same address:port: %s", mAddr)
+	}
+	if cfg.Metrics {
+		go metrics.CollectProcessMetrics(time.Second)
+		exp.Setup(fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port))
+	}
+	if cfg.PProf {
+		genericconf.StartPprof(pAddr)
+	}
+	return nil
+}
+>>>>>>> integration
 
 func mainImpl() int {
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -219,3 +244,9 @@ func parseAuctioneerArgs(ctx context.Context, args []string) (*AutonomousAuction
 	}
 	return &cfg, nil
 }
+
+// Checks metrics and PProf flag, runs them if enabled.
+
+// Note: they are separate so one can enable/disable them as they wish, the only
+
+// requirement is that they can't run on the same address and port.

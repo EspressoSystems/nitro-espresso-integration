@@ -280,7 +280,6 @@ impl From<GenericBytes20> for Bytes20 {
 #[cfg(test)]
 mod test {
     use super::*;
-
     #[test]
     fn test_bytes32() {
         let b = Bytes32::from(0x12345678u32);
@@ -290,7 +289,6 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_bytes32_from_usize() {
         let val: usize = 0x12345678;
@@ -301,7 +299,6 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_from_str_short() {
         // Short hex string
@@ -312,7 +309,6 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_from_str_very_short() {
         // Short hex string
@@ -323,7 +319,6 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_from_str_no_prefix() {
         // Short hex string
@@ -334,7 +329,6 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_from_str_full() {
         // Full-length hex string
@@ -347,17 +341,22 @@ mod test {
         ];
         assert_eq!(b, Bytes32(expected));
     }
-
     #[test]
     fn test_from_str_invalid_non_hex() {
         let s = "0x123g5678"; // Invalid character 'g'
         assert!(Bytes32::from_str(s).is_err());
     }
-
     #[test]
     fn test_from_str_too_big() {
         let s =
             "0123456789ABCDEF0123456789ABCDEF01234567890123456789ABCDEF01234567890123456789ABCDEF0"; // 65 characters
         assert!(Bytes32::from_str(s).is_err());
     }
+    #[test]
+    #[test]
+    #[test]
+    #[test]
+    #[test]
+    #[test]
+    #[test]
 }

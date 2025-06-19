@@ -134,15 +134,15 @@ impl EvmApi<VecReader> for MockEvmApi {
     /// Simulates a contract call.
     /// Note: this call function is for testing purposes only and deviates from onchain behavior.
     fn contract_call(
-        &mut self,
-        _contract: Bytes20,
-        _calldata: &[u8],
-        _gas_left: Gas,
-        _gas_req: Gas,
-        _value: Bytes32,
-    ) -> (u32, Gas, UserOutcomeKind) {
-        unimplemented!()
-    }
+    &mut self,
+    _contract: Bytes20,
+    _calldata: &[u8],
+    _gas_left: Gas,
+    _gas_req: Gas,
+    _value: Bytes32,
+) -> (u32, Gas, UserOutcomeKind) {
+    unimplemented!()
+}
 
     fn delegate_call(
         &mut self,

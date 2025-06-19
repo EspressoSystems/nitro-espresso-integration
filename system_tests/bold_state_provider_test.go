@@ -1,10 +1,7 @@
 // Copyright 2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 //go:build challengetest && !race
-
 package arbtest
-
 import (
 	"context"
 	"errors"
@@ -41,7 +38,6 @@ import (
 	mockmanager "github.com/offchainlabs/bold/testing/mocks/state-provider"
 	"github.com/offchainlabs/bold/testing/setup"
 )
-
 func TestChallengeProtocolBOLD_Bisections(t *testing.T) {
 	t.Parallel()
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -156,7 +152,6 @@ func TestChallengeProtocolBOLD_Bisections(t *testing.T) {
 		Fatal(t, "wrong commitment")
 	}
 }
-
 func TestChallengeProtocolBOLD_StateProvider(t *testing.T) {
 	t.Parallel()
 	ctx, cancelCtx := context.WithCancel(context.Background())
@@ -345,7 +340,6 @@ func TestChallengeProtocolBOLD_StateProvider(t *testing.T) {
 		}
 	})
 }
-
 func setupBoldStateProvider(t *testing.T, ctx context.Context, blockChallengeHeight uint64) (*arbnode.Node, *BlockchainTestInfo, *BlockchainTestInfo, *node.Node, *ethclient.Client, *bold.BOLDStateProvider, *staker.BlockValidator) {
 	var transferGas = util.NormalizeL2GasForL1GasInitial(800_000, params.GWei) // include room for aggregator L1 costs
 	l2chainConfig := chaininfo.ArbitrumDevTestChainConfig()
@@ -426,3 +420,6 @@ func setupBoldStateProvider(t *testing.T, ctx context.Context, blockChallengeHei
 	Require(t, l2node.Start(ctx))
 	return l2node, l1info, l2info, l1stack, l1client, stateManager, blockValidator
 }
+// Copyright 2023, Offchain Labs, Inc.
+// For license information, see https://github.com/offchainlabs/bold/blob/main/LICENSE
+//go:build challengetest && !race

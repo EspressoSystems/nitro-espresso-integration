@@ -87,9 +87,19 @@ func main() {
 		log.Fatal(err)
 	}
 
+<<<<<<< HEAD
 	filePaths = append(filePaths, filePathsInternal...)
+||||||| d81324dae
+=======
+	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "espresso-tee-contracts", "*", "*.sol", "*.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
+>>>>>>> integration
+
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
+	filePaths = append(filePaths, filePathsEspressoTeeContracts...)
 
 	modules := make(map[string]*moduleInfo)
 
@@ -108,6 +118,11 @@ func main() {
 		}
 
 		module += "gen"
+
+		if strings.Contains(file, "TEEVerifier") {
+			// override the module name for espresso contracts
+			module = "espressogen"
+		}
 
 		name := file[:len(file)-5]
 

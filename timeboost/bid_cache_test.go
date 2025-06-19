@@ -164,6 +164,7 @@ func BenchmarkBidValidation(b *testing.B) {
 	}
 }
 
+<<<<<<< HEAD
 func setupBidValidator(t testing.TB, ctx context.Context, redisURL string, testSetup *auctionSetup) (*BidValidator, string) {
 	randHttp := getRandomPort(t)
 	stackConf := node.Config{
@@ -206,6 +207,51 @@ func setupBidValidator(t testing.TB, ctx context.Context, redisURL string, testS
 	bidValidator.Start(ctx)
 	return bidValidator, fmt.Sprintf("http://localhost:%d", randHttp)
 }
+||||||| d81324dae
+func setupBidValidator(t testing.TB, ctx context.Context, redisURL string, testSetup *auctionSetup) (*BidValidator, string) 
+=======
+func setupBidValidator(t testing.TB, ctx context.Context, redisURL string, testSetup *auctionSetup) (*BidValidator, string) {
+	randHttp := getRandomPort(t)
+	stackConf := node.Config{
+		DataDir:             "", // ephemeral.
+		HTTPPort:            randHttp,
+		HTTPModules:         []string{AuctioneerNamespace},
+		HTTPHost:            "localhost",
+		HTTPVirtualHosts:    []string{"localhost"},
+		HTTPTimeouts:        rpc.DefaultHTTPTimeouts,
+		WSPort:              getRandomPort(t),
+		WSModules:           []string{AuctioneerNamespace},
+		WSHost:              "localhost",
+		GraphQLVirtualHosts: []string{"localhost"},
+		P2P: p2p.Config{
+			ListenAddr:  "",
+			NoDial:      true,
+			NoDiscovery: true,
+		},
+	}
+	stack, err := node.New(&stackConf)
+	require.NoError(t, err)
+	cfg := &BidValidatorConfig{
+		SequencerEndpoint:      testSetup.endpoint,
+		AuctionContractAddress: testSetup.expressLaneAuctionAddr.Hex(),
+		RedisURL:               redisURL,
+		ProducerConfig:         pubsub.TestProducerConfig,
+	}
+	fetcher := func() *BidValidatorConfig {
+		return cfg
+	}
+	bidValidator, err := NewBidValidator(
+		ctx,
+		stack,
+		fetcher,
+	)
+	require.NoError(t, err)
+	require.NoError(t, bidValidator.Initialize(ctx))
+	require.NoError(t, stack.Start())
+	bidValidator.Start(ctx)
+	return bidValidator, fmt.Sprintf("http://localhost:%d", randHttp)
+}
+>>>>>>> integration
 
 func getRandomPort(t testing.TB) int {
 	listener, err := net.Listen("tcp", "localhost:0")

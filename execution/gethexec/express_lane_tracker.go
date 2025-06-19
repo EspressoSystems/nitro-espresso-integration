@@ -1,8 +1,6 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package gethexec
-
 import (
 	"context"
 	"time"
@@ -21,11 +19,9 @@ import (
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
 type RoundListener interface {
 	NextRound(round uint64, controller common.Address)
 }
-
 // ExpressLaneTracker knows what round it is
 type ExpressLaneTracker struct {
 	stopwaiter.StopWaiter
@@ -41,7 +37,6 @@ type ExpressLaneTracker struct {
 
 	roundControl containers.SyncMap[uint64, common.Address] // thread safe
 }
-
 func NewExpressLaneTracker(
 	roundTimingInfo timeboost.RoundTimingInfo,
 	pollInterval time.Duration,
@@ -60,7 +55,6 @@ func NewExpressLaneTracker(
 		chainConfig:          chainConfig,
 	}
 }
-
 func (t *ExpressLaneTracker) Start(ctxIn context.Context) {
 	t.StopWaiter.Start(ctxIn, t)
 
@@ -164,7 +158,6 @@ func (t *ExpressLaneTracker) Start(ctxIn context.Context) {
 		}
 	})
 }
-
 func (t *ExpressLaneTracker) RoundController(round uint64) (common.Address, error) {
 	controller, ok := t.roundControl.Load(round)
 	if !ok {
@@ -172,7 +165,6 @@ func (t *ExpressLaneTracker) RoundController(round uint64) (common.Address, erro
 	}
 	return controller, nil
 }
-
 // validateExpressLaneTx checks for the correctness of all fields of msg
 func (t *ExpressLaneTracker) ValidateExpressLaneTx(msg *timeboost.ExpressLaneSubmission) error {
 	if msg == nil || msg.Transaction == nil || msg.Signature == nil {
@@ -211,7 +203,10 @@ func (t *ExpressLaneTracker) ValidateExpressLaneTx(msg *timeboost.ExpressLaneSub
 	}
 	return nil
 }
-
 func (t *ExpressLaneTracker) AuctionContractAddr() common.Address {
 	return t.auctionContractAddr
 }
+// Copyright 2024-2025, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE
+// ExpressLaneTracker knows what round it is
+// validateExpressLaneTx checks for the correctness of all fields of msg

@@ -5,11 +5,8 @@ import (
 	"slices"
 	"strings"
 	"time"
-
 	"github.com/spf13/pflag"
-
 	"github.com/ethereum/go-ethereum/log"
-
 	"github.com/offchainlabs/nitro/util"
 )
 
@@ -111,7 +108,7 @@ func (c *InitConfig) Validate() error {
 	if c.Force && c.RecreateMissingStateFrom > 0 {
 		log.Warn("force init enabled, recreate-missing-state-from will have no effect")
 	}
-	if c.Latest != "" && !slices.Contains(acceptedSnapshotKinds, c.Latest) {
+	if c.Latest != "" && !slices.Contains(acceptedSnapshotKinds,c.Latest) {
 		return fmt.Errorf("invalid value for latest option: \"%s\" %s", c.Latest, acceptedSnapshotKindsStr)
 	}
 	if c.Prune != "" && c.PruneThreads <= 0 {

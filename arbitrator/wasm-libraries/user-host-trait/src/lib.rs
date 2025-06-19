@@ -405,13 +405,32 @@ pub trait UserHost<DR: DataReader>: GasMeteredMachine {
         self.pay_for_read(data_len)?;
         self.pay_for_read(data_len)?; // read from geth
 
-        let CallInputs {
-            contract,
-            input,
-            gas_left,
-            gas_req,
-            ..
-        } = self.parse_call_inputs(contract, data, gas, data_len, None)?;
+    /// Performs one of the supported EVM calls.
+    /// Note that `value` must only be [`Some`] for normal calls.
+    fn do_call<F>(
+        &mut self,
+        contract: GuestPtr,
+        calldata: GuestPtr,
+        calldata_len: u32,
+        value: Option<GuestPtr>,
+        gas: u64,
+        return_data_len: GuestPtr,
+        call: F,
+        name: &str,
+    ) -> Result<u8, Self::Err>
+    where
+        F: FnOnce(
+            &mut Self::A,
+            Address,
+            &[u8],
+            u64,
+            u64,
+            Option<Wei>,
+        ) -> (u32, u64, UserOutcomeKind),
+    {
+        self.buy_ink(HOSTIO_INK + 3 * PTR_INK + EVM_API_INK)?;
+        self.pay_for_read(calldata_len)?;
+        self.pay_for_geth_bytes(calldata_len)?;
 
         let (outs_len, gas_cost, status) = self
             .evm_api()

@@ -17,15 +17,28 @@ import (
 
 var ErrBlockMetadataApiBlocksLimitExceeded = errors.New("number of blocks requested for blockMetadata exceeded")
 
+<<<<<<< HEAD
 type BlockMetadataFetcher interface {
 	BlockMetadataAtMessageIndex(ctx context.Context, msgIdx arbutil.MessageIndex) (common.BlockMetadata, error)
 	BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error)
 	MessageIndexToBlockNumber(messageNum arbutil.MessageIndex) uint64
 	SetReorgEventsNotifier(reorgEventsNotifier chan struct{})
 }
+||||||| d81324dae
+type BlockMetadataFetcher 
+=======
+type BlockMetadataFetcher interface {
+	BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error)
+	BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error)
+	MessageIndexToBlockNumber(messageNum arbutil.MessageIndex) uint64
+	SetReorgEventsNotifier(reorgEventsNotifier chan struct{})
+}
+>>>>>>> integration
 
 // BulkBlockMetadataFetcher is the underlying provider of bulk blockMetadata to service arb_getRawBlockMetadata api. Given a starting
+
 // and ending block number, it returns an array of struct (NumberAndBlockMetadata) containing blockMetadata and their corresponding blockNumbers
+
 type BulkBlockMetadataFetcher struct {
 	stopwaiter.StopWaiter
 	bc            *core.BlockChain
@@ -53,7 +66,10 @@ func NewBulkBlockMetadataFetcher(bc *core.BlockChain, fetcher BlockMetadataFetch
 }
 
 // Fetch won't include block numbers for whom consensus (arbDB) doesn't have blockMetadata, it stores recently fetched blockMetadata into an LRU
+
 // which is cleared in the events of reorg in order to provide accurate blockMetadata
+
+<<<<<<< HEAD
 func (b *BulkBlockMetadataFetcher) Fetch(ctx context.Context, fromBlock, toBlock rpc.BlockNumber) ([]NumberAndBlockMetadata, error) {
 	fromBlock, _ = b.bc.ClipToPostNitroGenesis(fromBlock)
 	toBlock, _ = b.bc.ClipToPostNitroGenesis(toBlock)
@@ -98,6 +114,53 @@ func (b *BulkBlockMetadataFetcher) Fetch(ctx context.Context, fromBlock, toBlock
 	}
 	return result, nil
 }
+||||||| d81324dae
+=======
+func (b *BulkBlockMetadataFetcher) Fetch(fromBlock, toBlock rpc.BlockNumber) ([]NumberAndBlockMetadata, error) {
+	fromBlock, _ = b.bc.ClipToPostNitroGenesis(fromBlock)
+	toBlock, _ = b.bc.ClipToPostNitroGenesis(toBlock)
+	// #nosec G115
+	start, err := b.fetcher.BlockNumberToMessageIndex(uint64(fromBlock))
+	if err != nil {
+		return nil, fmt.Errorf("error converting fromBlock blocknumber to message index: %w", err)
+	}
+	// #nosec G115
+	end, err := b.fetcher.BlockNumberToMessageIndex(uint64(toBlock))
+	if err != nil {
+		return nil, fmt.Errorf("error converting toBlock blocknumber to message index: %w", err)
+	}
+	if start > end {
+		return nil, fmt.Errorf("invalid inputs, fromBlock: %d is greater than toBlock: %d", fromBlock, toBlock)
+	}
+	if b.blocksLimit > 0 && end-start+1 > arbutil.MessageIndex(b.blocksLimit) {
+		return nil, fmt.Errorf("%w. Range requested- %d, Limit- %d", ErrBlockMetadataApiBlocksLimitExceeded, end-start+1, b.blocksLimit)
+	}
+	var result []NumberAndBlockMetadata
+	for i := start; i <= end; i++ {
+		var data common.BlockMetadata
+		var found bool
+		if b.cache != nil {
+			data, found = b.cache.Get(i)
+		}
+		if !found {
+			data, err = b.fetcher.BlockMetadataAtCount(i + 1)
+			if err != nil {
+				return nil, err
+			}
+			if data != nil && b.cache != nil {
+				b.cache.Add(i, data)
+			}
+		}
+		if data != nil {
+			result = append(result, NumberAndBlockMetadata{
+				BlockNumber: b.fetcher.MessageIndexToBlockNumber(i),
+				RawMetadata: (hexutil.Bytes)(data),
+			})
+		}
+	}
+	return result, nil
+}
+>>>>>>> integration
 
 func (b *BulkBlockMetadataFetcher) ClearCache(ctx context.Context, ignored struct{}) {
 	b.cache.Clear()

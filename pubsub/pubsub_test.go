@@ -183,6 +183,7 @@ func consume(ctx context.Context, t *testing.T, consumers []*Consumer[testReques
 						continue
 					}
 					gotMessages[idx][res.ID] = res.Value.Request
+<<<<<<< HEAD
 					if res.Value.IsInvalid {
 						errString := fmt.Sprintf("invalid request: %v", res.ID)
 						if err := c.SetError(ctx, res.ID, errString); err != nil {
@@ -196,6 +197,16 @@ func consume(ctx context.Context, t *testing.T, consumers []*Consumer[testReques
 						}
 						wantResponses[idx] = append(wantResponses[idx], resp)
 					}
+||||||| d81324dae
+=======
+					if !res.Value.IsInvalid {
+						resp := fmt.Sprintf("result for: %v", res.ID)
+						if err := c.SetResult(ctx, res.ID, testResponse{Response: resp}); err != nil {
+							t.Errorf("Error setting a result: %v", err)
+						}
+						wantResponses[idx] = append(wantResponses[idx], resp)
+					}
+>>>>>>> integration
 					res.Ack()
 				}
 			})
@@ -300,6 +311,7 @@ func TestRedisProduceComplex(t *testing.T) {
 			}
 
 			time.Sleep(time.Second)
+<<<<<<< HEAD
 			wantResponses, wantErrors := consume(ctx, t, consumers, gotMessages)
 
 			var gotResponses []string
@@ -320,6 +332,31 @@ func TestRedisProduceComplex(t *testing.T) {
 					t.Fatalf("Error awaiting responses from promises %d: %v", i, errIndexes)
 				}
 				gotResponses = append(gotResponses, grs...)
+||||||| d81324dae
+			wantResponses := consume(ctx, t, consumers, gotMessages)
+			gotResponses, errIndexes := awaitResponses(ctx, promises)
+			if len(errIndexes) != 0 && tc.autoRecover {
+				t.Fatalf("Error awaiting responses: %v", errIndexes)
+=======
+			wantResponses := consume(ctx, t, consumers, gotMessages)
+
+			var gotResponses []string
+			for i := 0; i < tc.numProducers; i++ {
+				grs, errIndexes := awaitResponses(ctx, promises[i])
+				if tc.withInvalidEntries {
+					if errIndexes[len(errIndexes)-1]+50 < len(entries[i]) {
+						t.Fatalf("Unexpected number of invalid requests while awaiting responses")
+					}
+					for j, idx := range errIndexes {
+						if idx != j*50 {
+							t.Fatalf("Invalid request' index mismatch want: %d got %d", j*50, idx)
+						}
+					}
+				} else if len(errIndexes) != 0 {
+					t.Fatalf("Error awaiting responses from promises %d: %v", i, errIndexes)
+				}
+				gotResponses = append(gotResponses, grs...)
+>>>>>>> integration
 			}
 
 			for _, c := range consumers {
@@ -349,7 +386,8 @@ func TestRedisProduceComplex(t *testing.T) {
 			if diff := cmp.Diff(wantResp, gotResponses); diff != "" {
 				t.Errorf("Unexpected diff in responses:\n%s\n", diff)
 			}
-
+<<<<<<< HEAD
+		
 			sort.Strings(gotErrors)
 			wantErr := flatten(wantErrors)
 			if diff := cmp.Diff(wantErr, gotErrors); diff != "" {
@@ -361,6 +399,17 @@ func TestRedisProduceComplex(t *testing.T) {
 				if cnt := producers[i].promisesLen(); cnt != 0 {
 					t.Errorf("Producer%d still has %d unfullfilled promises", i, cnt)
 				}
+||||||| d81324dae
+			if cnt := producer.promisesLen(); cnt != 0 {
+				t.Errorf("Producer still has %d unfullfilled promises", cnt)
+=======
+		
+			// Check each producers all promises were responded to
+			for i := 0; i < tc.numProducers; i++ {
+				if cnt := producers[i].promisesLen(); cnt != 0 {
+					t.Errorf("Producer%d still has %d unfullfilled promises", i, cnt)
+				}
+>>>>>>> integration
 			}
 
 			// Trigger a trim

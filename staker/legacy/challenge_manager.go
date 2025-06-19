@@ -132,8 +132,20 @@ func NewChallengeManager(
 	backend, err := NewBlockChallengeBackend(
 		parsedLog,
 		challengeInfo.MaxInboxMessages,
+<<<<<<< HEAD
 		inboxStreamer,
+||||||| d81324dae
+		val.streamer,
+=======
+		val.InboxStreamer(),
+>>>>>>> integration
+<<<<<<< HEAD
 		inboxTracker,
+||||||| d81324dae
+		val.inboxTracker,
+=======
+		val.InboxTracker(),
+>>>>>>> integration
 	)
 	if err != nil {
 		return nil, fmt.Errorf("error creating block challenge backend for challenge %v: %w", challengeIndex, err)

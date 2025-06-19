@@ -1,8 +1,6 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbtest
-
 import (
 	"context"
 	"fmt"
@@ -27,7 +25,6 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 )
-
 func TestPurePrecompileMethodCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -60,7 +57,6 @@ func TestPurePrecompileMethodCalls(t *testing.T) {
 		Fatal(t, "Expected 0 storage gas available, got", storageGasAvailable)
 	}
 }
-
 func TestViewLogReverts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -77,7 +73,6 @@ func TestViewLogReverts(t *testing.T) {
 		Fatal(t, "unexpected success")
 	}
 }
-
 func TestArbDebugPanic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -99,7 +94,6 @@ func TestArbDebugPanic(t *testing.T) {
 		Fatal(t, "expected method handler to crash")
 	}
 }
-
 func TestArbDebugLegacyError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -118,7 +112,6 @@ func TestArbDebugLegacyError(t *testing.T) {
 		Fatal(t, "unexpected success")
 	}
 }
-
 func TestCustomSolidityErrors(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -201,7 +194,6 @@ func TestCustomSolidityErrors(t *testing.T) {
 		"arbosActs.BatchPostingReport",
 	)
 }
-
 func TestPrecompileErrorGasLeft(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -237,7 +229,6 @@ func TestPrecompileErrorGasLeft(t *testing.T) {
 	Require(t, err)
 	assertNotAllGasConsumed(common.HexToAddress("0xff"), arbDebug.Methods["legacyError"].ID)
 }
-
 func setupArbOwnerAndArbGasInfo(
 	t *testing.T,
 ) (
@@ -266,7 +257,6 @@ func setupArbOwnerAndArbGasInfo(
 
 	return builder, cleanup, auth, arbOwner, arbGasInfo
 }
-
 func TestL1BaseFeeEstimateInertia(t *testing.T) {
 	t.Parallel()
 
@@ -285,7 +275,6 @@ func TestL1BaseFeeEstimateInertia(t *testing.T) {
 		Fatal(t, "expected inertia to be", inertia, "got", arbGasInfoInertia)
 	}
 }
-
 // Similar to TestL1BaseFeeEstimateInertia, but now using a different setter from ArbOwner
 func TestL1PricingInertia(t *testing.T) {
 	t.Parallel()
@@ -305,7 +294,6 @@ func TestL1PricingInertia(t *testing.T) {
 		Fatal(t, "expected inertia to be", inertia, "got", arbGasInfoInertia)
 	}
 }
-
 func TestL1PricingRewardRate(t *testing.T) {
 	t.Parallel()
 
@@ -324,7 +312,6 @@ func TestL1PricingRewardRate(t *testing.T) {
 		Fatal(t, "expected per unit reward to be", perUnitReward, "got", arbGasInfoPerUnitReward)
 	}
 }
-
 func TestL1PricingRewardRecipient(t *testing.T) {
 	t.Parallel()
 
@@ -343,7 +330,6 @@ func TestL1PricingRewardRecipient(t *testing.T) {
 		Fatal(t, "expected reward recipient to be", rewardRecipient, "got", arbGasInfoRewardRecipient)
 	}
 }
-
 func TestL2GasPricingInertia(t *testing.T) {
 	t.Parallel()
 
@@ -362,7 +348,6 @@ func TestL2GasPricingInertia(t *testing.T) {
 		Fatal(t, "expected inertia to be", inertia, "got", arbGasInfoInertia)
 	}
 }
-
 func TestL2GasBacklogTolerance(t *testing.T) {
 	t.Parallel()
 
@@ -381,7 +366,6 @@ func TestL2GasBacklogTolerance(t *testing.T) {
 		Fatal(t, "expected gas tolerance to be", gasTolerance, "got", arbGasInfoGasTolerance)
 	}
 }
-
 func TestPerBatchGasCharge(t *testing.T) {
 	t.Parallel()
 
@@ -400,7 +384,6 @@ func TestPerBatchGasCharge(t *testing.T) {
 		Fatal(t, "expected per batch gas charge to be", perBatchGasCharge, "got", arbGasInfoPerBatchGasCharge)
 	}
 }
-
 func TestL1PricingEquilibrationUnits(t *testing.T) {
 	t.Parallel()
 
@@ -419,7 +402,6 @@ func TestL1PricingEquilibrationUnits(t *testing.T) {
 		Fatal(t, "expected equilibration units to be", equilUnits, "got", arbGasInfoEquilUnits)
 	}
 }
-
 func TestGasAccountingParams(t *testing.T) {
 	t.Parallel()
 
@@ -452,7 +434,6 @@ func TestGasAccountingParams(t *testing.T) {
 		Fatal(t, "expected tx gas limit to be", txGasLimit, "got", arbGasInfoTxGasLimit)
 	}
 }
-
 func TestCurrentTxL1GasFees(t *testing.T) {
 	t.Parallel()
 
@@ -475,7 +456,6 @@ func TestCurrentTxL1GasFees(t *testing.T) {
 		Fatal(t, "expected currTxL1GasFees to be greater than 0, got", currTxL1GasFees)
 	}
 }
-
 func TestArbNativeTokenManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -710,7 +690,6 @@ func TestArbNativeTokenManager(t *testing.T) {
 		t.Fatal("expected sending L2 to L1 value to succeed")
 	}
 }
-
 func TestNativeTokenManagementDisabledByDefault(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -821,7 +800,6 @@ func TestNativeTokenManagementDisabledByDefault(t *testing.T) {
 		t.Error("expected enabling native token management to fail")
 	}
 }
-
 func TestNativeTokenManagementNotAvailableBeforeArbos41(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -858,7 +836,6 @@ func TestNativeTokenManagementNotAvailableBeforeArbos41(t *testing.T) {
 		t.Fatal("expected balance to be the same before and after minting")
 	}
 }
-
 func TestGetBrotliCompressionLevel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -891,7 +868,6 @@ func TestGetBrotliCompressionLevel(t *testing.T) {
 		Fatal(t, "expected brotli compression level to be", brotliCompressionLevel, "got", retrievedBrotliCompressionLevel)
 	}
 }
-
 func TestArbStatistics(t *testing.T) {
 	t.Parallel()
 
@@ -916,7 +892,6 @@ func TestArbStatistics(t *testing.T) {
 		Fatal(t, "expected block number to be", expectedBlockNum, "got", blockNum)
 	}
 }
-
 func TestArbosFeatures(t *testing.T) {
 	t.Parallel()
 
@@ -956,7 +931,6 @@ func TestArbosFeatures(t *testing.T) {
 		Fatal(t, "expected calldata price increase to be enabled")
 	}
 }
-
 func TestArbFunctionTable(t *testing.T) {
 	t.Parallel()
 
@@ -992,7 +966,6 @@ func TestArbFunctionTable(t *testing.T) {
 		t.Fatal("Should error")
 	}
 }
-
 func TestArbAggregatorBaseFee(t *testing.T) {
 	t.Parallel()
 
@@ -1020,7 +993,6 @@ func TestArbAggregatorBaseFee(t *testing.T) {
 		Fatal(t, "expected fee to be 0, got", fee)
 	}
 }
-
 func TestFeeAccounts(t *testing.T) {
 	t.Parallel()
 
@@ -1062,7 +1034,6 @@ func TestFeeAccounts(t *testing.T) {
 		Fatal(t, "expected fee account to be", addr, "got", feeAccount)
 	}
 }
-
 func TestChainOwners(t *testing.T) {
 	t.Parallel()
 
@@ -1137,7 +1108,6 @@ func TestChainOwners(t *testing.T) {
 		Fatal(t, "expected rectify chain owner to revert since it is already an owner")
 	}
 }
-
 func TestArbAggregatorBatchPosters(t *testing.T) {
 	t.Parallel()
 
@@ -1186,7 +1156,6 @@ func TestArbAggregatorBatchPosters(t *testing.T) {
 		Fatal(t, "expected addr to be a batch poster")
 	}
 }
-
 func TestArbAggregatorGetPreferredAggregator(t *testing.T) {
 	t.Parallel()
 
@@ -1219,3 +1188,6 @@ func TestArbAggregatorGetPreferredAggregator(t *testing.T) {
 		Fatal(t, "expected default preferred aggregator to be", l1pricing.BatchPosterAddress, "got", prefAgg)
 	}
 }
+// Copyright 2021-2023, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
+// Similar to TestL1BaseFeeEstimateInertia, but now using a different setter from ArbOwner

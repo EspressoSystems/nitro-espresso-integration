@@ -26,7 +26,7 @@ jobs:
   analyze:
     name: Analyze
     if: github.repository == 'OffchainLabs/nitro' # don't run in any forks without "Advanced Security" enabled
-    runs-on: ubuntu-8
+    runs-on: ubuntu-latest
     permissions:
       actions: read
       contents: read
@@ -92,11 +92,26 @@ jobs:
 
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@v1
+<<<<<<< HEAD
       with:
         cache: false
+||||||| d81324dae
+=======
+      with:
+        version: nightly
+>>>>>>> integration
         
+<<<<<<< HEAD
     - name: Install cbindgen
       run: cargo install --force cbindgen
+||||||| d81324dae
+=======
+    - name: Install cbindgen
+      run: cargo install --force cbindgen
+
+    - name: Install cbindgen
+      run: cargo install --force cbindgen
+>>>>>>> integration
 
     - name: Cache Build Products
       uses: actions/cache@v3

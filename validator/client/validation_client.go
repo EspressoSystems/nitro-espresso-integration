@@ -217,7 +217,9 @@ func (b *BOLDExecutionClient) GetProofAt(ctx context.Context, wasmModuleRoot com
 }
 
 // CtxWithCheckAlive Creates a context with a check alive routine that will
+
 // cancel the context if the check alive routine fails.
+
 func ctxWithCheckAlive(ctxIn context.Context, execRun validator.ExecutionRun) (context.Context, context.CancelFunc) {
 	// Create a context that will cancel if the check alive routine fails.
 	// This is to ensure that we do not have the validator froze indefinitely if

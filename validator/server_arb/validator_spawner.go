@@ -74,6 +74,7 @@ type ArbitratorSpawner struct {
 	// Oreder of wrappers is important. The first wrapper is the innermost.
 	machineWrappers []MachineWrapper
 	config          ArbitratorSpawnerConfigFecher
+	// Oreder of wrappers is important. The first wrapper is the innermost.
 }
 
 func WithWrapper(wrapper MachineWrapper) SpawnerOption {
@@ -211,6 +212,7 @@ func (v *ArbitratorSpawner) execute(
 }
 
 func (v *ArbitratorSpawner) Launch(entry *validator.ValidationInput, moduleRoot common.Hash) validator.ValidationRun {
+	println("LAUCHING ARBITRATOR VALIDATION")
 	v.count.Add(1)
 	promise := stopwaiter.LaunchPromiseThread(v, func(ctx context.Context) (validator.GoGlobalState, error) {
 		defer v.count.Add(-1)

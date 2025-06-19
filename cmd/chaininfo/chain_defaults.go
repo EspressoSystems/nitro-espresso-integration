@@ -1,8 +1,6 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package chaininfo
-
 import (
 	"encoding/json"
 	"fmt"
@@ -10,9 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/params"
 )
-
 var DefaultChainConfigs map[string]*params.ChainConfig
-
 func init() {
 	var chainsInfo []ChainInfo
 	err := json.Unmarshal(DefaultChainsInfoBytes, &chainsInfo)
@@ -27,7 +23,6 @@ func init() {
 		DefaultChainConfigs[chainInfo.ChainName] = chainInfo.ChainConfig
 	}
 }
-
 func CopyArbitrumChainParams(arbChainParams params.ArbitrumChainParams) params.ArbitrumChainParams {
 	return params.ArbitrumChainParams{
 		EnableArbOS:               arbChainParams.EnableArbOS,
@@ -40,7 +35,6 @@ func CopyArbitrumChainParams(arbChainParams params.ArbitrumChainParams) params.A
 		MaxInitCodeSize:           arbChainParams.MaxInitCodeSize,
 	}
 }
-
 func CopyBlobScheduleConfig(blobSchedule *params.BlobScheduleConfig) *params.BlobScheduleConfig {
 	blobScheduleCopy := &params.BlobScheduleConfig{}
 	if blobSchedule.Cancun != nil {
@@ -73,7 +67,7 @@ func CopyBlobScheduleConfig(blobSchedule *params.BlobScheduleConfig) *params.Blo
 	}
 	return blobScheduleCopy
 }
-
+<<<<<<< HEAD
 func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	copy := &params.ChainConfig{
 		DAOForkSupport:      chainConfig.DAOForkSupport,
@@ -127,7 +121,60 @@ func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	}
 	return copy
 }
-
+||||||| d81324dae
+func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig 
+=======
+func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
+	copy := &params.ChainConfig{
+		DAOForkSupport:      chainConfig.DAOForkSupport,
+		ArbitrumChainParams: CopyArbitrumChainParams(chainConfig.ArbitrumChainParams),
+		Clique: &params.CliqueConfig{
+			Period: chainConfig.Clique.Period,
+			Epoch:  chainConfig.Clique.Epoch,
+		},
+	}
+	if chainConfig.ChainID != nil {
+		copy.ChainID = new(big.Int).Set(chainConfig.ChainID)
+	}
+	if chainConfig.HomesteadBlock != nil {
+		copy.HomesteadBlock = new(big.Int).Set(chainConfig.HomesteadBlock)
+	}
+	if chainConfig.DAOForkBlock != nil {
+		copy.DAOForkBlock = new(big.Int).Set(chainConfig.DAOForkBlock)
+	}
+	if chainConfig.EIP150Block != nil {
+		copy.EIP150Block = new(big.Int).Set(chainConfig.EIP150Block)
+	}
+	if chainConfig.EIP155Block != nil {
+		copy.EIP155Block = new(big.Int).Set(chainConfig.EIP155Block)
+	}
+	if chainConfig.EIP158Block != nil {
+		copy.EIP158Block = new(big.Int).Set(chainConfig.EIP158Block)
+	}
+	if chainConfig.ByzantiumBlock != nil {
+		copy.ByzantiumBlock = new(big.Int).Set(chainConfig.ByzantiumBlock)
+	}
+	if chainConfig.ConstantinopleBlock != nil {
+		copy.ConstantinopleBlock = new(big.Int).Set(chainConfig.ConstantinopleBlock)
+	}
+	if chainConfig.PetersburgBlock != nil {
+		copy.PetersburgBlock = new(big.Int).Set(chainConfig.PetersburgBlock)
+	}
+	if chainConfig.IstanbulBlock != nil {
+		copy.IstanbulBlock = new(big.Int).Set(chainConfig.IstanbulBlock)
+	}
+	if chainConfig.MuirGlacierBlock != nil {
+		copy.MuirGlacierBlock = new(big.Int).Set(chainConfig.MuirGlacierBlock)
+	}
+	if chainConfig.BerlinBlock != nil {
+		copy.BerlinBlock = new(big.Int).Set(chainConfig.BerlinBlock)
+	}
+	if chainConfig.LondonBlock != nil {
+		copy.LondonBlock = new(big.Int).Set(chainConfig.LondonBlock)
+	}
+	return copy
+}
+>>>>>>> integration
 func fetchArbitrumChainParams(chainName string) params.ArbitrumChainParams {
 	originalConfig, ok := DefaultChainConfigs[chainName]
 	if !ok {
@@ -135,7 +182,6 @@ func fetchArbitrumChainParams(chainName string) params.ArbitrumChainParams {
 	}
 	return CopyArbitrumChainParams(originalConfig.ArbitrumChainParams)
 }
-
 func ArbitrumOneParams() params.ArbitrumChainParams {
 	return fetchArbitrumChainParams("arb1")
 }
@@ -151,7 +197,6 @@ func ArbitrumDevTestParams() params.ArbitrumChainParams {
 func ArbitrumDevTestDASParams() params.ArbitrumChainParams {
 	return fetchArbitrumChainParams("anytrust-dev-test")
 }
-
 func fetchChainConfig(chainName string) *params.ChainConfig {
 	originalConfig, ok := DefaultChainConfigs[chainName]
 	if !ok {
@@ -159,7 +204,6 @@ func fetchChainConfig(chainName string) *params.ChainConfig {
 	}
 	return CopyChainConfig(originalConfig)
 }
-
 func ArbitrumOneChainConfig() *params.ChainConfig {
 	return fetchChainConfig("arb1")
 }
@@ -175,3 +219,5 @@ func ArbitrumDevTestChainConfig() *params.ChainConfig {
 func ArbitrumDevTestDASChainConfig() *params.ChainConfig {
 	return fetchChainConfig("anytrust-dev-test")
 }
+// Copyright 2021-2024, Offchain Labs, Inc.
+// For license information, see https://github.com/nitro/blob/master/LICENSE

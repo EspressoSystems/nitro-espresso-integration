@@ -16,7 +16,8 @@ use arbutil::{
         api::{Gas, Ink},
     },
     operator::OperatorInfo,
-    pricing, Bytes32,
+    pricing,
+    Bytes32,
 };
 use derivative::Derivative;
 use eyre::Result;

@@ -19,7 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
-
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/burn"
 	"github.com/offchainlabs/nitro/arbos/l2pricing"
@@ -315,6 +314,190 @@ func TestArbTxTypesTracingPrestateTracerAndCallTracer(t *testing.T) {
 	}
 	// Nonce shouldn't exist (in this case defaults to 0) in the Post map of the trace in DiffMode
 	if l2Tx.SkipNonceChecks() && result.Post[faucetAddr].Nonce != 0 {
+		Fatal(t, "Faucet account's nonce should remain unchanged ")
+	}
+	if !arbmath.BigEquals(result.Pre[faucetAddr].Balance.ToInt(), oldBalance) {
+		Fatal(t, "Unexpected initial balance of Faucet")
+	}
+	if !arbmath.BigEquals(result.Post[faucetAddr].Balance.ToInt(), arbmath.BigAdd(oldBalance, txOpts.Value)) {
+		Fatal(t, "Unexpected final balance of Faucet")
+	}
+
+	var blockTrace json.RawMessage
+	blockTraceConfig := map[string]interface{}{"tracer": "callTracer"}
+
+	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": false}
+	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(l2Receipt.BlockNumber.Int64()), blockTraceConfig)
+	Require(t, err)
+
+	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": true}
+	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(l2Receipt.BlockNumber.Int64()), blockTraceConfig)
+	Require(t, err)
+
+	// Test prestate tracing of a ArbitrumSubmitRetryableTx type tx
+	user2Address := builder.L2Info.GetAddress("User2")
+	beneficiaryAddress := builder.L2Info.GetAddress("Beneficiary")
+
+	deposit := arbmath.BigMul(big.NewInt(1e12), big.NewInt(1e12))
+	callValue := big.NewInt(1e6)
+
+	nodeInterface, err := node_interfacegen.NewNodeInterface(types.NodeInterfaceAddress, builder.L2.Client)
+	Require(t, err, "failed to deploy NodeInterface")
+
+	// estimate the gas needed to auto redeem the retryable
+	usertxoptsL2 := builder.L2Info.GetDefaultTransactOpts("Faucet", ctx)
+	usertxoptsL2.NoSend = true
+	usertxoptsL2.GasMargin = 0
+	tx, err := nodeInterface.EstimateRetryableTicket(
+		&usertxoptsL2,
+		usertxoptsL2.From,
+		deposit,
+		user2Address,
+		callValue,
+		beneficiaryAddress,
+		beneficiaryAddress,
+		[]byte{0x32, 0x42, 0x32, 0x88}, // increase the cost to beyond that of params.TxGas
+	)
+	Require(t, err, "failed to estimate retryable submission")
+	estimate := tx.Gas()
+	expectedEstimate := params.TxGas + params.TxDataNonZeroGasEIP2028*4
+	if float64(estimate) > float64(expectedEstimate)*(1+gasestimator.EstimateGasErrorRatio) {
+		t.Errorf("estimated retryable ticket at %v gas but expected %v, with error margin of %v",
+			estimate,
+			expectedEstimate,
+			gasestimator.EstimateGasErrorRatio,
+		)
+	}
+
+	// submit & auto redeem the retryable using the gas estimate
+	usertxoptsL1 := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	usertxoptsL1.Value = deposit
+	l1tx, err = delayedInbox.CreateRetryableTicket(
+		&usertxoptsL1,
+		user2Address,
+		callValue,
+		big.NewInt(1e16),
+		beneficiaryAddress,
+		beneficiaryAddress,
+		arbmath.UintToBig(estimate),
+		big.NewInt(l2pricing.InitialBaseFeeWei*2),
+		[]byte{0x32, 0x42, 0x32, 0x88},
+	)
+	Require(t, err)
+
+	l1Receipt, err = builder.L1.EnsureTxSucceeded(l1tx)
+	Require(t, err)
+	if l1Receipt.Status != types.ReceiptStatusSuccessful {
+		Fatal(t, "l1Receipt indicated failure")
+	}
+
+	waitForL1DelayBlocks(t, builder)
+
+	l2Tx = lookupL2Tx(l1Receipt)
+	receipt, err := builder.L2.EnsureTxSucceeded(l2Tx)
+	Require(t, err)
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		Fatal(t)
+	}
+
+	l2balance, err := builder.L2.Client.BalanceAt(ctx, builder.L2Info.GetAddress("User2"), nil)
+	Require(t, err)
+	if !arbmath.BigEquals(l2balance, callValue) {
+		Fatal(t, "Unexpected balance:", l2balance)
+	}
+
+	ticketId := receipt.Logs[0].Topics[1]
+	firstRetryTxId := receipt.Logs[1].Topics[2]
+	fmt.Println("submitretryable txid ", ticketId)
+	fmt.Println("auto redeem txid ", firstRetryTxId)
+
+	// Trace ArbitrumSubmitRetryableTx
+	result = prestateTrace{}
+	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", l2Tx.Hash(), traceConfig)
+	Require(t, err)
+
+	escrowAddr := retryables.RetryableEscrowAddress(ticketId)
+	if _, ok := result.Pre[escrowAddr]; !ok {
+		Fatal(t, "Escrow account not found in the result of prestate tracer for a ArbitrumSubmitRetryableTx transaction")
+	}
+
+	if !arbmath.BigEquals(result.Pre[escrowAddr].Balance.ToInt(), common.Big0) {
+		Fatal(t, "Unexpected initial balance of Escrow")
+	}
+	if !arbmath.BigEquals(result.Post[escrowAddr].Balance.ToInt(), callValue) {
+		Fatal(t, "Unexpected final balance of Escrow")
+	}
+
+	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": false}
+	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(receipt.BlockNumber.Int64()), blockTraceConfig)
+	Require(t, err)
+	fmt.Println(string(blockTrace))
+
+	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": true}
+	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(receipt.BlockNumber.Int64()), blockTraceConfig)
+	Require(t, err)
+	fmt.Println(string(blockTrace))
+
+	// Trace ArbitrumRetryTx
+	result = prestateTrace{}
+	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", firstRetryTxId, traceConfig)
+	Require(t, err)
+
+	if !arbmath.BigEquals(result.Pre[user2Address].Balance.ToInt(), common.Big0) {
+		Fatal(t, "Unexpected initial balance of User2")
+	}
+	if !arbmath.BigEquals(result.Post[user2Address].Balance.ToInt(), callValue) {
+		Fatal(t, "Unexpected final balance of User2")
+	}
+}
+
+func TestArbTxTypesTracingPrestateTracerAndCallTracer(t *testing.T) {
+	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
+	defer teardown()
+
+	// Test prestate tracing of a ArbitrumDepositTx type tx
+	faucetAddr := builder.L1Info.GetAddress("Faucet")
+	oldBalance, err := builder.L2.Client.BalanceAt(ctx, faucetAddr, nil)
+	Require(t, err)
+
+	txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	txOpts.Value = big.NewInt(13)
+
+	l1tx, err := delayedInbox.DepositEth439370b1(&txOpts)
+	Require(t, err)
+
+	l1Receipt, err := builder.L1.EnsureTxSucceeded(l1tx)
+	Require(t, err)
+	if l1Receipt.Status != types.ReceiptStatusSuccessful {
+		t.Errorf("Got transaction status: %v, want: %v", l1Receipt.Status, types.ReceiptStatusSuccessful)
+	}
+	waitForL1DelayBlocks(t, builder)
+
+	l2Tx := lookupL2Tx(l1Receipt)
+	l2Receipt, err := builder.L2.EnsureTxSucceeded(l2Tx)
+	Require(t, err)
+	newBalance, err := builder.L2.Client.BalanceAt(ctx, faucetAddr, l2Receipt.BlockNumber)
+	Require(t, err)
+	if got := new(big.Int); got.Sub(newBalance, oldBalance).Cmp(txOpts.Value) != 0 {
+		t.Errorf("Got transferred: %v, want: %v", got, txOpts.Value)
+	}
+
+	l2rpc := builder.L2.Stack.Attach()
+	var result prestateTrace
+	traceConfig := map[string]interface{}{
+		"tracer": "prestateTracer",
+		"tracerConfig": map[string]interface{}{
+			"diffMode": true,
+		},
+	}
+	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", l2Tx.Hash(), traceConfig)
+	Require(t, err)
+
+	if _, ok := result.Pre[faucetAddr]; !ok {
+		Fatal(t, "Faucet account not found in the result of prestate tracer")
+	}
+	// Nonce shouldn't exist (in this case defaults to 0) in the Post map of the trace in DiffMode
+	if l2Tx.SkipAccountChecks() && result.Post[faucetAddr].Nonce != 0 {
 		Fatal(t, "Faucet account's nonce should remain unchanged ")
 	}
 	if !arbmath.BigEquals(result.Pre[faucetAddr].Balance.ToInt(), oldBalance) {

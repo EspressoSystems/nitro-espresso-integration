@@ -225,6 +225,7 @@ func (f *FastConfirmSafe) checkApprovedHashAndExecTransaction(ctx context.Contex
 	}
 	if approvedHashCount >= f.threshold {
 		log.Info("Executing Safe tx to fast confirm", "safeHash", common.BytesToHash(safeTxHash[:]))
+<<<<<<< HEAD
 		_, err := f.safe.ExecTransaction(
 			f.builder.Auth(ctx),
 			f.rollupAddress,
@@ -238,6 +239,22 @@ func (f *FastConfirmSafe) checkApprovedHashAndExecTransaction(ctx context.Contex
 			common.Address{},
 			signatures,
 		)
+||||||| d81324dae
+=======
+		_, err := f.safe.ExecTransaction(
+			f.builder.Auth(ctx),
+			f.wallet.RollupAddress(),
+			big.NewInt(0),
+			fastConfirmCallData,
+			0,
+			big.NewInt(0),
+			big.NewInt(0),
+			big.NewInt(0),
+			common.Address{},
+			common.Address{},
+			signatures,
+		)
+>>>>>>> integration
 		if err != nil {
 			return false, err
 		}

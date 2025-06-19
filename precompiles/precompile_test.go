@@ -180,6 +180,7 @@ func TestEventCosts(t *testing.T) {
 }
 
 func TestPrecompilesPerArbosVersion(t *testing.T) {
+<<<<<<< HEAD
 	// Each new precompile contract and each method on new or existing precompile
 	// contracts should be counted.
 	expectedNewEntriesPerArbosVersion := map[uint64]int{
@@ -192,6 +193,31 @@ func TestPrecompilesPerArbosVersion(t *testing.T) {
 		params.ArbosVersion_31: 1,
 		params.ArbosVersion_40: 3,
 		params.ArbosVersion_41: 10,
+||||||| d81324dae
+	// Set up a logger in case log.Crit is called by Precompiles()
+	glogger := log.NewGlogHandler(
+		log.NewTerminalHandler(io.Writer(os.Stderr), false))
+	glogger.Verbosity(log.LevelWarn)
+	log.SetDefault(log.NewLogger(glogger))
+
+	expectedNewMethodsPerArbosVersion := map[uint64]int{
+		0:  89,
+		5:  3,
+		10: 2,
+		11: 4,
+		20: 8,
+		30: 38,
+		31: 1,
+=======
+	expectedNewMethodsPerArbosVersion := map[uint64]int{
+		0:                      89,
+		params.ArbosVersion_5:  3,
+		params.ArbosVersion_10: 2,
+		params.ArbosVersion_11: 4,
+		params.ArbosVersion_20: 8,
+		params.ArbosVersion_30: 38,
+		params.ArbosVersion_31: 1,
+>>>>>>> integration
 	}
 
 	precompiles := Precompiles()

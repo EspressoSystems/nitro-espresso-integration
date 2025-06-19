@@ -1,15 +1,12 @@
 // Copyright 2021-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbtest
-
 import (
 	"context"
 	"fmt"
 	"math/big"
 	"testing"
 )
-
 func TestMaintenance(t *testing.T) {
 	t.Parallel()
 
@@ -32,7 +29,12 @@ func TestMaintenance(t *testing.T) {
 		Require(t, err)
 	}
 
+<<<<<<< HEAD
 	_, err := builder.L2.ExecNode.Maintenance().Await(ctx)
+||||||| d81324dae
+=======
+	err := builder.L2.ExecNode.Maintenance()
+>>>>>>> integration
 	Require(t, err)
 
 	for i := 2; i < 3+numberOfTransfers; i++ {
@@ -44,3 +46,5 @@ func TestMaintenance(t *testing.T) {
 		}
 	}
 }
+// Copyright 2021-2025, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE

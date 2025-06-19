@@ -119,7 +119,7 @@ type PebbleConfig struct {
 }
 
 var PebbleConfigDefault = PebbleConfig{
-	SyncMode:                 false, // use NO-SYNC mode, see: https://github.com/ethereum/go-ethereum/issues/29819
+	SyncMode:                 false, // use NO-SYNC mode, see: https://github.com/ethereum/go-ethereum/issues/29819, // use NO-SYNC mode, see: https://github.com/ethereum/go-ethereum/issues/29819
 	MaxConcurrentCompactions: util.GoMaxProcs(),
 	Experimental:             PebbleExperimentalConfigDefault,
 }

@@ -1,8 +1,6 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbnode
-
 import (
 	"bytes"
 	"context"
@@ -20,9 +18,7 @@ import (
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/signature"
 )
-
 const messagesPerRound = 20
-
 type CoordinatorTestData struct {
 	messageCount atomic.Uint64
 
@@ -33,7 +29,6 @@ type CoordinatorTestData struct {
 	waitForCoords  sync.WaitGroup
 	testStartRound atomic.Int32
 }
-
 func coordinatorTestThread(ctx context.Context, coord *SeqCoordinator, data *CoordinatorTestData) {
 	nextRound := int32(0)
 	for {
@@ -93,7 +88,6 @@ func coordinatorTestThread(ctx context.Context, coord *SeqCoordinator, data *Coo
 		data.waitForCoords.Done()
 	}
 }
-
 func TestRedisSeqCoordinatorAtomic(t *testing.T) {
 	NumOfThreads := 10
 	ctx, cancel := context.WithCancel(context.Background())
@@ -159,7 +153,6 @@ func TestRedisSeqCoordinatorAtomic(t *testing.T) {
 	}
 
 }
-
 func TestSeqCoordinatorDeletesFinalizedMessages(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -250,7 +243,6 @@ func TestSeqCoordinatorDeletesFinalizedMessages(t *testing.T) {
 		t.Fatal("non-finalized messages and signatures in range 7 to 10 are not fully available")
 	}
 }
-
 func TestSeqCoordinatorAddsBlockMetadata(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -289,3 +281,5 @@ func TestSeqCoordinatorAddsBlockMetadata(t *testing.T) {
 		t.Fatal("got incorrect blockMetadata")
 	}
 }
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md

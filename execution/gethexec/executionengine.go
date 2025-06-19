@@ -1,18 +1,14 @@
 // Copyright 2022-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 //go:build !wasm
 // +build !wasm
-
 package gethexec
-
 /*
 #cgo CFLAGS: -g -I../../target/include/
 #cgo LDFLAGS: ${SRCDIR}/../../target/lib/libstylus.a -ldl -lm
 #include "arbitrator.h"
 */
 import "C"
-
 import (
 	"bytes"
 	"context"
@@ -30,27 +26,39 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/ethereum/go-ethereum/core"
+
 	"github.com/ethereum/go-ethereum/core/rawdb"
+
 	"github.com/ethereum/go-ethereum/core/state"
+
 	"github.com/ethereum/go-ethereum/core/stateless"
+
 	"github.com/ethereum/go-ethereum/core/types"
+
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/metrics"
 
 	"github.com/offchainlabs/nitro/arbos"
+
 	"github.com/offchainlabs/nitro/arbos/arbosState"
+
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
+
 	"github.com/offchainlabs/nitro/arbos/programs"
+
 	"github.com/offchainlabs/nitro/arbutil"
+
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/sharedmetrics"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
 var (
 	l1GasPriceEstimateGauge    = metrics.NewRegisteredGauge("arb/l1gasprice/estimate", nil)
 	baseFeeGauge               = metrics.NewRegisteredGauge("arb/block/basefee", nil)
@@ -61,24 +69,20 @@ var (
 	blockExecutionTimer        = metrics.NewRegisteredTimer("arb/block/execution", nil)
 	blockWriteToDbTimer        = metrics.NewRegisteredTimer("arb/block/writetodb", nil)
 )
-
 var ExecutionEngineBlockCreationStopped = errors.New("block creation stopped in execution engine")
 var ResultNotFound = errors.New("result not found")
-
 type L1PriceDataOfMsg struct {
 	callDataUnits            uint64
 	cummulativeCallDataUnits uint64
 	l1GasCharged             uint64
 	cummulativeL1GasCharged  uint64
 }
-
 type L1PriceData struct {
 	mutex                   sync.RWMutex
 	startOfL1PriceDataCache arbutil.MessageIndex
 	endOfL1PriceDataCache   arbutil.MessageIndex
 	msgToL1PriceData        []L1PriceDataOfMsg
 }
-
 type ExecutionEngine struct {
 	stopwaiter.StopWaiter
 
@@ -105,13 +109,11 @@ type ExecutionEngine struct {
 	cachedL1PriceData *L1PriceData
 	syncTillBlock     uint64
 }
-
 func NewL1PriceData() *L1PriceData {
 	return &L1PriceData{
 		msgToL1PriceData: []L1PriceDataOfMsg{},
 	}
 }
-
 func NewExecutionEngine(bc *core.BlockChain, syncTillBlock uint64) (*ExecutionEngine, error) {
 	return &ExecutionEngine{
 		bc:                bc,
@@ -121,7 +123,6 @@ func NewExecutionEngine(bc *core.BlockChain, syncTillBlock uint64) (*ExecutionEn
 		syncTillBlock:     syncTillBlock,
 	}, nil
 }
-
 func (s *ExecutionEngine) backlogCallDataUnits() uint64 {
 	s.cachedL1PriceData.mutex.RLock()
 	defer s.cachedL1PriceData.mutex.RUnlock()
@@ -134,7 +135,6 @@ func (s *ExecutionEngine) backlogCallDataUnits() uint64 {
 		s.cachedL1PriceData.msgToL1PriceData[0].cummulativeCallDataUnits +
 		s.cachedL1PriceData.msgToL1PriceData[0].callDataUnits)
 }
-
 func (s *ExecutionEngine) backlogL1GasCharged() uint64 {
 	s.cachedL1PriceData.mutex.RLock()
 	defer s.cachedL1PriceData.mutex.RUnlock()
@@ -147,7 +147,6 @@ func (s *ExecutionEngine) backlogL1GasCharged() uint64 {
 		s.cachedL1PriceData.msgToL1PriceData[0].cummulativeL1GasCharged +
 		s.cachedL1PriceData.msgToL1PriceData[0].l1GasCharged)
 }
-
 func (s *ExecutionEngine) MarkFeedStart(to arbutil.MessageIndex) {
 	s.cachedL1PriceData.mutex.Lock()
 	defer s.cachedL1PriceData.mutex.Unlock()
@@ -164,7 +163,6 @@ func (s *ExecutionEngine) MarkFeedStart(to arbutil.MessageIndex) {
 		s.cachedL1PriceData.startOfL1PriceDataCache = to + 1
 	}
 }
-
 func PopulateStylusTargetCache(targetConfig *StylusTargetConfig) error {
 	localTarget := rawdb.LocalTarget()
 	targets := targetConfig.WasmTargets()
@@ -196,7 +194,6 @@ func PopulateStylusTargetCache(targetConfig *StylusTargetConfig) error {
 	}
 	return nil
 }
-
 func (s *ExecutionEngine) Initialize(rustCacheCapacityMB uint32, targetConfig *StylusTargetConfig) error {
 	if rustCacheCapacityMB != 0 {
 		programs.SetWasmLruCacheCapacity(arbmath.SaturatingUMul(uint64(rustCacheCapacityMB), 1024*1024))
@@ -206,7 +203,6 @@ func (s *ExecutionEngine) Initialize(rustCacheCapacityMB uint32, targetConfig *S
 	}
 	return nil
 }
-
 func (s *ExecutionEngine) SetRecorder(recorder *BlockRecorder) {
 	if s.Started() {
 		panic("trying to set recorder after start")
@@ -216,7 +212,6 @@ func (s *ExecutionEngine) SetRecorder(recorder *BlockRecorder) {
 	}
 	s.recorder = recorder
 }
-
 func (s *ExecutionEngine) SetReorgEventsNotifier(reorgEventsNotifier chan struct{}) {
 	if s.Started() {
 		panic("trying to set reorg events notifier after start")
@@ -226,7 +221,6 @@ func (s *ExecutionEngine) SetReorgEventsNotifier(reorgEventsNotifier chan struct
 	}
 	s.reorgEventsNotifier = reorgEventsNotifier
 }
-
 func (s *ExecutionEngine) EnableReorgSequencing() {
 	if s.Started() {
 		panic("trying to enable reorg sequencing after start")
@@ -236,7 +230,6 @@ func (s *ExecutionEngine) EnableReorgSequencing() {
 	}
 	s.reorgSequencing = true
 }
-
 func (s *ExecutionEngine) DisableStylusCacheMetricsCollection() {
 	if s.Started() {
 		panic("trying to disable stylus cache metrics collection after start")
@@ -246,7 +239,6 @@ func (s *ExecutionEngine) DisableStylusCacheMetricsCollection() {
 	}
 	s.disableStylusCacheMetricsCollection = true
 }
-
 func (s *ExecutionEngine) EnablePrefetchBlock() {
 	if s.Started() {
 		panic("trying to enable prefetch block after start")
@@ -256,7 +248,6 @@ func (s *ExecutionEngine) EnablePrefetchBlock() {
 	}
 	s.prefetchBlock = true
 }
-
 func (s *ExecutionEngine) SetConsensus(consensus execution.FullConsensusClient) {
 	if s.Started() {
 		panic("trying to set transaction consensus after start")
@@ -266,18 +257,15 @@ func (s *ExecutionEngine) SetConsensus(consensus execution.FullConsensusClient) 
 	}
 	s.consensus = consensus
 }
-
 func (s *ExecutionEngine) BlockMetadataAtMessageIndex(ctx context.Context, msgIdx arbutil.MessageIndex) (common.BlockMetadata, error) {
 	if s.consensus != nil {
 		return s.consensus.BlockMetadataAtMessageIndex(msgIdx).Await(ctx)
 	}
 	return nil, errors.New("FullConsensusClient is not accessible to execution")
 }
-
 func (s *ExecutionEngine) GetBatchFetcher() execution.BatchFetcher {
 	return s.consensus
 }
-
 func (s *ExecutionEngine) Reorg(msgIdxOfFirstMsgToAdd arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) ([]*execution.MessageResult, error) {
 	if msgIdxOfFirstMsgToAdd == 0 {
 		return nil, errors.New("cannot reorg out genesis")
@@ -349,7 +337,6 @@ func (s *ExecutionEngine) Reorg(msgIdxOfFirstMsgToAdd arbutil.MessageIndex, newM
 	}
 	return newMessagesResults, nil
 }
-
 func (s *ExecutionEngine) getCurrentHeader() (*types.Header, error) {
 	currentBlock := s.bc.CurrentBlock()
 	if currentBlock == nil {
@@ -357,7 +344,6 @@ func (s *ExecutionEngine) getCurrentHeader() (*types.Header, error) {
 	}
 	return currentBlock, nil
 }
-
 func (s *ExecutionEngine) HeadMessageIndex() (arbutil.MessageIndex, error) {
 	currentHeader, err := s.getCurrentHeader()
 	if err != nil {
@@ -365,13 +351,11 @@ func (s *ExecutionEngine) HeadMessageIndex() (arbutil.MessageIndex, error) {
 	}
 	return s.BlockNumberToMessageIndex(currentHeader.Number.Uint64())
 }
-
 func (s *ExecutionEngine) HeadMessageIndexSync(t *testing.T) (arbutil.MessageIndex, error) {
 	s.createBlocksMutex.Lock()
 	defer s.createBlocksMutex.Unlock()
 	return s.HeadMessageIndex()
 }
-
 func (s *ExecutionEngine) NextDelayedMessageNumber() (uint64, error) {
 	currentHeader, err := s.getCurrentHeader()
 	if err != nil {
@@ -379,7 +363,6 @@ func (s *ExecutionEngine) NextDelayedMessageNumber() (uint64, error) {
 	}
 	return currentHeader.Nonce.Uint64(), nil
 }
-
 func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, txErrors []error) (*arbostypes.L1IncomingMessage, error) {
 	var l2Message []byte
 	if len(txes) == 1 && txErrors[0] == nil {
@@ -414,7 +397,6 @@ func MessageFromTxes(header *arbostypes.L1IncomingMessageHeader, txes types.Tran
 		L2msg:  l2Message,
 	}, nil
 }
-
 // The caller must hold the createBlocksMutex
 func (s *ExecutionEngine) resequenceReorgedMessages(messages []*arbostypes.MessageWithMetadata) {
 	if !s.reorgSequencing {
@@ -468,7 +450,6 @@ func (s *ExecutionEngine) resequenceReorgedMessages(messages []*arbostypes.Messa
 		}
 	}
 }
-
 func (s *ExecutionEngine) sequencerWrapper(sequencerFunc func() (*types.Block, error)) (*types.Block, error) {
 	attempts := 0
 	for {
@@ -497,14 +478,12 @@ func (s *ExecutionEngine) sequencerWrapper(sequencerFunc func() (*types.Block, e
 		<-time.After(time.Millisecond * 100)
 	}
 }
-
 func (s *ExecutionEngine) SequenceTransactions(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks, timeboostedTxs map[common.Hash]struct{}) (*types.Block, error) {
 	return s.sequencerWrapper(func() (*types.Block, error) {
 		hooks.TxErrors = nil
 		return s.sequenceTransactionsWithBlockMutex(header, txes, hooks, timeboostedTxs)
 	})
 }
-
 // SequenceTransactionsWithProfiling runs SequenceTransactions with tracing and
 // CPU profiling enabled. If the block creation takes longer than 2 seconds, it
 // keeps both and prints out filenames in an error log line.
@@ -527,7 +506,6 @@ func (s *ExecutionEngine) SequenceTransactionsWithProfiling(header *arbostypes.L
 	}
 	return res, err
 }
-
 func writeAndLog(pprof, trace *bytes.Buffer) {
 	id := uuid.NewString()
 	pprofFile := path.Join(os.TempDir(), id+".pprof")
@@ -542,7 +520,6 @@ func writeAndLog(pprof, trace *bytes.Buffer) {
 	}
 	log.Info("Transactions sequencing took longer than 2 seconds, created pprof and trace files", "pprof", pprofFile, "traceFile", traceFile)
 }
-
 func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.L1IncomingMessageHeader, txes types.Transactions, hooks *arbos.SequencingHooks, timeboostedTxs map[common.Hash]struct{}) (*types.Block, error) {
 	lastBlockHeader, err := s.getCurrentHeader()
 	if err != nil {
@@ -639,7 +616,6 @@ func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.
 
 	return block, nil
 }
-
 // blockMetadataFromBlock returns timeboosted byte array which says whether a transaction in the block was timeboosted
 // or not. The first byte of blockMetadata byte array is reserved to indicate the version,
 // starting from the second byte, (N)th bit would represent if (N)th tx is timeboosted or not, 1 means yes and 0 means no
@@ -657,14 +633,12 @@ func (s *ExecutionEngine) blockMetadataFromBlock(block *types.Block, timeboosted
 	}
 	return bits
 }
-
 func (s *ExecutionEngine) SequenceDelayedMessage(message *arbostypes.L1IncomingMessage, delayedMsgIdx uint64) error {
 	_, err := s.sequencerWrapper(func() (*types.Block, error) {
 		return s.sequenceDelayedMessageWithBlockMutex(message, delayedMsgIdx)
 	})
 	return err
 }
-
 func (s *ExecutionEngine) sequenceDelayedMessageWithBlockMutex(message *arbostypes.L1IncomingMessage, delayedMsgIdx uint64) (*types.Block, error) {
 	if s.syncTillBlock > 0 && s.latestBlock != nil && s.latestBlock.NumberU64() >= s.syncTillBlock {
 		return nil, ExecutionEngineBlockCreationStopped
@@ -718,11 +692,9 @@ func (s *ExecutionEngine) sequenceDelayedMessageWithBlockMutex(message *arbostyp
 
 	return block, nil
 }
-
 func (s *ExecutionEngine) GetGenesisBlockNumber() uint64 {
 	return s.bc.Config().ArbitrumChainParams.GenesisBlockNum
 }
-
 func (s *ExecutionEngine) BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error) {
 	genesis := s.GetGenesisBlockNumber()
 	if blockNum < genesis {
@@ -730,11 +702,9 @@ func (s *ExecutionEngine) BlockNumberToMessageIndex(blockNum uint64) (arbutil.Me
 	}
 	return arbutil.MessageIndex(blockNum - genesis), nil
 }
-
 func (s *ExecutionEngine) MessageIndexToBlockNumber(msgIdx arbutil.MessageIndex) uint64 {
 	return uint64(msgIdx) + s.GetGenesisBlockNumber()
 }
-
 // must hold createBlockMutex
 func (s *ExecutionEngine) createBlockFromNextMessage(msg *arbostypes.MessageWithMetadata, isMsgForPrefetch bool) (*types.Block, *state.StateDB, types.Receipts, error) {
 	currentHeader := s.bc.CurrentBlock()
@@ -782,13 +752,13 @@ func (s *ExecutionEngine) createBlockFromNextMessage(msg *arbostypes.MessageWith
 
 	return block, statedb, receipts, err
 }
-
 // must hold createBlockMutex
 func (s *ExecutionEngine) appendBlock(block *types.Block, statedb *state.StateDB, receipts types.Receipts, duration time.Duration) error {
 	var logs []*types.Log
 	for _, receipt := range receipts {
 		logs = append(logs, receipt.Logs...)
 	}
+<<<<<<< HEAD
 	startTime := time.Now()
 	if s.bc.GetVMConfig().Tracer != nil {
 		// InsertChain is basically WriteBlockAndSetHeadWithTime along with recomputing
@@ -804,6 +774,22 @@ func (s *ExecutionEngine) appendBlock(block *types.Block, statedb *state.StateDB
 		if status == core.SideStatTy { // TODO: This check can be removed as this WriteStatus is never returned when setting head
 			return errors.New("geth rejected block as non-canonical")
 		}
+||||||| d81324dae
+	status, err := s.bc.WriteBlockAndSetHeadWithTime(block, receipts, logs, statedb, true, duration)
+	if err != nil {
+		return err
+	}
+	if status == core.SideStatTy {
+		return errors.New("geth rejected block as non-canonical")
+=======
+	startTime := time.Now()
+	status, err := s.bc.WriteBlockAndSetHeadWithTime(block, receipts, logs, statedb, true, duration)
+	if err != nil {
+		return err
+	}
+	if status == core.SideStatTy {
+		return errors.New("geth rejected block as non-canonical")
+>>>>>>> integration
 	}
 	blockWriteToDbTimer.Update(time.Since(startTime))
 	baseFeeGauge.Update(block.BaseFee().Int64())
@@ -819,7 +805,6 @@ func (s *ExecutionEngine) appendBlock(block *types.Block, statedb *state.StateDB
 	s.updateL1GasPriceEstimateMetric()
 	return nil
 }
-
 func (s *ExecutionEngine) resultFromHeader(header *types.Header) (*execution.MessageResult, error) {
 	if header == nil {
 		return nil, ResultNotFound
@@ -830,11 +815,9 @@ func (s *ExecutionEngine) resultFromHeader(header *types.Header) (*execution.Mes
 		SendRoot:  info.SendRoot,
 	}, nil
 }
-
 func (s *ExecutionEngine) ResultAtMessageIndex(msgIdx arbutil.MessageIndex) (*execution.MessageResult, error) {
 	return s.resultFromHeader(s.bc.GetHeaderByNumber(s.MessageIndexToBlockNumber(msgIdx)))
 }
-
 func (s *ExecutionEngine) updateL1GasPriceEstimateMetric() {
 	bc := s.bc
 	latestHeader := bc.CurrentBlock()
@@ -855,7 +838,6 @@ func (s *ExecutionEngine) updateL1GasPriceEstimateMetric() {
 	}
 	l1GasPriceEstimateGauge.Update(l2EstimateL1GasPrice.Int64())
 }
-
 func (s *ExecutionEngine) getL1PricingSurplus() (int64, error) {
 	bc := s.bc
 	latestHeader := bc.CurrentBlock()
@@ -873,7 +855,6 @@ func (s *ExecutionEngine) getL1PricingSurplus() (int64, error) {
 	}
 	return surplus.Int64(), nil
 }
-
 func (s *ExecutionEngine) cacheL1PriceDataOfMsg(msgIdx arbutil.MessageIndex, receipts types.Receipts, block *types.Block, blockBuiltUsingDelayedMessage bool) {
 	var gasUsedForL1 uint64
 	var callDataUnits uint64
@@ -935,7 +916,6 @@ func (s *ExecutionEngine) cacheL1PriceDataOfMsg(msgIdx arbutil.MessageIndex, rec
 		s.cachedL1PriceData.endOfL1PriceDataCache = msgIdx
 	}
 }
-
 // DigestMessage is used to create a block by executing msg against the latest state and storing it.
 // Also, while creating a block by executing msg against the latest state,
 // in parallel, creates a block by executing msgForPrefetch (msg+1) against the latest state
@@ -948,7 +928,6 @@ func (s *ExecutionEngine) DigestMessage(msgIdx arbutil.MessageIndex, msg *arbost
 	defer s.createBlocksMutex.Unlock()
 	return s.digestMessageWithBlockMutex(msgIdx, msg, msgForPrefetch)
 }
-
 func (s *ExecutionEngine) digestMessageWithBlockMutex(msgIdxToDigest arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) (*execution.MessageResult, error) {
 	currentHeader, err := s.getCurrentHeader()
 	if err != nil {
@@ -1036,7 +1015,6 @@ func (s *ExecutionEngine) digestMessageWithBlockMutex(msgIdxToDigest arbutil.Mes
 	}
 	return msgResult, nil
 }
-
 func (s *ExecutionEngine) ArbOSVersionForMessageIndex(msgIdx arbutil.MessageIndex) (uint64, error) {
 	block := s.bc.GetBlockByNumber(s.MessageIndexToBlockNumber(msgIdx))
 	if block == nil {
@@ -1045,7 +1023,6 @@ func (s *ExecutionEngine) ArbOSVersionForMessageIndex(msgIdx arbutil.MessageInde
 	extra := types.DeserializeHeaderExtraInformation(block.Header())
 	return extra.ArbOSFormatVersion, nil
 }
-
 func (s *ExecutionEngine) Start(ctx_in context.Context) {
 	s.StopWaiter.Start(ctx_in, s)
 	s.LaunchThread(func(ctx context.Context) {
@@ -1103,9 +1080,46 @@ func (s *ExecutionEngine) Start(ctx_in context.Context) {
 		})
 	}
 }
-
 func (s *ExecutionEngine) Maintenance(capLimit uint64) error {
 	s.createBlocksMutex.Lock()
 	defer s.createBlocksMutex.Unlock()
 	return s.bc.FlushTrieDB(common.StorageSize(capLimit))
+}
+// Copyright 2022-2024, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
+//go:build !wasm
+// +build !wasm
+/*
+#cgo CFLAGS: -g -I../../target/include/
+#cgo LDFLAGS: ${SRCDIR}/../../target/lib/libstylus.a -ldl -lm
+#include "arbitrator.h"
+*/
+func (s *ExecutionEngine) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
+	if s.consensus != nil {
+		return s.consensus.BlockMetadataAtCount(count)
+	}
+	return nil, errors.New("FullConsensusClient is not accessible to execution")
+}
+// The caller must hold the createBlocksMutex
+// SequenceTransactionsWithProfiling runs SequenceTransactions with tracing and
+// CPU profiling enabled. If the block creation takes longer than 2 seconds, it
+// keeps both and prints out filenames in an error log line.
+// blockMetadataFromBlock returns timeboosted byte array which says whether a transaction in the block was timeboosted
+// or not. The first byte of blockMetadata byte array is reserved to indicate the version,
+// starting from the second byte, (N)th bit would represent if (N)th tx is timeboosted or not, 1 means yes and 0 means no
+// blockMetadata[index / 8 + 1] & (1 << (index % 8)) != 0; where index = (N - 1), implies whether (N)th tx in a block is timeboosted
+// note that number of txs in a block will always lag behind (len(blockMetadata) - 1) * 8 but it wont lag more than a value of 7
+// must hold createBlockMutex
+// must hold createBlockMutex
+// DigestMessage is used to create a block by executing msg against the latest state and storing it.
+// Also, while creating a block by executing msg against the latest state,
+// in parallel, creates a block by executing msgForPrefetch (msg+1) against the latest state
+// but does not store the block.
+// This helps in filling the cache, so that the next block creation is faster.
+// Publish following functions for espresso caff node to access the blockchain
+func (s *ExecutionEngine) Bc() *core.BlockChain {
+	return s.bc
+}
+func (s *ExecutionEngine) AppendBlock(block *types.Block, statedb *state.StateDB, receipts types.Receipts, duration time.Duration) error {
+	return s.appendBlock(block, statedb, receipts, duration)
 }
