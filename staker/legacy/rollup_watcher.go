@@ -113,13 +113,7 @@ func (r *RollupWatcher) getNodeCreationBlock(ctx context.Context, nodeNum uint64
 			r.supportedL3Method.Store(true)
 			return createdAtBlock, nil
 		}
-<<<<<<< HEAD:staker/legacy/rollup_watcher.go
 		if headerreader.IsExecutionReverted(err) && !looksLikeNoNodeError(err) {
-||||||| d81324dae:staker/rollup_watcher.go
-		if headerreader.ExecutionRevertedRegexp.MatchString(err.Error()) {
-=======
-		if headerreader.ExecutionRevertedRegexp.MatchString(err.Error()) && !looksLikeNoNodeError(err) {
->>>>>>> integration:staker/rollup_watcher.go
 			if r.supportedL3Method.Load() {
 				return nil, fmt.Errorf("getNodeCreationBlockForLogLookup failed despite previously succeeding: %w", err)
 			}

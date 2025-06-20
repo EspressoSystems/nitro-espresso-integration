@@ -758,7 +758,6 @@ func (s *ExecutionEngine) appendBlock(block *types.Block, statedb *state.StateDB
 	for _, receipt := range receipts {
 		logs = append(logs, receipt.Logs...)
 	}
-<<<<<<< HEAD
 	startTime := time.Now()
 	if s.bc.GetVMConfig().Tracer != nil {
 		// InsertChain is basically WriteBlockAndSetHeadWithTime along with recomputing
@@ -774,22 +773,6 @@ func (s *ExecutionEngine) appendBlock(block *types.Block, statedb *state.StateDB
 		if status == core.SideStatTy { // TODO: This check can be removed as this WriteStatus is never returned when setting head
 			return errors.New("geth rejected block as non-canonical")
 		}
-||||||| d81324dae
-	status, err := s.bc.WriteBlockAndSetHeadWithTime(block, receipts, logs, statedb, true, duration)
-	if err != nil {
-		return err
-	}
-	if status == core.SideStatTy {
-		return errors.New("geth rejected block as non-canonical")
-=======
-	startTime := time.Now()
-	status, err := s.bc.WriteBlockAndSetHeadWithTime(block, receipts, logs, statedb, true, duration)
-	if err != nil {
-		return err
-	}
-	if status == core.SideStatTy {
-		return errors.New("geth rejected block as non-canonical")
->>>>>>> integration
 	}
 	blockWriteToDbTimer.Update(time.Since(startTime))
 	baseFeeGauge.Update(block.BaseFee().Int64())

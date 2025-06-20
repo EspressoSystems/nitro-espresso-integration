@@ -52,7 +52,6 @@ var DefaultS3StorageServiceConfig = S3StorageServiceConfig{
 	MaxDbRows:      0, // Disabled by default
 }
 
-<<<<<<< HEAD
 func S3StorageServiceConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultS3StorageServiceConfig.Enable, "enable persisting of validated bids to AWS S3 bucket")
 	f.String(prefix+".access-key", DefaultS3StorageServiceConfig.AccessKey, "S3 access key")
@@ -64,21 +63,6 @@ func S3StorageServiceConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Int(prefix+".max-batch-size", DefaultS3StorageServiceConfig.MaxBatchSize, "max size of uncompressed batch in bytes to be uploaded to S3")
 	f.Int(prefix+".max-db-rows", DefaultS3StorageServiceConfig.MaxDbRows, "when the sql db is very large, this enables reading of db in chunks instead of all at once which might cause OOM")
 }
-||||||| d81324dae
-func S3StorageServiceConfigAddOptions(prefix string, f *pflag.FlagSet) 
-=======
-func S3StorageServiceConfigAddOptions(prefix string, f *pflag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultS3StorageServiceConfig.Enable, "enable persisting of valdiated bids to AWS S3 bucket")
-	f.String(prefix+".access-key", DefaultS3StorageServiceConfig.AccessKey, "S3 access key")
-	f.String(prefix+".bucket", DefaultS3StorageServiceConfig.Bucket, "S3 bucket")
-	f.String(prefix+".object-prefix", DefaultS3StorageServiceConfig.ObjectPrefix, "prefix to add to S3 objects")
-	f.String(prefix+".region", DefaultS3StorageServiceConfig.Region, "S3 region")
-	f.String(prefix+".secret-key", DefaultS3StorageServiceConfig.SecretKey, "S3 secret key")
-	f.Duration(prefix+".upload-interval", DefaultS3StorageServiceConfig.UploadInterval, "frequency at which batches are uploaded to S3")
-	f.Int(prefix+".max-batch-size", DefaultS3StorageServiceConfig.MaxBatchSize, "max size of uncompressed batch in bytes to be uploaded to S3")
-	f.Int(prefix+".max-db-rows", DefaultS3StorageServiceConfig.MaxDbRows, "when the sql db is very large, this enables reading of db in chunks instead of all at once which might cause OOM")
-}
->>>>>>> integration
 
 type S3StorageService struct {
 	stopwaiter.StopWaiter

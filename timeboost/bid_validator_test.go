@@ -1,6 +1,5 @@
 package timeboost
 
-<<<<<<< HEAD
 import (
 	"context"
 	"crypto/ecdsa"
@@ -14,21 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
-||||||| d81324dae
-=======
-import (
-	"context"
-	"math/big"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
-
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-)
->>>>>>> integration
 
 func TestBidValidator_validateBid(t *testing.T) {
 	t.Parallel()
@@ -141,7 +125,6 @@ func TestBidValidator_validateBid(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestBidValidator_validateBid_perRoundBidLimitReached(t *testing.T) {
 	t.Parallel()
 	balanceCheckerFn := func(_ *bind.CallOpts, _ common.Address) (*big.Int, error) {
@@ -185,55 +168,6 @@ func TestBidValidator_validateBid_perRoundBidLimitReached(t *testing.T) {
 	require.ErrorIs(t, err, ErrTooManyBids)
 
 }
-||||||| d81324dae
-func TestBidValidator_validateBid_perRoundBidLimitReached(t *testing.T) 
-=======
-func TestBidValidator_validateBid_perRoundBidLimitReached(t *testing.T) {
-	t.Parallel()
-	balanceCheckerFn := func(_ *bind.CallOpts, _ common.Address) (*big.Int, error) {
-		return big.NewInt(10), nil
-	}
-	auctionContractAddr := common.Address{'a'}
-	bv := BidValidator{
-		chainId: big.NewInt(1),
-		roundTimingInfo: RoundTimingInfo{
-			Offset:         time.Now().Add(-time.Second),
-			Round:          time.Minute,
-			AuctionClosing: 45 * time.Second,
-		},
-		reservePrice:                   big.NewInt(2),
-		bidsPerSenderInRound:           make(map[common.Address]uint8),
-		maxBidsPerSenderInRound:        5,
-		auctionContractAddr:            auctionContractAddr,
-		auctionContractDomainSeparator: common.Hash{},
-	}
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-	bid := &Bid{
-		ExpressLaneController:  common.Address{'b'},
-		AuctionContractAddress: auctionContractAddr,
-		ChainId:                big.NewInt(1),
-		Round:                  1,
-		Amount:                 big.NewInt(3),
-		Signature:              []byte{'a'},
-	}
-
-	bidHash, err := bid.ToEIP712Hash(bv.auctionContractDomainSeparator)
-	require.NoError(t, err)
-
-	signature, err := crypto.Sign(bidHash[:], privateKey)
-	require.NoError(t, err)
-
-	bid.Signature = signature
-	for i := 0; i < int(bv.maxBidsPerSenderInRound); i++ {
-		_, err := bv.validateBid(bid, balanceCheckerFn)
-		require.NoError(t, err)
-	}
-	_, err = bv.validateBid(bid, balanceCheckerFn)
-	require.ErrorIs(t, err, ErrTooManyBids)
-
-}
->>>>>>> integration
 
 func makeValidSignature(t *testing.T, err error, bidHash common.Hash, privateKey *ecdsa.PrivateKey) []byte {
 	signature, err := crypto.Sign(bidHash[:], privateKey)
@@ -243,7 +177,6 @@ func makeValidSignature(t *testing.T, err error, bidHash common.Hash, privateKey
 	return signature
 }
 
-<<<<<<< HEAD
 func buildValidBid(t *testing.T, auctionContractAddr common.Address) *Bid {
 	privateKey, err := crypto.GenerateKey()
 	require.NoError(t, err)
@@ -263,28 +196,3 @@ func buildValidBid(t *testing.T, auctionContractAddr common.Address) *Bid {
 
 	return bid
 }
-||||||| d81324dae
-=======
-func buildValidBid(t *testing.T, auctionContractAddr common.Address) *Bid {
-	privateKey, err := crypto.GenerateKey()
-	require.NoError(t, err)
-	bid := &Bid{
-		ExpressLaneController:  common.Address{'b'},
-		AuctionContractAddress: auctionContractAddr,
-		ChainId:                big.NewInt(1),
-		Round:                  1,
-		Amount:                 big.NewInt(3),
-		Signature:              []byte{'a'},
-	}
-
-	bidHash, err := bid.ToEIP712Hash(common.Hash{})
-	require.NoError(t, err)
-
-	signature, err := crypto.Sign(bidHash[:], privateKey)
-	require.NoError(t, err)
-
-	bid.Signature = signature
-
-	return bid
-}
->>>>>>> integration

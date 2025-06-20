@@ -20,28 +20,10 @@ import (
 // An Ethereum Externally Owned Account is directly represented by a private key,
 // as opposed to a smart contract wallet where the smart contract authorizes transactions.
 type EOA struct {
-<<<<<<< HEAD
 	auth        *bind.TransactOpts
 	client      *ethclient.Client
 	dataPoster  *dataposter.DataPoster
 	getExtraGas func() uint64
-||||||| d81324dae
-	auth                    *bind.TransactOpts
-	client                  arbutil.L1Interface
-	rollupAddress           common.Address
-	challengeManager        *challengegen.ChallengeManager
-	challengeManagerAddress common.Address
-	dataPoster              *dataposter.DataPoster
-	getExtraGas             func() uint64
-=======
-	auth                    *bind.TransactOpts
-	client                  *ethclient.Client
-	rollupAddress           common.Address
-	challengeManager        *challengegen.ChallengeManager
-	challengeManagerAddress common.Address
-	dataPoster              *dataposter.DataPoster
-	getExtraGas             func() uint64
->>>>>>> integration
 }
 
 func NewEOA(dataPoster *dataposter.DataPoster, l1Client *ethclient.Client, getExtraGas func() uint64) (*EOA, error) {

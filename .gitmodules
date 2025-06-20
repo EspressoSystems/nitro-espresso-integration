@@ -20,7 +20,6 @@
 [submodule "arbitrator/tools/wasmer"]
 	path = arbitrator/tools/wasmer
 	url = https://github.com/OffchainLabs/wasmer.git
- integration
 [submodule "arbitrator/langs/rust"]
 	path = arbitrator/langs/rust
 	url = https://github.com/OffchainLabs/stylus-sdk-rs.git

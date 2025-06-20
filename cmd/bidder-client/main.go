@@ -43,7 +43,6 @@ func mainImpl() error {
 		return bidderClientConfig
 	}
 
-<<<<<<< HEAD
 	bidderClient, err := timeboost.NewBidderClient(ctx, configFetcher)
 	if err != nil {
 		return err
@@ -72,37 +71,6 @@ func mainImpl() error {
 
 	return errors.New("select one of --deposit-gwei or --bid-gwei")
 }
-||||||| d81324dae
-=======
-	bidderClient, err := timeboost.NewBidderClient(ctx, configFetcher)
-	if err != nil {
-		return err
-	}
-
-	if bidderClientConfig.DepositGwei > 0 && bidderClientConfig.BidGwei > 0 {
-		return errors.New("--deposit-gwei and --bid-gwei can't both be set, either make a deposit or a bid")
-	}
-
-	if bidderClientConfig.DepositGwei > 0 {
-		err = bidderClient.Deposit(ctx, big.NewInt(int64(bidderClientConfig.DepositGwei)*1_000_000_000))
-		if err == nil {
-			log.Info("Depsoit successful")
-		}
-		return err
-	}
-
-	if bidderClientConfig.BidGwei > 0 {
-		bidderClient.Start(ctx)
-		bid, err := bidderClient.Bid(ctx, big.NewInt(int64(bidderClientConfig.BidGwei)*1_000_000_000), common.Address{})
-		if err == nil {
-			log.Info("Bid submitted successfully", "bid", bid)
-		}
-		return err
-	}
-
-	return errors.New("select one of --deposit-gwei or --bid-gwei")
-}
->>>>>>> integration
 
 func parseBidderClientArgs(ctx context.Context, args []string) (*timeboost.BidderClientConfig, error) {
 	f := flag.NewFlagSet("", flag.ContinueOnError)

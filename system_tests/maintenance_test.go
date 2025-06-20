@@ -29,12 +29,7 @@ func TestMaintenance(t *testing.T) {
 		Require(t, err)
 	}
 
-<<<<<<< HEAD
 	_, err := builder.L2.ExecNode.Maintenance().Await(ctx)
-||||||| d81324dae
-=======
-	err := builder.L2.ExecNode.Maintenance()
->>>>>>> integration
 	Require(t, err)
 
 	for i := 2; i < 3+numberOfTransfers; i++ {

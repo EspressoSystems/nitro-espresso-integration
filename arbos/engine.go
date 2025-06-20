@@ -40,16 +40,9 @@ func (e Engine) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 	header.Difficulty = big.NewInt(1)
 	return nil
 }
-<<<<<<< HEAD
 func (e Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body) {
 	FinalizeBlock(header, body.Transactions, state, chain.Config())
 }
-||||||| d81324dae
-=======
-func (e Engine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) {
-	FinalizeBlock(header, body.Transactions, state, chain.Config())
-}
->>>>>>> integration
 func (e Engine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body, receipts []*types.Receipt) (*types.Block, error) {
 
 	e.Finalize(chain, header, state, body)

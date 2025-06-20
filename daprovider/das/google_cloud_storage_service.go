@@ -1,6 +1,5 @@
 package das
 
-<<<<<<< HEAD:daprovider/das/google_cloud_storage_service.go
 import (
 	"context"
 	"fmt"
@@ -21,29 +20,6 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/util/pretty"
 )
-||||||| d81324dae:daprovider/das/google_cloud_storage_service.go
-=======
-import (
-	"context"
-	"fmt"
-	"io"
-	"math"
-	"sort"
-	"time"
-
-	googlestorage "cloud.google.com/go/storage"
-	"github.com/google/go-cmp/cmp"
-	flag "github.com/spf13/pflag"
-	"google.golang.org/api/option"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
-
-	"github.com/offchainlabs/nitro/arbstate/daprovider"
-	"github.com/offchainlabs/nitro/das/dastree"
-	"github.com/offchainlabs/nitro/util/pretty"
-)
->>>>>>> integration:das/google_cloud_storage_service.go
 
 type GoogleCloudStorageOperator interface {
 	Bucket(name string) *googlestorage.BucketHandle
@@ -60,7 +36,6 @@ func (g *GoogleCloudStorageClient) Bucket(name string) *googlestorage.BucketHand
 	return g.client.Bucket(name)
 }
 
-<<<<<<< HEAD:daprovider/das/google_cloud_storage_service.go
 func (g *GoogleCloudStorageClient) Upload(ctx context.Context, bucket, objectPrefix string, value []byte, discardAfterTimeout bool, timeout uint64) error {
 	obj := g.client.Bucket(bucket).Object(objectPrefix + EncodeStorageServiceKey(dastree.Hash(value)))
 	w := obj.NewWriter(ctx)
@@ -77,25 +52,6 @@ func (g *GoogleCloudStorageClient) Upload(ctx context.Context, bucket, objectPre
 	}
 	return w.Close()
 }
-||||||| d81324dae:daprovider/das/google_cloud_storage_service.go
-=======
-func (g *GoogleCloudStorageClient) Upload(ctx context.Context, bucket, objectPrefix string, value []byte, discardAfterTimeout bool, timeout uint64) error {
-	obj := g.client.Bucket(bucket).Object(objectPrefix + EncodeStorageServiceKey(dastree.Hash(value)))
-	w := obj.NewWriter(ctx)
-
-	if discardAfterTimeout && timeout <= math.MaxInt64 {
-		w.Retention = &googlestorage.ObjectRetention{
-			Mode:        "Unlocked",
-			RetainUntil: time.Unix(int64(timeout), 0),
-		}
-	}
-
-	if _, err := fmt.Fprintln(w, value); err != nil {
-		return err
-	}
-	return w.Close()
-}
->>>>>>> integration:das/google_cloud_storage_service.go
 
 func (g *GoogleCloudStorageClient) Download(ctx context.Context, bucket, objectPrefix string, key common.Hash) ([]byte, error) {
 	obj := g.client.Bucket(bucket).Object(objectPrefix + EncodeStorageServiceKey(key))
@@ -121,7 +77,6 @@ type GoogleCloudStorageServiceConfig struct {
 
 var DefaultGoogleCloudStorageServiceConfig = GoogleCloudStorageServiceConfig{}
 
-<<<<<<< HEAD:daprovider/das/google_cloud_storage_service.go
 func GoogleCloudConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultGoogleCloudStorageServiceConfig.Enable, "EXPERIMENTAL/unsupported - enable storage/retrieval of sequencer batch data from a Google Cloud Storage bucket")
 	f.String(prefix+".access-token", DefaultGoogleCloudStorageServiceConfig.AccessToken, "Google Cloud Storage access token (JSON string)")
@@ -130,18 +85,6 @@ func GoogleCloudConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".object-prefix", DefaultGoogleCloudStorageServiceConfig.ObjectPrefix, "prefix to add to Google Cloud Storage objects")
 	f.Bool(prefix+".discard-after-timeout", DefaultGoogleCloudStorageServiceConfig.DiscardAfterTimeout, "discard data after its expiry timeout")
 }
-||||||| d81324dae:daprovider/das/google_cloud_storage_service.go
-func GoogleCloudConfigAddOptions(prefix string, f *flag.FlagSet) 
-=======
-func GoogleCloudConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultGoogleCloudStorageServiceConfig.Enable, "EXPERIMENTAL/unsupported - enable storage/retrieval of sequencer batch data from an Google Cloud Storage bucket")
-	f.String(prefix+".access-token", DefaultGoogleCloudStorageServiceConfig.AccessToken, "Google Cloud Storage access token (JSON string)")
-	f.String(prefix+".access-token-file", DefaultGoogleCloudStorageServiceConfig.AccessTokenFile, "Google Cloud Storage access token (JSON file path)")
-	f.String(prefix+".bucket", DefaultGoogleCloudStorageServiceConfig.Bucket, "Google Cloud Storage bucket")
-	f.String(prefix+".object-prefix", DefaultGoogleCloudStorageServiceConfig.ObjectPrefix, "prefix to add to Google Cloud Storage objects")
-	f.Bool(prefix+".discard-after-timeout", DefaultGoogleCloudStorageServiceConfig.DiscardAfterTimeout, "discard data after its expiry timeout")
-}
->>>>>>> integration:das/google_cloud_storage_service.go
 
 type GoogleCloudStorageService struct {
 	operator            GoogleCloudStorageOperator
@@ -194,22 +137,12 @@ func (gcs *GoogleCloudStorageService) GetByHash(ctx context.Context, key common.
 	return buf, nil
 }
 
-<<<<<<< HEAD:daprovider/das/google_cloud_storage_service.go
 func (gcs *GoogleCloudStorageService) ExpirationPolicy(ctx context.Context) (dasutil.ExpirationPolicy, error) {
 	if gcs.discardAfterTimeout {
 		return dasutil.DiscardAfterDataTimeout, nil
 	}
 	return dasutil.KeepForever, nil
 }
-||||||| d81324dae:daprovider/das/google_cloud_storage_service.go
-=======
-func (gcs *GoogleCloudStorageService) ExpirationPolicy(ctx context.Context) (daprovider.ExpirationPolicy, error) {
-	if gcs.discardAfterTimeout {
-		return daprovider.DiscardAfterDataTimeout, nil
-	}
-	return daprovider.KeepForever, nil
-}
->>>>>>> integration:das/google_cloud_storage_service.go
 
 func (gcs *GoogleCloudStorageService) Sync(ctx context.Context) error {
 	return nil

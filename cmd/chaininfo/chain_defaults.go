@@ -67,7 +67,6 @@ func CopyBlobScheduleConfig(blobSchedule *params.BlobScheduleConfig) *params.Blo
 	}
 	return blobScheduleCopy
 }
-<<<<<<< HEAD
 func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	copy := &params.ChainConfig{
 		DAOForkSupport:      chainConfig.DAOForkSupport,
@@ -121,60 +120,6 @@ func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	}
 	return copy
 }
-||||||| d81324dae
-func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig 
-=======
-func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
-	copy := &params.ChainConfig{
-		DAOForkSupport:      chainConfig.DAOForkSupport,
-		ArbitrumChainParams: CopyArbitrumChainParams(chainConfig.ArbitrumChainParams),
-		Clique: &params.CliqueConfig{
-			Period: chainConfig.Clique.Period,
-			Epoch:  chainConfig.Clique.Epoch,
-		},
-	}
-	if chainConfig.ChainID != nil {
-		copy.ChainID = new(big.Int).Set(chainConfig.ChainID)
-	}
-	if chainConfig.HomesteadBlock != nil {
-		copy.HomesteadBlock = new(big.Int).Set(chainConfig.HomesteadBlock)
-	}
-	if chainConfig.DAOForkBlock != nil {
-		copy.DAOForkBlock = new(big.Int).Set(chainConfig.DAOForkBlock)
-	}
-	if chainConfig.EIP150Block != nil {
-		copy.EIP150Block = new(big.Int).Set(chainConfig.EIP150Block)
-	}
-	if chainConfig.EIP155Block != nil {
-		copy.EIP155Block = new(big.Int).Set(chainConfig.EIP155Block)
-	}
-	if chainConfig.EIP158Block != nil {
-		copy.EIP158Block = new(big.Int).Set(chainConfig.EIP158Block)
-	}
-	if chainConfig.ByzantiumBlock != nil {
-		copy.ByzantiumBlock = new(big.Int).Set(chainConfig.ByzantiumBlock)
-	}
-	if chainConfig.ConstantinopleBlock != nil {
-		copy.ConstantinopleBlock = new(big.Int).Set(chainConfig.ConstantinopleBlock)
-	}
-	if chainConfig.PetersburgBlock != nil {
-		copy.PetersburgBlock = new(big.Int).Set(chainConfig.PetersburgBlock)
-	}
-	if chainConfig.IstanbulBlock != nil {
-		copy.IstanbulBlock = new(big.Int).Set(chainConfig.IstanbulBlock)
-	}
-	if chainConfig.MuirGlacierBlock != nil {
-		copy.MuirGlacierBlock = new(big.Int).Set(chainConfig.MuirGlacierBlock)
-	}
-	if chainConfig.BerlinBlock != nil {
-		copy.BerlinBlock = new(big.Int).Set(chainConfig.BerlinBlock)
-	}
-	if chainConfig.LondonBlock != nil {
-		copy.LondonBlock = new(big.Int).Set(chainConfig.LondonBlock)
-	}
-	return copy
-}
->>>>>>> integration
 func fetchArbitrumChainParams(chainName string) params.ArbitrumChainParams {
 	originalConfig, ok := DefaultChainConfigs[chainName]
 	if !ok {

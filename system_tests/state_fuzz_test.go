@@ -66,13 +66,7 @@ func BuildBlock(
 	}
 
 	block, _, err := arbos.ProduceBlock(
-<<<<<<< HEAD
 		l1Message, delayedMessagesRead, lastBlockHeader, statedb, chainContext, false, runMode,
-||||||| d81324dae
-		l1Message, delayedMessagesRead, lastBlockHeader, statedb, chainContext, chainConfig, false,
-=======
-		l1Message, delayedMessagesRead, lastBlockHeader, statedb, chainContext, chainConfig, false, runMode,
->>>>>>> integration
 	)
 	return block, err
 }
@@ -147,13 +141,7 @@ func FuzzStateTransition(f *testing.F) {
 			return
 		}
 		chainDb := rawdb.NewMemoryDatabase()
-<<<<<<< HEAD
 		chainConfig := chaininfo.ArbitrumDevTestChainConfig()
-||||||| d81324dae
-		chainConfig := params.ArbitrumRollupGoerliTestnetChainConfig()
-=======
-		chainConfig := chaininfo.ArbitrumRollupGoerliTestnetChainConfig()
->>>>>>> integration
 		serializedChainConfig, err := json.Marshal(chainConfig)
 		if err != nil {
 			panic(err)
@@ -210,17 +198,9 @@ func FuzzStateTransition(f *testing.F) {
 			positionWithinMessage: 0,
 			delayedMessages:       delayedMessages,
 		}
-<<<<<<< HEAD
 		numberOfMessageRunModes := uint8(core.MessageReplayMode) + 1 // TODO update number of run modes when new mode is added
 		runMode := core.MessageRunMode(runModeSeed % numberOfMessageRunModes)
 		_, err = BuildBlock(statedb, genesis.Header(), noopChainContext{chainConfig: chaininfo.ArbitrumDevTestChainConfig()}, inbox, seqBatch, runMode)
-||||||| d81324dae
-		_, err = BuildBlock(statedb, genesis, noopChainContext{}, params.ArbitrumOneChainConfig(), inbox, seqBatch)
-=======
-		numberOfMessageRunModes := uint8(core.MessageReplayMode) + 1 // TODO update number of run modes when new mode is added
-		runMode := core.MessageRunMode(runModeSeed % numberOfMessageRunModes)
-		_, err = BuildBlock(statedb, genesis, noopChainContext{}, chaininfo.ArbitrumOneChainConfig(), inbox, seqBatch, runMode)
->>>>>>> integration
 		if err != nil {
 			// With the fixed header it shouldn't be possible to read a delayed message,
 			// and no other type of error should be possible.

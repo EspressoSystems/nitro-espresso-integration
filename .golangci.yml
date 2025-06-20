@@ -3,33 +3,12 @@
 version: "2"
 linters:
   enable:
-<<<<<<< HEAD
     - asciicheck
     - errorlint
     - gocritic
     - gosec
     - nilerr
     - misspell
-||||||| d81324dae
-    - asciicheck  # check for non-ascii characters
-    - errorlint   # enure error wrapping is safely done
-    - gocritic    # check for certain simplifications
-    - gofmt       # ensure code is formatted
-    - gosec       # check for security concerns
-    - nilerr      # ensure errors aren't mishandled
-    - staticcheck # check for suspicious constructs
-    - unused      # check for unused constructs
-=======
-    - asciicheck  # check for non-ascii characters
-    - errorlint   # enure error wrapping is safely done
-    - gci         # keep imports sorted deterministically
-    - gocritic    # check for certain simplifications
-    - gofmt       # ensure code is formatted
-    - gosec       # check for security concerns
-    - nilerr      # ensure errors aren't mishandled
-    - staticcheck # check for suspicious constructs
-    - unused      # check for unused constructs
->>>>>>> integration
   settings:
     errcheck:
       check-type-assertions: true
@@ -52,14 +31,7 @@ linters:
         - opinionated
     gosec:
       excludes:
-<<<<<<< HEAD
         - G404
-||||||| d81324dae
-        - G404  # checks that random numbers are securely generated
-=======
-        - G404  # checks that random numbers are securely generated
-        - G114
->>>>>>> integration
     govet:
       disable:
         - shadow
@@ -90,14 +62,9 @@ linters:
     paths:
       - go-ethereum
       - fastcache
-<<<<<<< HEAD
       - third_party$
       - builtin$
       - examples$
-||||||| d81324dae
-=======
-      - bold
->>>>>>> integration
 formatters:
   enable:
     - gci

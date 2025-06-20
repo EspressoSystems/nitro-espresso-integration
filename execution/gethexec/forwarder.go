@@ -148,20 +148,10 @@ func (f *TxForwarder) PublishTransaction(inctx context.Context, tx *types.Transa
 			return err
 		}
 	}
-<<<<<<< HEAD
 	log.Error("Failed to publish transaction to any of the forwarding targets", "numTargets", len(f.rpcClients))
 	return errors.New("failed to publish transaction to any of the forwarding targets")
 }
-||||||| d81324dae
-	log.Error("Failed to publish transaction to any of the forwarding targets", "numTargets", len(f.rpcClients))
-	return errors.New("failed to publish transaction to any of the forwarding targets")
-}
-=======
-	return errors.New("failed to publish transaction to any of the forwarding targets")
-}
->>>>>>> integration
 
-<<<<<<< HEAD
 func (f *TxForwarder) PublishExpressLaneTransaction(inctx context.Context, msg *timeboost.ExpressLaneSubmission) error {
 	if !f.enabled.Load() {
 		return ErrNoSequencer
@@ -180,26 +170,6 @@ func (f *TxForwarder) PublishExpressLaneTransaction(inctx context.Context, msg *
 	log.Error("Failed to publish transaction to any of the forwarding targets", "numTargets", len(f.rpcClients))
 	return errors.New("failed to publish transaction to any of the forwarding targets")
 }
-||||||| d81324dae
-=======
-func (f *TxForwarder) PublishExpressLaneTransaction(inctx context.Context, msg *timeboost.ExpressLaneSubmission) error {
-	if !f.enabled.Load() {
-		return ErrNoSequencer
-	}
-	ctx, cancelFunc := f.ctxWithTimeout()
-	defer cancelFunc()
-	for pos, rpcClient := range f.rpcClients {
-		err := sendExpressLaneTransactionRPC(ctx, rpcClient, msg)
-		if err != nil {
-			log.Warn("error forwarding express lane transaction to a backup target", "target", f.targets[pos], "err", err)
-		}
-		if err == nil || !f.tryNewForwarderErrors.MatchString(err.Error()) {
-			return err
-		}
-	}
-	return errors.New("failed to publish transaction to any of the forwarding targets")
-}
->>>>>>> integration
 
 func sendExpressLaneTransactionRPC(ctx context.Context, rpcClient *rpc.Client, msg *timeboost.ExpressLaneSubmission) error {
 	jsonMsg, err := msg.ToJson()

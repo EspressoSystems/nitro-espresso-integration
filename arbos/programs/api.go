@@ -73,13 +73,8 @@ func newApiClosures(
 		return db.GetState(actingAddress, key), cost
 	}
 	setTrieSlots := func(data []byte, gasLeft *uint64) apiStatus {
-<<<<<<< HEAD
 		isOutOfGas := false
 		recording := db.Recording()
-||||||| d81324dae
-=======
-		isOutOfGas := false
->>>>>>> integration
 		for len(data) > 0 {
 			key := common.BytesToHash(data[:32])
 			value := common.BytesToHash(data[32:64])
@@ -92,21 +87,11 @@ func newApiClosures(
 			cost := vm.WasmStateStoreCost(db, actingAddress, key, value)
 			if cost > *gasLeft {
 				*gasLeft = 0
-<<<<<<< HEAD
 				isOutOfGas = true
 				if recording {
 					continue
 				}
 				break
-||||||| d81324dae
-				return OutOfGas
-=======
-				if db.Deterministic() {
-					isOutOfGas = true
-					continue
-				}
-				return OutOfGas
->>>>>>> integration
 			}
 			*gasLeft -= cost
 			db.SetState(actingAddress, key, value)

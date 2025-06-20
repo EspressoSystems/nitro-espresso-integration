@@ -87,16 +87,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-<<<<<<< HEAD
-	filePaths = append(filePaths, filePathsInternal...)
-||||||| d81324dae
-=======
 	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "espresso-tee-contracts", "*", "*.sol", "*.json"))
 	if err != nil {
 		log.Fatal(err)
 	}
->>>>>>> integration
-
+	filePaths = append(filePaths, filePathsInternal...)
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
 	filePaths = append(filePaths, filePathsEspressoTeeContracts...)

@@ -150,28 +150,16 @@ macro_rules! derive_math {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-
 #[must_use]
-
 pub struct Gas(pub u64);
 
 derive_math!(Gas);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-
 #[must_use]
-
 pub struct Ink(pub u64);
 
 derive_math!(Ink);
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-
-#[must_use]
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-
-#[must_use]
 
 pub trait EvmApi<D: DataReader>: Send + 'static {
     /// Reads the 32-byte value in the EVM state trie at offset `key`.
@@ -199,58 +187,58 @@ pub trait EvmApi<D: DataReader>: Send + 'static {
     /// Returns the EVM return data's length, the gas cost, and whether the call succeeded.
     /// Analogous to `vm.CALL`.
     fn contract_call(
-    &mut self,
-    contract: Bytes20,
-    calldata: &[u8],
-    gas_left: Gas,
-    gas_req: Gas,
-    value: Bytes32,
-) -> (u32, Gas, UserOutcomeKind);
+        &mut self,
+        contract: Bytes20,
+        calldata: &[u8],
+        gas_left: Gas,
+        gas_req: Gas,
+        value: Bytes32,
+    ) -> (u32, Gas, UserOutcomeKind);
 
     /// Delegate-calls the contract at the given address.
     /// Returns the EVM return data's length, the gas cost, and whether the call succeeded.
     /// Analogous to `vm.DELEGATECALL`.
     fn delegate_call(
-    &mut self,
-    contract: Bytes20,
-    calldata: &[u8],
-    gas_left: Gas,
-    gas_req: Gas,
-) -> (u32, Gas, UserOutcomeKind);
+        &mut self,
+        contract: Bytes20,
+        calldata: &[u8],
+        gas_left: Gas,
+        gas_req: Gas,
+    ) -> (u32, Gas, UserOutcomeKind);
 
     /// Static-calls the contract at the given address.
     /// Returns the EVM return data's length, the gas cost, and whether the call succeeded.
     /// Analogous to `vm.STATICCALL`.
     fn static_call(
-    &mut self,
-    contract: Bytes20,
-    calldata: &[u8],
-    gas_left: Gas,
-    gas_req: Gas,
-) -> (u32, Gas, UserOutcomeKind);
+        &mut self,
+        contract: Bytes20,
+        calldata: &[u8],
+        gas_left: Gas,
+        gas_req: Gas,
+    ) -> (u32, Gas, UserOutcomeKind);
 
     /// Deploys a new contract using the init code provided.
     /// Returns the new contract's address on success, or the error reason on failure.
     /// In both cases the EVM return data's length and the overall gas cost are returned too.
     /// Analogous to `vm.CREATE`.
     fn create1(
-    &mut self,
-    code: Vec<u8>,
-    endowment: Bytes32,
-    gas: Gas,
-) -> (eyre::Result<Bytes20>, u32, Gas);
+        &mut self,
+        code: Vec<u8>,
+        endowment: Bytes32,
+        gas: Gas,
+    ) -> (eyre::Result<Bytes20>, u32, Gas);
 
     /// Deploys a new contract using the init code provided, with an address determined in part by the `salt`.
     /// Returns the new contract's address on success, or the error reason on failure.
     /// In both cases the EVM return data's length and the overall gas cost are returned too.
     /// Analogous to `vm.CREATE2`.
     fn create2(
-    &mut self,
-    code: Vec<u8>,
-    endowment: Bytes32,
-    salt: Bytes32,
-    gas: Gas,
-) -> (eyre::Result<Bytes20>, u32, Gas);
+        &mut self,
+        code: Vec<u8>,
+        endowment: Bytes32,
+        salt: Bytes32,
+        gas: Gas,
+    ) -> (eyre::Result<Bytes20>, u32, Gas);
 
     /// Returns the EVM return data.
     /// Analogous to `vm.RETURNDATACOPY`.
@@ -282,11 +270,11 @@ pub trait EvmApi<D: DataReader>: Send + 'static {
 
     /// Captures tracing information for hostio invocations during native execution.
     fn capture_hostio(
-    &mut self,
-    name: &str,
-    args: &[u8],
-    outs: &[u8],
-    start_ink: Ink,
-    end_ink: Ink,
-);
+        &mut self,
+        name: &str,
+        args: &[u8],
+        outs: &[u8],
+        start_ink: Ink,
+        end_ink: Ink,
+    );
 }

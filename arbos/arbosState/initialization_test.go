@@ -13,14 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
-<<<<<<< HEAD
 	"github.com/ethereum/go-ethereum/triedb"
 
-||||||| d81324dae
-	"github.com/ethereum/go-ethereum/params"
-=======
-
->>>>>>> integration
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/burn"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"

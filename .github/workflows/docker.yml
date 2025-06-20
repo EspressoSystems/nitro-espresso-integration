@@ -33,24 +33,11 @@ jobs:
         with:
           tool-cache: true
   docker:
-<<<<<<< HEAD
-    needs: free-disk-space
-    needs: check-label
-||||||| d81324dae
-    needs: free-disk-space
-=======
-    needs: free-disk-space
->>>>>>> integration
+    needs: [free-disk-space, check-label]
     name: Docker build
     # Run if it's not a PR or if it's a PR with the required label
     if: github.event_name != 'pull_request' || needs.check-label.outputs.should-run == 'true'
-<<<<<<< HEAD
-    runs-on: arbitrator-ci
-||||||| d81324dae
-    runs-on: ubuntu-8
-=======
     runs-on: ubuntu-latest
->>>>>>> integration
     services:
       # local registry
       registry:

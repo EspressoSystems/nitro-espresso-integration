@@ -359,13 +359,7 @@ func handleReqImpl(apiId usize, req_type u32, data *rustSlice, costPtr *u64, out
 func cacheProgram(db vm.StateDB, module common.Hash, program Program, addressForLogging common.Address, code []byte, codehash common.Hash, params *StylusParams, debug bool, time uint64, runMode core.MessageRunMode) {
 	if runMode == core.MessageCommitMode {
 		// address is only used for logging
-<<<<<<< HEAD
 		asm, err := getLocalAsm(db, module, addressForLogging, code, codehash, params.MaxWasmSize, params.PageLimit, time, debug, program)
-||||||| d81324dae
-		asm, err := getLocalAsm(db, module, addressForLogging, code, codehash, codeHash, params.PageLimit, time, debug, program)
-=======
-		asm, err := getLocalAsm(db, module, addressForLogging, code, codehash, codehash, params.PageLimit, time, debug, program)
->>>>>>> integration
 		if err != nil {
 			panic("unable to recreate wasm")
 		}

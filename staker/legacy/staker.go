@@ -287,28 +287,10 @@ type ValidatorWalletInterface interface {
 	// Address must be able to be called concurrently with other functions
 	AddressOrZero() common.Address
 	TxSenderAddress() *common.Address
-<<<<<<< HEAD
 	L1Client() *ethclient.Client
-||||||| d81324dae
-	RollupAddress() common.Address
-	ChallengeManagerAddress() common.Address
-	L1Client() arbutil.L1Interface
-=======
-	RollupAddress() common.Address
-	ChallengeManagerAddress() common.Address
-	L1Client() *ethclient.Client
->>>>>>> integration
 	TestTransactions(context.Context, []*types.Transaction) error
-<<<<<<< HEAD
 	ExecuteTransactions(context.Context, []*types.Transaction, common.Address) (*types.Transaction, error)
 	TimeoutChallenges(context.Context, []uint64, common.Address) (*types.Transaction, error)
-||||||| d81324dae
-	ExecuteTransactions(context.Context, *txbuilder.Builder, common.Address) (*types.Transaction, error)
-	TimeoutChallenges(context.Context, []uint64) (*types.Transaction, error)
-=======
-	ExecuteTransactions(context.Context, []*types.Transaction, common.Address) (*types.Transaction, error)
-	TimeoutChallenges(context.Context, []uint64) (*types.Transaction, error)
->>>>>>> integration
 	CanBatchTxs() bool
 	AuthIfEoa() *bind.TransactOpts
 	Start(context.Context)
@@ -337,16 +319,8 @@ func NewStaker(
 		return nil, err
 	}
 	client := l1Reader.Client()
-<<<<<<< HEAD
 	val, err := NewL1Validator(client, wallet, validatorUtilsAddress, rollupAddress, config().GasRefunder(), callOpts,
 		inboxTracker, inboxStreamer, blockValidator)
-||||||| d81324dae
-	val, err := NewL1Validator(client, wallet, validatorUtilsAddress, callOpts,
-		statelessBlockValidator.inboxTracker, statelessBlockValidator.streamer, blockValidator)
-=======
-	val, err := NewL1Validator(client, wallet, validatorUtilsAddress, config().GasRefunder(), callOpts,
-		statelessBlockValidator.InboxTracker(), statelessBlockValidator.InboxStreamer(), blockValidator)
->>>>>>> integration
 	if err != nil {
 		return nil, err
 	}
@@ -363,13 +337,7 @@ func NewStaker(
 		config:                  config,
 		highGasBlocksBuffer:     big.NewInt(config().PostingStrategy.HighGasDelayBlocks),
 		lastActCalledBlock:      nil,
-<<<<<<< HEAD
 		inboxReader:             inboxReader,
-||||||| d81324dae
-		inboxReader:             statelessBlockValidator.inboxReader,
-=======
-		inboxReader:             statelessBlockValidator.InboxReader(),
->>>>>>> integration
 		statelessBlockValidator: statelessBlockValidator,
 		fatalErr:                fatalErr,
 		inactiveValidatedNodes:  inactiveValidatedNodes,

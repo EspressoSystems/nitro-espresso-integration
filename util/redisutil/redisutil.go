@@ -33,13 +33,7 @@ func RedisClientWithSentinelMasterNameFromURL(redisUrl string) (redis.UniversalC
 		if err != nil {
 			return nil, "", err
 		}
-<<<<<<< HEAD
 		return redis.NewFailoverClient(redisOptions), redisOptions.MasterName, nil
-||||||| d81324dae
-		return 
-=======
-		return redis.NewFailoverClient(redisOptions), nil
->>>>>>> integration
 	}
 	redisOptions, err := redis.ParseURL(redisUrl)
 	if err != nil {

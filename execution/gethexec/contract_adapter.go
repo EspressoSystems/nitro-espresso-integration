@@ -55,7 +55,6 @@ func (a *contractAdapter) CodeAt(ctx context.Context, contract common.Address, b
 	code := statedb.GetCode(contract)
 	return code, nil
 }
-<<<<<<< HEAD
 func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	var num = rpc.LatestBlockNumber
 	if blockNumber != nil {
@@ -92,45 +91,6 @@ func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMs
 
 	return result.ReturnData, nil
 }
-||||||| d81324dae
-func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) 
-=======
-func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-	var num rpc.BlockNumber = rpc.LatestBlockNumber
-	if blockNumber != nil {
-		num = rpc.BlockNumber(blockNumber.Int64())
-	}
-
-	state, header, err := a.apiBackend.StateAndHeaderByNumber(ctx, num)
-	if err != nil {
-		return nil, err
-	}
-
-	msg := &core.Message{
-		From:              call.From,
-		To:                call.To,
-		Value:             big.NewInt(0),
-		GasLimit:          math.MaxUint64,
-		GasPrice:          big.NewInt(0),
-		GasFeeCap:         big.NewInt(0),
-		GasTipCap:         big.NewInt(0),
-		Data:              call.Data,
-		AccessList:        call.AccessList,
-		SkipAccountChecks: true,
-		TxRunMode:         core.MessageEthcallMode, // Indicate this is an eth_call
-		SkipL1Charging:    true,                    // Skip L1 data fees
-	}
-
-	evm := a.apiBackend.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true}, nil)
-	gp := new(core.GasPool).AddGas(math.MaxUint64)
-	result, err := core.ApplyMessage(evm, msg, gp)
-	if err != nil {
-		return nil, err
-	}
-
-	return result.ReturnData, nil
-}
->>>>>>> integration
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/nitro/blob/master/LICENSE
 // contractAdapter is an impl of bind.ContractBackend with necessary methods defined to work with the ExpressLaneAuction contract

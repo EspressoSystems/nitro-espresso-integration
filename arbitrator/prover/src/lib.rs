@@ -112,35 +112,16 @@ impl RustBytes {
 }
 
 /// Frees the vector. Does nothing when the vector is null.
-
-
 ///
-
-
 /// # Safety
-
-
 ///
-
-
 /// Must only be called once per vec.
-
-
 #[no_mangle]
-
 pub unsafe extern "C" fn free_rust_bytes(vec: RustBytes) {
     if !vec.ptr.is_null() {
         drop(vec.into_vec())
     }
 }
-
-///
-
-
-///
-
-
-#[no_mangle]
 
 #[no_mangle]
 pub unsafe extern "C" fn arbitrator_load_machine(

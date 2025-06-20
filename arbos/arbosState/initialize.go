@@ -21,14 +21,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-<<<<<<< HEAD
 	"github.com/ethereum/go-ethereum/triedb"
 
-||||||| d81324dae
-	"github.com/holiman/uint256"
-=======
-
->>>>>>> integration
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/burn"
 	"github.com/offchainlabs/nitro/arbos/l2pricing"
@@ -106,7 +100,6 @@ func InitializeArbosInDatabase(db ethdb.Database, cacheConfig *core.CacheConfig,
 		panic("failed to open the ArbOS state :" + err.Error())
 	}
 
-<<<<<<< HEAD
 	chainOwner, err := initData.GetChainOwner()
 	if err != nil {
 		return common.Hash{}, err
@@ -118,19 +111,6 @@ func InitializeArbosInDatabase(db ethdb.Database, cacheConfig *core.CacheConfig,
 		}
 	}
 	// TODO: add init data native token owner handling
-||||||| d81324dae
-=======
-	chainOwner, err := initData.GetChainOwner()
-	if err != nil {
-		return common.Hash{}, err
-	}
-	if chainOwner != (common.Address{}) {
-		err = arbosState.ChainOwners().Add(chainOwner)
-		if err != nil {
-			return common.Hash{}, err
-		}
-	}
->>>>>>> integration
 	addrTable := arbosState.AddressTable()
 	addrTableSize, err := addrTable.Size()
 	if err != nil {
@@ -194,16 +174,8 @@ func InitializeArbosInDatabase(db ethdb.Database, cacheConfig *core.CacheConfig,
 		if err != nil {
 			return common.Hash{}, err
 		}
-<<<<<<< HEAD
 		statedb.SetBalance(account.Addr, uint256.MustFromBig(account.EthBalance), tracing.BalanceChangeUnspecified)
 		statedb.SetNonce(account.Addr, account.Nonce, tracing.NonceChangeUnspecified)
-||||||| d81324dae
-		statedb.SetBalance(account.Addr, uint256.MustFromBig(account.EthBalance))
-		statedb.SetNonce(account.Addr, account.Nonce)
-=======
-		statedb.SetBalance(account.Addr, uint256.MustFromBig(account.EthBalance), tracing.BalanceChangeUnspecified)
-		statedb.SetNonce(account.Addr, account.Nonce)
->>>>>>> integration
 		if account.ContractInfo != nil {
 			statedb.SetCode(account.Addr, account.ContractInfo.Code)
 			for k, v := range account.ContractInfo.ContractStorage {

@@ -43,7 +43,6 @@ func TransferBalance(
 			return errors.New("tracing scenario mismatch")
 		}
 
-<<<<<<< HEAD
 		if scenario != TracingDuringEVM {
 			if tracer.CaptureArbitrumTransfer != nil {
 				tracer.CaptureArbitrumTransfer(from, to, amount, scenario == TracingBeforeEVM, reason)
@@ -66,31 +65,6 @@ func TransferBalance(
 			}
 			info.MockCall([]byte{}, 0, *fromCopy, *toCopy, amount)
 		}
-||||||| d81324dae
-=======
-		if scenario != TracingDuringEVM {
-			if tracer.CaptureArbitrumTransfer != nil {
-				tracer.CaptureArbitrumTransfer(from, to, amount, scenario == TracingBeforeEVM, purpose)
-			}
-		} else {
-			fromCopy := from
-			toCopy := to
-			if fromCopy == nil {
-				fromCopy = &common.Address{}
-			}
-			if toCopy == nil {
-				toCopy = &common.Address{}
-			}
-
-			info := &TracingInfo{
-				Tracer:   evm.Config.Tracer,
-				Scenario: scenario,
-				Contract: vm.NewContract(addressHolder{*toCopy}, addressHolder{*fromCopy}, uint256.NewInt(0), 0),
-				Depth:    evm.Depth(),
-			}
-			info.MockCall([]byte{}, 0, *fromCopy, *toCopy, amount)
-		}
->>>>>>> integration
 	}
 	if from != nil {
 		balance := evm.StateDB.GetBalance(*from)
@@ -100,22 +74,10 @@ func TransferBalance(
 		if evm.Context.ArbOSVersion < params.ArbosVersion_Stylus && amount.Sign() == 0 {
 			evm.StateDB.CreateZombieIfDeleted(*from)
 		}
-<<<<<<< HEAD
 		evm.StateDB.SubBalance(*from, uint256.MustFromBig(amount), reason)
-||||||| d81324dae
-		evm.StateDB.SubBalance(*from, uint256.MustFromBig(amount))
-=======
-		evm.StateDB.SubBalance(*from, uint256.MustFromBig(amount), tracing.BalanceChangeTransfer)
->>>>>>> integration
 	}
 	if to != nil {
-<<<<<<< HEAD
 		evm.StateDB.AddBalance(*to, uint256.MustFromBig(amount), reason)
-||||||| d81324dae
-		evm.StateDB.AddBalance(*to, uint256.MustFromBig(amount))
-=======
-		evm.StateDB.AddBalance(*to, uint256.MustFromBig(amount), tracing.BalanceChangeTransfer)
->>>>>>> integration
 	}
 	return nil
 }

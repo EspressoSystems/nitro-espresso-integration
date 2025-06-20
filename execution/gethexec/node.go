@@ -147,15 +147,9 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".tx-lookup-limit", ConfigDefault.TxLookupLimit, "retain the ability to lookup transactions by hash for the past N blocks (0 = all blocks)")
 	f.Bool(prefix+".enable-prefetch-block", ConfigDefault.EnablePrefetchBlock, "enable prefetching of blocks")
 	StylusTargetConfigAddOptions(prefix+".stylus-target", f)
-<<<<<<< HEAD
 	f.Uint64(prefix+".block-metadata-api-cache-size", ConfigDefault.BlockMetadataApiCacheSize, "size (in bytes) of lru cache storing the blockMetadata to service arb_getRawBlockMetadata")
 	f.Uint64(prefix+".block-metadata-api-blocks-limit", ConfigDefault.BlockMetadataApiBlocksLimit, "maximum number of blocks allowed to be queried for blockMetadata per arb_getRawBlockMetadata query. Enabled by default, set 0 to disable the limit")
 	LiveTracingConfigAddOptions(prefix+".vmtrace", f)
-||||||| d81324dae
-=======
-	f.Uint64(prefix+".block-metadata-api-cache-size", ConfigDefault.BlockMetadataApiCacheSize, "size (in bytes) of lru cache storing the blockMetadata to service arb_getRawBlockMetadata")
-	f.Uint64(prefix+".block-metadata-api-blocks-limit", ConfigDefault.BlockMetadataApiBlocksLimit, "maximum number of blocks allowed to be queried for blockMetadata per arb_getRawBlockMetadata query. Enabled by default, set 0 to disable the limit")
->>>>>>> integration
 }
 
 type LiveTracingConfig struct {
@@ -521,18 +515,10 @@ func (n *ExecutionNode) MessageIndexToBlockNumber(messageNum arbutil.MessageInde
 	return containers.NewReadyPromise(blockNum, nil)
 }
 
-<<<<<<< HEAD
 func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) containers.PromiseInterface[arbutil.MessageIndex] {
 	return containers.NewReadyPromise(n.ExecEngine.BlockNumberToMessageIndex(blockNum))
 }
-||||||| d81324dae
-=======
-func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error) {
-	return n.ExecEngine.BlockNumberToMessageIndex(blockNum)
-}
->>>>>>> integration
 
-<<<<<<< HEAD
 func (n *ExecutionNode) Maintenance() containers.PromiseInterface[struct{}] {
 	trieCapLimitBytes := arbmath.SaturatingUMul(uint64(n.ConfigFetcher().Caching.TrieCapLimit), 1024*1024)
 	err := n.ExecEngine.Maintenance(trieCapLimitBytes)
@@ -543,17 +529,6 @@ func (n *ExecutionNode) Maintenance() containers.PromiseInterface[struct{}] {
 	err = n.ChainDB.Compact(nil, nil)
 	return containers.NewReadyPromise(struct{}{}, err)
 }
-||||||| d81324dae
-=======
-func (n *ExecutionNode) Maintenance() error {
-	trieCapLimitBytes := arbmath.SaturatingUMul(uint64(n.ConfigFetcher().Caching.TrieCapLimit), 1024*1024)
-	err := n.ExecEngine.Maintenance(trieCapLimitBytes)
-	if err != nil {
-		return err
-	}
-	return n.ChainDB.Compact(nil, nil)
-}
->>>>>>> integration
 
 func (n *ExecutionNode) Synced(ctx context.Context) bool {
 	return n.SyncMonitor.Synced(ctx)

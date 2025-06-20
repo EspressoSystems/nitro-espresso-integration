@@ -346,16 +346,8 @@ func (state *ArbosState) UpgradeArbosVersion(
 		case 21, 22, 23, 24, 25, 26, 27, 28, 29:
 			// these versions are left to Orbit chains for custom upgrades.
 
-<<<<<<< HEAD
 		case params.ArbosVersion_30:
 			programs.Initialize(nextArbosVersion, state.backingStorage.OpenSubStorage(programsSubspace))
-||||||| d81324dae
-		case 30:
-			programs.Initialize(state.backingStorage.OpenSubStorage(programsSubspace))
-=======
-		case params.ArbosVersion_30:
-			programs.Initialize(state.backingStorage.OpenSubStorage(programsSubspace))
->>>>>>> integration
 
 		case params.ArbosVersion_31:
 			params, err := state.Programs().Params()
@@ -363,7 +355,6 @@ func (state *ArbosState) UpgradeArbosVersion(
 			ensure(params.UpgradeToVersion(2))
 			ensure(params.Save())
 
-<<<<<<< HEAD
 		case params.ArbosVersion_32:
 			// no change state needed
 
@@ -382,11 +373,6 @@ func (state *ArbosState) UpgradeArbosVersion(
 			ensure(params.Save())
 
 		case params.ArbosVersion_41:
-||||||| d81324dae
-		case 32:
-=======
-		case params.ArbosVersion_32:
->>>>>>> integration
 			// no change state needed
 
 		case 33, 34:

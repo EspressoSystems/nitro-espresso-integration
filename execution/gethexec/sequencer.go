@@ -183,15 +183,9 @@ func SequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.StringSlice(prefix+".sender-whitelist", DefaultSequencerConfig.SenderWhitelist, "comma separated whitelist of authorized senders (if empty, everyone is allowed)")
 	AddOptionsForSequencerForwarderConfig(prefix+".forwarder", f)
-<<<<<<< HEAD
 	TimeboostAddOptions(prefix+".timeboost", f)
 
 	DangerousAddOptions(prefix+".dangerous", f)
-||||||| d81324dae
-=======
-	TimeboostAddOptions(prefix+".timeboost", f)
-
->>>>>>> integration
 	f.Int(prefix+".queue-size", DefaultSequencerConfig.QueueSize, "size of the pending tx queue")
 	f.Duration(prefix+".queue-timeout", DefaultSequencerConfig.QueueTimeout, "maximum amount of time transaction can wait in queue")
 	f.Int(prefix+".nonce-cache-size", DefaultSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
@@ -501,7 +495,6 @@ func (s *Sequencer) PublishTransaction(parentCtx context.Context, tx *types.Tran
 		return err
 	}
 }
-<<<<<<< HEAD
 func (s *Sequencer) PublishAuctionResolutionTransaction(ctx context.Context, tx *types.Transaction) error {
 	if !s.config().Timeboost.Enable {
 		return errors.New("timeboost not enabled")
@@ -625,215 +618,6 @@ func (s *Sequencer) publishTransactionToQueue(queueCtx context.Context, tx *type
 
 	return nil
 }
-||||||| d81324dae
-func (s *Sequencer) PublishTransaction(parentCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	config := s.config()
-	// Only try to acquire Rlock and check for hard threshold if l1reader is not nil
-	// And hard threshold was enabled, this prevents spamming of read locks when not needed
-	if s.l1Reader != nil && config.ExpectedSurplusHardThreshold != "default" {
-		s.expectedSurplusMutex.RLock()
-		if s.expectedSurplusUpdated && s.expectedSurplus < int64(config.expectedSurplusHardThreshold) {
-			return errors.New("currently not accepting transactions due to expected surplus being below threshold")
-		}
-		s.expectedSurplusMutex.RUnlock()
-	}
-
-	sequencerBacklogGauge.Inc(1)
-	defer sequencerBacklogGauge.Dec(1)
-
-	_, forwarder := s.GetPauseAndForwarder()
-	if forwarder != nil {
-		err := forwarder.PublishTransaction(parentCtx, tx, options)
-		if !errors.Is(err, ErrNoSequencer) {
-			return err
-		}
-	}
-
-	if len(s.senderWhitelist) > 0 {
-		signer := types.LatestSigner(s.execEngine.bc.Config())
-		sender, err := types.Sender(signer, tx)
-		if err != nil {
-			return err
-		}
-		_, authorized := s.senderWhitelist[sender]
-		if !authorized {
-			return errors.New("transaction sender is not on the whitelist")
-		}
-	}
-	if tx.Type() >= types.ArbitrumDepositTxType || tx.Type() == types.BlobTxType {
-		// Should be unreachable for Arbitrum types due to UnmarshalBinary not accepting Arbitrum internal txs
-		// and we want to disallow BlobTxType since Arbitrum doesn't support EIP-4844 txs yet.
-		return types.ErrTxTypeNotSupported
-	}
-
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	queueTimeout := config.QueueTimeout
-	queueCtx, cancelFunc := ctxWithTimeout(parentCtx, queueTimeout)
-	defer cancelFunc()
-
-	// Just to be safe, make sure we don't run over twice the queue timeout
-	abortCtx, cancel := ctxWithTimeout(parentCtx, queueTimeout*2)
-	defer cancel()
-
-	resultChan := make(chan error, 1)
-	queueItem := txQueueItem{
-		tx,
-		len(txBytes),
-		options,
-		resultChan,
-		&atomic.Bool{},
-		queueCtx,
-		time.Now(),
-	}
-	select {
-	case s.txQueue <- queueItem:
-	case <-queueCtx.Done():
-		return queueCtx.Err()
-	}
-
-	select {
-	case res := <-resultChan:
-		return res
-	case <-abortCtx.Done():
-		// We use abortCtx here and not queueCtx, because the QueueTimeout only applies to the background queue.
-		// We want to give the background queue as much time as possible to make a response.
-		err := abortCtx.Err()
-		if parentCtx.Err() == nil {
-			// If we've hit the abort deadline (as opposed to parentCtx being canceled), something went wrong.
-			log.Warn("Transaction sequencing hit abort deadline", "err", err, "submittedAt", queueItem.firstAppearance, "queueTimeout", queueTimeout, "txHash", tx.Hash())
-		}
-		return err
-	}
-}
-=======
-func (s *Sequencer) PublishAuctionResolutionTransaction(ctx context.Context, tx *types.Transaction) error {
-	if !s.config().Timeboost.Enable {
-		return errors.New("timeboost not enabled")
-	}
-
-	forwarder, err := s.getForwarder(ctx)
-	if err != nil {
-		return err
-	}
-	if forwarder != nil {
-		err := forwarder.PublishAuctionResolutionTransaction(ctx, tx)
-		if !errors.Is(err, ErrNoSequencer) {
-			return err
-		}
-	}
-
-	arrivalTime := time.Now()
-	auctioneerAddr := s.auctioneerAddr
-	if auctioneerAddr == (common.Address{}) {
-		return errors.New("invalid auctioneer address")
-	}
-	if tx.To() == nil {
-		return errors.New("transaction has no recipient")
-	}
-	if *tx.To() != s.expressLaneService.AuctionContractAddr() {
-		return fmt.Errorf("transaction recipient %#x is not the auction contract %#x", *tx.To(), s.expressLaneService.AuctionContractAddr())
-	}
-	signer := types.LatestSigner(s.execEngine.bc.Config())
-	sender, err := types.Sender(signer, tx)
-	if err != nil {
-		return err
-	}
-	if sender != auctioneerAddr {
-		return fmt.Errorf("sender %#x is not the auctioneer address %#x", sender, auctioneerAddr)
-	}
-	if !s.expressLaneService.roundTimingInfo.IsWithinAuctionCloseWindow(arrivalTime) {
-		return fmt.Errorf("transaction arrival time not within auction closure window: %v", arrivalTime)
-	}
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	log.Info("Prioritizing auction resolution transaction from auctioneer", "txHash", tx.Hash().Hex())
-	s.timeboostAuctionResolutionTxQueue <- txQueueItem{
-		tx:              tx,
-		txSize:          len(txBytes),
-		options:         nil,
-		resultChan:      make(chan error, 1),
-		returnedResult:  &atomic.Bool{},
-		ctx:             s.GetContext(),
-		firstAppearance: time.Now(),
-		isTimeboosted:   true,
-	}
-	return nil
-}
-
-func (s *Sequencer) publishTransactionToQueue(queueCtx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions, resultChan chan error, isExpressLaneController bool) error {
-	config := s.config()
-	// Only try to acquire Rlock and check for hard threshold if l1reader is not nil
-	// And hard threshold was enabled, this prevents spamming of read locks when not needed
-	if s.l1Reader != nil && config.ExpectedSurplusHardThreshold != "default" {
-		s.expectedSurplusMutex.RLock()
-		if s.expectedSurplusUpdated && s.expectedSurplus < int64(config.expectedSurplusHardThreshold) {
-			return errors.New("currently not accepting transactions due to expected surplus being below threshold")
-		}
-		s.expectedSurplusMutex.RUnlock()
-	}
-
-	sequencerBacklogGauge.Inc(1)
-	defer sequencerBacklogGauge.Dec(1)
-
-	if len(s.senderWhitelist) > 0 {
-		signer := types.LatestSigner(s.execEngine.bc.Config())
-		sender, err := types.Sender(signer, tx)
-		if err != nil {
-			return err
-		}
-		_, authorized := s.senderWhitelist[sender]
-		if !authorized {
-			return errors.New("transaction sender is not on the whitelist")
-		}
-	}
-	if tx.Type() >= types.ArbitrumDepositTxType || tx.Type() == types.BlobTxType {
-		// Should be unreachable for Arbitrum types due to UnmarshalBinary not accepting Arbitrum internal txs
-		// and we want to disallow BlobTxType since Arbitrum doesn't support EIP-4844 txs yet.
-		return types.ErrTxTypeNotSupported
-	}
-
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	if s.config().Timeboost.Enable && s.expressLaneService != nil {
-		if !isExpressLaneController && s.expressLaneService.currentRoundHasController() {
-			time.Sleep(s.config().Timeboost.ExpressLaneAdvantage)
-		}
-	}
-
-	var blockStamp uint64
-	if isExpressLaneController && config.Timeboost.QueueTimeoutInBlocks > 0 {
-		blockStamp = s.execEngine.bc.CurrentBlock().Number.Uint64()
-	}
-
-	queueItem := txQueueItem{
-		tx,
-		len(txBytes),
-		options,
-		resultChan,
-		&atomic.Bool{},
-		queueCtx,
-		time.Now(),
-		isExpressLaneController,
-		blockStamp,
-	}
-	select {
-	case s.txQueue <- queueItem:
-	case <-queueCtx.Done():
-		return queueCtx.Err()
-	}
-
-	return nil
-}
->>>>>>> integration
 func (s *Sequencer) PublishExpressLaneTransaction(ctx context.Context, msg *timeboost.ExpressLaneSubmission) error {
 	if !s.config().Timeboost.Enable {
 		return errors.New("timeboost not enabled")
@@ -1267,7 +1051,6 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		}
 		if queueItem.isTimeboosted &&
 			queueItem.blockStamp != 0 &&
-<<<<<<< HEAD
 			lastBlock.Number.Uint64() >= queueItem.blockStamp+config.Timeboost.QueueTimeoutInBlocks {
 			err := fmt.Errorf("timeboosted tx: %s has hit block based timeout. currentBlockNum: %d, blockStamp: %d, blockExpiry: %d",
 				queueItem.tx.Hash(),
@@ -1279,21 +1062,6 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 			log.Info("Error sequencing timeboost tx", "err", err)
 			continue
 		}
-||||||| d81324dae
-			lastBlock.Number.Uint64() >= queueItem.blockStamp+config.Timeboost.QueueTimeoutInBlocks 
-=======
-			lastBlock.Number.Uint64() >= queueItem.blockStamp+config.Timeboost.QueueTimeoutInBlocks {
-			err := fmt.Errorf("timeboosted tx: %s has hit block based timeout. currentBlockNum: %d, blockStamp: %d, blockExpiry: %d",
-				queueItem.tx.Hash(),
-				lastBlock.Number.Uint64()+1,
-				queueItem.blockStamp,
-				queueItem.blockStamp+config.Timeboost.QueueTimeoutInBlocks,
-			)
-			queueItem.returnResult(err) // this isnt read by anyone, so we log a debug line
-			log.Debug("Error sequencing timeboost tx", "err", err)
-			continue
-		}
->>>>>>> integration
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			queueItem.returnResult(fmt.Errorf("%w: maxFeePerGas: %s baseFee: %s", core.ErrFeeCapTooLow, queueItem.tx.GasFeeCap(), lastBlock.BaseFee))
 			continue

@@ -1,6 +1,5 @@
 package timeboost
 
-<<<<<<< HEAD
 import (
 	"context"
 	"crypto/ecdsa"
@@ -24,32 +23,6 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/timeboost/bindings"
 )
-||||||| d81324dae
-=======
-import (
-	"context"
-	"crypto/ecdsa"
-	"fmt"
-	"math/big"
-	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
-
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/ethclient/simulated"
-	"github.com/ethereum/go-ethereum/node"
-
-	"github.com/offchainlabs/nitro/cmd/genericconf"
-	"github.com/offchainlabs/nitro/solgen/go/express_lane_auctiongen"
-	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
-	"github.com/offchainlabs/nitro/timeboost/bindings"
-)
->>>>>>> integration
 
 type auctionSetup struct {
 	chainId                *big.Int
@@ -66,7 +39,6 @@ type auctionSetup struct {
 	endpoint               string
 }
 
-<<<<<<< HEAD
 func setupAuctionTest(t testing.TB, ctx context.Context) *auctionSetup {
 	accs, backend, endpoint := setupAccounts(t, 10)
 
@@ -183,126 +155,6 @@ func setupAuctionTest(t testing.TB, ctx context.Context) *auctionSetup {
 		endpoint:               endpoint,
 	}
 }
-||||||| d81324dae
-func setupAuctionTest(t testing.TB, ctx context.Context) *auctionSetup 
-=======
-func setupAuctionTest(t testing.TB, ctx context.Context) *auctionSetup {
-	accs, backend, endpoint := setupAccounts(t, 10)
-
-	go func() {
-		tick := time.NewTicker(time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-tick.C:
-				backend.Commit()
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	opts := accs[0].txOpts
-	chainId, err := backend.Client().ChainID(ctx)
-	require.NoError(t, err)
-
-	// Deploy the token as a mock erc20.
-	erc20Addr, tx, erc20, err := bindings.DeployMockERC20(opts, backend.Client())
-	require.NoError(t, err)
-	if _, err = bind.WaitMined(ctx, backend.Client(), tx); err != nil {
-		t.Fatal(err)
-	}
-	tx, err = erc20.Initialize(opts, "LANE", "LNE", 18)
-	require.NoError(t, err)
-	if _, err = bind.WaitMined(ctx, backend.Client(), tx); err != nil {
-		t.Fatal(err)
-	}
-
-	// Mint 10 wei tokens to all accounts.
-	mintTokens(ctx, opts, backend, accs, erc20)
-
-	// Check account balances.
-	bal, err := erc20.BalanceOf(&bind.CallOpts{}, accs[0].accountAddr)
-	require.NoError(t, err)
-	t.Log("Account seeded with ERC20 token balance =", bal.String())
-
-	// Deploy the express lane auction contract.
-	auctionContractAddr, tx, _, err := express_lane_auctiongen.DeployExpressLaneAuction(
-		opts, backend.Client(),
-	)
-	require.NoError(t, err)
-	if _, err = bind.WaitMined(ctx, backend.Client(), tx); err != nil {
-		t.Fatal(err)
-	}
-	proxyAddr, tx, _, err := mocksgen.DeploySimpleProxy(opts, backend.Client(), auctionContractAddr)
-	require.NoError(t, err)
-	if _, err = bind.WaitMined(ctx, backend.Client(), tx); err != nil {
-		t.Fatal(err)
-	}
-	auctionContract, err := express_lane_auctiongen.NewExpressLaneAuction(proxyAddr, backend.Client())
-	require.NoError(t, err)
-
-	expressLaneAddr := common.HexToAddress("0x2424242424242424242424242424242424242424")
-
-	// Calculate the number of seconds until the next minute
-	// and the next timestamp that is a multiple of a minute.
-	now := time.Now()
-	roundDuration := time.Minute
-	waitTime := roundDuration - time.Duration(now.Second())*time.Second - time.Duration(now.Nanosecond())
-	initialTime := now.Add(waitTime)
-	initialTimestamp := big.NewInt(initialTime.Unix())
-	t.Logf("Initial timestamp for express lane auctions: %v", initialTime)
-
-	// Deploy the auction manager contract.
-	auctioneer := opts.From
-	beneficiary := opts.From
-	biddingToken := erc20Addr
-	bidRoundSeconds := uint64(60)
-	auctionClosingSeconds := uint64(15)
-	reserveSubmissionSeconds := uint64(15)
-	minReservePrice := big.NewInt(1) // 1 wei.
-	roleAdmin := opts.From
-	tx, err = auctionContract.Initialize(
-		opts,
-		express_lane_auctiongen.InitArgs{
-			Auctioneer:   auctioneer,
-			BiddingToken: biddingToken,
-			Beneficiary:  beneficiary,
-			RoundTimingInfo: express_lane_auctiongen.RoundTimingInfo{
-				OffsetTimestamp:          initialTimestamp.Int64(),
-				RoundDurationSeconds:     bidRoundSeconds,
-				AuctionClosingSeconds:    auctionClosingSeconds,
-				ReserveSubmissionSeconds: reserveSubmissionSeconds,
-			},
-			MinReservePrice:       minReservePrice,
-			AuctioneerAdmin:       roleAdmin,
-			MinReservePriceSetter: roleAdmin,
-			ReservePriceSetter:    roleAdmin,
-			BeneficiarySetter:     roleAdmin,
-			RoundTimingSetter:     roleAdmin,
-			MasterAdmin:           roleAdmin,
-		},
-	)
-	require.NoError(t, err)
-	if _, err = bind.WaitMined(ctx, backend.Client(), tx); err != nil {
-		t.Fatal(err)
-	}
-	return &auctionSetup{
-		chainId:                chainId,
-		expressLaneAuctionAddr: proxyAddr,
-		expressLaneAuction:     auctionContract,
-		erc20Addr:              erc20Addr,
-		erc20Contract:          erc20,
-		initialTimestamp:       now,
-		roundDuration:          time.Minute,
-		expressLaneAddr:        expressLaneAddr,
-		beneficiaryAddr:        beneficiary,
-		accounts:               accs,
-		backend:                backend,
-		endpoint:               endpoint,
-	}
-}
->>>>>>> integration
 
 func setupBidderClient(
 	t testing.TB, ctx context.Context, account *testAccount, testSetup *auctionSetup, bidValidatorEndpoint string,
@@ -378,20 +230,11 @@ func setupAccounts(t testing.TB, numAccounts uint64) ([]*testAccount, *simulated
 		}
 	}
 	randPort := getRandomPort(t)
-<<<<<<< HEAD
 	withRPC := func(n *node.Config, _ *ethconfig.Config) {
 		n.HTTPHost = "localhost"
 		n.HTTPPort = randPort
 		n.HTTPModules = []string{"eth", "net", "web3", "debug"}
 	}
-||||||| d81324dae
-=======
-	withRPC := func(n *node.Config, _ *ethconfig.Config) {
-		n.HTTPHost = "localhost"
-		n.HTTPPort = randPort
-		n.HTTPModules = []string{"eth", "net", "web3", "debug", "personal"}
-	}
->>>>>>> integration
 	backend := simulated.NewBackend(genesis, simulated.WithBlockGasLimit(gasLimit), withRPC)
 	return accs, backend, fmt.Sprintf("http://localhost:%d", randPort)
 }

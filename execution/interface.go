@@ -34,7 +34,6 @@ var ErrSequencerInsertLockTaken = errors.New("insert lock taken")
 
 // always needed
 type ExecutionClient interface {
-<<<<<<< HEAD
 	DigestMessage(msgIdx arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) containers.PromiseInterface[*MessageResult]
 	Reorg(msgIdxOfFirstMsgToAdd arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) containers.PromiseInterface[[]*MessageResult]
 	HeadMessageIndex() containers.PromiseInterface[arbutil.MessageIndex]
@@ -48,21 +47,6 @@ type ExecutionClient interface {
 
 	Start(ctx context.Context) error
 	StopAndWait()
-||||||| d81324dae
-	DigestMessage(num arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) (*MessageResult, error)
-	Reorg(count arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockHash, oldMessages []*arbostypes.MessageWithMetadata) ([]*MessageResult, error)
-	HeadMessageNumber() (arbutil.MessageIndex, error)
-	HeadMessageNumberSync(t *testing.T) (arbutil.MessageIndex, error)
-	ResultAtPos(pos arbutil.MessageIndex) (*MessageResult, error)
-=======
-	DigestMessage(num arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) (*MessageResult, error)
-	Reorg(count arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) ([]*MessageResult, error)
-	HeadMessageNumber() (arbutil.MessageIndex, error)
-	HeadMessageNumberSync(t *testing.T) (arbutil.MessageIndex, error)
-	ResultAtPos(pos arbutil.MessageIndex) (*MessageResult, error)
-	MessageIndexToBlockNumber(messageNum arbutil.MessageIndex) uint64
-	BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error)
->>>>>>> integration
 }
 
 // needed for validators / stakers
@@ -101,44 +85,15 @@ type BatchFetcher interface {
 }
 
 type ConsensusInfo interface {
-<<<<<<< HEAD
 	Synced() containers.PromiseInterface[bool]
 	FullSyncProgressMap() containers.PromiseInterface[map[string]interface{}]
 	SyncTargetMessageCount() containers.PromiseInterface[arbutil.MessageIndex]
 	BlockMetadataAtMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[common.BlockMetadata]
-||||||| d81324dae
-	Synced() bool
-	FullSyncProgressMap() map[string]interface{}
-	SyncTargetMessageCount() arbutil.MessageIndex
-
-	// TODO: switch from pulling to pushing safe/finalized
-	GetSafeMsgCount(ctx context.Context) (arbutil.MessageIndex, error)
-	GetFinalizedMsgCount(ctx context.Context) (arbutil.MessageIndex, error)
-	ValidatedMessageCount() (arbutil.MessageIndex, error)
-=======
-	Synced() bool
-	FullSyncProgressMap() map[string]interface{}
-	SyncTargetMessageCount() arbutil.MessageIndex
-	BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error)
-
-	// TODO: switch from pulling to pushing safe/finalized
-	GetSafeMsgCount(ctx context.Context) (arbutil.MessageIndex, error)
-	GetFinalizedMsgCount(ctx context.Context) (arbutil.MessageIndex, error)
-	ValidatedMessageCount() (arbutil.MessageIndex, error)
->>>>>>> integration
 }
 
 type ConsensusSequencer interface {
-<<<<<<< HEAD
 	WriteMessageFromSequencer(msgIdx arbutil.MessageIndex, msgWithMeta arbostypes.MessageWithMetadata, msgResult MessageResult, blockMetadata common.BlockMetadata) containers.PromiseInterface[struct{}]
 	ExpectChosenSequencer() containers.PromiseInterface[struct{}]
-||||||| d81324dae
-	WriteMessageFromSequencer(pos arbutil.MessageIndex, msgWithMeta arbostypes.MessageWithMetadata, msgResult MessageResult) error
-	ExpectChosenSequencer() error
-=======
-	WriteMessageFromSequencer(pos arbutil.MessageIndex, msgWithMeta arbostypes.MessageWithMetadata, msgResult MessageResult, blockMetadata common.BlockMetadata) error
-	ExpectChosenSequencer() error
->>>>>>> integration
 }
 
 type FullConsensusClient interface {

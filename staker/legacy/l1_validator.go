@@ -63,13 +63,8 @@ func NewL1Validator(
 	client *ethclient.Client,
 	wallet ValidatorWalletInterface,
 	validatorUtilsAddress common.Address,
-<<<<<<< HEAD
 	rollupAddress common.Address,
 	gasRefunder common.Address,
-||||||| d81324dae
-=======
-	gasRefunder common.Address,
->>>>>>> integration
 	callOpts bind.CallOpts,
 	inboxTracker staker.InboxTrackerInterface,
 	txStreamer staker.TransactionStreamerInterface,
@@ -79,13 +74,7 @@ func NewL1Validator(
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
 	rollup, err := staker.NewRollupWatcher(rollupAddress, wallet.L1Client(), callOpts)
-||||||| d81324dae
-	rollup, err := staker.NewRollupWatcher(wallet.RollupAddress(), builder, callOpts)
-=======
-	rollup, err := staker.NewRollupWatcher(wallet.RollupAddress(), wallet.L1Client(), callOpts)
->>>>>>> integration
 	if err != nil {
 		return nil, err
 	}

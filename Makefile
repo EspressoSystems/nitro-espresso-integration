@@ -211,11 +211,7 @@ all: build build-replay-env test-gen-proofs
 	@touch .make/all
 
 .PHONY: build
-<<<<<<< HEAD
 build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daprovider daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
-=======
-build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
->>>>>>> integration
 	@printf $(done)
 
 .PHONY: build-node-deps
@@ -656,15 +652,11 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account build
-<<<<<<< HEAD
 	yarn --cwd contracts build
 	yarn --cwd contracts build:forge:yul
 	yarn --cwd contracts-legacy build
 	yarn --cwd contracts-legacy build:forge:yul
 	make -C contracts-local build
-=======
-	yarn --cwd contracts build:all
->>>>>>> integration
 	@touch $@
 
 .make/yarndeps: $(DEP_PREDICATE) */package.json */yarn.lock $(ORDER_ONLY_PREDICATE) .make

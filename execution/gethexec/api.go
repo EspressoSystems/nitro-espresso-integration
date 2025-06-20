@@ -48,7 +48,6 @@ func (a *ArbAPI) CheckPublisherHealth(ctx context.Context) error {
 	return a.txPublisher.CheckHealth(ctx)
 }
 
-<<<<<<< HEAD
 func (a *ArbAPI) GetRawBlockMetadata(ctx context.Context, fromBlock, toBlock rpc.BlockNumber) ([]NumberAndBlockMetadata, error) {
 	if a.bulkBlockMetadataFetcher == nil {
 		return nil, errors.New("arb_getRawBlockMetadata is not available")
@@ -66,23 +65,6 @@ func (a *ArbTimeboostAPI) SendExpressLaneTransaction(ctx context.Context, msg *t
 	}
 	return a.txPublisher.PublishExpressLaneTransaction(ctx, goMsg)
 }
-||||||| d81324dae
-=======
-func (a *ArbAPI) GetRawBlockMetadata(ctx context.Context, fromBlock, toBlock rpc.BlockNumber) ([]NumberAndBlockMetadata, error) {
-	if a.bulkBlockMetadataFetcher == nil {
-		return nil, errors.New("arb_getRawBlockMetadata is not available")
-	}
-	return a.bulkBlockMetadataFetcher.Fetch(fromBlock, toBlock)
-}
-
-func (a *ArbTimeboostAPI) SendExpressLaneTransaction(ctx context.Context, msg *timeboost.JsonExpressLaneSubmission) error {
-	goMsg, err := timeboost.JsonSubmissionToGo(msg)
-	if err != nil {
-		return err
-	}
-	return a.txPublisher.PublishExpressLaneTransaction(ctx, goMsg)
-}
->>>>>>> integration
 
 type ArbTimeboostAuctioneerAPI struct {
 	txPublisher TransactionPublisher

@@ -1,7 +1,6 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package gethexec
-<<<<<<< HEAD
 import (
 	"bytes"
 	"context"
@@ -27,33 +26,6 @@ import (
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-||||||| d81324dae
-=======
-import (
-	"bytes"
-	"context"
-	"fmt"
-	"sync"
-	"time"
-
-	"github.com/pkg/errors"
-
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/arbitrum"
-	"github.com/ethereum/go-ethereum/arbitrum_types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-
-	"github.com/offchainlabs/nitro/solgen/go/express_lane_auctiongen"
-	"github.com/offchainlabs/nitro/timeboost"
-	"github.com/offchainlabs/nitro/util/containers"
-	"github.com/offchainlabs/nitro/util/stopwaiter"
-)
->>>>>>> integration
 var (
 	auctionResolutionLatency = metrics.NewRegisteredGauge("arb/sequencer/timeboost/auctionresolution", nil)
 )
@@ -157,7 +129,6 @@ func (es *expressLaneService) StopAndWait() {
 const DontCareSequence = math.MaxUint64
 // sequenceExpressLaneSubmission with the roundInfo lock held, validates sequence number and sender address fields of the message
 // adds the message to the sequencer transaction queue
-<<<<<<< HEAD
 func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.ExpressLaneSubmission) error {
 	if msg.SequenceNumber == DontCareSequence {
 		// Don't store DontCareSequence txs with the redisCoordinator. The redisCoordinator is
@@ -273,105 +244,6 @@ func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.Expre
 
 	return retErr
 }
-||||||| d81324dae
-=======
-func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.ExpressLaneSubmission) error {
-	es.roundInfoMutex.Lock()
-	defer es.roundInfoMutex.Unlock()
-
-	// Below code block isn't a repetition, it prevents stale messages to be accepted during control transfer within or after the round ends!
-	controller, err := es.tracker.RoundController(msg.Round)
-	if err != nil {
-		return err
-	}
-	sender, err := msg.Sender() // Doesn't recompute sender address
-	if err != nil {
-		return err
-	}
-	if sender != controller {
-		return timeboost.ErrNotExpressLaneController
-	}
-
-	// If expressLaneRoundInfo for current round doesn't exist yet, we'll add it to the cache
-	if !es.roundInfo.Contains(msg.Round) {
-		es.roundInfo.Add(msg.Round, &expressLaneRoundInfo{
-			0,
-			make(map[uint64]*timeboost.ExpressLaneSubmission),
-		})
-	}
-	roundInfo, _ := es.roundInfo.Get(msg.Round)
-
-	prev, exists := roundInfo.msgBySequenceNumber[msg.SequenceNumber]
-
-	// Check if the submission nonce is too low.
-	if msg.SequenceNumber < roundInfo.sequence {
-		if exists && bytes.Equal(prev.Signature, msg.Signature) {
-			return nil
-		}
-		return timeboost.ErrSequenceNumberTooLow
-	}
-
-	// Check if a duplicate submission exists already, and reject if so.
-	if exists {
-		if bytes.Equal(prev.Signature, msg.Signature) {
-			return nil
-		}
-		return timeboost.ErrDuplicateSequenceNumber
-	}
-
-	seqConfig := es.seqConfig()
-
-	// Log an informational warning if the message's sequence number is in the future.
-	if msg.SequenceNumber > roundInfo.sequence {
-		if msg.SequenceNumber > roundInfo.sequence+seqConfig.Timeboost.MaxFutureSequenceDistance {
-			return fmt.Errorf("message sequence number has reached max allowed limit. SequenceNumber: %d, ExpectedSequenceNumber: %d, Limit: %d", msg.SequenceNumber, roundInfo.sequence, roundInfo.sequence+seqConfig.Timeboost.MaxFutureSequenceDistance)
-		}
-		log.Info("Received express lane submission with future sequence number", "SequenceNumber", msg.SequenceNumber)
-	}
-
-	// Put into the sequence number map.
-	roundInfo.msgBySequenceNumber[msg.SequenceNumber] = msg
-
-	if es.redisCoordinator != nil {
-		// Persist accepted expressLane txs to redis
-		if err := es.redisCoordinator.AddAcceptedTx(msg); err != nil {
-			log.Error("Error adding accepted ExpressLaneSubmission to redis. Loss of msg possible if sequencer switch happens", "seqNum", msg.SequenceNumber, "txHash", msg.Transaction.Hash(), "err", err)
-		}
-	}
-
-	var retErr error
-	queueTimeout := seqConfig.QueueTimeout
-	for es.roundTimingInfo.RoundNumber() == msg.Round { // This check ensures that the controller for this round is not allowed to send transactions from msgBySequenceNumber map once the next round starts
-		// Get the next message in the sequence.
-		nextMsg, exists := roundInfo.msgBySequenceNumber[roundInfo.sequence]
-		if !exists {
-			break
-		}
-		// Txs (current or buffered) cannot use this function's context as it would lead to context canceled error later on, once the tx is queued and this function returns, hence we
-		// use es.GetContext(). Txs sequenced this round shouldn't be processed by sequencer into next round, to enforce this, queueCtx has a timeout = min(TimeTilNextRound, queueTimeout)
-		timeout := min(es.roundTimingInfo.TimeTilNextRound(), queueTimeout)
-		queueCtx, _ := ctxWithTimeout(es.GetContext(), timeout)
-		if err := es.transactionPublisher.PublishTimeboostedTransaction(queueCtx, nextMsg.Transaction, nextMsg.Options); err != nil {
-			log.Error("Error queuing expressLane transaction", "seqNum", nextMsg.SequenceNumber, "txHash", nextMsg.Transaction.Hash(), "err", err)
-			if nextMsg.SequenceNumber == msg.SequenceNumber {
-				retErr = err
-			}
-		}
-		// Increase the global round sequence number.
-		roundInfo.sequence += 1
-	}
-	es.roundInfo.Add(msg.Round, roundInfo)
-
-	if es.redisCoordinator != nil {
-		// We update the sequence count in redis after we were able to queue the txs up until roundInfo.sequence
-		if redisErr := es.redisCoordinator.UpdateSequenceCount(msg.Round, roundInfo.sequence); redisErr != nil {
-			log.Error("Error updating round's sequence count in redis", "err", redisErr) // this shouldn't be a problem if future msgs succeed in updating the count
-		}
-	}
-
-	return retErr
-}
->>>>>>> integration
 func (es *expressLaneService) syncFromRedis() {
 	if es.redisCoordinator == nil {
 		return

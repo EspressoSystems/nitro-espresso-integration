@@ -24,20 +24,10 @@ type ValidationRun interface {
 	WasmModuleRoot() common.Hash
 }
 
-<<<<<<< HEAD
 type ExecutionSpawner interface {
 	ValidationSpawner
 	CreateExecutionRun(wasmModuleRoot common.Hash, input *ValidationInput, useBoldMachine bool) containers.PromiseInterface[ExecutionRun]
 }
-||||||| d81324dae
-type ExecutionSpawner 
-=======
-type ExecutionSpawner interface {
-	ValidationSpawner
-	CreateExecutionRun(wasmModuleRoot common.Hash, input *ValidationInput, useBoldMachine bool) containers.PromiseInterface[ExecutionRun]
-	LatestWasmModuleRoot() containers.PromiseInterface[common.Hash]
-}
->>>>>>> integration
 
 type BOLDExecutionSpawner interface {
 	WasmModuleRoots() ([]common.Hash, error)

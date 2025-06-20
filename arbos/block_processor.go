@@ -116,22 +116,11 @@ type ConditionalOptionsForTx []*arbitrum_types.ConditionalOptions
 
 type SequencingHooks struct {
 	TxErrors                []error                                                                                                                                                                 // This can be unset
-	DiscardInvalidTxsEarly  bool
-// This can be unset
-	PreTxFilter             func(*params.ChainConfig, *types.Header, *state.StateDB, *arbosState.ArbosState, *types.Transaction, *arbitrum_types.ConditionalOptions, common.Address, *L1Info) error
-// This has to be set. Writes to *state.StateDB object should be avoided to prevent invalid state from permeating
-	PostTxFilter            func(*types.Header, *state.StateDB, *arbosState.ArbosState, *types.Transaction, common.Address, uint64, *core.ExecutionResult) error
-// This has to be set
-	BlockFilter             func(*types.Header, *state.StateDB, types.Transactions, types.Receipts) error
-// This can be unset
-	ConditionalOptionsForTx []*arbitrum_types.ConditionalOptions
-// This can be unset
-// This can be unset
-// This can be unset
-// This has to be set
-// This has to be set
-// This can be unset
-// This can be unset
+	DiscardInvalidTxsEarly  bool                                                                                                                                                                    // This can be unset
+	PreTxFilter             func(*params.ChainConfig, *types.Header, *state.StateDB, *arbosState.ArbosState, *types.Transaction, *arbitrum_types.ConditionalOptions, common.Address, *L1Info) error // This has to be set. Writes to *state.StateDB object should be avoided to prevent invalid state from permeating
+	PostTxFilter            func(*types.Header, *state.StateDB, *arbosState.ArbosState, *types.Transaction, common.Address, uint64, *core.ExecutionResult) error                                    // This has to be set
+	BlockFilter             func(*types.Header, *state.StateDB, types.Transactions, types.Receipts) error                                                                                           // This can be unset
+	ConditionalOptionsForTx []*arbitrum_types.ConditionalOptions                                                                                                                                    // This can be unset
 }
 
 func NoopSequencingHooks() *SequencingHooks {
@@ -201,13 +190,7 @@ func ProduceBlockAdvanced(
 		l1Timestamp:   l1Header.Timestamp,
 	}
 
-<<<<<<< HEAD
 	chainConfig := chainContext.Config()
-||||||| d81324dae
-	chainConfig := chainContext.Config(lastBlockHeader, l1Info, state, chainConfig)
-=======
-	chainConfig := chainContext.Config(lastBlockHeader, l1Info, arbState, chainConfig)
->>>>>>> integration
 
 	header := createNewHeader(lastBlockHeader, l1Info, arbState, chainConfig)
 	// Note: blockGasLeft will diverge from the actual gas left during execution in the event of invalid txs,
@@ -341,14 +324,7 @@ func ProduceBlockAdvanced(
 				header,
 				tx,
 				&header.GasUsed,
-<<<<<<< HEAD
 				runMode,
-||||||| d81324dae
-				vm.Config{},
-=======
-				vm.Config{},
-				runMode,
->>>>>>> integration
 				func(result *core.ExecutionResult) error {
 					return hooks.PostTxFilter(header, statedb, arbState, tx, sender, dataGas, result)
 				},
