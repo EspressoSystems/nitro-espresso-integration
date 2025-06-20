@@ -1516,6 +1516,12 @@ func (n *Node) Start(ctx context.Context) error {
 	if n.configFetcher != nil {
 		n.configFetcher.Start(ctx)
 	}
+	if n.EspressoCaffNode != nil {
+		err = n.EspressoCaffNode.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("error starting espresso caff node: %w", err)
+		}
+	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
 	n.SyncMonitor.Initialize(n.InboxReader, n.TxStreamer, n.SeqCoordinator)
