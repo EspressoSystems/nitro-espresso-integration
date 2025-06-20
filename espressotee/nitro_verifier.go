@@ -49,31 +49,6 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
 
-	// Avoid race conditions where we make a readonly call to the contract to see if cert is verified
-	// So give some retries
-	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
-		verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
-
-		if err == nil {
-			if verified {
-				log.Info("cert already verified", "cert hash", certHash, "isCA", isCA)
-			}
-			break
-		}
-
-		// Sleep before retry (unless this was the last attempt)
-		if attempt < registerSignerOpts.MaxRetries-1 {
-			log.Info("failed to check if cert is verified, retrying...",
-				"attempt", attempt+1,
-				"maxRetries", registerSignerOpts.MaxRetries,
-				"err", err,
-			)
-			time.Sleep(registerSignerOpts.RetryDelay)
-		} else {
-			return certHash, err
-		}
-	}
-
 	// Try and verify the certificate either CA or client
 	contractABI, err := espressogen.IEspressoNitroTEEVerifierMetaData.GetAbi()
 	if err != nil {
@@ -112,6 +87,16 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
 	log.Info("verify cert gas limit", "gas limit", gasLimit)
+
+	latestBaseFee, err := dataPoster.BaseFee()
+	if err != nil {
+		return certHash, err
+	}
+
+	if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
+		return certHash, fmt.Errorf("latest base fee is greater than max base fee: %d > %d", latestBaseFee.Uint64(), registerSignerOpts.MaxBaseFee)
+	}
+
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(
@@ -144,6 +129,29 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	if receipt.Status != types.ReceiptStatusSuccessful {
 		return certHash, errors.New("cert transaction failed")
 	}
+
+	// Make sure certificate is verified, after tx succeeded this should always be the case
+	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
+		verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
+
+		if verified {
+			log.Info("cert verified", "cert hash", certHash, "isCA", isCA)
+			break
+		}
+
+		// Sleep before retry (unless this was the last attempt)
+		if attempt < registerSignerOpts.MaxRetries-1 {
+			log.Info("failed to check if cert is verified, retrying...",
+				"attempt", attempt+1,
+				"maxRetries", registerSignerOpts.MaxRetries,
+				"err", err,
+			)
+			time.Sleep(registerSignerOpts.RetryDelay)
+		} else {
+			return certHash, err
+		}
+	}
+
 	return certHash, nil
 }
 
