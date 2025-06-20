@@ -259,42 +259,42 @@ func (a *Aggregator) Store(ctx context.Context, message []byte, timeout uint64) 
 		var successfullyStoredCount int
 		var returned int // 0-no status, 1-succeeded, 2-failed
 		for i := 0; i < len(a.services); i++ {
-		select {
-		case <-ctx.Done():
-			break
-		case r := <-responses:
-			if r.err != nil {
-				_ = storeFailures.Add(1)
-				log.Warn("das.Aggregator: Error from backend", "backend", r.details.service, "signerMask", r.details.signersMask, "err", r.err)
-			} else {
-				pubKeys = append(pubKeys, r.details.pubKey)
-				sigs = append(sigs, r.sig)
-				aggSignersMask |= r.details.signersMask
+			select {
+			case <-ctx.Done():
+				break
+			case r := <-responses:
+				if r.err != nil {
+					_ = storeFailures.Add(1)
+					log.Warn("das.Aggregator: Error from backend", "backend", r.details.service, "signerMask", r.details.signersMask, "err", r.err)
+				} else {
+					pubKeys = append(pubKeys, r.details.pubKey)
+					sigs = append(sigs, r.sig)
+					aggSignersMask |= r.details.signersMask
 
-				successfullyStoredCount++
+					successfullyStoredCount++
+				}
+			}
+
+			// As soon as enough responses are returned, pass the response to
+			// certDetailsChan, so the Store function can return, but also continue
+			// running until all responses are received (or the context is canceled)
+			// in order to produce accurate logs/metrics.
+			if returned == 0 {
+				if successfullyStoredCount >= a.requiredServicesForStore {
+					cd := certDetails{}
+					cd.pubKeys = append(cd.pubKeys, pubKeys...)
+					cd.sigs = append(cd.sigs, sigs...)
+					cd.aggSignersMask = aggSignersMask
+					certDetailsChan <- cd
+					returned = 1
+				} else if int(storeFailures.Load()) > a.maxAllowedServiceStoreFailures {
+					cd := certDetails{}
+					cd.err = fmt.Errorf("aggregator failed to store message to at least %d out of %d DASes (assuming %d are honest). %w", a.requiredServicesForStore, len(a.services), a.config.AssumedHonest, dasutil.ErrBatchToDasFailed)
+					certDetailsChan <- cd
+					returned = 2
+				}
 			}
 		}
-
-		// As soon as enough responses are returned, pass the response to
-		// certDetailsChan, so the Store function can return, but also continue
-		// running until all responses are received (or the context is canceled)
-		// in order to produce accurate logs/metrics.
-		if returned == 0 {
-			if successfullyStoredCount >= a.requiredServicesForStore {
-				cd := certDetails{}
-				cd.pubKeys = append(cd.pubKeys, pubKeys...)
-				cd.sigs = append(cd.sigs, sigs...)
-				cd.aggSignersMask = aggSignersMask
-				certDetailsChan <- cd
-				returned = 1
-			} else if int(storeFailures.Load()) > a.maxAllowedServiceStoreFailures {
-				cd := certDetails{}
-				cd.err = fmt.Errorf("aggregator failed to store message to at least %d out of %d DASes (assuming %d are honest). %w", a.requiredServicesForStore, len(a.services), a.config.AssumedHonest, dasutil.ErrBatchToDasFailed)
-				certDetailsChan <- cd
-				returned = 2
-			}
-		}
-	}
 		if returned == 1 &&
 			a.maxAllowedServiceStoreFailures > 0 && // Ignore the case where AssumedHonest = 1, probably a testnet
 			int(storeFailures.Load())+1 > a.maxAllowedServiceStoreFailures {
