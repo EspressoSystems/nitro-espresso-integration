@@ -730,7 +730,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 	}
 	callOpts := s.getCallOpts(ctx)
 	s.builder.ClearTransactions()
-	var rawInfo *staker.StakerInfo
+	var rawInfo *StakerInfo
 	walletAddressOrZero := s.wallet.AddressOrZero()
 	if walletAddressOrZero != (common.Address{}) {
 		var err error
@@ -966,7 +966,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 	return s.builder.ExecuteTransactions(ctx)
 }
 
-func (s *Staker) handleConflict(ctx context.Context, info *staker.StakerInfo) error {
+func (s *Staker) handleConflict(ctx context.Context, info *StakerInfo) error {
 	if info.CurrentChallenge == nil {
 		s.activeChallenge = nil
 		return nil
@@ -1069,7 +1069,8 @@ func (s *Staker) advanceStake(ctx context.Context, info *OurStakerInfo, effectiv
 			return fmt.Errorf("error placing new stake on new node: %w", err)
 		}
 		info.StakeExists = true
-		return s.tryFastConfirmation(ctx, action.assertion.AfterState.GlobalState.BlockHash, action.assertion.AfterState.GlobalState.SendRoot, action.hash)	case existingNodeAction:
+		return s.tryFastConfirmation(ctx, action.assertion.AfterState.GlobalState.BlockHash, action.assertion.AfterState.GlobalState.SendRoot, action.hash)
+	case existingNodeAction:
 		info.LatestStakedNode = action.number
 		info.LatestStakedNodeHash = action.hash
 		if !active {
@@ -1119,7 +1120,7 @@ func (s *Staker) advanceStake(ctx context.Context, info *OurStakerInfo, effectiv
 	}
 }
 
-func (s *Staker) createConflict(ctx context.Context, info *staker.StakerInfo) error {
+func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
 	if info.CurrentChallenge != nil {
 		return nil
 	}
@@ -1204,7 +1205,7 @@ func (s *Staker) Strategy() StakerStrategy {
 	return s.config().StrategyType()
 }
 
-func (s *Staker) Rollup() *staker.RollupWatcher {
+func (s *Staker) Rollup() *RollupWatcher {
 	return s.rollup
 }
 
