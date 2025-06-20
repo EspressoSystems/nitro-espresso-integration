@@ -35,7 +35,6 @@ type BidValidatorConfig struct {
 	RpcEndpoint            string `koanf:"rpc-endpoint"`
 	AuctionContractAddress string `koanf:"auction-contract-address"`
 	MaxBidsPerSender       uint8  `koanf:"max-bids-per-sender"`
-	SequencerEndpoint      string `koanf:"sequencer-endpoint"`
 }
 
 var DefaultBidValidatorConfig = BidValidatorConfig{
@@ -279,11 +278,8 @@ func (bv *BidValidator) fetchReservePrice() *big.Int {
 }
 
 // Check time-related constraints for bid.
-
 // It's useful to split out to be able to re-check just these contraints after
-
 // time has elapsed.
-
 func validateBidTimeConstraints(roundTimingInfo *RoundTimingInfo, bidRound uint64) error {
 	// Check if the bid is intended for upcoming round.
 	upcomingRound := roundTimingInfo.RoundNumber() + 1
@@ -391,16 +387,4 @@ func (bv *BidValidator) validateBid(
 		Bidder:                 bidder,
 	}
 	return vb.ToJson(), nil
-}
-
-var DefaultBidValidatorConfig = BidValidatorConfig{
-	Enable:         true,
-	RedisURL:       "",
-	ProducerConfig: pubsub.DefaultProducerConfig,
-}
-
-var TestBidValidatorConfig = BidValidatorConfig{
-	Enable:         true,
-	RedisURL:       "",
-	ProducerConfig: pubsub.TestProducerConfig,
 }

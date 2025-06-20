@@ -1,5 +1,6 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package timeboost
 
 import (
@@ -59,6 +60,7 @@ func init() {
 }
 
 type AuctioneerServerConfigFetcher func() *AuctioneerServerConfig
+
 type AuctioneerServerConfig struct {
 	Enable         bool                  `koanf:"enable"`
 	RedisURL       string                `koanf:"redis-url"`
@@ -82,6 +84,7 @@ var DefaultAuctioneerConsumerConfig = pubsub.ConsumerConfig{
 
 	ResponseEntryTimeout: time.Minute * 5,
 }
+
 var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
 	Enable:                    true,
 	RedisURL:                  "",
@@ -90,6 +93,7 @@ var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
 	AuctionResolutionWaitTime: 2 * time.Second,
 	S3Storage:                 DefaultS3StorageServiceConfig,
 }
+
 var TestAuctioneerServerConfig = AuctioneerServerConfig{
 	Enable:                    true,
 	RedisURL:                  "",
@@ -134,12 +138,12 @@ type AuctioneerServer struct {
 	s3StorageService               *S3StorageService
 	unackedBidsMutex               sync.Mutex
 	unackedBids                    map[string]*pubsub.Message[*JsonValidatedBid]
+
 	// Coordination fields
-	redisClient       redis.UniversalClient
-	myId              string
-	isPrimary         atomic.Bool
-	lastPrimaryStatus bool
-	// Track state changes for logging
+	redisClient               redis.UniversalClient
+	myId                      string
+	isPrimary                 atomic.Bool
+	lastPrimaryStatus         bool // Track state changes for logging
 	auctioneerLivenessTimeout time.Duration
 }
 
@@ -252,6 +256,7 @@ func NewAuctioneerServer(ctx context.Context, configFetcher AuctioneerServerConf
 		auctioneerLivenessTimeout:      cfg.ConsumerConfig.IdletimeToAutoclaim * 3,
 	}, nil
 }
+
 func (a *AuctioneerServer) consumeNextBid(ctx context.Context) time.Duration {
 	// Only consume if we're primary
 	if !a.isPrimary.Load() {
@@ -380,6 +385,7 @@ func (a *AuctioneerServer) updateCoordination(ctx context.Context) time.Duration
 	// Needs to be parameterized rather than hardcoded for tests which run more quickly.
 	return a.auctioneerLivenessTimeout / 6
 }
+
 func (a *AuctioneerServer) Start(ctx_in context.Context) {
 	a.StopWaiter.Start(ctx_in, a)
 	// Start S3 storage service to persist validated bids to s3
@@ -600,6 +606,7 @@ func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
 	log.Info("Auction resolved successfully", "txHash", tx.Hash().Hex())
 	return nil
 }
+
 func (a *AuctioneerServer) acknowledgeAllBids(ctx context.Context, round uint64) {
 	a.unackedBidsMutex.Lock()
 	defer a.unackedBidsMutex.Unlock()
@@ -649,11 +656,13 @@ func retryUntil(ctx context.Context, operation func() error, retryInterval time.
 	}
 	return errors.New("operation failed after multiple attempts")
 }
+
 func (a *AuctioneerServer) persistValidatedBid(bid *JsonValidatedBid) {
 	if err := a.database.InsertBid(JsonValidatedBidToGo(bid)); err != nil {
 		log.Error("Could not persist validated bid to database", "err", err, "bidder", bid.Bidder, "amount", bid.Amount.String())
 	}
 }
+
 func copyTxOpts(opts *bind.TransactOpts) *bind.TransactOpts {
 	if opts == nil {
 		return nil
@@ -693,6 +702,7 @@ func (a *AuctioneerServer) IsPrimary() bool {
 func (a *AuctioneerServer) GetId() string {
 	return a.myId
 }
+
 func (a *AuctioneerServer) StopAndWait() {
 	// The AUCTIONEER_CHOSEN_KEY lock will be considered expired by other auctioneers after
 	// auctioneerLivenessTimeout. This timeout gives time for existing messages to  become
@@ -701,31 +711,3 @@ func (a *AuctioneerServer) StopAndWait() {
 	a.StopWaiter.StopAndWait()
 	a.consumer.StopAndWait()
 }
-
-// Copyright 2024-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// domainValue holds the Keccak256 hash of the string "TIMEBOOST_BID".
-// It is intended to be immutable after initialization.
-var DefaultAuctioneerServerConfig = AuctioneerServerConfig{
-	Enable:                    true,
-	RedisURL:                  "",
-	ConsumerConfig:            pubsub.DefaultConsumerConfig,
-	StreamTimeout:             10 * time.Minute,
-	AuctionResolutionWaitTime: 2 * time.Second,
-	S3Storage:                 DefaultS3StorageServiceConfig,
-}
-var TestAuctioneerServerConfig = AuctioneerServerConfig{
-	Enable:                    true,
-	RedisURL:                  "",
-	ConsumerConfig:            pubsub.TestConsumerConfig,
-	StreamTimeout:             time.Minute,
-	AuctionResolutionWaitTime: 2 * time.Second,
-}
-
-// AuctioneerServer is a struct that represents an autonomous auctioneer.
-// It is responsible for receiving bids, validating them, and resolving auctions.
-// NewAuctioneerServer creates a new autonomous auctioneer struct.
-// Resolves the auction by calling the smart contract with the top two bids.
-// retryUntil retries a given operation defined by the closure until the specified duration
-// has passed or the operation succeeds. It waits for the specified retry interval between
-// attempts. The function returns an error if all attempts fail.

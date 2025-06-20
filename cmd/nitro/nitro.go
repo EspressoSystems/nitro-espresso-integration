@@ -491,25 +491,6 @@ func mainImpl() int {
 			return 1
 		case <-success:
 		}
-		blocksReExecutor, err := blocksreexecutor.New(&nodeConfig.BlocksReExecutor, l2BlockChain, chainDb, fatalErrChan)
-		if err != nil {
-			log.Error("error initializing blocksReExecutor", "err", err)
-			return 1
-		}
-		if err := gethexec.PopulateStylusTargetCache(&nodeConfig.Execution.StylusTarget); err != nil {
-			log.Error("error populating stylus target cache", "err", err)
-			return 1
-		}
-		success := make(chan struct{})
-		blocksReExecutor.Start(ctx, success)
-		deferFuncs = append(deferFuncs, func() { blocksReExecutor.StopAndWait() })
-		select {
-		case err := <-fatalErrChan:
-			log.Error("shutting down due to fatal error", "err", err)
-			defer log.Error("shut down due to fatal error", "err", err)
-			return 1
-		case <-success:
-		}
 	}
 
 	if nodeConfig.Init.ThenQuit && !nodeConfig.Init.IsReorgRequested() {

@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,6 +27,7 @@ import (
 	"github.com/ccoveille/go-safecast"
 	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
 
 	flag "github.com/spf13/pflag"
 
@@ -116,7 +118,7 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxReorgResequenceDepth: 1024,
 	ExecuteMessageLoopDelay: time.Millisecond * 100,
 	SyncTillBlock:           0,
-	TrackBlockMetadataFrom:  0
+	TrackBlockMetadataFrom:  0,
 	QuoteFile:               "",
 	UserDataAttestationFile: "",
 }
@@ -126,7 +128,7 @@ var TestTransactionStreamerConfig = TransactionStreamerConfig{
 	MaxReorgResequenceDepth: 128 * 1024,
 	ExecuteMessageLoopDelay: time.Millisecond,
 	SyncTillBlock:           0,
-	TrackBlockMetadataFrom:  0
+	TrackBlockMetadataFrom:  0,
 }
 
 func TransactionStreamerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -331,9 +333,7 @@ func deleteFromRange(ctx context.Context, db ethdb.Database, prefix []byte, star
 }
 
 // The insertion mutex must be held. This acquires the reorg mutex.
-
 // Note: oldMessages will be empty if reorgHook is nil
-
 func (s *TransactionStreamer) addMessagesAndReorg(batch ethdb.Batch, msgIdxOfFirstMsgToAdd arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo) error {
 	if msgIdxOfFirstMsgToAdd == 0 {
 		return errors.New("cannot reorg out init message")
@@ -395,7 +395,7 @@ func (s *TransactionStreamer) addMessagesAndReorg(batch ethdb.Batch, msgIdxOfFir
 				// oldMessage, accumulator stored in tracker, and the message re-read from l1
 				expectedAcc, err := s.inboxReader.tracker.GetDelayedAcc(delayedMsgIdx)
 				if err != nil {
-					if !dbutil.IsErrNotFound(err) {
+					if !strings.Contains(err.Error(), "not found") {
 						log.Error("reorg-resequence: failed to read expected accumulator", "err", err)
 					}
 					continue
@@ -464,14 +464,6 @@ func (s *TransactionStreamer) addMessagesAndReorg(batch ethdb.Batch, msgIdxOfFir
 		return err
 	}
 	err = deleteStartingAt(s.db, batch, missingBlockMetadataInputFeedPrefix, uint64ToKey(uint64(msgIdxOfFirstMsgToAdd)))
-	if err != nil {
-		return err
-	}
-	err = deleteStartingAt(s.db, batch, blockMetadataInputFeedPrefix, uint64ToKey(uint64(count)))
-	if err != nil {
-		return err
-	}
-	err = deleteStartingAt(s.db, batch, missingBlockMetadataInputFeedPrefix, uint64ToKey(uint64(count)))
 	if err != nil {
 		return err
 	}
@@ -571,10 +563,10 @@ func (s *TransactionStreamer) getMessageWithMetadataAndBlockInfo(msgIdx arbutil.
 	}
 
 	msgWithBlockInfo := arbostypes.MessageWithMetadataAndBlockInfo{
-	MessageWithMeta: *msg,
-	BlockHash:       blockHash,
-	BlockMetadata:   blockMetadata,
-}
+		MessageWithMeta: *msg,
+		BlockHash:       blockHash,
+		BlockMetadata:   blockMetadata,
+	}
 	return &msgWithBlockInfo, nil
 }
 
@@ -1257,7 +1249,7 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 	for i, msg := range messages {
 		if len(msg.MessageWithMeta.Message.L2msg) > arbostypes.MaxL2MessageSize {
 			// #nosec G115
-			log.Warn("L2 message is too large", "pos", pos+arbutil.MessageIndex(i), "size", len(msg.MessageWithMeta.Message.L2msg))
+			log.Warn("L2 message is too large", "pos", firstMsgIdx+arbutil.MessageIndex(i), "size", len(msg.MessageWithMeta.Message.L2msg))
 			return fmt.Errorf("L2 message is too large")
 		}
 		// #nosec G115
@@ -1281,7 +1273,7 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 			if err != nil {
 				return err
 			}
-			indexToSubmit := (pos + arbutil.MessageIndex(idx))
+			indexToSubmit := (firstMsgIdx + arbutil.MessageIndex(idx))
 
 			// convert to uint64
 			indexToSubmitUint64, err := safecast.ToUint64(indexToSubmit)
@@ -1289,13 +1281,13 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 				return err
 			}
 			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
-				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
-				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
+				log.Info("Enqueuing pending transaction to Espresso", "pos", firstMsgIdx+arbutil.MessageIndex(idx))
+				err = s.enqueuePendingTransaction(firstMsgIdx + arbutil.MessageIndex(idx))
 				if err != nil {
-					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
+					log.Error("Failed to enqueue pending transaction to Espresso", "pos", firstMsgIdx+arbutil.MessageIndex(idx), "err", err)
 					return err
 				}
-				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
+				log.Info("Enqueued pending transaction to Espresso was successful", "pos", firstMsgIdx+arbutil.MessageIndex(idx))
 			}
 
 		}

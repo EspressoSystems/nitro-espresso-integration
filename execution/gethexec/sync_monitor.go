@@ -8,13 +8,10 @@ import (
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
-
 	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
-
 	"github.com/offchainlabs/nitro/execution"
 )
 
@@ -125,19 +122,6 @@ func (s *SyncMonitor) BlockMetadataByNumber(ctx context.Context, blockNum uint64
 	msgIdx := arbutil.MessageIndex(blockNum - genesis)
 	if s.consensus != nil {
 		return s.consensus.BlockMetadataAtMessageIndex(msgIdx).Await(ctx)
-	}
-	log.Debug("FullConsensusClient is not accessible to execution, BlockMetadataByNumber will return nil")
-	return nil, nil
-}
-
-func (s *SyncMonitor) BlockMetadataByNumber(blockNum uint64) (common.BlockMetadata, error) {
-	genesis := s.exec.GetGenesisBlockNumber()
-	if blockNum < genesis { // Arbitrum classic block
-		return nil, nil
-	}
-	pos := arbutil.MessageIndex(blockNum - genesis)
-	if s.consensus != nil {
-		return s.consensus.BlockMetadataAtCount(pos + 1)
 	}
 	log.Debug("FullConsensusClient is not accessible to execution, BlockMetadataByNumber will return nil")
 	return nil, nil

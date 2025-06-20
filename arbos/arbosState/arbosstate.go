@@ -358,9 +358,6 @@ func (state *ArbosState) UpgradeArbosVersion(
 		case params.ArbosVersion_32:
 			// no change state needed
 
-		case 33, 34, 35, 36, 37, 38, 39:
-			// these versions are left to Orbit chains for custom upgrades.
-
 		case params.ArbosVersion_40:
 			// EIP-2935: Add support for historical block hashes.
 			stateDB.SetNonce(params.HistoryStorageAddress, 1, tracing.NonceChangeUnspecified)

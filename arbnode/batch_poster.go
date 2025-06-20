@@ -35,7 +35,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/parent"
@@ -87,11 +86,17 @@ var (
 const (
 	batchPosterSimpleRedisLockKey = "node.batch-poster.redis-lock.simple-lock-key"
 
-	sequencerBatchPostMethodName                    = "addSequencerL2BatchFromOrigin0"
-	sequencerBatchPostWithBlobsMethodName           = "addSequencerL2BatchFromBlobs"
 	sequencerBatchPostDelayProofMethodName          = "addSequencerL2BatchFromOriginDelayProof"
 	sequencerBatchPostWithBlobsDelayProofMethodName = "addSequencerL2BatchFromBlobsDelayProof"
+	// oldSequencerBatchPostMethodName uses automatically generated solidity function
+	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
+	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
+	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
+	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
+	espressoTransactionSizeLimit             = 900 * 1024
 )
+
 
 type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
@@ -1772,25 +1777,6 @@ func (b *BatchPoster) estimateGasSimple(
 }
 
 // This estimates gas for a batch with future nonce
-
-// a prev. batch is already pending in the parent chain's mempool
-
-const (
-	batchPosterSimpleRedisLockKey = "node.batch-poster.redis-lock.simple-lock-key"
-
-	sequencerBatchPostDelayProofMethodName          = "addSequencerL2BatchFromOriginDelayProof"
-	sequencerBatchPostWithBlobsDelayProofMethodName = "addSequencerL2BatchFromBlobsDelayProof"
-	// oldSequencerBatchPostMethodName uses automatically generated solidity function
-	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
-	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
-	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
-	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
-	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
-	espressoTransactionSizeLimit             = 900 * 1024
-)
-
-// This estimates gas for a batch with future nonce
-
 // a prev. batch is already pending in the parent chain's mempool
 func (b *BatchPoster) estimateGasForFutureTx(
 	ctx context.Context,

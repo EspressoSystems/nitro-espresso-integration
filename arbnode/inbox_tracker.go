@@ -312,11 +312,6 @@ func (t *InboxTracker) PopulateFeedBacklog(broadcastServer *broadcaster.Broadcas
 			log.Warn("Error getting blockMetadata byte array from tx streamer", "err", err)
 		}
 
-		blockMetadata, err := t.txStreamer.BlockMetadataAtCount(*message, seqNum, blockHash, blockMetadata)
-		if err != nil {
-			log.Warn("Error getting blockMetadata byte array from tx streamer", "err", err)
-		}
-
 		feedMessage, err := broadcastServer.NewBroadcastFeedMessage(*message, seqNum, blockHash, blockMetadata)
 		if err != nil {
 			return fmt.Errorf("error creating broadcast feed message %v: %w", seqNum, err)

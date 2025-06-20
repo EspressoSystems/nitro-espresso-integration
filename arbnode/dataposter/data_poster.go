@@ -49,7 +49,6 @@ import (
 	"github.com/offchainlabs/nitro/util/rpcclient"
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-	"github.com/ethereum/go-ethereum/core/txpool"
 )
 var (
 	latestFinalizedNonceGauge     = metrics.NewRegisteredGauge("arb/dataposter/nonce/finalized", nil)
@@ -1410,29 +1409,28 @@ var DefaultDataPosterConfig = DataPosterConfig{
 	ReplacementTimes:       []time.Duration{5 * time.Minute, 10 * time.Minute, 20 * time.Minute, 30 * time.Minute, time.Hour, 2 * time.Hour, 4 * time.Hour, 6 * time.Hour, 8 * time.Hour, 12 * time.Hour, 16 * time.Hour, 18 * time.Hour, 20 * time.Hour, 22 * time.Hour},
 	BlobTxReplacementTimes: []time.Duration{5 * time.Minute, 10 * time.Minute, 30 * time.Minute, time.Hour, 4 * time.Hour, 8 * time.Hour, 16 * time.Hour, 22 * time.Hour},
 	WaitForL1Finality:      true,
-	TargetPriceGwei:        60.
-	UrgencyGwei:            2.
-	MaxMempoolTransactions: 18
-	MaxMempoolWeight:       18
-	MinTipCapGwei:          0.05
-	MinBlobTxTipCapGwei:    1 // default geth minimum, and relays aren't likely to accept lower values given propagation time,
+	TargetPriceGwei:        60.,
+	UrgencyGwei:            2.,
+	MaxMempoolTransactions: 18,
+	MaxMempoolWeight:       18,
+	MinTipCapGwei:          0.05,
+	MinBlobTxTipCapGwei:    1, // default geth minimum, and relays aren't likely to accept lower values given propagation time
 	MaxTipCapGwei:          1.2,
-	MaxBlobTxTipCapGwei:    1 // lower than normal because 4844 rbf is a minimum of a 2x,
-	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10
-	NonceRbfSoftConfs:      1
+	MaxBlobTxTipCapGwei:    1, // lower than normal because 4844 rbf is a minimum of a 2x
+	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
+	NonceRbfSoftConfs:      1,
 	Post4844Blobs:          false,
-	AllocateMempoolBalance: true
+	AllocateMempoolBalance: true,
 	UseDBStorage:           true,
-	UseNoOpStorage:         false
-	LegacyStorageEncoding:  false
+	UseNoOpStorage:         false,
+	LegacyStorageEncoding:  false,
 	Dangerous:              DangerousConfig{ClearDBStorage: false},
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: false},
-	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei"
-	ElapsedTimeBase:        10 * time.Minute
-	ElapsedTimeImportance:  10
-	DisableNewTx:           false // default geth minimum, and relays aren't likely to accept lower values given propagation time,
-// lower than normal because 4844 rbf is a minimum of a 2x,
+	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
 	MaxBaseFee:             5000000000,
+	ElapsedTimeBase:        10 * time.Minute,
+	ElapsedTimeImportance:  10,
+	DisableNewTx:           false,
 }
 
 var DefaultDataPosterConfigForValidator = func() DataPosterConfig {
@@ -1448,27 +1446,27 @@ var TestDataPosterConfig = DataPosterConfig{
 	BlobTxReplacementTimes: []time.Duration{1 * time.Second, 10 * time.Second, 30 * time.Second, 5 * time.Minute},
 	RedisSigner:            signature.TestSimpleHmacConfig,
 	WaitForL1Finality:      false,
-	TargetPriceGwei:        60.
-	UrgencyGwei:            2.
-	MaxMempoolTransactions: 18
-	MaxMempoolWeight:       18
-	MinTipCapGwei:          0.05
-	MinBlobTxTipCapGwei:    1
+	TargetPriceGwei:        60.,
+	UrgencyGwei:            2.,
+	MaxMempoolTransactions: 18,
+	MaxMempoolWeight:       18,
+	MinTipCapGwei:          0.05,
+	MinBlobTxTipCapGwei:    1,
 	MaxTipCapGwei:          5,
-	MaxBlobTxTipCapGwei:    1
-	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10
-	NonceRbfSoftConfs:      1
+	MaxBlobTxTipCapGwei:    1,
+	MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
+	NonceRbfSoftConfs:      1,
 	Post4844Blobs:          false,
-	AllocateMempoolBalance: true
+	AllocateMempoolBalance: true,
 	UseDBStorage:           false,
-	UseNoOpStorage:         false
-	LegacyStorageEncoding:  false
+	UseNoOpStorage:         false,
+	LegacyStorageEncoding:  false,
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: true},
-	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei"
-	ElapsedTimeBase:        10 * time.Minute
-	ElapsedTimeImportance:  10
-	DisableNewTx:           false
+	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
 	MaxBaseFee:             5000000000,
+	ElapsedTimeBase:        10 * time.Minute,
+	ElapsedTimeImportance:  10,
+	DisableNewTx:           false,
 }
 
 var TestDataPosterConfigForValidator = func() DataPosterConfig {

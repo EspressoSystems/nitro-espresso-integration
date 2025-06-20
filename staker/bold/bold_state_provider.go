@@ -2,6 +2,7 @@
 // For license information, see
 // https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package bold
+
 import (
 	"context"
 	"errors"
@@ -26,12 +27,14 @@ import (
 	"github.com/offchainlabs/nitro/validator"
 	"github.com/offchainlabs/nitro/validator/server_arb"
 )
+
 var (
 	_ l2stateprovider.ProofCollector          = (*BOLDStateProvider)(nil)
 	_ l2stateprovider.L2MessageStateCollector = (*BOLDStateProvider)(nil)
 	_ l2stateprovider.MachineHashCollector    = (*BOLDStateProvider)(nil)
 	_ l2stateprovider.ExecutionProvider       = (*BOLDStateProvider)(nil)
 )
+
 type BOLDStateProvider struct {
 	validator                *staker.BlockValidator
 	statelessValidator       *staker.StatelessBlockValidator
@@ -43,6 +46,7 @@ type BOLDStateProvider struct {
 	inboxReader              staker.InboxReaderInterface
 	sync.RWMutex
 }
+
 func NewBOLDStateProvider(
 	blockValidator *staker.BlockValidator,
 	statelessValidator *staker.StatelessBlockValidator,
@@ -69,6 +73,7 @@ func NewBOLDStateProvider(
 	}
 	return sp, nil
 }
+
 // ExecutionStateAfterPreviousState Produces the L2 execution state for the next
 // assertion. Returns the state at maxSeqInboxCount or blockChallengeLeafHeight
 // after the previous state, whichever is earlier. If previousGlobalState is
@@ -145,6 +150,7 @@ func (s *BOLDStateProvider) ExecutionStateAfterPreviousState(
 	executionState.EndHistoryRoot = historyCommit.Merkle
 	return executionState, nil
 }
+
 func (s *BOLDStateProvider) isStateValidatedAndMessageCountPastThreshold(
 	ctx context.Context, gs validator.GoGlobalState, messageCount arbutil.MessageIndex,
 ) (bool, error) {
@@ -248,6 +254,72 @@ func (s *BOLDStateProvider) StatesInBatchRange(
 	}
 	return machineHashes, states, nil
 }
+
+func machineHash(gs validator.GoGlobalState) common.Hash {
+	return crypto.Keccak256Hash([]byte("Machine finished:"), gs.Hash().Bytes())
+}
+
+func (s *BOLDStateProvider) findGlobalStateFromMessageCountAndBatch(count arbutil.MessageIndex, batchIndex l2stateprovider.Batch) (validator.GoGlobalState, error) {
+	var prevBatchMsgCount arbutil.MessageIndex
+	var err error
+	if batchIndex > 0 {
+		prevBatchMsgCount, err = s.inboxTracker.GetBatchMessageCount(uint64(batchIndex) - 1)
+		if err != nil {
+			return validator.GoGlobalState{}, err
+		}
+		if prevBatchMsgCount > count {
+			return validator.GoGlobalState{}, fmt.Errorf("bad batch %v provided for message count %v as previous batch ended at message count %v", batchIndex, count, prevBatchMsgCount)
+		}
+	}
+	if count != prevBatchMsgCount {
+		batchMsgCount, err := s.inboxTracker.GetBatchMessageCount(uint64(batchIndex))
+		if err != nil {
+			return validator.GoGlobalState{}, err
+		}
+		if count > batchMsgCount {
+			return validator.GoGlobalState{}, fmt.Errorf("message count %v is past end of batch %v message count %v", count, batchIndex, batchMsgCount)
+		}
+	}
+	res := &execution.MessageResult{}
+	if count > 0 {
+		res, err = s.inboxStreamer.ResultAtMessageIndex(count - 1)
+		if err != nil {
+			return validator.GoGlobalState{}, fmt.Errorf("%s: could not check if we have result at count %d: %w", s.stateProviderConfig.ValidatorName, count, err)
+		}
+	}
+	return validator.GoGlobalState{
+		BlockHash:  res.BlockHash,
+		SendRoot:   res.SendRoot,
+		Batch:      uint64(batchIndex),
+		PosInBatch: uint64(count - prevBatchMsgCount),
+	}, nil
+}
+
+// L2MessageStatesUpTo Computes a block history commitment from a start L2
+// message to an end L2 message index and up to a required batch index. The
+// hashes used for this commitment are the machine hashes at each message
+// number.
+func (s *BOLDStateProvider) L2MessageStatesUpTo(
+	ctx context.Context,
+	fromState protocol.GoGlobalState,
+	batchLimit l2stateprovider.Batch,
+	toHeight option.Option[l2stateprovider.Height],
+) ([]common.Hash, error) {
+	var to l2stateprovider.Height
+	if !toHeight.IsNone() {
+		to = toHeight.Unwrap()
+	} else {
+		to = s.blockChallengeLeafHeight
+	}
+	items, _, err := s.StatesInBatchRange(ctx, fromState, uint64(batchLimit), to)
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// CollectMachineHashes Collects a list of machine hashes at a message number
+// based on some configuration parameters.
 func (s *BOLDStateProvider) CollectMachineHashes(
 	ctx context.Context, cfg *l2stateprovider.HashCollectorConfig,
 ) ([]common.Hash, error) {
@@ -328,6 +400,10 @@ func (s *BOLDStateProvider) CollectMachineHashes(
 	}
 	return result, nil
 }
+
+// messageNum returns the message number at which the BoLD protocol should
+// process machine hashes based on the AssociatedAssertionMetadata and
+// chalHeight.
 func (s *BOLDStateProvider) messageNum(md *l2stateprovider.AssociatedAssertionMetadata, chalHeight l2stateprovider.Height) (arbutil.MessageIndex, error) {
 	var prevBatchMsgCount arbutil.MessageIndex
 	bNum := md.FromState.Batch
@@ -341,6 +417,23 @@ func (s *BOLDStateProvider) messageNum(md *l2stateprovider.AssociatedAssertionMe
 	}
 	return prevBatchMsgCount + arbutil.MessageIndex(posInBatch) + arbutil.MessageIndex(chalHeight), nil
 }
+
+// virtualState returns an optional global state.
+//
+// If messageNum is a virtual block or the last real block to which this
+// validator's assertion committed, then this function returns a global state
+// representing that virtual block's finished machine. Otherwise, it returns
+// an Option.None.
+//
+// This can happen in the BoLD protocol when the rival block-level challenge
+// edge has committed to more blocks that this validator expected for the
+// current batch. In that case, the chalHeight will be a block in the virtual
+// padding of the history commitment of this validator.
+//
+// If there is an Option.Some() retrun value, it means that callers don't need
+// to actually step through a machine to produce a series of hashes, because all
+// of the hashes can just be "virtual" copies of a single machine in the
+// FINISHED state's hash.
 func (s *BOLDStateProvider) virtualState(msgNum arbutil.MessageIndex, limit l2stateprovider.Batch) (option.Option[validator.GoGlobalState], error) {
 	gs := option.None[validator.GoGlobalState]()
 	limitMsgCount, err := s.inboxTracker.GetBatchMessageCount(uint64(limit) - 1)
@@ -364,87 +457,7 @@ func (s *BOLDStateProvider) virtualState(msgNum arbutil.MessageIndex, limit l2st
 	}
 	return gs, nil
 }
-func machineHash(gs validator.GoGlobalState) common.Hash {
-	return crypto.Keccak256Hash([]byte("Machine finished:"), gs.Hash().Bytes())
-}
-func (s *BOLDStateProvider) findGlobalStateFromMessageCountAndBatch(count arbutil.MessageIndex, batchIndex l2stateprovider.Batch) (validator.GoGlobalState, error) {
-	var prevBatchMsgCount arbutil.MessageIndex
-	var err error
-	if batchIndex > 0 {
-		prevBatchMsgCount, err = s.inboxTracker.GetBatchMessageCount(uint64(batchIndex) - 1)
-		if err != nil {
-			return validator.GoGlobalState{}, err
-		}
-		if prevBatchMsgCount > count {
-			return validator.GoGlobalState{}, fmt.Errorf("bad batch %v provided for message count %v as previous batch ended at message count %v", batchIndex, count, prevBatchMsgCount)
-		}
-	}
-	if count != prevBatchMsgCount {
-		batchMsgCount, err := s.inboxTracker.GetBatchMessageCount(uint64(batchIndex))
-		if err != nil {
-			return validator.GoGlobalState{}, err
-		}
-		if count > batchMsgCount {
-			return validator.GoGlobalState{}, fmt.Errorf("message count %v is past end of batch %v message count %v", count, batchIndex, batchMsgCount)
-		}
-	}
-	res := &execution.MessageResult{}
-	if count > 0 {
-		res, err = s.inboxStreamer.ResultAtMessageIndex(count - 1)
-		if err != nil {
-			return validator.GoGlobalState{}, fmt.Errorf("%s: could not check if we have result at count %d: %w", s.stateProviderConfig.ValidatorName, count, err)
-		}
-	}
-	return validator.GoGlobalState{
-		BlockHash:  res.BlockHash,
-		SendRoot:   res.SendRoot,
-		Batch:      uint64(batchIndex),
-		PosInBatch: uint64(count - prevBatchMsgCount),
-	}, nil
-}
-// L2MessageStatesUpTo Computes a block history commitment from a start L2
-// message to an end L2 message index and up to a required batch index. The
-// hashes used for this commitment are the machine hashes at each message
-// number.
-func (s *BOLDStateProvider) L2MessageStatesUpTo(
-	ctx context.Context,
-	fromState protocol.GoGlobalState,
-	batchLimit l2stateprovider.Batch,
-	toHeight option.Option[l2stateprovider.Height],
-) ([]common.Hash, error) {
-	var to l2stateprovider.Height
-	if !toHeight.IsNone() {
-		to = toHeight.Unwrap()
-	} else {
-		to = s.blockChallengeLeafHeight
-	}
-	items, _, err := s.StatesInBatchRange(ctx, fromState, uint64(batchLimit), to)
-	if err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-// CollectMachineHashes Collects a list of machine hashes at a message number
-// based on some configuration parameters.
-// messageNum returns the message number at which the BoLD protocol should
-// process machine hashes based on the AssociatedAssertionMetadata and
-// chalHeight.
-// virtualState returns an optional global state.
-//
-// If messageNum is a virtual block or the last real block to which this
-// validator's assertion committed, then this function returns a global state
-// representing that virtual block's finished machine. Otherwise, it returns
-// an Option.None.
-//
-// This can happen in the BoLD protocol when the rival block-level challenge
-// edge has committed to more blocks that this validator expected for the
-// current batch. In that case, the chalHeight will be a block in the virtual
-// padding of the history commitment of this validator.
-//
-// If there is an Option.Some() retrun value, it means that callers don't need
-// to actually step through a machine to produce a series of hashes, because all
-// of the hashes can just be "virtual" copies of a single machine in the
-// FINISHED state's hash.
+
 // CollectProof collects a one-step proof at a message number and OpcodeIndex.
 func (s *BOLDStateProvider) CollectProof(
 	ctx context.Context,
@@ -498,70 +511,3 @@ func (s *BOLDStateProvider) CollectProof(
 		uint64(machineIndex),
 	)
 }
-// Copyright 2023, Offchain Labs, Inc.
-// For license information, see
-// https://github.com/offchainlabs/bold/blob/main/LICENSE
-var executionNodeOfflineGauge = metrics.NewRegisteredGauge("arb/state_provider/execution_node_offline", nil)
-// ExecutionStateAfterPreviousState Produces the L2 execution state for the next
-// assertion. Returns the state at maxSeqInboxCount or blockChallengeLeafHeight
-// after the previous state, whichever is earlier. If previousGlobalState is
-// nil, defaults to returning the state at maxSeqInboxCount.
-// L2MessageStatesUpTo Computes a block history commitment from a start L2
-// message to an end L2 message index and up to a required batch index. The
-// hashes used for this commitment are the machine hashes at each message
-// number.
-// CollectMachineHashes Collects a list of machine hashes at a message number
-// based on some configuration parameters.
-// messageNum returns the message number at which the BoLD protocol should
-// process machine hashes based on the AssociatedAssertionMetadata and
-// chalHeight.
-// virtualState returns an optional global state.
-//
-// If messageNum is a virtual block or the last real block to which this
-// validator's assertion committed, then this function retuns a global state
-// representing that virtual block's finished machine. Otherwise, it returns
-// an Option.None.
-//
-// This can happen in the BoLD protocol when the rival block-level challenge
-// edge has committed to more blocks that this validator expected for the
-// current batch. In that case, the chalHeight will be a block in the virtual
-// padding of the history commitment of this validator.
-//
-// If there is an Option.Some() retrun value, it means that callers don't need
-// to actually step through a machine to produce a series of hashes, because all
-// of the hashes can just be "virtual" copies of a single machine in the
-// FINISHED state's hash.
-// CtxWithCheckAlive Creates a context with a check alive routine that will
-// cancel the context if the check alive routine fails.
-func ctxWithCheckAlive(ctxIn context.Context, execRun validator.ExecutionRun) (context.Context, context.CancelFunc) {
-	// Create a context that will cancel if the check alive routine fails.
-	// This is to ensure that we do not have the validator froze indefinitely if
-	// the execution run is no longer alive.
-	ctx, cancel := context.WithCancel(ctxIn)
-	go func() {
-		// Call cancel so that the calling function is canceled if the check alive
-		// routine fails/returns.
-		defer cancel()
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				// Create a context with a timeout, so that the check alive routine does
-				// not run indefinitely.
-				ctxCheckAliveWithTimeout, cancelCheckAliveWithTimeout := context.WithTimeout(ctx, 5*time.Second)
-				err := execRun.CheckAlive(ctxCheckAliveWithTimeout)
-				if err != nil {
-					executionNodeOfflineGauge.Inc(1)
-					cancelCheckAliveWithTimeout()
-					return
-				}
-				cancelCheckAliveWithTimeout()
-			}
-		}
-	}()
-	return ctx, cancel
-}
-// CollectProof collects a one-step proof at a message number and OpcodeIndex.
