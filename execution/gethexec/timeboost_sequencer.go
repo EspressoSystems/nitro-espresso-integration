@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -28,7 +29,6 @@ import (
 )
 
 type timeboostTransactionQueueItem struct {
-	// TODO: this needs to be changed to be support timeboost transaction
 	tx                 *types.Transaction
 	txSize             int
 	options            *arbitrum_types.ConditionalOptions
@@ -50,7 +50,10 @@ func (q *synchronizedTimeboostTransactionQueue) Push(item timeboostTransactionQu
 func (q *synchronizedTimeboostTransactionQueue) Pop() timeboostTransactionQueueItem {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	return q.queue[0]
+	// Remove the first element from the queue and then return it
+	item := q.queue[0]
+	q.queue = q.queue[1:]
+	return item
 }
 
 func (q *synchronizedTimeboostTransactionQueue) Len() int {
@@ -62,7 +65,7 @@ func (q *synchronizedTimeboostTransactionQueue) Len() int {
 func (q *synchronizedTimeboostTransactionQueue) Peek() timeboostTransactionQueueItem {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
-	return q.queue[q.Len()-1]
+	return q.queue[0]
 }
 
 type TimeboostSequencer struct {
@@ -114,7 +117,6 @@ func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 }
 
 func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
-
 	return &TimeboostSequencer{
 		config:     configFetcher,
 		execEngine: execEngine,
@@ -122,15 +124,29 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 	}, nil
 }
 
-func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
-
-	// TODO: handle if the context is done
+func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
 
 	// First we need to create the current list of transactions that we will process
 	var queueItems []timeboostTransactionQueueItem
 	var totalBlockSize int
+
+	defer func() {
+		panicErr := recover()
+		if panicErr != nil {
+			log.Error("sequencer block creation panicked", "panic", panicErr, "backtrace", string(debug.Stack()))
+			// TODO: we should return errors to the user here
+			// For now we are logging
+			for _, queueItem := range queueItems {
+				log.Error("Error processing transaction", "err", sequencerInternalError, "queueItem", queueItem)
+			}
+		}
+
+		returnValue = true
+	}()
+
 	lastBlock := s.execEngine.bc.CurrentBlock()
 	config := s.config()
+
 	for {
 		var queueItem timeboostTransactionQueueItem
 		done := false
@@ -138,6 +154,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
 			queueItem = s.txRetryQueue.Pop()
+			log.Debug("Popped the txRetryQueue", "txHash", queueItem.tx.Hash())
 		} else if s.txQueue.Len() == 0 {
 			// This means we have no transactions in the txRetryQueue and
 			// we also dont have any sailfish rounds to process
@@ -147,11 +164,20 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 			if queueItems == nil {
 				queueItems = make([]timeboostTransactionQueueItem, 0)
 				queueItem = s.txQueue.Pop()
+				log.Debug("Popped the txQueue", "txHash", queueItem.tx.Hash())
 			} else if queueItems[len(queueItems)-1].roundId != s.txQueue.Peek().roundId {
 				queueItem = s.txQueue.Pop()
+				log.Debug("Popped the txQueue when queueItems had transactions from the given round", "txHash", queueItem.tx.Hash(), "roundId", queueItem.roundId)
 			} else {
 				done = true
 			}
+		}
+
+		// If context is done, return false
+		select {
+		case <-ctx.Done():
+			return false
+		default:
 		}
 
 		if done {
@@ -162,20 +188,21 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		if queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx is too large
 			// Even if its a priority item this should be skipped,
-			// TODO: ideally should the size of transactions be handled on sailfish side?
+			// TODO: return the error to the user here
 			log.Warn("timeboost transaction is too large", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
-		// TODO: should this be checked and ignored on the sailfish side?
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			// This tx is too low gas fee
+			// TODO: return the error to the user here
 			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "hash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
+			log.Debug("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
 			s.txRetryQueue.Push(queueItem)
 			// End the batch here to put this tx in the next one
 			break
@@ -185,7 +212,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 	}
 
 	s.nonceCache.Resize(config.NonceCacheSize)
-	queueItems = s.precheckNonces(queueItems, totalBlockSize)
+	s.nonceCache.BeginNewBlock()
+
+	queueItems = s.precheckNonces(queueItems)
 	txes := make([]*types.Transaction, len(queueItems))
 	hooks := s.makeSequencingHooks()
 	hooks.ConditionalOptionsForTx = make([]*arbitrum_types.ConditionalOptions, len(queueItems))
@@ -195,7 +224,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 		totalBlockSize = arbmath.SaturatingAdd(totalBlockSize, queueItem.txSize)
 		hooks.ConditionalOptionsForTx[i] = queueItem.options
 	}
-	// TODO: Check if this edge case is even possible?
 	if totalBlockSize > config.MaxTxDataSize {
 		for _, queueItem := range queueItems {
 			s.txRetryQueue.Push(queueItem)
@@ -271,6 +299,10 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 			return true // don't return failure to avoid retrying immediately
 		}
 		log.Error("error sequencing transactions", "err", err)
+		for _, queueItem := range queueItems {
+			// TODO: should send the error back to the user
+			log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
+		}
 		return false
 	}
 
@@ -304,6 +336,8 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) bool {
 			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash())
 			continue
 		}
+		// TODO: should send the error back to the user
+		log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
 	}
 
 	return madeBlock
@@ -367,7 +401,7 @@ func (s *TimeboostSequencer) postTxFilter(header *types.Header, statedb *state.S
 	return nil
 }
 
-func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQueueItem, totalBlockSize int) []timeboostTransactionQueueItem {
+func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQueueItem) []timeboostTransactionQueueItem {
 	bc := s.execEngine.bc
 	latestHeader := bc.CurrentBlock()
 	latestState, err := bc.StateAt(latestHeader.Root)
@@ -395,6 +429,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 		tx := queueItem.tx
 		sender, err := types.Sender(signer, tx)
 		if err != nil {
+			// TODO: should send the error back to the user
 			log.Warn("failed to get sender", "err", err, "txHash", tx.Hash())
 			continue
 		}
@@ -420,6 +455,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 					log.Warn("unreachable nonce error is not nonceError")
 					continue
 				}
+				// TODO send the error back to the user
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
@@ -438,6 +474,10 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 
 func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
+	if s.l1Reader == nil {
+		return errors.New("l1Reader is nil")
+	}
+
 	s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
@@ -454,4 +494,9 @@ func (s *TimeboostSequencer) StopAndWait() {
 		s.txQueue.Len() == 0 {
 		return
 	}
+
+	log.Warn("Sequencer has queued items while shutting down",
+		"txQueue", s.txQueue.Len(),
+		"retryQueue", s.txRetryQueue.Len(),
+	)
 }
