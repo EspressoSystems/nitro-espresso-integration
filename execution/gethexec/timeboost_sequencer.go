@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	flag "github.com/spf13/pflag"
+
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/common"
@@ -17,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -25,7 +28,6 @@ import (
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-	flag "github.com/spf13/pflag"
 )
 
 type timeboostTransactionQueueItem struct {
@@ -244,7 +246,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		return false
 	}
 	// finalized l1 block <= consensus timestamp - parent chain finalization time
-	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Uint64(), header.Time)
+	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Int64(), header.Time)
 	if err != nil {
 		return false
 	}
@@ -343,9 +345,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	return madeBlock
 }
 
-func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber uint64, consensusTimestamp uint64) (*types.Block, error) {
+func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber int64, consensusTimestamp uint64) (*types.Block, error) {
 
-	block, err := s.l1Reader.Client().BlockByNumber(ctx, big.NewInt(int64(blockNumber)))
+	block, err := s.l1Reader.Client().BlockByNumber(ctx, big.NewInt(blockNumber))
 	if err != nil {
 		return nil, err
 	}
@@ -478,13 +480,13 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 		return errors.New("l1Reader is nil")
 	}
 
-	s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
 		}
 		return s.config().BlockRetryDuration
 	})
-	return nil
+	return err
 }
 
 func (s *TimeboostSequencer) StopAndWait() {
