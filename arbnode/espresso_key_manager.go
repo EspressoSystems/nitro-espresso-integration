@@ -24,7 +24,7 @@ const (
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() (bool, error)
-	Register(getAttestationFunc func([]byte) ([]byte, error)) error
+	Register(getAttestationFunc func([]byte) ([]byte, error)) (bool, error)
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
@@ -164,36 +164,51 @@ func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byt
 	}
 }
 
-func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) error {
+func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) (bool, error) {
 	if k.hasRegistered {
 		log.Info("EspressoKeyManager already registered")
-		return nil
+		return true, nil
 	}
 
-	// Get the attestation and data needed to register the signer
-	attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
-	if err != nil {
-		return err
+	var transactionSent bool
+	for i := 0; i < k.registerSignerOpts.MaxRetries; i++ {
+		// Get the attestation and data needed to register the signer
+		attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
+		if err != nil {
+			log.Warn("Failed to prepare register signer, retrying...", "attempt", i+1, "err", err)
+			time.Sleep(k.registerSignerOpts.RetryDelay)
+			continue
+		}
+
+		err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType), k.registerSignerOpts)
+		if err != nil {
+			log.Warn("Failed to register signer, retrying...", "attempt", i+1, "err", err)
+			time.Sleep(k.registerSignerOpts.RetryDelay)
+			continue
+		}
+
+		signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+		log.Info("Register signer transaction sent", "signer address", signerAddr.Hex(), "attempt", i+1)
+		transactionSent = true
+		break
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType), k.registerSignerOpts)
-	if err != nil {
-		return err
+	if !transactionSent {
+		return false, errors.New("failed to send register signer transaction after max retries")
 	}
-
-	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
-	log.Info("Register signer succeeded", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
 	hasRegistered, err := k.HasRegistered()
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !hasRegistered {
-		return errors.New("address is not registered in contract")
+		return false, errors.New("address is not registered in contract even after successful transaction and retries")
 	}
+
 	k.hasRegistered = true
-	return nil
+	log.Info("Signer registration confirmed on-chain")
+	return true, nil
 }
 
 func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
