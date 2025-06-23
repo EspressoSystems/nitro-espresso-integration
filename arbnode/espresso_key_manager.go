@@ -75,8 +75,12 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("Max txn wait time cannot be more than 5 minutes")
 	}
 
-	if registerSignerConfig.RetryDelay > 2*time.Minute {
-		panic("Retry delay cannot be more than 20 seconds")
+	if registerSignerConfig.RetryReadContractDelay > 20*time.Second {
+		panic("Retry read contract delay cannot be more than 20 seconds")
+	}
+
+	if registerSignerConfig.RetryBaseFeeDelay > 3*time.Minute {
+		panic("Retry read contract delay cannot be more than 3 minutes")
 	}
 
 	return &EspressoKeyManager{
@@ -90,7 +94,8 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		registerSignerOpts: espressotee.EspressoRegisterSignerOpts{
 			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
-			RetryDelay:                    registerSignerConfig.RetryDelay,
+			RetryBaseFeeDelay:             registerSignerConfig.RetryBaseFeeDelay,
+			RetryReadContractDelay:        registerSignerConfig.RetryReadContractDelay,
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
 			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
@@ -122,7 +127,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 
 		if i < k.registerSignerOpts.MaxRetries-1 {
 			log.Info("address not registered in contract again, retrying...")
-			time.Sleep(k.registerSignerOpts.RetryDelay)
+			time.Sleep(k.registerSignerOpts.RetryReadContractDelay)
 		}
 	}
 	return false, nil

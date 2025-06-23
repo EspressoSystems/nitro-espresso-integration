@@ -38,17 +38,17 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
 		latestBaseFee, err := dataPoster.BaseFee()
 		if err != nil && attempt < registerSignerOpts.MaxRetries-1 {
-			log.Error("register signer: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			log.Error("register signer: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
 			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryDelay)
+				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
 			}
 			continue
 		}
 
 		if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
-			log.Error("register signer: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			log.Error("register signer: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
 			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryDelay)
+				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
 			}
 			continue
 		}

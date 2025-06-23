@@ -122,6 +122,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	}
 
 	// Make sure certificate is verified, after tx succeeded this should always be the case
+	// Add retries in case of delay on chain
 	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
 		verified, err := e.contract.CertVerified(&bind.CallOpts{}, certHash)
 
@@ -137,7 +138,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 				"maxRetries", registerSignerOpts.MaxRetries,
 				"err", err,
 			)
-			time.Sleep(registerSignerOpts.RetryDelay)
+			time.Sleep(registerSignerOpts.RetryReadContractDelay)
 		} else {
 			return certHash, err
 		}
@@ -158,17 +159,17 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationB
 	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
 		latestBaseFee, err := dataPoster.BaseFee()
 		if err != nil && attempt < registerSignerOpts.MaxRetries-1 {
-			log.Error("verify certificate: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			log.Error("verify certificate: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
 			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryDelay)
+				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
 			}
 			continue
 		}
 
 		if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
-			log.Error("verify certificate: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			log.Error("verify certificate: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
 			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryDelay)
+				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
 			}
 			continue
 		}
