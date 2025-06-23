@@ -115,22 +115,11 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	for i := 0; i < k.registerSignerOpts.MaxRetries; i++ {
-		ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType))
-		if err != nil {
-			return false, err
-		}
-
-		if ok {
-			return ok, nil
-		}
-
-		if i < k.registerSignerOpts.MaxRetries-1 {
-			log.Info("address not registered in contract again, retrying...")
-			time.Sleep(k.registerSignerOpts.RetryReadContractDelay)
-		}
+	ok, err := k.espressoTEEVerifierCaller.RegisteredSigners(signerAddr, uint8(k.teeType), k.registerSignerOpts)
+	if err != nil {
+		return false, err
 	}
-	return false, nil
+	return ok, nil
 }
 
 /*

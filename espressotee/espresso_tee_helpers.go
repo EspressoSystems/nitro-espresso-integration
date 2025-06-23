@@ -2,10 +2,13 @@ package espressotee
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type TEE uint8
@@ -24,6 +27,76 @@ func (t TEE) FromString(s string) (TEE, error) {
 	default:
 		return 0, fmt.Errorf("invalid TEE type: %q", s)
 	}
+}
+
+type ContractVerificationFunc func() (bool, error)
+
+func ContractVerification(
+	maxRetries int,
+	retryDelay time.Duration,
+	fn ContractVerificationFunc,
+	msg string,
+) (bool, error) {
+	var err error
+	success := false
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		success, err = fn()
+		if err != nil {
+			log.Error(msg, "err", err)
+		}
+		if success {
+			return true, nil
+		}
+
+		if attempt < maxRetries-1 {
+			log.Error(msg, "attempt", attempt, "retry delay", retryDelay)
+			time.Sleep(retryDelay)
+		}
+	}
+	return false, nil
+}
+
+type BaseFeeCheckFunc func() (*big.Int, error)
+
+func BaseFeeCheck(
+	maxBaseFee uint64,
+	maxRetries int,
+	retryDelay time.Duration,
+	fn BaseFeeCheckFunc,
+	msg string,
+) error {
+	lowBaseFee := false
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		latestBaseFee, err := fn()
+		if err != nil && attempt < maxRetries-1 {
+			log.Error(msg, "err", err, "delay", retryDelay, "attempt", attempt+1)
+			if attempt < maxRetries-1 {
+				time.Sleep(retryDelay)
+			}
+			continue
+		}
+
+		if latestBaseFee.Uint64() > maxBaseFee {
+			log.Error(
+				msg,
+				"base fee", latestBaseFee.Uint64(),
+				"max base fee", maxBaseFee,
+				"delay", retryDelay,
+				"attempt", attempt+1,
+			)
+			if attempt < maxRetries-1 {
+				time.Sleep(retryDelay)
+			}
+			continue
+		}
+
+		lowBaseFee = true
+		break
+	}
+	if !lowBaseFee {
+		return fmt.Errorf("base fee is not low enough to attempt to register signer")
+	}
+	return nil
 }
 
 type EspressoRegisterSignerConfig struct {

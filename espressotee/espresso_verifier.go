@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -18,8 +18,18 @@ import (
 )
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error
-	RegisteredSigners(signer common.Address, teeType uint8) (bool, error)
+	RegisterSigner(
+		dataPoster *dataposter.DataPoster,
+		attestation []byte,
+		data []byte,
+		teeType uint8,
+		registerSignerOpts EspressoRegisterSignerOpts,
+	) error
+	RegisteredSigners(
+		signer common.Address,
+		teeType uint8,
+		registerSignerOpts EspressoRegisterSignerOpts,
+	) (bool, error)
 }
 
 type EspressoTEEVerifier struct {
@@ -32,32 +42,25 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client, address: address}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error {
+func (e *EspressoTEEVerifier) RegisterSigner(
+	dataPoster *dataposter.DataPoster,
+	attestation []byte,
+	data []byte,
+	teeType uint8,
+	registerSignerOpts EspressoRegisterSignerOpts,
+) error {
 	// First check base fee is low enough
-	lowBaseFee := false
-	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
-		latestBaseFee, err := dataPoster.BaseFee()
-		if err != nil && attempt < registerSignerOpts.MaxRetries-1 {
-			log.Error("register signer: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
-			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
-			}
-			continue
-		}
-
-		if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
-			log.Error("register signer: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryBaseFeeDelay, "attempt", attempt+1)
-			if attempt < registerSignerOpts.MaxRetries-1 {
-				time.Sleep(registerSignerOpts.RetryBaseFeeDelay)
-			}
-			continue
-		}
-
-		lowBaseFee = true
-		break
-	}
-	if !lowBaseFee {
-		return fmt.Errorf("base fee is not low enough to attempt to verify attestations certificates")
+	err := BaseFeeCheck(
+		registerSignerOpts.MaxBaseFee,
+		registerSignerOpts.MaxRetries,
+		registerSignerOpts.RetryBaseFeeDelay,
+		func() (*big.Int, error) {
+			return dataPoster.BaseFee()
+		},
+		"register signer: latest base fee is greater than max base fee",
+	)
+	if err != nil {
+		return err
 	}
 
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
@@ -108,7 +111,11 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return fmt.Errorf("register signer timed out after %v minutes waiting for tx %s to be mined", registerSignerOpts.MaxTxnWaitTime, tx.Hash().Hex())
+			return fmt.Errorf(
+				"register signer timed out after %v minutes waiting for tx %s to be mined",
+				registerSignerOpts.MaxTxnWaitTime,
+				tx.Hash().Hex(),
+			)
 		}
 		return err
 	}
@@ -122,6 +129,17 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	return nil
 }
 
-func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8) (bool, error) {
-	return e.contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
+func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) (bool, error) {
+	ok, err := ContractVerification(
+		registerSignerOpts.MaxRetries,
+		registerSignerOpts.RetryReadContractDelay,
+		func() (bool, error) {
+			return e.contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
+		},
+		"address not yet registered in contract",
+	)
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
 }
