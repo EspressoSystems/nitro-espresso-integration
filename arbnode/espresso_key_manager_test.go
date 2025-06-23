@@ -85,8 +85,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Maybe()
+		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, opts.DataSigner, SGX, registerOpts)
 		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
@@ -168,8 +167,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Maybe()
+		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, opts.DataSigner, NITRO, registerOpts)
 		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
@@ -193,9 +191,10 @@ func TestEspressoKeyManager(t *testing.T) {
 		// Second call (already registered)
 		called = false
 		err = km.Register(getAttestationFunc)
-		assert.True(t, registered, "Register function should return true")
 		require.NoError(t, err, "Registry should succeed when already registered")
 		assert.False(t, called, "Sign function should not be called again")
+		registered = km.HasRegistered()
+		assert.True(t, registered, "Register function should still return true")
 	})
 
 	// Test Sign

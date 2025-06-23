@@ -93,16 +93,6 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
 
-	latestBaseFee, err := dataPoster.BaseFee()
-	if err != nil {
-		log.Error("failed to get latest base fee", "err", err)
-		return err
-	}
-
-	if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
-		return fmt.Errorf("latest base fee is greater than max base fee: %d > %d", latestBaseFee.Uint64(), registerSignerOpts.MaxBaseFee)
-	}
-
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, gasLimit, dataPoster.Auth().Value)

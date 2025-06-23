@@ -55,8 +55,8 @@ type EspressoRegisterSignerOpts struct {
 
 func AddEspressoRegisterSignerConfigOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".max-txn-wait-time", DefaultEspressoRegisterSignerConfig.MaxTxnWaitTime, "max transaction wait time when calling espresso tee verifier contracts")
-	f.Duration(prefix+".retry-send-delay", DefaultEspressoRegisterSignerConfig.RetryBaseFeeDelay, "delay in calls to check the base fee")
-	f.Duration(prefix+".retry-send-delay", DefaultEspressoRegisterSignerConfig.RetryReadContractDelay, "delay in calls to read from contract for verification")
+	f.Duration(prefix+".retry-base-fee-delay", DefaultEspressoRegisterSignerConfig.RetryBaseFeeDelay, "delay in calls to check the base fee")
+	f.Duration(prefix+".retry-read-contract-delay", DefaultEspressoRegisterSignerConfig.RetryReadContractDelay, "delay in calls to read from contract for verification")
 	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterSignerConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
 	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterSignerConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
 	f.Uint64(prefix+".max-base-fee", DefaultEspressoRegisterSignerConfig.MaxBaseFee, "max base fee to use when calling espresso tee contracts")
