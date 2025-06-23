@@ -67,6 +67,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 
 	latestBaseFee, err := dataPoster.BaseFee()
 	if err != nil {
+		log.Error("failed to get latest base fee", "err", err)
 		return err
 	}
 
@@ -78,6 +79,7 @@ func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, 
 	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(context.Background(), e.address, calldata, gasLimit, dataPoster.Auth().Value)
 	if err != nil {
+		log.Info("failed to post register signer transaction", "err", err)
 		return err
 	}
 

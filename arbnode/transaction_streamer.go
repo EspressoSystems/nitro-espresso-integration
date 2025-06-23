@@ -1991,23 +1991,14 @@ func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Con
 
 func (s *TransactionStreamer) RegisterSigner() error {
 	teeType := s.EspressoKeyManager.TeeType()
-	var registered bool
-	var err error
 	switch teeType {
 	case SGX:
-		registered, err = s.EspressoKeyManager.Register(s.getAttestationQuote)
+		return s.EspressoKeyManager.Register(s.getAttestationQuote)
 	case NITRO:
-		registered, err = s.EspressoKeyManager.Register(s.getNitroAttestation)
+		return s.EspressoKeyManager.Register(s.getNitroAttestation)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
-	if err != nil {
-		return err
-	}
-	if !registered {
-		return errors.New("failed to register TEE signer")
-	}
-	return nil
 }
 
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {

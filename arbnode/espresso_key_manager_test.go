@@ -102,8 +102,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// First registration
-		registered, err := km.Register(getAttestationFunc)
-		assert.True(t, registered, "Register function should return true")
+		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		registered, _ = km.HasRegistered()
@@ -111,8 +110,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 		// Second call (already registered)
 		called = false
-		registered, err = km.Register(getAttestationFunc)
-		assert.True(t, registered, "Register function should return true")
+		err = km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed when already registered")
 		assert.False(t, called, "Sign function should not be called again")
 	})
@@ -186,8 +184,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// First registration
-		registered, err := km.Register(getAttestationFunc)
-		assert.True(t, registered, "Register function should return true")
+		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		registered, _ = km.HasRegistered()
@@ -195,8 +192,7 @@ func TestEspressoKeyManager(t *testing.T) {
 
 		// Second call (already registered)
 		called = false
-		registered, err = km.Register(getAttestationFunc)
-		assert.True(t, registered, "Register function should return true")
+		err = km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed when already registered")
 		assert.False(t, called, "Sign function should not be called again")
 	})
