@@ -144,15 +144,17 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 		func() (bool, error) {
 			return e.contract.CertVerified(&bind.CallOpts{}, certHash)
 		},
-		"attestation certificate is not yet verified")
+		"attestation certificate is not yet verified",
+	)
 	if err != nil {
 		return certHash, err
 	}
 	if verified {
 		log.Info("cert verified", "cert hash", certHash, "isCA", isCA)
+		return certHash, nil
+	} else {
+		return certHash, errors.New("attestation certificate is not registered in contract even after successful transaction")
 	}
-
-	return certHash, nil
 }
 
 /**
