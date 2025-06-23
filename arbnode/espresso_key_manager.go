@@ -23,7 +23,7 @@ const (
 )
 
 type EspressoKeyManagerInterface interface {
-	HasRegistered() (bool, error)
+	HasRegistered() bool
 	Register(getAttestationFunc func([]byte) ([]byte, error)) error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignHotShotPayload(message []byte) ([]byte, error)
@@ -75,7 +75,7 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 		panic("Max txn wait time cannot be more than 5 minutes")
 	}
 
-	if registerSignerConfig.RetryDelay > 20*time.Second {
+	if registerSignerConfig.RetryDelay > 2*time.Minute {
 		panic("Retry delay cannot be more than 20 seconds")
 	}
 
@@ -97,7 +97,11 @@ func NewEspressoKeyManager(espressoTEEVerifierCaller espressotee.EspressoTEEVeri
 	}
 }
 
-func (k *EspressoKeyManager) HasRegistered() (bool, error) {
+func (k *EspressoKeyManager) HasRegistered() bool {
+	return k.hasRegistered
+}
+
+func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 	if k.hasRegistered {
 		return true, nil
 	}
@@ -170,29 +174,22 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return nil
 	}
 
-	for i := 0; i < k.registerSignerOpts.MaxRetries; i++ {
-		// Get the attestation and data needed to register the signer
-		attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
-		if err != nil {
-			log.Warn("Failed to prepare register signer, retrying...", "attempt", i+1, "err", err)
-			time.Sleep(k.registerSignerOpts.RetryDelay)
-			continue
-		}
-
-		err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType), k.registerSignerOpts)
-		if err != nil {
-			log.Warn("Failed to register signer, retrying...", "attempt", i+1, "err", err)
-			time.Sleep(k.registerSignerOpts.RetryDelay)
-			continue
-		}
-
-		signerAddr := crypto.PubkeyToAddress(*k.pubKey)
-		log.Info("Register signer transaction sent", "signer address", signerAddr.Hex(), "attempt", i+1)
-		break
+	// Get the attestation and data needed to register the signer
+	attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
+	if err != nil {
+		return err
 	}
 
+	err = k.espressoTEEVerifierCaller.RegisterSigner(k.dataPoster, attestation, data, uint8(k.teeType), k.registerSignerOpts)
+	if err != nil {
+		return err
+	}
+
+	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
+
 	// Verify our address is actually registered in contract
-	hasRegistered, err := k.HasRegistered()
+	hasRegistered, err := k.VerifyRegistered()
 	if err != nil {
 		return err
 	}

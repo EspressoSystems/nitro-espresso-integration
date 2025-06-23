@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -32,6 +33,33 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 }
 
 func (e *EspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) error {
+	// First check base fee is low enough
+	lowBaseFee := false
+	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
+		latestBaseFee, err := dataPoster.BaseFee()
+		if err != nil && attempt < registerSignerOpts.MaxRetries-1 {
+			log.Error("register signer: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			if attempt < registerSignerOpts.MaxRetries-1 {
+				time.Sleep(registerSignerOpts.RetryDelay)
+			}
+			continue
+		}
+
+		if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
+			log.Error("register signer: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			if attempt < registerSignerOpts.MaxRetries-1 {
+				time.Sleep(registerSignerOpts.RetryDelay)
+			}
+			continue
+		}
+
+		lowBaseFee = true
+		break
+	}
+	if !lowBaseFee {
+		return fmt.Errorf("base fee is not low enough to attempt to verify attestations certificates")
+	}
+
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err

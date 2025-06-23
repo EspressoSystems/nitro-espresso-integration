@@ -77,7 +77,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.pubKey, "Public key should be set")
 		assert.NotNil(t, km.privKey, "Private key should be set")
-		registered, _ := km.HasRegistered()
+		registered := km.HasRegistered()
 		assert.False(t, registered, "Should not be registered initially")
 	})
 
@@ -88,7 +88,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Maybe()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, opts.DataSigner, SGX, registerOpts)
-		registered, _ := km.HasRegistered()
+		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
 
 		// Mock sign function
@@ -105,7 +105,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered, _ = km.HasRegistered()
+		registered = km.HasRegistered()
 		assert.True(t, registered, "Should be registered after call")
 
 		// Second call (already registered)
@@ -171,7 +171,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything).Return(true, nil).Maybe()
 		km := NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, opts.DataSigner, NITRO, registerOpts)
-		registered, _ := km.HasRegistered()
+		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
 
 		// Mock sign function
@@ -187,12 +187,13 @@ func TestEspressoKeyManager(t *testing.T) {
 		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered, _ = km.HasRegistered()
+		registered = km.HasRegistered()
 		assert.True(t, registered, "Should be registered after call")
 
 		// Second call (already registered)
 		called = false
 		err = km.Register(getAttestationFunc)
+		assert.True(t, registered, "Register function should return true")
 		require.NoError(t, err, "Registry should succeed when already registered")
 		assert.False(t, called, "Sign function should not be called again")
 	})

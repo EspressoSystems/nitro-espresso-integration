@@ -36,7 +36,7 @@ type EspressoRegisterSignerConfig struct {
 
 var DefaultEspressoRegisterSignerConfig = EspressoRegisterSignerConfig{
 	MaxTxnWaitTime:                3 * time.Minute,
-	RetryDelay:                    5 * time.Second,
+	RetryDelay:                    1 * time.Minute,
 	MaxRetries:                    5,
 	GasLimitBufferIncreasePercent: 20,
 	MaxBaseFee:                    70000000,

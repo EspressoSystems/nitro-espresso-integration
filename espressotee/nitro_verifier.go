@@ -88,15 +88,6 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
 	log.Info("verify cert gas limit", "gas limit", gasLimit)
 
-	latestBaseFee, err := dataPoster.BaseFee()
-	if err != nil {
-		return certHash, err
-	}
-
-	if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
-		return certHash, fmt.Errorf("latest base fee is greater than max base fee: %d > %d", latestBaseFee.Uint64(), registerSignerOpts.MaxBaseFee)
-	}
-
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
 	tx, err := dataPoster.PostSimpleTransaction(
@@ -161,10 +152,37 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster,
  * 2. The CA certificate chain
  * 3. The client certificate
  */
-func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, registerSignerOpts EspressoRegisterSignerOpts) (attestation []byte, data []byte, err error) {
+func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, registerSignerOpts EspressoRegisterSignerOpts) ([]byte, []byte, error) {
+	// First check base fee is low enough
+	lowBaseFee := false
+	for attempt := 0; attempt < registerSignerOpts.MaxRetries; attempt++ {
+		latestBaseFee, err := dataPoster.BaseFee()
+		if err != nil && attempt < registerSignerOpts.MaxRetries-1 {
+			log.Error("verify certificate: error getting latest base fee", "err", err, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			if attempt < registerSignerOpts.MaxRetries-1 {
+				time.Sleep(registerSignerOpts.RetryDelay)
+			}
+			continue
+		}
+
+		if latestBaseFee.Uint64() > registerSignerOpts.MaxBaseFee {
+			log.Error("verify certificate: latest base fee is greater than max base fee", "base fee", latestBaseFee.Uint64(), "max base fee", registerSignerOpts.MaxBaseFee, "delay", registerSignerOpts.RetryDelay, "attempt", attempt+1)
+			if attempt < registerSignerOpts.MaxRetries-1 {
+				time.Sleep(registerSignerOpts.RetryDelay)
+			}
+			continue
+		}
+
+		lowBaseFee = true
+		break
+	}
+	if !lowBaseFee {
+		return nil, nil, fmt.Errorf("base fee is not low enough to attempt to verify attestations certificates")
+	}
+
 	// Unmarshal attestation document
 	var res nitrite.Result
-	err = json.Unmarshal(attestationBytes, &res)
+	err := json.Unmarshal(attestationBytes, &res)
 	if err != nil {
 		return nil, nil, err
 	}
