@@ -70,6 +70,7 @@ import (
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -379,18 +380,14 @@ func (b *NodeBuilder) WithStylusLongTermCache(enabled bool) *NodeBuilder {
 }
 
 // WithDelayBuffer sets the delay-buffer threshold, which is the number of blocks the batch-poster
-
 // is allowed to delay a batch with a delayed message.
-
 // Setting the threshold to zero disabled the delay buffer (default behaviour).
-
 func (b *NodeBuilder) WithDelayBuffer(threshold uint64) *NodeBuilder {
 	b.delayBufferThreshold = threshold
 	return b
 }
 
 // WithL1ClientWrapper creates a ClientWrapper for the L1 RPC client before passing it to the L2 node.
-
 func (b *NodeBuilder) WithL1ClientWrapper(t *testing.T) *NodeBuilder {
 	if !b.withL1 {
 		Fatal(t, "WithL1ClientWrapper only works when L1 is enabled")
@@ -442,7 +439,7 @@ func (b *NodeBuilder) BuildL1(t *testing.T) {
 		l1StackConfig = b.l1StackConfig
 	}
 
-	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack, b.L1.ClientWrapper = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, b.withL1ClientWrapper)
+	b.L1Info, b.L1.Client, b.L1.L1Backend, b.L1.Stack, b.L1.ClientWrapper = createTestL1BlockChainWithL1StackConfig(t, b.L1Info, l1StackConfig, b.withL1ClientWrapper)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	b.addresses, b.initMessage = deployOnParentChain(
@@ -708,15 +705,15 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
 	execConfigFetcher := func() *gethexec.Config { return execConfig }
-	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher)
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	fatalErrChan := make(chan error, 10)
-	b.L2.ConsensusNode, err = arbnode.CreateNode(
-		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil)
+	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
+		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, common.Hash{})
 	if err != nil {
 		return nil, err
 	}
@@ -1278,7 +1275,7 @@ func AddValNode(t *testing.T, ctx context.Context, nodeConfig *arbnode.Config, u
 	configByValidationNode(nodeConfig, valStack)
 }
 
-func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackConfig *node.Config) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
+func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackConfig *node.Config, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
 	if l1info == nil {
 		l1info = NewL1TestInfo(t)
 	}
@@ -1410,7 +1407,7 @@ func deployOnParentChain(
 	Require(t, err)
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
-		stakeToken, tx, _, err := boldMocksgen.DeployTestWETH9(
+		stakeToken, tx, _, err := localgen.DeployTestWETH9(
 			&parentChainTransactionOpts,
 			parentChainReader.Client(),
 			"Weth",
@@ -1494,14 +1491,14 @@ func deployOnParentChain(
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
 
-		addresses, err = deploy.DeployOnParentChain(
+		addresses, err = deploy.DeployLegacyOnParentChain(
 			ctx,
 			parentChainReader,
 			&parentChainTransactionOpts,
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			arbnode.GenerateRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
+			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
@@ -1957,11 +1954,8 @@ func logParser[T any](t *testing.T, source string, name string) func(*types.Log)
 }
 
 // recordBlock writes a json file with all of the data needed to validate a block.
-
 //
-
 // This can be used as an input to the arbitrator prover to validate a block.
-
 func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...ethdb.WasmTarget) {
 	t.Helper()
 	if !*testflag.RecordBlockInputsEnable {
@@ -2001,16 +1995,9 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...et
 	}
 }
 
-// WithDelayBuffer sets the delay-buffer threshold, which is the number of blocks the batch-poster
-
-// is allowed to delay a batch with a delayed message.
-
-// Setting the threshold to zero disabled the delay buffer (default behaviour).
-
 // nolint:unused
-
-func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node) {
-	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()))
+func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
+	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()), withClientWrapper)
 }
 
 func createL2BlockChain(
@@ -2026,12 +2013,6 @@ var (
 	recordBlockInputsWithTimestampDirEnabled      = flag.Bool("recordBlockInputs.WithTimestampDirEnabled", true, "Whether to add timestamp directory while recording block inputs")
 	recordBlockInputsWithBlockIdInFileNameEnabled = flag.Bool("recordBlockInputs.WithBlockIdInFileNameEnabled", true, "Whether to record block inputs using test specific block_id")
 )
-
-// recordBlock writes a json file with all of the data needed to validate a block.
-
-//
-
-// This can be used as an input to the arbitrator prover to validate a block.
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
 	baseDir := t.TempDir()

@@ -38,6 +38,7 @@ func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwn
 		Owner:                    rollupOwner,
 		LoserStakeEscrow:         loserStakeEscrow,
 		ChainId:                  chainConfig.ChainID,
+		EspressoTEEVerifier:      espressoTEEVerifier,
 		// TODO could the ChainConfig be just []byte?
 		ChainConfig: string(serializedChainConfig),
 		SequencerInboxMaxTimeVariation: rollup_legacy_gen.ISequencerInboxMaxTimeVariation{

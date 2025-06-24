@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"log/slog"
 	"math/big"
 	"net"
 	"net/http"
