@@ -1599,6 +1599,10 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// for a time.
 		// So when error occurs, we break the loop and continue the rest of the function to see
 		// if we can make a new batch.
+		lastPotentialMsg = &arbostypes.MessageWithMetadata{
+			// Only initializing `DelayedMessagesRead` is fine because this is the only field needed in `estimateGas`.
+			DelayedMessagesRead: batchPosition.DelayedMessageCount,
+		}
 		bufferCount := b.espressoStreamer.GetMessageCount()
 		i := uint64(0)
 		addMessageLoop = func() bool {
