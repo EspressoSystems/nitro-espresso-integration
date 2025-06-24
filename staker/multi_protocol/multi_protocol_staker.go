@@ -269,26 +269,3 @@ func (m *MultiProtocolStaker) setupBoldStaker(
 	m.boldStaker = boldStaker
 	return nil
 }
-
-func (m *MultiProtocolStaker) isBoldActive(ctx context.Context) (bool, common.Address, error) {
-	var addr common.Address
-	if !m.boldConfig.Enable {
-		return false, addr, nil
-	}
-	callOpts := m.getCallOpts(ctx)
-	rollupAddress, err := m.bridge.Rollup(callOpts)
-	if err != nil {
-		return false, addr, err
-	}
-	userLogic, err := boldrollup.NewRollupUserLogic(rollupAddress, m.l1Reader.Client())
-	if err != nil {
-		return false, addr, err
-	}
-	_, err = userLogic.ChallengeGracePeriodBlocks(callOpts)
-	if err != nil && !headerreader.ExecutionRevertedRegexp.MatchString(err.Error()) {
-		// Unexpected error, perhaps an L1 issue?
-		return false, addr, err
-	}
-	// ChallengeGracePeriodBlocks only exists in the BOLD rollup contracts.
-	return err == nil, rollupAddress, nil
-}

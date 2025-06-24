@@ -101,7 +101,7 @@ func main() {
 	if !common.IsHexAddress(*espressoTEEVerifierAddressString) {
 		panic("specified espressoTEEVerifier address is invalid")
 	}
-	esperssoTEEVerifierAddress := common.HexToAddress(*espressoTEEVerifierAddressString)
+  _ = common.HexToAddress(*espressoTEEVerifierAddressString) // This might be unused as a result of using mergiraf the one time, it meant that the creation of the rollup config here no longer takes the tee verifier address. TODO
 	sequencerAddress := common.HexToAddress(*sequencerAddressString)
 
 	if !common.IsHexAddress(*ownerAddressString) {
@@ -191,7 +191,7 @@ func main() {
 		batchPosters,
 		batchPosterManagerAddress,
 		*authorizevalidators,
-		deploycode.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress, esperssoTEEVerifierAddress),
+		deploycode.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress),
 		nativeToken,
 		maxDataSize,
 		true,

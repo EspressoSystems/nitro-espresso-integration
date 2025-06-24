@@ -1068,37 +1068,6 @@ func (s *ExecutionEngine) Maintenance(capLimit uint64) error {
 	defer s.createBlocksMutex.Unlock()
 	return s.bc.FlushTrieDB(common.StorageSize(capLimit))
 }
-// Copyright 2022-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
-//go:build !wasm
-// +build !wasm
-/*
-#cgo CFLAGS: -g -I../../target/include/
-#cgo LDFLAGS: ${SRCDIR}/../../target/lib/libstylus.a -ldl -lm
-#include "arbitrator.h"
-*/
-func (s *ExecutionEngine) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
-	if s.consensus != nil {
-		return s.consensus.BlockMetadataAtCount(count)
-	}
-	return nil, errors.New("FullConsensusClient is not accessible to execution")
-}
-// The caller must hold the createBlocksMutex
-// SequenceTransactionsWithProfiling runs SequenceTransactions with tracing and
-// CPU profiling enabled. If the block creation takes longer than 2 seconds, it
-// keeps both and prints out filenames in an error log line.
-// blockMetadataFromBlock returns timeboosted byte array which says whether a transaction in the block was timeboosted
-// or not. The first byte of blockMetadata byte array is reserved to indicate the version,
-// starting from the second byte, (N)th bit would represent if (N)th tx is timeboosted or not, 1 means yes and 0 means no
-// blockMetadata[index / 8 + 1] & (1 << (index % 8)) != 0; where index = (N - 1), implies whether (N)th tx in a block is timeboosted
-// note that number of txs in a block will always lag behind (len(blockMetadata) - 1) * 8 but it wont lag more than a value of 7
-// must hold createBlockMutex
-// must hold createBlockMutex
-// DigestMessage is used to create a block by executing msg against the latest state and storing it.
-// Also, while creating a block by executing msg against the latest state,
-// in parallel, creates a block by executing msgForPrefetch (msg+1) against the latest state
-// but does not store the block.
-// This helps in filling the cache, so that the next block creation is faster.
 // Publish following functions for espresso caff node to access the blockchain
 func (s *ExecutionEngine) Bc() *core.BlockChain {
 	return s.bc
