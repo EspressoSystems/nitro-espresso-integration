@@ -123,6 +123,7 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 		config:     configFetcher,
 		execEngine: execEngine,
 		l1Reader:   l1Reader,
+		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
 	}, nil
 }
 
@@ -215,7 +216,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 	s.nonceCache.Resize(config.NonceCacheSize)
 	s.nonceCache.BeginNewBlock()
-
 	queueItems = s.precheckNonces(queueItems)
 	txes := make([]*types.Transaction, len(queueItems))
 	hooks := s.makeSequencingHooks()
@@ -238,7 +238,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		)
 		return false
 	}
-
+	if len(queueItems) == 0 {
+		return false
+	}
 	timestamp := queueItems[0].consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
@@ -338,8 +340,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash())
 			continue
 		}
-		// TODO: should send the error back to the user
-		log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
 	}
 
 	return madeBlock
@@ -472,6 +472,24 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	}
 
 	return outputQueueItems
+}
+
+func (s *TimeboostSequencer) PublishTestTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
+	txBytes, err := tx.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	txQueueItem := timeboostTransactionQueueItem{
+		tx:                 tx,
+		txSize:             len(txBytes),
+		options:            options,
+		roundId:            1,
+		consensusTimestamp: time.Now().Unix(),
+	}
+
+	s.txQueue.Push(txQueueItem)
+	return nil
 }
 
 func (s *TimeboostSequencer) Start(ctx context.Context) error {
