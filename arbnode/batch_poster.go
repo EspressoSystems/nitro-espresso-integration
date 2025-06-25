@@ -97,7 +97,6 @@ const (
 	espressoTransactionSizeLimit             = 900 * 1024
 )
 
-
 type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
 	DelayedMessageCount uint64
@@ -139,10 +138,10 @@ type BatchPoster struct {
 	checkEip7623 bool
 	useEip7623   bool
 	// Types for packing the blob hashes into the data used to generate the batchers attestation quote.
-	bytesType        abi.Type
-	bytes32ArrayType abi.Type
+	bytesType                 abi.Type
+	bytes32ArrayType          abi.Type
 	blobsAttestationArguments abi.Arguments
-	espressoStreamer *espressostreamer.EspressoStreamer
+	espressoStreamer          *espressostreamer.EspressoStreamer
 }
 
 type l1BlockBound int
@@ -328,18 +327,18 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	DelayBufferThresholdMargin:     25,
-// 5 minutes considering 12-second blocks,
-	DelayBufferAlwaysUpdatable:     true,
-	ParentChainEip7623:             "auto",
-// 5 minutes considering 12-second blocks,
-	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Second,
-	ResubmitEspressoTxDeadline:     10 * time.Minute,
-	MaxBlockLagBeforeEscapeHatch:   350,
-	LightClientAddress:             "",
-	HotShotUrls:                    []string{""},
-	EspressoTeeType:                "SGX",
-	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
+	// 5 minutes considering 12-second blocks,
+	DelayBufferAlwaysUpdatable: true,
+	ParentChainEip7623:         "auto",
+	// 5 minutes considering 12-second blocks,
+	UseEscapeHatch:               false,
+	EspressoTxnsPollingInterval:  time.Second,
+	ResubmitEspressoTxDeadline:   10 * time.Minute,
+	MaxBlockLagBeforeEscapeHatch: 350,
+	LightClientAddress:           "",
+	HotShotUrls:                  []string{""},
+	EspressoTeeType:              "SGX",
+	EspressoRegisterSignerConfig: espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -535,9 +534,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		dapWriter:                 opts.DAPWriter,
 		redisLock:                 redisLock,
 		dapReaders:                opts.DAPReaders,
-		parentChain:        &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.L1Reader},
-		checkEip7623:       checkEip7623,
-		useEip7623:         useEip7623,
+		parentChain:               &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.L1Reader},
+		checkEip7623:              checkEip7623,
+		useEip7623:                useEip7623,
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
@@ -626,7 +625,7 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
 	}
-	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
+	log.Info("successfully retrieved nitro contract verifier address", "address", nitroAddr)
 
 	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
 		nitroAddr,
@@ -661,11 +660,11 @@ func (b *simulatedMuxBackend) PeekSequencerInbox() ([]byte, common.Hash, error) 
 	return b.seqMsg, common.Hash{}, nil
 }
 
-func (b *simulatedMuxBackend) GetSequencerInboxPosition() uint64   { return b.batchSeqNum }
+func (b *simulatedMuxBackend) GetSequencerInboxPosition() uint64 { return b.batchSeqNum }
 
-func (b *simulatedMuxBackend) AdvanceSequencerInbox()              {}
+func (b *simulatedMuxBackend) AdvanceSequencerInbox() {}
 
-func (b *simulatedMuxBackend) GetPositionWithinMessage() uint64    { return b.positionWithinMessage }
+func (b *simulatedMuxBackend) GetPositionWithinMessage() uint64 { return b.positionWithinMessage }
 
 func (b *simulatedMuxBackend) SetPositionWithinMessage(pos uint64) { b.positionWithinMessage = pos }
 
@@ -1866,7 +1865,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.streamer.EspressoKeyManager != nil {
 		registered := b.streamer.EspressoKeyManager.HasRegistered()
 		if !registered {
-			return false, fmt.Errorf("ephemeral keys are not yet registed in Espresso TEE Contract")
+			return false, fmt.Errorf("ephemeral keys are not yet registered in Espresso TEE Contract")
 		}
 	}
 

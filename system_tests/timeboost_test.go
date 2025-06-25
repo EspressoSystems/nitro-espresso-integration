@@ -2177,7 +2177,7 @@ func getRandomPort(t testing.TB) int {
 
 // 	time.Sleep(time.Second) // Wait for controller to change on the sequencer side
 
-// 	// Check that now Alice's tx gets priority since she's the controller after bob transfered it
+// 	// Check that now Alice's tx gets priority since she's the controller after bob transferred it
 
 // 	verifyControllerAdvantage(t, ctx, seqClient, aliceExpressLaneClient, seqInfo, "Alice", "Bob")
 
