@@ -176,24 +176,28 @@ func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
 
 	b, err := rlp.EncodeToBytes(&oldSubmiitedTx)
 	if err != nil {
-		t.Error("failed to encode")
+		t.Errorf("Failed to encode, got %v", err)
 	}
 
 	var expected SubmittedEspressoTx
 	err = rlp.DecodeBytes(b, &expected)
 	if err != nil {
-		t.Error("failed to encode")
+		t.Errorf("Failed to decode, got %v", err)
 	}
 
 	if oldSubmiitedTx.Hash != expected.Hash {
-		t.Error("failed to check hash")
+		t.Errorf("Failed to check hash after decoding, got %v, want %v", expected.Hash, oldSubmiitedTx.Hash)
 	}
 
-	if oldSubmiitedTx.Pos[0] != expected.Pos[0] {
-		t.Error("failed to check pos")
+	if len(expected.Pos) != 1 || oldSubmiitedTx.Pos[0] != expected.Pos[0] {
+		t.Errorf("Pos mismatch: got %v, want %v", expected.Pos, oldSubmiitedTx.Pos)
 	}
 
 	if !bytes.Equal(oldSubmiitedTx.Payload, expected.Payload) {
-		t.Error("failed to check payload")
+		t.Errorf("Payload mismatch: got %x, want %x", expected.Payload, oldSubmiitedTx.Payload)
+	}
+
+	if !expected.SubmittedAt.IsZero() {
+		t.Errorf("Expected SubmittedAt to be zero after decoding old data, but got %v", expected.SubmittedAt)
 	}
 }
