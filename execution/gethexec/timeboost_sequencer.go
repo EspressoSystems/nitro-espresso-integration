@@ -10,6 +10,7 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
@@ -25,6 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
+	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -35,7 +37,7 @@ type timeboostTransactionQueueItem struct {
 	txSize             int
 	options            *arbitrum_types.ConditionalOptions
 	roundId            uint64
-	consensusTimestamp int64
+	consensusTimestamp uint64
 }
 
 type synchronizedTimeboostTransactionQueue struct {
@@ -78,8 +80,9 @@ type TimeboostSequencer struct {
 	execEngine *ExecutionEngine
 	l1Reader   *headerreader.HeaderReader
 	// TODO: We should probably also store the txRetryQueue in storage
-	txRetryQueue synchronizedTimeboostTransactionQueue
-	nonceCache   *nonceCache
+	txRetryQueue         synchronizedTimeboostTransactionQueue
+	nonceCache           *nonceCache
+	timeboostTxnListener TimeboostListener
 }
 
 type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
@@ -124,6 +127,12 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 		execEngine: execEngine,
 		l1Reader:   l1Reader,
 		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
+		timeboostTxnListener: TimeboostListener{
+			config: TimeboostListenerConfig{
+				Enable:     true,
+				ListenPort: 55000,
+			},
+		},
 	}, nil
 }
 
@@ -257,7 +266,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		Kind:        arbostypes.L1MessageType_L2Message,
 		Poster:      l1pricing.BatchPosterAddress,
 		BlockNumber: l1Block.NumberU64(),
-		Timestamp:   arbmath.SaturatingUCast[uint64](timestamp),
+		Timestamp:   timestamp,
 		RequestId:   nil,
 		L1BaseFee:   nil,
 	}
@@ -474,21 +483,37 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) PublishTestTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
+func (s *TimeboostSequencer) ProcessIncomingTx(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+	// txBytes, err := tx.MarshalBinary()
+	// if err != nil {
+	// 	return err
+	// }
+
+	inclusionList := &gethexec.InclusionList{}
+	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
+		log.Warn("Error decoding InclusionList", "err", err)
 		return err
 	}
 
-	txQueueItem := timeboostTransactionQueueItem{
-		tx:                 tx,
-		txSize:             len(txBytes),
-		options:            options,
-		roundId:            1,
-		consensusTimestamp: time.Now().Unix(),
-	}
+	log.Info("list", "list", inclusionList)
+	for _, protoTx := range inclusionList.EncodedTxns {
+		var tx types.Transaction
+		err := tx.UnmarshalBinary(protoTx.EncodedTxn)
+		if err != nil {
+			log.Info("err", "err", err)
+			return err
+		}
+		txQueueItem := timeboostTransactionQueueItem{
+			tx:                 &tx,
+			txSize:             len(protoTx.EncodedTxn),
+			options:            options,
+			roundId:            inclusionList.Round,
+			consensusTimestamp: inclusionList.ConsensusTimestamp,
+		}
 
-	s.txQueue.Push(txQueueItem)
+		s.txQueue.Push(txQueueItem)
+
+	}
 	return nil
 }
 
@@ -497,7 +522,20 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
 	}
-
+	txChan := make(chan []byte, 1000)
+	s.timeboostTxnListener.Start(ctx, txChan)
+	s.LaunchThread(func(ctx context.Context) {
+		for {
+			select {
+			case tx := <-txChan:
+				if err := s.ProcessIncomingTx(ctx, tx, nil); err != nil {
+					log.Warn("Error processing transaction", "err", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
