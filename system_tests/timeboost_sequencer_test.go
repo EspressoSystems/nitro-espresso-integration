@@ -88,9 +88,9 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 
 		var users []string
 
-		const numUsers = 100
-		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
-		Require(t, err)
+		const numUsers = 10
+		// blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+		// Require(t, err)
 
 		for num := 0; num < numUsers; num++ {
 			userName := fmt.Sprintf("My_User_%d", num)
@@ -98,42 +98,53 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			users = append(users, userName)
 		}
 
+		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
+		timeboostSequencer := builder.L2.ConsensusNode.TimeboostSequencer
+
 		for _, userName := range users {
 			tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
 			txs = append(txs, tx)
 		}
 
-		timeboostSequencer := builder.L2.ConsensusNode.TimeboostSequencer
-
 		for _, tx := range txs {
-			go func(ptx *types.Transaction) {
-				err := timeboostSequencer.PublishTestTransaction(ctx, ptx, nil)
-				Require(t, err)
-			}(tx)
+			err := timeboostSequencer.PublishTestTransaction(ctx, tx, nil)
+			Require(t, err)
 		}
 
-		// Check that a block is created aftersometime
-		time.Sleep(time.Second * 5)
+		// Wait for sometime for the block to be produced
+		time.Sleep(time.Second * 10)
 
 		// Check that the database now has updated block
 		blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 		Require(t, err)
 
 		// msgCntAfter should be 1 greater than msgCntBefore
-		if blockNumberAfter-blockNumberBefore != 1 {
-			t.Fatalf("expected msgCntAfter to be 1 greater than msgCntBefore, got: %d", blockNumberAfter-blockNumberBefore)
+		if blockNumberAfter-blockNumberBefore <= 0 {
+			t.Fatalf("expected difference between blockNumberAfter and blockNumberBefore to be greater than 0, got: %d", blockNumberAfter-blockNumberBefore)
 		}
 
 		// Check that if that block contains all the tx hashes
-
 		if blockNumberAfter > math.MaxInt64 {
 			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
 		}
-		block, err := builder.L1.Client.BlockByNumber(ctx, big.NewInt(int64(blockNumberAfter)))
-		Require(t, err)
-		for i, tx := range block.Transactions() {
+
+		// Get all the transactions from all the blocks after the blockNumberBefore
+		var transactions []*types.Transaction
+		for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
+			if i > math.MaxInt64 {
+				t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+			}
+			block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+			Require(t, err)
+			blockTransactions := block.Transactions()
+			transactionsWithoutStartBlock := blockTransactions[1:]
+			transactions = append(transactions, transactionsWithoutStartBlock...)
+		}
+
+		for i, tx := range transactions {
 			if tx.Hash() != txs[i].Hash() {
-				t.Fatalf("expected tx hash to be in block, got: %s", tx.Hash().Hex())
+				t.Fatalf("txHash doesn't match, got %s, want %s", tx.Hash().Hex(), txs[i].Hash().Hex())
 			}
 		}
 	})

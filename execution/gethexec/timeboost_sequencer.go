@@ -97,8 +97,8 @@ type TimeboostSequencerConfig struct {
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
-	Enable:                      true,
-	BlockRetryDuration:          time.Millisecond * 250,
+	Enable:                      false,
+	BlockRetryDuration:          time.Second * 5,
 	MaxTxDataSize:               95000,
 	NonceCacheSize:              1024,
 	MaxRevertGasReject:          0,
@@ -157,7 +157,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
 			queueItem = s.txRetryQueue.Pop()
-			log.Debug("Popped the txRetryQueue", "txHash", queueItem.tx.Hash())
 		} else if s.txQueue.Len() == 0 {
 			// This means we have no transactions in the txRetryQueue and
 			// we also dont have any sailfish rounds to process
@@ -167,10 +166,8 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			if queueItems == nil {
 				queueItems = make([]timeboostTransactionQueueItem, 0)
 				queueItem = s.txQueue.Pop()
-				log.Debug("Popped the txQueue", "txHash", queueItem.tx.Hash())
-			} else if queueItems[len(queueItems)-1].roundId != s.txQueue.Peek().roundId {
+			} else if queueItems[len(queueItems)-1].roundId == s.txQueue.Peek().roundId {
 				queueItem = s.txQueue.Pop()
-				log.Debug("Popped the txQueue when queueItems had transactions from the given round", "txHash", queueItem.tx.Hash(), "roundId", queueItem.roundId)
 			} else {
 				done = true
 			}
@@ -205,7 +202,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
-			log.Debug("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
 			s.txRetryQueue.Push(queueItem)
 			// End the batch here to put this tx in the next one
 			break
@@ -239,8 +236,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		return false
 	}
 	if len(queueItems) == 0 {
-		return false
+		return true
 	}
+
 	timestamp := queueItems[0].consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
