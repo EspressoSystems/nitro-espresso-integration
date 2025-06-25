@@ -420,6 +420,3 @@ func setupBoldStateProvider(t *testing.T, ctx context.Context, blockChallengeHei
 	Require(t, l2node.Start(ctx))
 	return l2node, l1info, l2info, l1stack, l1client, stateManager, blockValidator
 }
-// Copyright 2023, Offchain Labs, Inc.
-// For license information, see https://github.com/offchainlabs/bold/blob/main/LICENSE
-//go:build challengetest && !race

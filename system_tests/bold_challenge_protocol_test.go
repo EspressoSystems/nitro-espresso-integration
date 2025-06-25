@@ -927,7 +927,3 @@ func writeTxToBatchBold(writer io.Writer, tx *types.Transaction) error {
 	err = rlp.Encode(writer, segment)
 	return err
 }
-// Copyright 2023, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-//go:build challengetest && !race
-// Every 3 seconds, send an L1 transaction to keep the chain moving.

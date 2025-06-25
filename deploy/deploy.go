@@ -22,7 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
-func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address) rollup_legacy_gen.Config {
+func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address, espressoTEEVerifier common.Address) rollup_legacy_gen.Config {
 	var confirmPeriod uint64
 	if prod {
 		confirmPeriod = 45818

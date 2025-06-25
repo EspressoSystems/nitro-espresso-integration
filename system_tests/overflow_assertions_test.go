@@ -320,7 +320,3 @@ func TestOverflowAssertions(t *testing.T) {
 	}
 	// PASS: All expected assertions were seen.
 }
-// Copyright 2024, Offchain Labs, Inc.
-// For license information, see:
-// https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-//go:build challengetest && !race

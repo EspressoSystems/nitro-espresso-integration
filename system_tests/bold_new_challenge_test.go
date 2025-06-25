@@ -351,6 +351,3 @@ func startBoldChallengeManager(t *testing.T, ctx context.Context, builder *NodeB
 	challengeManager.Start(ctx)
 	return assertionChain, challengeManager.StopAndWait
 }
-// Copyright 2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-//go:build challengetest && !race
