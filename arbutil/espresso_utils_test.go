@@ -160,3 +160,40 @@ func TestSerdeSubmittedEspressoTx(t *testing.T) {
 		t.Error("failed to check payload")
 	}
 }
+
+func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
+	type OldSubmittedEspressoTx struct {
+		Hash    string
+		Pos     []MessageIndex
+		Payload []byte
+	}
+
+	oldSubmiitedTx := OldSubmittedEspressoTx{
+		Hash:    "0x1234",
+		Pos:     []MessageIndex{MessageIndex(10)},
+		Payload: []byte{0, 1, 2, 3},
+	}
+
+	b, err := rlp.EncodeToBytes(&oldSubmiitedTx)
+	if err != nil {
+		t.Error("failed to encode")
+	}
+
+	var expected SubmittedEspressoTx
+	err = rlp.DecodeBytes(b, &expected)
+	if err != nil {
+		t.Error("failed to encode")
+	}
+
+	if oldSubmiitedTx.Hash != expected.Hash {
+		t.Error("failed to check hash")
+	}
+
+	if oldSubmiitedTx.Pos[0] != expected.Pos[0] {
+		t.Error("failed to check pos")
+	}
+
+	if !bytes.Equal(oldSubmiitedTx.Payload, expected.Payload) {
+		t.Error("failed to check payload")
+	}
+}
