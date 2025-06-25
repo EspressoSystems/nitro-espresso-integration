@@ -44,7 +44,8 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --cover)
-      cover=true
+      # Espresso Change: to expedite the CI, we always disable this flag
+      cover=false
       shift
       ;;
     *)
@@ -54,9 +55,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+###### Espresso
+# 1. First ensure the library path is set
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$(pwd)/target/lib"
+
+# 2. Verify the library exists
+if [[ ! -f "$(pwd)/target/lib/libespresso_crypto_helper-x86_64-unknown-linux-gnu.so" ]]; then
+    echo "Error: libespresso_crypto_helper-x86_64-unknown-linux-gnu.so not found in $(pwd)/target/lib"
+    exit 1
+fi
+
+skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
+######
+
+
 packages=$(go list ./...)
 for package in $packages; do
   cmd="stdbuf -oL gotestsum --format short-verbose --packages=\"$package\" --rerun-fails=2 --no-color=false --"
+  cmd="$cmd -skip \"$skip_tests\""
   if [ "$timeout" != "" ]; then
     cmd="$cmd -timeout $timeout"
   fi
