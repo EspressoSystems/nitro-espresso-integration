@@ -2024,3 +2024,8 @@ func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
 	Require(t, err)
 	return machineDir
 }
+
+// nolint:unused
+func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
+	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()), withClientWrapper)
+}
