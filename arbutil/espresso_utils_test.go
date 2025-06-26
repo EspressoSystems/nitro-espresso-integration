@@ -168,13 +168,13 @@ func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
 		Payload []byte
 	}
 
-	oldSubmiitedTx := OldSubmittedEspressoTx{
+	oldSubmittedTx := OldSubmittedEspressoTx{
 		Hash:    "0x1234",
 		Pos:     []MessageIndex{MessageIndex(10)},
 		Payload: []byte{0, 1, 2, 3},
 	}
 
-	b, err := rlp.EncodeToBytes(&oldSubmiitedTx)
+	b, err := rlp.EncodeToBytes(&oldSubmittedTx)
 	if err != nil {
 		t.Errorf("Failed to encode, got %v", err)
 	}
@@ -185,16 +185,16 @@ func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
 		t.Errorf("Failed to decode, got %v", err)
 	}
 
-	if oldSubmiitedTx.Hash != expected.Hash {
-		t.Errorf("Failed to check hash after decoding, got %v, want %v", expected.Hash, oldSubmiitedTx.Hash)
+	if oldSubmittedTx.Hash != expected.Hash {
+		t.Errorf("Failed to check hash after decoding, got %v, want %v", expected.Hash, oldSubmittedTx.Hash)
 	}
 
-	if len(expected.Pos) != 1 || oldSubmiitedTx.Pos[0] != expected.Pos[0] {
-		t.Errorf("Pos mismatch: got %v, want %v", expected.Pos, oldSubmiitedTx.Pos)
+	if len(expected.Pos) != 1 || oldSubmittedTx.Pos[0] != expected.Pos[0] {
+		t.Errorf("Pos mismatch: got %v, want %v", expected.Pos, oldSubmittedTx.Pos)
 	}
 
-	if !bytes.Equal(oldSubmiitedTx.Payload, expected.Payload) {
-		t.Errorf("Payload mismatch: got %x, want %x", expected.Payload, oldSubmiitedTx.Payload)
+	if !bytes.Equal(oldSubmittedTx.Payload, expected.Payload) {
+		t.Errorf("Payload mismatch: got %x, want %x", expected.Payload, oldSubmittedTx.Payload)
 	}
 
 	if !expected.SubmittedAt.IsZero() {
