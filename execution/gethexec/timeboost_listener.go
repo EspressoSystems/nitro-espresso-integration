@@ -241,7 +241,7 @@ func process(
 			return currentBackoff
 		}
 		*backoff = time.Second
-		return currentBackoff
+		return time.Second
 	}
 
 	*backoff = time.Second
@@ -249,7 +249,7 @@ func process(
 	// Decode and process inclusion list
 	if err := processInclusionListFunc(ctx, inclBytes, nil); err != nil {
 		log.Warn("error processing inclusion list", "err", err, "backoff", currentBackoff)
-		return currentBackoff
+		return time.Second
 	}
 
 	// Send acknowledgement to timeboost we received and processed
@@ -260,7 +260,7 @@ func process(
 			*backoff = min(currentBackoff*2, maxBackoff)
 			return currentBackoff
 		}
-		return currentBackoff
+		return time.Second
 	}
 
 	return 0
