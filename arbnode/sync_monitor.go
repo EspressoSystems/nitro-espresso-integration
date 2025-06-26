@@ -49,7 +49,6 @@ func SyncMonitorConfigAddOptions(prefix string, f *flag.FlagSet) {
 }
 
 func (s *SyncMonitor) Initialize(inboxReader *InboxReader, txStreamer *TransactionStreamer, coordinator *SeqCoordinator) {
-  log.Info("Vars", "iReader", inboxReader, "txStreamer", txStreamer, "coordinator", coordinator)
 	s.inboxReader = inboxReader
 	s.txStreamer = txStreamer
 	s.coordinator = coordinator

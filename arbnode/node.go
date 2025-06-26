@@ -1172,7 +1172,6 @@ func createNodeImpl(
 	if err != nil {
 		return nil, err
 	}
-  log.Info("Params", "arbDb", arbDb, "txStreamer ", txStreamer, "dapReaders", dapReaders, "config", config, "configFetcher", configFetcher, "l1client ", l1client, "l1Reader", l1Reader, "deployInfo", deployInfo, "delayedBridge", delayedBridge, "sequencerInbox", sequencerInbox, "executionSequencer", executionSequencer)
 	inboxTracker, inboxReader, err := getInboxTrackerAndReader(ctx, arbDb, txStreamer, dapReaders, config, configFetcher, l1client, l1Reader, deployInfo, delayedBridge, sequencerInbox, executionSequencer)
 	if err != nil {
 		return nil, err
@@ -1521,6 +1520,7 @@ func (n *Node) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error starting espresso caff node: %w", err)
 		}
+		return nil
 	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
@@ -1587,7 +1587,12 @@ func (n *Node) StopAndWait() {
 		// Just stops the redis client (most other stuff was stopped earlier)
 		n.SeqCoordinator.StopAndWait()
 	}
-	n.SyncMonitor.StopAndWait()
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
+	if n.SyncMonitor != nil {
+		n.SyncMonitor.StopAndWait()
+	}
 	if n.dasServerCloseFn != nil {
 		n.dasServerCloseFn()
 	}
