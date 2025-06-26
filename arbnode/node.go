@@ -1172,7 +1172,7 @@ func createNodeImpl(
 	if err != nil {
 		return nil, err
 	}
-
+  log.Info("Params", "arbDb", arbDb, "txStreamer ", txStreamer, "dapReaders", dapReaders, "config", config, "configFetcher", configFetcher, "l1client ", l1client, "l1Reader", l1Reader, "deployInfo", deployInfo, "delayedBridge", delayedBridge, "sequencerInbox", sequencerInbox, "executionSequencer", executionSequencer)
 	inboxTracker, inboxReader, err := getInboxTrackerAndReader(ctx, arbDb, txStreamer, dapReaders, config, configFetcher, l1client, l1Reader, deployInfo, delayedBridge, sequencerInbox, executionSequencer)
 	if err != nil {
 		return nil, err
