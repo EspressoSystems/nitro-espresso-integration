@@ -86,7 +86,7 @@ type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
 
 type TimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
-	BlockRetryDuration time.Duration `koanf:"max-block-speed"`
+	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
 	MaxTxDataSize               int           `koanf:"max-tx-data-size"`
 	NonceCacheSize              int           `koanf:"nonce-cache-size"`
