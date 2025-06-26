@@ -19,6 +19,7 @@ import (
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"

@@ -1,6 +1,8 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package stopwaiter
+
 import (
 	"context"
 	"errors"
@@ -14,7 +16,9 @@ import (
 
 	"github.com/offchainlabs/nitro/util/containers"
 )
+
 const stopDelayWarningTimeout = 30 * time.Second
+
 type StopWaiterSafe struct {
 	mutex     sync.Mutex // protects started, stopped, ctx, parentCtx, stopFunc
 	started   bool
@@ -27,27 +31,32 @@ type StopWaiterSafe struct {
 
 	wg sync.WaitGroup
 }
+
 func (s *StopWaiterSafe) Started() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.started
 }
+
 func (s *StopWaiterSafe) Stopped() bool {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.stopped
 }
+
 func (s *StopWaiterSafe) GetContextSafe() (context.Context, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.getContext()
 }
+
 // this context is not cancelled even after someone calls Stop
 func (s *StopWaiterSafe) GetParentContextSafe() (context.Context, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	return s.getParentContext()
 }
+
 // Only call this internally with the mutex held.
 func (s *StopWaiterSafe) getContext() (context.Context, error) {
 	if s.started {
@@ -55,6 +64,7 @@ func (s *StopWaiterSafe) getContext() (context.Context, error) {
 	}
 	return nil, errors.New("not started")
 }
+
 // Only call this internally with the mutex held.
 func (s *StopWaiterSafe) getParentContext() (context.Context, error) {
 	if s.started {
@@ -62,10 +72,12 @@ func (s *StopWaiterSafe) getParentContext() (context.Context, error) {
 	}
 	return nil, errors.New("not started")
 }
+
 func getParentName(parent any) string {
 	// remove asterisk in case the type is a pointer
 	return strings.Replace(reflect.TypeOf(parent).String(), "*", "", 1)
 }
+
 // start-after-start will error, start-after-stop will immediately cancel
 func (s *StopWaiterSafe) Start(ctx context.Context, parent any) error {
 	s.mutex.Lock()
@@ -82,6 +94,7 @@ func (s *StopWaiterSafe) Start(ctx context.Context, parent any) error {
 	}
 	return nil
 }
+
 func (s *StopWaiterSafe) StopOnly() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -90,10 +103,12 @@ func (s *StopWaiterSafe) StopOnly() {
 	}
 	s.stopped = true
 }
+
 // StopAndWait may be called multiple times, even before start.
 func (s *StopWaiterSafe) StopAndWait() error {
 	return s.stopAndWaitImpl(stopDelayWarningTimeout)
 }
+
 func getAllStackTraces() string {
 	buf := make([]byte, 64*1024*1024)
 	size := runtime.Stack(buf, true)
@@ -101,6 +116,7 @@ func getAllStackTraces() string {
 	builder.Write(buf[0:size])
 	return builder.String()
 }
+
 func (s *StopWaiterSafe) stopAndWaitImpl(warningTimeout time.Duration) error {
 	s.StopOnly()
 	if !s.Started() {
@@ -129,6 +145,7 @@ func (s *StopWaiterSafe) stopAndWaitImpl(warningTimeout time.Duration) error {
 	<-waitChan
 	return nil
 }
+
 func (s *StopWaiterSafe) GetWaitChannel() (<-chan interface{}, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -147,6 +164,7 @@ func (s *StopWaiterSafe) GetWaitChannel() (<-chan interface{}, error) {
 	}
 	return s.waitChan, nil
 }
+
 // If stop was already called, thread might silently not be launched
 func (s *StopWaiterSafe) LaunchThreadSafe(foo func(context.Context)) error {
 	ctx, err := s.GetContextSafe()
@@ -163,11 +181,13 @@ func (s *StopWaiterSafe) LaunchThreadSafe(foo func(context.Context)) error {
 	}()
 	return nil
 }
+
 // This calls go foo() directly, with the benefit of being easily searchable.
 // Callers may rely on the assumption that foo runs even if this is stopped.
 func (s *StopWaiterSafe) LaunchUntrackedThread(foo func()) {
 	go foo()
 }
+
 // CallIteratively calls function iteratively in a thread.
 // input param return value is how long to wait before next invocation
 func (s *StopWaiterSafe) CallIterativelySafe(foo func(context.Context) time.Duration) error {
@@ -190,12 +210,14 @@ func (s *StopWaiterSafe) CallIterativelySafe(foo func(context.Context) time.Dura
 		}
 	})
 }
+
 type ThreadLauncher interface {
 	GetContextSafe() (context.Context, error)
 	LaunchThreadSafe(foo func(context.Context)) error
 	LaunchUntrackedThread(foo func())
 	Stopped() bool
 }
+
 // CallIterativelyWith calls function iteratively in a thread.
 // The return value of foo is how long to wait before next invocation
 // Anything sent to triggerChan parameter triggers call to happen immediately
@@ -231,6 +253,7 @@ func CallIterativelyWith[T any](
 		}
 	})
 }
+
 func CallWhenTriggeredWith[T any](
 	s ThreadLauncher,
 	foo func(context.Context, T),
@@ -250,6 +273,7 @@ func CallWhenTriggeredWith[T any](
 		}
 	})
 }
+
 func LaunchPromiseThread[T any](
 	s ThreadLauncher,
 	foo func(context.Context) (T, error),
@@ -281,6 +305,7 @@ func LaunchPromiseThread[T any](
 	}
 	return &promise
 }
+
 func ChanRateLimiter[T any](s *StopWaiterSafe, inChan <-chan T, maxRateCallback func() time.Duration) (<-chan T, error) {
 	outChan := make(chan T)
 	err := s.LaunchThreadSafe(func(ctx context.Context) {
@@ -306,37 +331,24 @@ func ChanRateLimiter[T any](s *StopWaiterSafe, inChan <-chan T, maxRateCallback 
 
 	return outChan, nil
 }
+
 // StopWaiter may panic on race conditions instead of returning errors
 type StopWaiter struct {
 	StopWaiterSafe
 }
+
 func (s *StopWaiter) Start(ctx context.Context, parent any) {
 	if err := s.StopWaiterSafe.Start(ctx, parent); err != nil {
 		panic(err)
 	}
 }
+
 func (s *StopWaiter) StopAndWait() {
 	if err := s.StopWaiterSafe.StopAndWait(); err != nil {
 		panic(err)
 	}
 }
-// If stop was already called, thread might silently not be launched
-// Copyright 2021-2022, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// this context is not cancelled even after someone calls Stop
-// Only call this internally with the mutex held.
-// Only call this internally with the mutex held.
-// start-after-start will error, start-after-stop will immediately cancel
-// StopAndWait may be called multiple times, even before start.
-// If stop was already called, thread might silently not be launched
-// This calls go foo() directly, with the benefit of being easily searchable.
-// Callers may rely on the assumption that foo runs even if this is stopped.
-// CallIteratively calls function iteratively in a thread.
-// input param return value is how long to wait before next invocation
-// CallIterativelyWith calls function iteratively in a thread.
-// The return value of foo is how long to wait before next invocation
-// Anything sent to triggerChan parameter triggers call to happen immediately
-// StopWaiter may panic on race conditions instead of returning errors
+
 // If stop was already called, thread might silently not be launched
 func (s *StopWaiter) LaunchThread(foo func(context.Context)) {
 	if err := s.StopWaiterSafe.LaunchThreadSafe(foo); err != nil {

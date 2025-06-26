@@ -1,6 +1,8 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package chaininfo
+
 import (
 	"encoding/json"
 	"fmt"
@@ -8,7 +10,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/params"
 )
+
 var DefaultChainConfigs map[string]*params.ChainConfig
+
 func init() {
 	var chainsInfo []ChainInfo
 	err := json.Unmarshal(DefaultChainsInfoBytes, &chainsInfo)
@@ -23,6 +27,7 @@ func init() {
 		DefaultChainConfigs[chainInfo.ChainName] = chainInfo.ChainConfig
 	}
 }
+
 func CopyArbitrumChainParams(arbChainParams params.ArbitrumChainParams) params.ArbitrumChainParams {
 	return params.ArbitrumChainParams{
 		EnableArbOS:               arbChainParams.EnableArbOS,
@@ -35,6 +40,7 @@ func CopyArbitrumChainParams(arbChainParams params.ArbitrumChainParams) params.A
 		MaxInitCodeSize:           arbChainParams.MaxInitCodeSize,
 	}
 }
+
 func CopyBlobScheduleConfig(blobSchedule *params.BlobScheduleConfig) *params.BlobScheduleConfig {
 	blobScheduleCopy := &params.BlobScheduleConfig{}
 	if blobSchedule.Cancun != nil {
@@ -67,6 +73,7 @@ func CopyBlobScheduleConfig(blobSchedule *params.BlobScheduleConfig) *params.Blo
 	}
 	return blobScheduleCopy
 }
+
 func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	copy := &params.ChainConfig{
 		DAOForkSupport:      chainConfig.DAOForkSupport,
@@ -120,6 +127,7 @@ func CopyChainConfig(chainConfig *params.ChainConfig) *params.ChainConfig {
 	}
 	return copy
 }
+
 func fetchArbitrumChainParams(chainName string) params.ArbitrumChainParams {
 	originalConfig, ok := DefaultChainConfigs[chainName]
 	if !ok {
@@ -127,6 +135,7 @@ func fetchArbitrumChainParams(chainName string) params.ArbitrumChainParams {
 	}
 	return CopyArbitrumChainParams(originalConfig.ArbitrumChainParams)
 }
+
 func ArbitrumOneParams() params.ArbitrumChainParams {
 	return fetchArbitrumChainParams("arb1")
 }
@@ -142,6 +151,7 @@ func ArbitrumDevTestParams() params.ArbitrumChainParams {
 func ArbitrumDevTestDASParams() params.ArbitrumChainParams {
 	return fetchArbitrumChainParams("anytrust-dev-test")
 }
+
 func fetchChainConfig(chainName string) *params.ChainConfig {
 	originalConfig, ok := DefaultChainConfigs[chainName]
 	if !ok {
@@ -149,6 +159,7 @@ func fetchChainConfig(chainName string) *params.ChainConfig {
 	}
 	return CopyChainConfig(originalConfig)
 }
+
 func ArbitrumOneChainConfig() *params.ChainConfig {
 	return fetchChainConfig("arb1")
 }
@@ -164,5 +175,3 @@ func ArbitrumDevTestChainConfig() *params.ChainConfig {
 func ArbitrumDevTestDASChainConfig() *params.ChainConfig {
 	return fetchChainConfig("anytrust-dev-test")
 }
-// Copyright 2021-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE

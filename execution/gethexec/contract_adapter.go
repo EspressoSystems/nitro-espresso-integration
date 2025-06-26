@@ -1,6 +1,8 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package gethexec
+
 import (
 	"context"
 	"errors"
@@ -20,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/rpc"
 )
+
 // contractAdapter is an impl of bind.ContractBackend with necessary methods defined to work with the ExpressLaneAuction contract
 type contractAdapter struct {
 	*filters.FilterAPI
@@ -27,6 +30,7 @@ type contractAdapter struct {
 
 	apiBackend *arbitrum.APIBackend
 }
+
 func (a *contractAdapter) FilterLogs(ctx context.Context, q ethereum.FilterQuery) ([]types.Log, error) {
 	logPointers, err := a.GetLogs(ctx, filters.FilterCriteria(q))
 	if err != nil {
@@ -38,10 +42,12 @@ func (a *contractAdapter) FilterLogs(ctx context.Context, q ethereum.FilterQuery
 	}
 	return logs, nil
 }
+
 func (a *contractAdapter) SubscribeFilterLogs(ctx context.Context, q ethereum.FilterQuery, ch chan<- types.Log) (ethereum.Subscription, error) {
 	fmt.Fprintf(os.Stderr, "contractAdapter doesn't implement SubscribeFilterLogs: Stack trace:\n%s\n", debug.Stack())
 	return nil, errors.New("contractAdapter doesn't implement SubscribeFilterLogs - shouldn't be needed")
 }
+
 func (a *contractAdapter) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
 	number := rpc.LatestBlockNumber
 	if blockNumber != nil {
@@ -55,6 +61,7 @@ func (a *contractAdapter) CodeAt(ctx context.Context, contract common.Address, b
 	code := statedb.GetCode(contract)
 	return code, nil
 }
+
 func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	var num = rpc.LatestBlockNumber
 	if blockNumber != nil {
@@ -91,6 +98,3 @@ func (a *contractAdapter) CallContract(ctx context.Context, call ethereum.CallMs
 
 	return result.ReturnData, nil
 }
-// Copyright 2024-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// contractAdapter is an impl of bind.ContractBackend with necessary methods defined to work with the ExpressLaneAuction contract

@@ -1,6 +1,8 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package server_arb
+
 import (
 	"path"
 	"reflect"
@@ -13,6 +15,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
+
 func TestEntriesAreDeletedFromPreimageResolversGlobalMap(t *testing.T) {
 	resolver := func(arbutil.PreimageType, common.Hash) ([]byte, error) {
 		return nil, nil
@@ -89,5 +92,3 @@ func TestEntriesAreDeletedFromPreimageResolversGlobalMap(t *testing.T) {
 	machine2.Destroy()
 	checkKeys([]int64{}, "after machine2 is destroyed")
 }
-// Copyright 2021-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
