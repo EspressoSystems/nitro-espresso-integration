@@ -19,6 +19,7 @@ import (
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
+	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -34,8 +35,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
+	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/parent"
@@ -57,7 +58,6 @@ import (
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-	"github.com/spf13/pflag"
 )
 
 var (

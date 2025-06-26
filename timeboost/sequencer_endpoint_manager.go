@@ -1,6 +1,7 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package timeboost
+
 import (
 	"context"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+
 type SequencerEndpointManager interface {
 	GetSequencerRPC(ctx context.Context) (*rpc.Client, bool, error)
 }
@@ -30,6 +32,7 @@ type RedisEndpointManager struct {
 	client           *rpc.Client
 	clientUrl        string
 }
+
 func NewRedisEndpointManager(redisCoordinator *redisutil.RedisCoordinator, jwtPath string) SequencerEndpointManager {
 	return &RedisEndpointManager{
 		redisCoordinator: redisCoordinator,
@@ -74,11 +77,13 @@ func (m *RedisEndpointManager) GetSequencerRPC(ctx context.Context) (*rpc.Client
 	m.clientUrl = sequencerUrl
 	return client, true, nil
 }
+
 type StaticEndpointManager struct {
 	endpoint string
 	jwtPath  string
 	client   *rpc.Client
 }
+
 func NewStaticEndpointManager(endpoint string, jwtPath string) SequencerEndpointManager {
 	return &StaticEndpointManager{
 		endpoint: endpoint,
@@ -125,5 +130,6 @@ func createRPCClient(ctx context.Context, endpoint string, jwtPath string) (*rpc
 		return nil
 	}))
 }
+
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/nitro/blob/master/LICENSE

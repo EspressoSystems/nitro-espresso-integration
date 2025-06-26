@@ -1,6 +1,7 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbtest
+
 import (
 	"context"
 	"encoding/json"
@@ -19,6 +20,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 )
+
 func TestScheduleArbosUpgrade(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -275,6 +277,7 @@ func TestArbos11To32UpgradeWithCalldata(t *testing.T) {
 		t.Errorf("expected sequencer and replica to have same block hash, got %v and %v", blockSeq.Hash(), blockReplica.Hash())
 	}
 }
+
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
 // func checkArbOSVersion(t *testing.T, testClient *TestClient, expectedVersion uint64, scenario string) {

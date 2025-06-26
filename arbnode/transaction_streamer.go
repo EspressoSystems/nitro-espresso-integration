@@ -28,7 +28,6 @@ import (
 	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
-
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"

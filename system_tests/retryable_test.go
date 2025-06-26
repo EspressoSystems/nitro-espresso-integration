@@ -1,6 +1,7 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbtest
+
 import (
 	"context"
 	"fmt"
@@ -37,6 +38,7 @@ import (
 	"github.com/offchainlabs/nitro/util/testhelpers"
 	"github.com/offchainlabs/nitro/validator/valnode"
 )
+
 func retryableSetup(t *testing.T, modifyNodeConfig ...func(*NodeBuilder)) (
 	*NodeBuilder,
 	*bridgegen.Inbox,
@@ -453,6 +455,7 @@ func TestSubmitRetryableFailThenRetry(t *testing.T) {
 	}
 	testFlatCallTracer(t, ctx, builder.L2.Client.Client())
 }
+
 // insertRetriables inserts n retryable transactions into the delayed
 // inbox and returns the receipts for the retryables.
 //
@@ -1554,6 +1557,7 @@ func TestRetryableRedeemBlockGasUsage(t *testing.T) {
 		Fatal(t, "Failed to fit a tx to the same block as redeem and retry")
 	}
 }
+
 // elevateL2Basefee by burning gas exceeding speed limit
 func elevateL2Basefee(t *testing.T, ctx context.Context, builder *NodeBuilder) {
 	baseFeeBefore := builder.L2.GetBaseFee(t)
@@ -1626,6 +1630,7 @@ func testFlatCallTracer(t *testing.T, ctx context.Context, client rpc.ClientInte
 		Require(t, err)
 	}
 }
+
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/nitro/blob/master/LICENSE
 // elevateL2Basefee by burning gas exceeding speed limit

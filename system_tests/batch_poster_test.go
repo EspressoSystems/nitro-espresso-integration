@@ -1,6 +1,7 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbtest
+
 import (
 	"context"
 	"crypto/rand"
@@ -26,6 +27,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
 	"github.com/offchainlabs/nitro/util/redisutil"
 )
+
 func TestBatchPosterParallel(t *testing.T) {
 	testBatchPosterParallel(t, false)
 }
@@ -552,5 +554,6 @@ func TestBatchPosterWithDelayProofsAndBacklog(t *testing.T) {
 	builder.L1.SendWaitTestTransactions(t, batchPosterTxs)
 	CheckBatchCount(t, builder, initialBatchCount+numBatches)
 }
+
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md

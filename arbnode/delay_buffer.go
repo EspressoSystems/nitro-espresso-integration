@@ -1,8 +1,11 @@
 // Copyright 2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 // This file contains functions related to the delay buffer feature that are used mostly in the
 // batch poster.
+
 package arbnode
+
 import (
 	"context"
 	"fmt"
@@ -16,6 +19,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/util/headerreader"
 )
+
 // DelayBufferConfig originates from the sequencer inbox contract.
 type DelayBufferConfig struct {
 	Enabled         bool
@@ -24,15 +28,18 @@ type DelayBufferConfig struct {
 	BufferBlocks    uint64
 	Max             uint64
 }
+
 func (d *DelayBufferConfig) isUpdatable(blockNumber uint64) bool {
 	// if synced, the buffer can't be depleted
 	// if full, the buffer can't be replenished
 	// if neither synced nor full, the buffer updatable (depletable / replenishable)
 	return !d.isSynced(blockNumber) || d.BufferBlocks < d.Max
 }
+
 func (d *DelayBufferConfig) isSynced(blockNumber uint64) bool {
 	return blockNumber-d.PrevBlockNumber <= d.Threshold
 }
+
 // GetDelayBufferConfig gets the delay buffer config from the sequencer inbox contract.
 // If the contract doesn't support the delay buffer, it returns a config with Enabled set to false.
 func GetDelayBufferConfig(ctx context.Context, sequencerInbox *bridgegen.SequencerInbox) (
@@ -62,6 +69,7 @@ func GetDelayBufferConfig(ctx context.Context, sequencerInbox *bridgegen.Sequenc
 	}
 	return config, nil
 }
+
 // GenDelayProof generates the delay proof based on batch's first delayed message and the delayed
 // accumulater from the inbox.
 func GenDelayProof(ctx context.Context, message *arbostypes.MessageWithMetadata, inbox *InboxTracker) (
@@ -94,12 +102,3 @@ func GenDelayProof(ctx context.Context, message *arbostypes.MessageWithMetadata,
 	}
 	return delayProof, nil
 }
-// Copyright 2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// This file contains functions related to the delay buffer feature that are used mostly in the
-// batch poster.
-// DelayBufferConfig originates from the sequencer inbox contract.
-// GetDelayBufferConfig gets the delay buffer config from the sequencer inbox contract.
-// If the contract doesn't support the delay buffer, it returns a config with Enabled set to false.
-// GenDelayProof generates the delay proof based on batch's first delayed message and the delayed
-// accumulater from the inbox.

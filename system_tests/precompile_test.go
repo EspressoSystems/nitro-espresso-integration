@@ -1,6 +1,7 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbtest
+
 import (
 	"context"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 )
+
 func TestPurePrecompileMethodCalls(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -275,6 +277,7 @@ func TestL1BaseFeeEstimateInertia(t *testing.T) {
 		Fatal(t, "expected inertia to be", inertia, "got", arbGasInfoInertia)
 	}
 }
+
 // Similar to TestL1BaseFeeEstimateInertia, but now using a different setter from ArbOwner
 func TestL1PricingInertia(t *testing.T) {
 	t.Parallel()
@@ -1188,6 +1191,7 @@ func TestArbAggregatorGetPreferredAggregator(t *testing.T) {
 		Fatal(t, "expected default preferred aggregator to be", l1pricing.BatchPosterAddress, "got", prefAgg)
 	}
 }
+
 // Copyright 2021-2023, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
 // Similar to TestL1BaseFeeEstimateInertia, but now using a different setter from ArbOwner

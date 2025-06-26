@@ -1,6 +1,7 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbtest
+
 import (
 	"context"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 )
+
 // DoesntRevert tests are useful to check if precompile calls revert due to differences in the
 // return types of a contract between go and solidity.
 // They are not a substitute for unit tests, as they don't test the actual functionality of the precompile.
@@ -237,6 +239,7 @@ func TestArbRetryableTxDoesntRevert(t *testing.T) {
 	_, err = arbRetryableTx.GetCurrentRedeemer(callOpts)
 	Require(t, err)
 }
+
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
 // DoesntRevert tests are useful to check if precompile calls revert due to differences in the

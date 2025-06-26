@@ -1,6 +1,7 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package arbnode
+
 import (
 	"bytes"
 	"context"
@@ -18,7 +19,9 @@ import (
 	"github.com/offchainlabs/nitro/util/redisutil"
 	"github.com/offchainlabs/nitro/util/signature"
 )
+
 const messagesPerRound = 20
+
 type CoordinatorTestData struct {
 	messageCount atomic.Uint64
 
@@ -29,6 +32,7 @@ type CoordinatorTestData struct {
 	waitForCoords  sync.WaitGroup
 	testStartRound atomic.Int32
 }
+
 func coordinatorTestThread(ctx context.Context, coord *SeqCoordinator, data *CoordinatorTestData) {
 	nextRound := int32(0)
 	for {
@@ -281,5 +285,6 @@ func TestSeqCoordinatorAddsBlockMetadata(t *testing.T) {
 		t.Fatal("got incorrect blockMetadata")
 	}
 }
+
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
