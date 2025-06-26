@@ -17,6 +17,10 @@ import (
 	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
 )
 
+// Acknowledgement flag that timeboost will wait for to know sequencer processed
+// Inclusion list succesfully
+const ACK_FLAG = 0xc0
+
 func createL1AndL2NodeForTimeboost(
 	ctx context.Context,
 	t *testing.T,
@@ -75,6 +79,104 @@ func createL1AndL2NodeForTimeboost(
 	return builder, cleanup
 }
 
+func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, numIncls int) []*gethexec.InclusionList {
+	var incls []*gethexec.InclusionList
+	// Create given number of inclusion lists
+	for i := range numIncls {
+		var txns []*gethexec.Transaction
+		// Every user generates a transaction and put into inclusion list
+		for _, userName := range users {
+			tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
+			txBytes, err := tx.MarshalBinary()
+			Require(t, err)
+
+			time := tx.Time().Unix()
+			if time < 0 {
+				t.Fatalf("Invalid timestamp %d", time)
+			}
+			protoTx := gethexec.Transaction{
+				EncodedTxn: txBytes,
+				Address:    []byte{0x00},
+				Timestamp:  uint64(time),
+			}
+			txns = append(txns, &protoTx)
+		}
+		if i < 0 {
+			t.Fatalf("Invalid index %d", i)
+		}
+		incl := &gethexec.InclusionList{
+			Round:               uint64(i),
+			ConsensusTimestamp:  uint64(i),
+			EncodedTxns:         txns,
+			DelayedMessagesRead: 0,
+		}
+		incls = append(incls, incl)
+	}
+	return incls
+}
+
+func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
+	// Connect to the default port of listener
+	conn, err := net.Dial("tcp", "localhost:55000")
+	if err != nil {
+		t.Fatalf("Error connecting: %v", err)
+	}
+	defer conn.Close()
+
+	// Iterate over each inclusion list
+	for i, incl := range incls {
+		// Encode via protobuf
+		inclBytes, err := proto.Marshal(incl)
+		Require(t, err)
+
+		// Calculate and write the size of the encoded inclusion list first
+		len := len(inclBytes)
+		if len < 0 || len > math.MaxUint32 {
+			t.Fatalf("Invalid len %d", len)
+		}
+		length := uint32(len)
+		lengthBuf := make([]byte, 4)
+		binary.BigEndian.PutUint32(lengthBuf, length)
+		_, err = conn.Write(lengthBuf)
+		Require(t, err)
+
+		// Rudely interrupt the connection
+		if i == 2 {
+			if err := conn.Close(); err != nil {
+				t.Fatalf("Test failed to close connection")
+			}
+			// Wait some time
+			time.Sleep(3 * time.Second)
+
+			// Reconnect and resend
+			conn, err = net.Dial("tcp", "localhost:55000")
+			if err != nil {
+				t.Fatalf("Error connecting: %v", err)
+			}
+			_, err = conn.Write(lengthBuf)
+			Require(t, err)
+		}
+
+		// Now that listener knows the length in bytes to read, send inclusion list over
+		_, err = conn.Write(inclBytes)
+		Require(t, err)
+
+		// Timeboost is expecting an acknowledgment from the server
+		// So it knows if it needs to resend the inclusion list or can send the next one
+		ackBuffer := make([]byte, 1)
+		n, err := conn.Read(ackBuffer)
+		Require(t, err)
+		if n != 1 {
+			t.Fatalf("Expected to read 1 byte, read %d\n", n)
+		}
+		if ackBuffer[0] != ACK_FLAG {
+			t.Fatalf("Unexpected response byte: 0x%02x, expected 0xc0\n", ackBuffer[0])
+		}
+
+		Require(t, err)
+	}
+}
+
 func TestEspressoTimeboostSequencer(t *testing.T) {
 	t.Run("Run simple test to see if it builds the block", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -90,8 +192,6 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		err := waitForL1Node(ctx)
 		Require(t, err)
 
-		var incls []*gethexec.InclusionList
-
 		var users []string
 
 		const numUsers = 10
@@ -106,68 +206,9 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
 		Require(t, err)
 
-		for i := range numIncls {
-			var txns []*gethexec.Transaction
-			for _, userName := range users {
-				tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
-				txBytes, err := tx.MarshalBinary()
-				Require(t, err)
-
-				time := tx.Time().Unix()
-				if time < 0 {
-					t.Fatalf("Invalid timestamp %d", time)
-				}
-				protoTx := gethexec.Transaction{
-					EncodedTxn: txBytes,
-					Address:    []byte{0x00},
-					Timestamp:  uint64(time),
-				}
-				txns = append(txns, &protoTx)
-			}
-			if i < 0 {
-				t.Fatalf("Invalid index %d", i)
-			}
-			incl := &gethexec.InclusionList{
-				Round:               uint64(i),
-				ConsensusTimestamp:  uint64(i),
-				EncodedTxns:         txns,
-				DelayedMessagesRead: 0,
-			}
-			incls = append(incls, incl)
-		}
-
-		conn, err := net.Dial("tcp", "localhost:55000")
-		if err != nil {
-			t.Fatalf("Error connecting: %v", err)
-		}
-		defer conn.Close()
-		for _, incl := range incls {
-			inclBytes, err := proto.Marshal(incl)
-			Require(t, err)
-			len := len(inclBytes)
-			if len < 0 || len > math.MaxUint32 {
-				t.Fatalf("Invalid len %d", len)
-			}
-			length := uint32(len)
-			lengthBuf := make([]byte, 4)
-			binary.BigEndian.PutUint32(lengthBuf, length)
-			_, err = conn.Write(lengthBuf)
-			Require(t, err)
-			_, err = conn.Write(inclBytes)
-			Require(t, err)
-
-			buffer := make([]byte, 1)
-			n, err := conn.Read(buffer)
-			Require(t, err)
-			if n != 1 {
-				t.Fatalf("Expected to read 1 byte, read %d\n", n)
-			}
-			if buffer[0] != 0xc0 {
-				t.Fatalf("Unexpected response byte: 0x%02x, expected 0xc0\n", buffer[0])
-			}
-
-			Require(t, err)
-		}
+		// Generate and send inclusion lists
+		inclusionLists := GenerateInclusionLists(t, users, builder, numIncls)
+		SendInclusionLists(t, inclusionLists)
 
 		// Wait for sometime for the block to be produced
 		time.Sleep(time.Second * 10)
@@ -200,7 +241,9 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		}
 
 		count := 0
-		for _, incl := range incls {
+		// Iterate over each inclusion list the order they were send
+		for _, incl := range inclusionLists {
+			// And compare each transaction was sent and processed in order
 			for _, protoTxn := range incl.EncodedTxns {
 				tx := transactions[count]
 				var expected types.Transaction

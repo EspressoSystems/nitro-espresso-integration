@@ -82,7 +82,7 @@ type TimeboostSequencer struct {
 	// TODO: We should probably also store the txRetryQueue in storage
 	txRetryQueue         synchronizedTimeboostTransactionQueue
 	nonceCache           *nonceCache
-	timeboostTxnListener TimeboostListener
+	timeboostTxnListener *TimeboostListener
 }
 
 type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
@@ -91,12 +91,13 @@ type TimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
 	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize               int           `koanf:"max-tx-data-size"`
-	NonceCacheSize              int           `koanf:"nonce-cache-size"`
-	MaxRevertGasReject          uint64        `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime time.Duration `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta time.Duration `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling             bool          `koanf:"enable-profiling"`
+	MaxTxDataSize               int                     `koanf:"max-tx-data-size"`
+	NonceCacheSize              int                     `koanf:"nonce-cache-size"`
+	MaxRevertGasReject          uint64                  `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime time.Duration           `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta time.Duration           `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling             bool                    `koanf:"enable-profiling"`
+	TimeboostListenerConfig     TimeboostListenerConfig `koanf:"timeboost-listener-config"`
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
@@ -108,6 +109,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 	ParentChainFinalizationTime: 20 * time.Minute,
 	MaxAcceptableTimestampDelta: time.Hour,
 	EnableProfiling:             false,
+	TimeboostListenerConfig:     DefaultTimeboostListenerConfig,
 }
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -119,19 +121,20 @@ func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".parent-chain-finalization-time", DefaultTimeboostSequencerConfig.ParentChainFinalizationTime, "parent chain finalization time")
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
+	TimeboostListenerConfigAddOptions(prefix+".timeboost-listener-config", f)
 }
 
 func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
+	timeboostListener := &TimeboostListener{
+		config: configFetcher().TimeboostListenerConfig,
+		conn:   nil,
+	}
 	return &TimeboostSequencer{
-		config:     configFetcher,
-		execEngine: execEngine,
-		l1Reader:   l1Reader,
-		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
-		timeboostTxnListener: TimeboostListener{
-			config: TimeboostListenerConfig{
-				ListenPort: 55000,
-			},
-		},
+		config:               configFetcher,
+		execEngine:           execEngine,
+		l1Reader:             l1Reader,
+		nonceCache:           newNonceCache(configFetcher().NonceCacheSize),
+		timeboostTxnListener: timeboostListener,
 	}, nil
 }
 
@@ -487,10 +490,10 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 		return err
 	}
 
+	log.Info("Processing inclusion list", "round", inclusionList.Round)
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
-		err := tx.UnmarshalBinary(protoTx.EncodedTxn)
-		if err != nil {
+		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
 			log.Info("Error unmarshalling encoded transaction", "err", err)
 			return err
 		}
@@ -514,36 +517,43 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 		return errors.New("l1Reader is nil")
 	}
 	s.timeboostTxnListener.Start(ctx)
-	s.LaunchThread(func(ctx context.Context) {
-		backoff := time.Second
-		maxBackoff := 10 * time.Second
-		for {
-			if !s.timeboostTxnListener.HasConnection() {
-				log.Warn("Connection with timeboost not yet established", "backoff delay", backoff)
-				time.Sleep(backoff)
-				backoff = min(backoff*2, maxBackoff)
-				continue
-			}
-			inclBytes, err := s.timeboostTxnListener.Receive()
-			if err != nil {
-				log.Warn("Error receiving inclusion list", "err", err)
-				continue
-			}
-
-			err = s.ProcessInclusionList(ctx, inclBytes, nil)
-			if err != nil {
-				log.Warn("Error processing inclusion list", "err", err)
-				continue
-			}
-
-			err = s.timeboostTxnListener.WriteAck()
-			if err != nil {
-				log.Warn("Error writing ack to timeboost", "err", err)
-				continue
-			}
-		}
-	})
+	backoff := time.Second
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		maxBackoff := s.timeboostTxnListener.config.MaxBackoff
+
+		// On startup or on failures we may not have a connection, dont proceed
+		if !s.timeboostTxnListener.HasConnection() {
+			log.Warn("Connection with timeboost not yet established", "backoff delay", backoff)
+			backoff = min(backoff*2, maxBackoff)
+			return backoff
+		}
+
+		// Get inclusion list bytes
+		inclBytes, err := s.timeboostTxnListener.ReceiveInclusionList()
+		if err != nil {
+			log.Warn("Error receiving inclusion list", "err", err)
+			return time.Second
+		}
+
+		// Decode and process inclusion list
+		if err := s.ProcessInclusionList(ctx, inclBytes, nil); err != nil {
+			log.Warn("Error processing inclusion list", "err", err)
+			return time.Second
+		}
+
+		// Send acknowledgement to timeboost we received and processed
+		if err := s.timeboostTxnListener.WriteAck(); err != nil {
+			log.Warn("Error writing ack to timeboost", "err", err)
+			return time.Second
+		}
+
+		backoff = time.Second
+		return 0
+	})
+	if err != nil {
+		return err
+	}
+	err = s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
 		}
