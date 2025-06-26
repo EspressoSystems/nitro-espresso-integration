@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"os"
 	"slices"
 	"testing"
 
@@ -162,27 +163,47 @@ func TestSerdeSubmittedEspressoTx(t *testing.T) {
 }
 
 func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
+	// This test ensures that we can deserialize the old SubmittedEspressoTx, which did not have
+	// the `SubmittedAt` field, into the new struct. It uses a static RLP-encoded artifact
+	// generated from the old struct definition. See testdata/old_submitted_espresso_tx.md for details.
 	type OldSubmittedEspressoTx struct {
 		Hash    string
 		Pos     []MessageIndex
 		Payload []byte
 	}
 
+	// This represents the original data that was used to create the RLP artifact.
 	oldSubmittedTx := OldSubmittedEspressoTx{
 		Hash:    "0x1234",
 		Pos:     []MessageIndex{MessageIndex(10)},
 		Payload: []byte{0, 1, 2, 3},
 	}
 
-	b, err := rlp.EncodeToBytes(&oldSubmittedTx)
+	b, err := os.ReadFile("testdata/old_submitted_espresso_tx.rlp")
 	if err != nil {
-		t.Errorf("Failed to encode, got %v", err)
+		t.Fatalf("Failed to read RLP artifact: %v", err)
 	}
 
+	// First, validate that the artifact correctly decodes to the old struct format.
+	// This confirms the artifact's integrity and that our definition of OldSubmittedEspressoTx is correct.
+	var decodedOldTx OldSubmittedEspressoTx
+	if err := rlp.DecodeBytes(b, &decodedOldTx); err != nil {
+		t.Fatalf("Failed to decode artifact into OldSubmittedEspressoTx: %v", err)
+	}
+	if decodedOldTx.Hash != oldSubmittedTx.Hash {
+		t.Errorf("Hash mismatch in old struct: got %v, want %v", decodedOldTx.Hash, oldSubmittedTx.Hash)
+	}
+	if len(decodedOldTx.Pos) != 1 || decodedOldTx.Pos[0] != oldSubmittedTx.Pos[0] {
+		t.Errorf("Pos mismatch in old struct: got %v, want %v", decodedOldTx.Pos, oldSubmittedTx.Pos)
+	}
+	if !bytes.Equal(decodedOldTx.Payload, oldSubmittedTx.Payload) {
+		t.Errorf("Payload mismatch in old struct: got %x, want %x", decodedOldTx.Payload, oldSubmittedTx.Payload)
+	}
+
+	// Now, decode the same artifact into the new struct to test backward compatibility.
 	var expected SubmittedEspressoTx
-	err = rlp.DecodeBytes(b, &expected)
-	if err != nil {
-		t.Errorf("Failed to decode, got %v", err)
+	if err := rlp.DecodeBytes(b, &expected); err != nil {
+		t.Fatalf("Failed to decode artifact into new SubmittedEspressoTx: %v", err)
 	}
 
 	if oldSubmittedTx.Hash != expected.Hash {
