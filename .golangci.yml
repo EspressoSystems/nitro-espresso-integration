@@ -1,5 +1,3 @@
-
-
 version: "2"
 linters:
   enable:
@@ -12,14 +10,6 @@ linters:
   settings:
     errcheck:
       check-type-assertions: true
-
-    gci:
-      sections:
-        - standard
-        - default
-        - prefix(github.com/ethereum/go-ethereum)
-        - prefix(github.com/offchainlabs)
-
     gocritic:
       disabled-checks:
         - ifElseChain
