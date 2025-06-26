@@ -1499,8 +1499,8 @@ func deployOnParentChain(
 			maxDataSize,
 			chainSupportsBlobs,
 		)
+		Require(t, err)
 	}
-	Require(t, err)
 	parentChainInfo.SetContract("Bridge", addresses.Bridge)
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)

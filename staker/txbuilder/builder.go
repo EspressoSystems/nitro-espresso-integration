@@ -1,6 +1,8 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package txbuilder
+
 import (
 	"context"
 	"fmt"
@@ -11,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
+
 type ValidatorWalletInterface interface {
 	// Address must be able to be called concurrently with other functions
 	Address() *common.Address
@@ -18,6 +21,7 @@ type ValidatorWalletInterface interface {
 	ExecuteTransactions(ctx context.Context, txs []*types.Transaction, gasRefunder common.Address) (*types.Transaction, error)
 	AuthIfEoa() *bind.TransactOpts
 }
+
 // Builder combines any transactions signed via it into one batch,
 // which is then sent to the validator wallet.
 // This lets the validator make multiple atomic transactions.
@@ -30,6 +34,7 @@ type Builder struct {
 	wallet       ValidatorWalletInterface
 	gasRefunder  common.Address
 }
+
 func NewBuilder(wallet ValidatorWalletInterface, gasRefunder common.Address) (*Builder, error) {
 	var builderAuth bind.TransactOpts
 	var isAuthFake bool
@@ -92,12 +97,15 @@ func NewBuilder(wallet ValidatorWalletInterface, gasRefunder common.Address) (*B
 	}
 	return builder, nil
 }
+
 func (b *Builder) BuildingTransactionCount() int {
 	return len(b.transactions)
 }
+
 func (b *Builder) ClearTransactions() {
 	b.transactions = nil
 }
+
 func (b *Builder) tryToFillAuthAddress() {
 	if b.multiTxAuth.From == (common.Address{}) {
 		if addr := b.wallet.Address(); addr != nil {
@@ -106,6 +114,7 @@ func (b *Builder) tryToFillAuthAddress() {
 		}
 	}
 }
+
 func (b *Builder) AuthWithAmount(ctx context.Context, amount *big.Int) *bind.TransactOpts {
 	b.authMutex.Lock()
 	defer b.authMutex.Unlock()
@@ -115,10 +124,12 @@ func (b *Builder) AuthWithAmount(ctx context.Context, amount *big.Int) *bind.Tra
 	auth.Value = amount
 	return &auth
 }
+
 // Auth is the same as AuthWithAmount with a 0 amount specified.
 func (b *Builder) Auth(ctx context.Context) *bind.TransactOpts {
 	return b.AuthWithAmount(ctx, common.Big0)
 }
+
 // SingleTxAuth should be used if you need an auth without the transaction batching of the builder.
 func (b *Builder) SingleTxAuth() *bind.TransactOpts {
 	b.authMutex.Lock()
@@ -127,18 +138,13 @@ func (b *Builder) SingleTxAuth() *bind.TransactOpts {
 	auth := b.singleTxAuth
 	return &auth
 }
+
 func (b *Builder) WalletAddress() *common.Address {
 	return b.wallet.Address()
 }
+
 func (b *Builder) ExecuteTransactions(ctx context.Context) (*types.Transaction, error) {
 	tx, err := b.wallet.ExecuteTransactions(ctx, b.transactions, b.gasRefunder)
 	b.ClearTransactions()
 	return tx, err
 }
-// Copyright 2021-2022, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// Builder combines any transactions signed via it into one batch,
-// which is then sent to the validator wallet.
-// This lets the validator make multiple atomic transactions.
-// Auth is the same as AuthWithAmount with a 0 amount specified.
-// SingleTxAuth should be used if you need an auth without the transaction batching of the builder.

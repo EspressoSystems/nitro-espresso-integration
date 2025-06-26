@@ -1,6 +1,7 @@
 // Copyright 2023-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package bold
+
 import (
 	"context"
 	"time"
@@ -11,8 +12,6 @@ import (
 	solimpl "github.com/offchainlabs/bold/chain-abstraction/sol-implementation"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 )
-// Copyright 2023-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/offchainlabs/nitro/blob/main/LICENSE
 
 // DataPosterTransactor is a wrapper around a DataPoster that implements the Transactor interface.
 type DataPosterTransactor struct {
