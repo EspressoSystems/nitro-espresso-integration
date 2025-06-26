@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"net"
+
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -16,19 +17,16 @@ type TimeboostListener struct {
 }
 
 type TimeboostListenerConfig struct {
-	Enable     bool   `koanf:"enable"`
 	ListenPort uint16 `koanf:"listen-port"`
 }
 
 var DefaultTimeboostListenerConfig = TimeboostListenerConfig{
-	Enable:     true,
 	ListenPort: 55000,
 }
 
 func NewTimeboostListener() (*TimeboostListener, error) {
 	return &TimeboostListener{
 		config: TimeboostListenerConfig{
-			Enable:     true,
 			ListenPort: 55000,
 		},
 	}, nil
@@ -40,23 +38,23 @@ func handleConnection(conn net.Conn, txChan chan<- []byte) {
 		sizeBuf := make([]byte, 4)
 		_, err := conn.Read(sizeBuf)
 		if err != nil {
-			log.Printf("Error reading size: %v", err)
+			log.Error("Txn listener error reading data size", "err", err)
 			return
 		}
 
 		size := binary.BigEndian.Uint32(sizeBuf)
-		log.Printf("Received %d", size)
 
 		data := make([]byte, size)
 		_, err = conn.Read(data)
 		if err != nil {
-			log.Printf("Error reading data: %v", err)
+			log.Error("Txn listener error reading data", "err", err)
 			return
 		}
 		txChan <- data
 
 		_, err = conn.Write([]byte{0xc0})
 		if err != nil {
+			log.Error("Txn listener srror sending acknowledge to timeboost", "err", err)
 			return
 		}
 
@@ -67,16 +65,16 @@ func listenAndServe(port uint16, txChan chan<- []byte) {
 	addr := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Printf("Failed to listen on %d: %v", port, err)
+		log.Error("Txn listener failed to start", "port", port, "err", err)
 		return
 	}
 	defer listener.Close()
-	log.Printf("Listening on :%d", port)
+	log.Info("Listening", "port", port)
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Accept error on port %d: %v", port, err)
+			log.Info("Connection accept error", "port", port, "err", err)
 			continue
 		}
 		go handleConnection(conn, txChan)

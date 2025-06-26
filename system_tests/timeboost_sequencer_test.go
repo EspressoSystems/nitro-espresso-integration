@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/ethereum/go-ethereum/core/types"
+	"google.golang.org/protobuf/proto"
 
 	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
 )
@@ -94,15 +93,16 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 
 		var users []string
 
-		const numUsers = 1
-		_, err = builder.L2.Client.BlockNumber(ctx)
-		Require(t, err)
+		const numUsers = 10
 
 		for num := 0; num < numUsers; num++ {
 			userName := fmt.Sprintf("My_User_%d", num)
 			builder.L2Info.GenerateAccount(userName)
 			users = append(users, userName)
 		}
+
+		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
 
 		for i, userName := range users {
 			tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
@@ -126,72 +126,77 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			incls = append(incls, incl)
 		}
 
-		// timeboostSequencer := builder.L2.ConsensusNode.TimeboostSequencer
 		conn, err := net.Dial("tcp", "localhost:55000")
 		if err != nil {
-			fmt.Println("Error connecting:", err)
+			t.Fatalf("Error connecting: %v", err)
 			return
 		}
 		defer conn.Close()
 		for _, incl := range incls {
-			go func(ptx *gethexec.InclusionList) {
-				inclBytes, err := proto.Marshal(ptx)
-				Require(t, err)
-				len := len(inclBytes)
-				if len < 0 || len > math.MaxUint32 {
-					return
-				}
-				length := uint32(len)
-				lengthBuf := make([]byte, 4)
-				binary.BigEndian.PutUint32(lengthBuf, length)
-				_, err = conn.Write(lengthBuf)
-				Require(t, err)
-				_, err = conn.Write(inclBytes)
-				Require(t, err)
+			inclBytes, err := proto.Marshal(incl)
+			Require(t, err)
+			len := len(inclBytes)
+			if len < 0 || len > math.MaxUint32 {
+				t.Fatalf("Invalid len %d", len)
+			}
+			length := uint32(len)
+			lengthBuf := make([]byte, 4)
+			binary.BigEndian.PutUint32(lengthBuf, length)
+			_, err = conn.Write(lengthBuf)
+			Require(t, err)
+			_, err = conn.Write(inclBytes)
+			Require(t, err)
 
-				buffer := make([]byte, 1)
-				n, err := conn.Read(buffer)
-				Require(t, err)
-				if n != 1 {
-					fmt.Printf("Expected to read 1 byte, read %d\n", n)
-					return
-				}
-				if buffer[0] != 0xc0 {
-					fmt.Printf("Unexpected response byte: 0x%02x, expected 0xc0\n", buffer[0])
-					return
-				}
+			buffer := make([]byte, 1)
+			n, err := conn.Read(buffer)
+			Require(t, err)
+			if n != 1 {
+				t.Fatalf("Expected to read 1 byte, read %d\n", n)
+			}
+			if buffer[0] != 0xc0 {
+				t.Fatalf("Unexpected response byte: 0x%02x, expected 0xc0\n", buffer[0])
+			}
 
-				// err = timeboostSequencer.ProcessIncomingTx(ctx, inclBytes, nil)
-				Require(t, err)
-			}(incl)
+			Require(t, err)
 		}
 
-		// Check that a block is created aftersometime
-		time.Sleep(time.Second * 5)
+		// Wait for sometime for the block to be produced
+		time.Sleep(time.Second * 10)
 
 		// Check that the database now has updated block
 		blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 		Require(t, err)
 
 		// msgCntAfter should be 1 greater than msgCntBefore
-		// if blockNumberAfter-blockNumberBefore != 1 {
-		// 	t.Fatalf("expected msgCntAfter to be 1 greater than msgCntBefore, got: %d", blockNumberAfter-blockNumberBefore)
-		// }
+		if blockNumberAfter-blockNumberBefore <= 0 {
+			t.Fatalf("expected difference between blockNumberAfter and blockNumberBefore to be greater than 0, got: %d", blockNumberAfter-blockNumberBefore)
+		}
 
 		// Check that if that block contains all the tx hashes
-
 		if blockNumberAfter > math.MaxInt64 {
 			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
 		}
-		block, err := builder.L1.Client.BlockByNumber(ctx, big.NewInt(int64(blockNumberAfter)))
-		Require(t, err)
-		for i, tx := range block.Transactions() {
-			incl := incls[i]
-			var expTx types.Transaction
-			err := expTx.UnmarshalBinary(incl.EncodedTxns[0].EncodedTxn)
+
+		// Get all the transactions from all the blocks after the blockNumberBefore
+		var transactions []*types.Transaction
+		for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
+			if i > math.MaxInt64 {
+				t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+			}
+			block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
 			Require(t, err)
-			if tx.Hash() != expTx.Hash() {
-				t.Fatalf("expected tx hash to be in block, got: %s, %s", tx.Hash().Hex(), expTx.Hash().Hex())
+			blockTransactions := block.Transactions()
+			transactionsWithoutStartBlock := blockTransactions[1:]
+			transactions = append(transactions, transactionsWithoutStartBlock...)
+		}
+
+		for i, tx := range transactions {
+			incl := incls[i]
+			var expected types.Transaction
+			err = expected.UnmarshalBinary(incl.EncodedTxns[0].EncodedTxn)
+			Require(t, err)
+			if tx.Hash() != expected.Hash() {
+				t.Fatalf("txHash doesn't match, got %s, want %s", tx.Hash().Hex(), expected.Hash().Hex())
 			}
 		}
 	})

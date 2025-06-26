@@ -28,6 +28,8 @@ jobs:
         run: >
           sudo apt update && sudo apt install -y wabt
           build-essential bison golang clang make
+      - name: Install protobuf compiler
+        run: sudo apt-get install -y protobuf-compiler
 
       - name: Install cmake
         uses: jwlawson/actions-setup-cmake@v2

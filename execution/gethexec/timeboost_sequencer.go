@@ -89,7 +89,7 @@ type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
 
 type TimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
-	BlockRetryDuration time.Duration `koanf:"max-block-speed"`
+	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
 	MaxTxDataSize               int           `koanf:"max-tx-data-size"`
 	NonceCacheSize              int           `koanf:"nonce-cache-size"`
@@ -100,8 +100,8 @@ type TimeboostSequencerConfig struct {
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
-	Enable:                      true,
-	BlockRetryDuration:          time.Millisecond * 250,
+	Enable:                      false,
+	BlockRetryDuration:          time.Second * 5,
 	MaxTxDataSize:               95000,
 	NonceCacheSize:              1024,
 	MaxRevertGasReject:          0,
@@ -112,7 +112,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
-	f.Duration(prefix+".max-block-speed", DefaultTimeboostSequencerConfig.BlockRetryDuration, "maximum block creation speed")
+	f.Duration(prefix+".block-retry-duration", DefaultTimeboostSequencerConfig.BlockRetryDuration, "maximum block creation speed")
 	f.Int(prefix+".max-tx-data-size", DefaultTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
 	f.Int(prefix+".nonce-cache-size", DefaultTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
 	f.Uint64(prefix+".max-revert-gas-reject", DefaultTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
@@ -129,7 +129,6 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
 		timeboostTxnListener: TimeboostListener{
 			config: TimeboostListenerConfig{
-				Enable:     true,
 				ListenPort: 55000,
 			},
 		},
@@ -166,7 +165,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
 			queueItem = s.txRetryQueue.Pop()
-			log.Debug("Popped the txRetryQueue", "txHash", queueItem.tx.Hash())
 		} else if s.txQueue.Len() == 0 {
 			// This means we have no transactions in the txRetryQueue and
 			// we also dont have any sailfish rounds to process
@@ -176,10 +174,8 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			if queueItems == nil {
 				queueItems = make([]timeboostTransactionQueueItem, 0)
 				queueItem = s.txQueue.Pop()
-				log.Debug("Popped the txQueue", "txHash", queueItem.tx.Hash())
-			} else if queueItems[len(queueItems)-1].roundId != s.txQueue.Peek().roundId {
+			} else if queueItems[len(queueItems)-1].roundId == s.txQueue.Peek().roundId {
 				queueItem = s.txQueue.Pop()
-				log.Debug("Popped the txQueue when queueItems had transactions from the given round", "txHash", queueItem.tx.Hash(), "roundId", queueItem.roundId)
 			} else {
 				done = true
 			}
@@ -214,7 +210,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
-			log.Debug("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
 			s.txRetryQueue.Push(queueItem)
 			// End the batch here to put this tx in the next one
 			break
@@ -248,8 +244,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		return false
 	}
 	if len(queueItems) == 0 {
-		return false
+		return true
 	}
+
 	timestamp := queueItems[0].consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
@@ -484,23 +481,17 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 }
 
 func (s *TimeboostSequencer) ProcessIncomingTx(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
-	// txBytes, err := tx.MarshalBinary()
-	// if err != nil {
-	// 	return err
-	// }
-
 	inclusionList := &gethexec.InclusionList{}
 	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
 		log.Warn("Error decoding InclusionList", "err", err)
 		return err
 	}
 
-	log.Info("list", "list", inclusionList)
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
 		err := tx.UnmarshalBinary(protoTx.EncodedTxn)
 		if err != nil {
-			log.Info("err", "err", err)
+			log.Info("Error unmarshalling encoded transaction", "err", err)
 			return err
 		}
 		txQueueItem := timeboostTransactionQueueItem{
