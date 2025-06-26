@@ -486,15 +486,15 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
 	inclusionList := &gethexec.InclusionList{}
 	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
-		log.Warn("Error decoding InclusionList", "err", err)
+		log.Warn("error decoding InclusionList", "err", err)
 		return err
 	}
 
-	log.Info("Processing inclusion list", "round", inclusionList.Round)
+	log.Info("processing inclusion list", "round", inclusionList.Round)
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
 		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
-			log.Info("Error unmarshalling encoded transaction", "err", err)
+			log.Warn("error unmarshalling encoded transaction", "err", err)
 			return err
 		}
 		txQueueItem := timeboostTransactionQueueItem{
