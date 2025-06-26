@@ -109,7 +109,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
-	f.Duration(prefix+".max-block-speed", DefaultTimeboostSequencerConfig.BlockRetryDuration, "maximum block creation speed")
+	f.Duration(prefix+".block-retry-duration", DefaultTimeboostSequencerConfig.BlockRetryDuration, "maximum block creation speed")
 	f.Int(prefix+".max-tx-data-size", DefaultTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
 	f.Int(prefix+".nonce-cache-size", DefaultTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
 	f.Uint64(prefix+".max-revert-gas-reject", DefaultTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
