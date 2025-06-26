@@ -399,7 +399,6 @@ func (b *NodeBuilder) WithL1ClientWrapper(t *testing.T) *NodeBuilder {
 func (b *NodeBuilder) Build(t *testing.T) func() {
 	b.CheckConfig(t)
 	if b.withL1 {
-		log.Info("Building L1 node")
 		b.BuildL1(t)
 		return b.BuildL2OnL1(t)
 	}
@@ -632,11 +631,10 @@ func (b *NodeBuilder) BuildL2OnL1(t *testing.T) func() {
 }
 
 // L2 -Only. Enough for tests that needs no interface to L1
-
 // Requires precompiles.AllowDebugPrecompiles = true
-
 func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	b.L2 = NewTestClient(b.ctx)
+
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
 	var chainDb ethdb.Database
@@ -733,7 +731,6 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
-
 func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
@@ -917,7 +914,6 @@ func TransferBalanceTo(
 }
 
 // if l2client is not nil - will wait until balance appears in l2
-
 func BridgeBalance(
 	t *testing.T, account string, amount *big.Int, l1info info, l2info info, l1client *ethclient.Client, l2client *ethclient.Client, ctx context.Context,
 ) (*types.Transaction, *types.Receipt) {
@@ -976,7 +972,6 @@ func BridgeBalance(
 }
 
 // AdvanceL1 sends dummy transactions to L1 to create blocks.
-
 func AdvanceL1(
 	t *testing.T,
 	ctx context.Context,
@@ -1304,6 +1299,7 @@ func createTestL1BlockChainWithL1StackConfig(t *testing.T, l1info info, stackCon
 	nodeConf.Miner.Etherbase = l1info.GetAddress("Faucet")
 	nodeConf.Miner.PendingFeeRecipient = l1info.GetAddress("Faucet")
 	nodeConf.SyncMode = downloader.FullSync
+
 	l1backend, err := eth.New(stack, &nodeConf)
 	Require(t, err)
 
@@ -1457,7 +1453,6 @@ func deployOnParentChain(
 			EspressoTEEVerifier:          espressoTEEVerifierAddress,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
-		log.Info("Deploying Full rollup stack")
 		boldAddresses, err := setup.DeployFullRollupStack(
 			ctx,
 			wrappedClient,
@@ -1467,6 +1462,7 @@ func deployOnParentChain(
 			setup.RollupStackConfig{
 				UseMockBridge:          false,
 				UseMockOneStepProver:   false,
+				UseBlobs:               chainSupportsBlobs,
 				MinimumAssertionPeriod: 0,
 			},
 		)
@@ -1503,8 +1499,8 @@ func deployOnParentChain(
 			maxDataSize,
 			chainSupportsBlobs,
 		)
-		Require(t, err)
 	}
+	Require(t, err)
 	parentChainInfo.SetContract("Bridge", addresses.Bridge)
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
@@ -1995,24 +1991,11 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...et
 	}
 }
 
-// nolint:unused
-func createTestL1BlockChain(t *testing.T, l1info info, withClientWrapper bool) (info, *ethclient.Client, *eth.Ethereum, *node.Node, *ClientWrapper) {
-	return createTestL1BlockChainWithL1StackConfig(t, l1info, testhelpers.CreateStackConfigForTest(t.TempDir()), withClientWrapper)
-}
-
 func createL2BlockChain(
 	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, nodeConf *node.Config, execConfig *gethexec.Config, wasmCacheTag uint32, useFreezer bool,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
 	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, nodeConf, execConfig, wasmCacheTag, useFreezer)
 }
-
-var (
-	recordBlockInputsEnable                       = flag.Bool("recordBlockInputs.enable", true, "Whether to record block inputs as a json file")
-	recordBlockInputsWithSlug                     = flag.String("recordBlockInputs.WithSlug", "", "Slug directory for validationInputsWriter")
-	recordBlockInputsWithBaseDir                  = flag.String("recordBlockInputs.WithBaseDir", "", "Base directory for validationInputsWriter")
-	recordBlockInputsWithTimestampDirEnabled      = flag.Bool("recordBlockInputs.WithTimestampDirEnabled", true, "Whether to add timestamp directory while recording block inputs")
-	recordBlockInputsWithBlockIdInFileNameEnabled = flag.Bool("recordBlockInputs.WithBlockIdInFileNameEnabled", true, "Whether to record block inputs using test specific block_id")
-)
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
 	baseDir := t.TempDir()

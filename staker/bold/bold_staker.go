@@ -1,6 +1,7 @@
 // Copyright 2023-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 package bold
+
 import (
 	"context"
 	"errors"
@@ -34,7 +35,9 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 	"github.com/offchainlabs/nitro/validator"
 )
+
 var assertionCreatedId common.Hash
+
 func init() {
 	rollupAbi, err := boldrollup.RollupCoreMetaData.GetAbi()
 	if err != nil {
@@ -46,6 +49,7 @@ func init() {
 	}
 	assertionCreatedId = assertionCreatedEvent.ID
 }
+
 type BoldConfig struct {
 	Strategy string `koanf:"strategy"`
 	// How often to post assertions onchain.
@@ -73,12 +77,13 @@ type BoldConfig struct {
 	MinimumGapToParentAssertion time.Duration `koanf:"minimum-gap-to-parent-assertion"`
 	strategy                    legacystaker.StakerStrategy
 	blockNum                    rpc.BlockNumber
-	Enable   bool   `koanf:"enable"`
+	Enable                      bool `koanf:"enable"`
 	// How often to post assertions onchain.
 	// How often to scan for newly created assertions onchain.
 	// How often to confirm assertions onchain.
 	// How long to wait since parent assertion was created to post a new assertion
 }
+
 func (c *BoldConfig) Validate() error {
 	strategy, err := legacystaker.ParseStrategy(c.Strategy)
 	if err != nil {
@@ -99,14 +104,17 @@ func (c *BoldConfig) Validate() error {
 	c.blockNum = blockNum
 	return nil
 }
+
 type DelegatedStakingConfig struct {
 	Enable                  bool   `koanf:"enable"`
 	CustomWithdrawalAddress string `koanf:"custom-withdrawal-address"`
 }
+
 var DefaultDelegatedStakingConfig = DelegatedStakingConfig{
 	Enable:                  false,
 	CustomWithdrawalAddress: "",
 }
+
 type StateProviderConfig struct {
 	// A name identifier for the validator for cosmetic purposes.
 	ValidatorName      string `koanf:"validator-name"`
@@ -114,37 +122,38 @@ type StateProviderConfig struct {
 	// Path to a filesystem directory that will cache machine hashes for BOLD.
 	MachineLeavesCachePath string `koanf:"machine-leaves-cache-path"`
 }
+
 var DefaultStateProviderConfig = StateProviderConfig{
 	ValidatorName:          "default-validator",
 	CheckBatchFinality:     true,
 	MachineLeavesCachePath: "machine-hashes-cache",
 }
 var DefaultBoldConfig = BoldConfig{
-	Strategy:                            "Watchtower",
-	AssertionPostingInterval:            time.Minute * 15,
-	AssertionScanningInterval:           time.Minute,
-	AssertionConfirmingInterval:         time.Minute,
-	MinimumGapToParentAssertion:         time.Minute,
-// Correct default?,
+	Strategy:                    "Watchtower",
+	AssertionPostingInterval:    time.Minute * 15,
+	AssertionScanningInterval:   time.Minute,
+	AssertionConfirmingInterval: time.Minute,
+	MinimumGapToParentAssertion: time.Minute,
+	// Correct default?,
 	API:                                 false,
 	APIHost:                             "127.0.0.1",
 	APIPort:                             9393,
 	APIDBPath:                           "bold-api-db",
 	TrackChallengeParentAssertionHashes: []string{},
 	CheckStakerSwitchInterval:           time.Minute,
-// Every minute, check if the Nitro node staker should switch to using BOLD.,
-	StateProviderConfig:                 DefaultStateProviderConfig,
-	StartValidationFromStaked:           true,
-	AutoDeposit:                         true,
-	AutoIncreaseAllowance:               true,
-	DelegatedStaking:                    DefaultDelegatedStakingConfig,
-	ParentChainBlockTime:                time.Second * 12,
-	RPCBlockNumber:                      "finalized",
-	EnableFastConfirmation:              false,
-	MaxGetLogBlocks:                     5000,
-	Enable:                              false,
-// Correct default?,
-// Every minute, check if the Nitro node staker should switch to using BOLD.,
+	// Every minute, check if the Nitro node staker should switch to using BOLD.,
+	StateProviderConfig:       DefaultStateProviderConfig,
+	StartValidationFromStaked: true,
+	AutoDeposit:               true,
+	AutoIncreaseAllowance:     true,
+	DelegatedStaking:          DefaultDelegatedStakingConfig,
+	ParentChainBlockTime:      time.Second * 12,
+	RPCBlockNumber:            "finalized",
+	EnableFastConfirmation:    false,
+	MaxGetLogBlocks:           5000,
+	Enable:                    false,
+	// Correct default?,
+	// Every minute, check if the Nitro node staker should switch to using BOLD.,
 }
 var BoldModes = map[legacystaker.StakerStrategy]boldtypes.Mode{
 	legacystaker.WatchtowerStrategy:   boldtypes.WatchTowerMode,
@@ -152,6 +161,7 @@ var BoldModes = map[legacystaker.StakerStrategy]boldtypes.Mode{
 	legacystaker.ResolveNodesStrategy: boldtypes.ResolveMode,
 	legacystaker.MakeNodesStrategy:    boldtypes.MakeMode,
 }
+
 func BoldConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".strategy", DefaultBoldConfig.Strategy, "define the bold validator staker strategy, either watchtower, defensive, stakeLatest, or makeNodes")
 	f.String(prefix+".rpc-block-number", DefaultBoldConfig.RPCBlockNumber, "define the block number to use for reading data onchain, either latest, safe, or finalized")
@@ -183,6 +193,7 @@ func DelegatedStakingConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultDelegatedStakingConfig.Enable, "enable delegated staking by having the validator call newStake on startup")
 	f.String(prefix+".custom-withdrawal-address", DefaultDelegatedStakingConfig.CustomWithdrawalAddress, "enable a custom withdrawal address for staking on the rollup contract, useful for delegated stakers")
 }
+
 type BOLDStaker struct {
 	stopwaiter.StopWaiter
 	config             *BoldConfig
@@ -197,8 +208,8 @@ type BOLDStaker struct {
 	confirmedNotifiers []legacystaker.LatestConfirmedNotifier
 	inboxTracker       staker.InboxTrackerInterface
 	inboxStreamer      staker.TransactionStreamerInterface
-	statelessBlockValidator *staker.StatelessBlockValidator
 }
+
 func NewBOLDStaker(
 	ctx context.Context,
 	stack *node.Node,
@@ -240,6 +251,7 @@ func NewBOLDStaker(
 		inboxStreamer:      inboxStreamer,
 	}, nil
 }
+
 // Initialize Updates the block validator module root.
 // And updates the init state of the block validator if block validator has not started yet.
 func (b *BOLDStaker) Initialize(ctx context.Context) error {
@@ -389,6 +401,7 @@ func (b *BOLDStaker) getCallOpts(ctx context.Context) *bind.CallOpts {
 	opts.Context = ctx
 	return &opts
 }
+
 // Sets up a BOLD challenge manager implementation by providing it with
 // its necessary dependencies and configuration. The challenge manager can then be started, as it
 // implements the StopWaiter pattern as part of the Nitro validator.
@@ -635,6 +648,7 @@ func ReadBoldAssertionCreationInfo(
 		CreationL1Block:     creationL1Block,
 	}, nil
 }
+
 // Read the creation info for an assertion by looking up its creation
 // event from the rollup contracts.
 // Copyright 2023-2024, Offchain Labs, Inc.
