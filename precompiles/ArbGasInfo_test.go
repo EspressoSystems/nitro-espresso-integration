@@ -1,6 +1,8 @@
 // Copyright 2021-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package precompiles
+
 import (
 	"math/big"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/util"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
+
 func setupArbGasInfo(
 	t *testing.T,
 ) (
@@ -36,6 +39,7 @@ func setupArbGasInfo(
 
 	return evm, state, callCtx, arbGasInfo
 }
+
 func TestGetGasBacklog(t *testing.T) {
 	t.Parallel()
 
@@ -50,6 +54,7 @@ func TestGetGasBacklog(t *testing.T) {
 		t.Fatal("expected backlog to be", backlog, "but got", retrievedBacklog)
 	}
 }
+
 func TestGetL1PricingUpdateTime(t *testing.T) {
 	t.Parallel()
 
@@ -64,6 +69,7 @@ func TestGetL1PricingUpdateTime(t *testing.T) {
 		t.Fatal("expected last update time to be", lastUpdateTime, "but got", retrievedLastUpdateTime)
 	}
 }
+
 func TestGetL1PricingFundsDueForRewards(t *testing.T) {
 	t.Parallel()
 
@@ -78,6 +84,7 @@ func TestGetL1PricingFundsDueForRewards(t *testing.T) {
 		t.Fatal("expected funds due for rewards to be", fundsDueForRewards, "but got", retrievedFundsDueForRewards)
 	}
 }
+
 func TestGetL1PricingUnitsSinceUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -92,6 +99,7 @@ func TestGetL1PricingUnitsSinceUpdate(t *testing.T) {
 		t.Fatal("expected pricing units since update to be", pricingUnitsSinceUpdate, "but got", retrievedPricingUnitsSinceUpdate)
 	}
 }
+
 func TestGetLastL1PricingSurplus(t *testing.T) {
 	t.Parallel()
 
@@ -106,6 +114,7 @@ func TestGetLastL1PricingSurplus(t *testing.T) {
 		t.Fatal("expected last surplus to be", lastSurplus, "but got", retrievedLastSurplus)
 	}
 }
+
 func TestGetPricesInArbGas(t *testing.T) {
 	t.Parallel()
 
@@ -130,5 +139,3 @@ func TestGetPricesInArbGas(t *testing.T) {
 		t.Fatal("expected storage arb gas to be", expectedStorageArbGas, "but got", storageArbGas)
 	}
 }
-// Copyright 2021-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE

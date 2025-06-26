@@ -1,6 +1,8 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package timeboost
+
 import (
 	"fmt"
 	"time"
@@ -8,6 +10,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/express_lane_auctiongen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 )
+
 // Validate the express_lane_auctiongen.RoundTimingInfo fields.
 // Returns errors in terms of the solidity field names to ease debugging.
 func validateRoundTimingInfo(c *express_lane_auctiongen.RoundTimingInfo) error {
@@ -40,6 +43,7 @@ func validateRoundTimingInfo(c *express_lane_auctiongen.RoundTimingInfo) error {
 
 	return nil
 }
+
 // RoundTimingInfo holds the information from the Solidity type of the same name,
 // validated and converted into higher level time types, with helpful methods
 // for calculating round number, if a round is closed, and time til close.
@@ -49,6 +53,7 @@ type RoundTimingInfo struct {
 	AuctionClosing    time.Duration
 	ReserveSubmission time.Duration
 }
+
 // Convert from solgen bindings to domain type
 func NewRoundTimingInfo(c express_lane_auctiongen.RoundTimingInfo) (*RoundTimingInfo, error) {
 	if err := validateRoundTimingInfo(&c); err != nil {
@@ -62,6 +67,7 @@ func NewRoundTimingInfo(c express_lane_auctiongen.RoundTimingInfo) (*RoundTiming
 		ReserveSubmission: arbmath.SaturatingCast[time.Duration](c.ReserveSubmissionSeconds) * time.Second,
 	}, nil
 }
+
 // resolutionWaitTime is an additional parameter that the Auctioneer
 // needs to validate against other timing fields.
 func (info *RoundTimingInfo) ValidateResolutionWaitTime(resolutionWaitTime time.Duration) error {
@@ -72,39 +78,28 @@ func (info *RoundTimingInfo) ValidateResolutionWaitTime(resolutionWaitTime time.
 	}
 	return nil
 }
+
 // RoundNumber returns the round number as of now.
 func (info *RoundTimingInfo) RoundNumber() uint64 {
 	return info.RoundNumberAt(time.Now())
 }
+
 // RoundNumberAt returns the round number as of some timestamp.
 func (info *RoundTimingInfo) RoundNumberAt(currentTime time.Time) uint64 {
 	return arbmath.SaturatingUCast[uint64](currentTime.Sub(info.Offset) / info.Round)
 	// info.Round has already been validated to be nonzero during construction.
 }
+
 // TimeTilNextRound returns the time til the next round as of now.
 func (info *RoundTimingInfo) TimeTilNextRound() time.Duration {
 	return info.TimeTilNextRoundAt(time.Now())
 }
+
 // TimeTilNextRoundAt returns the time til the next round,
 // where the next round is determined from the timestamp passed in.
 func (info *RoundTimingInfo) TimeTilNextRoundAt(currentTime time.Time) time.Duration {
 	return info.TimeOfNextRoundAt(currentTime).Sub(currentTime)
 }
-// Copyright 2024-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// Validate the express_lane_auctiongen.RoundTimingInfo fields.
-// Returns errors in terms of the solidity field names to ease debugging.
-// RoundTimingInfo holds the information from the Solidity type of the same name,
-// validated and converted into higher level time types, with helpful methods
-// for calculating round number, if a round is closed, and time til close.
-// Convert from solgen bindings to domain type
-// resolutionWaitTime is an additional parameter that the Auctioneer
-// needs to validate against other timing fields.
-// RoundNumber returns the round number as of now.
-// RoundNumberAt returns the round number as of some timestamp.
-// TimeTilNextRound returns the time til the next round as of now.
-// TimeTilNextRoundAt returns the time til the next round,
-// where the next round is determined from the timestamp passed in.
 
 func (info *RoundTimingInfo) TimeOfNextRound() time.Time {
 	return info.TimeOfNextRoundAt(time.Now())

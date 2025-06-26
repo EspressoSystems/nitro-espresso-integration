@@ -19,9 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/blsSignatures"
-
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
-
 	testflag "github.com/offchainlabs/nitro/util/testhelpers/flag"
 )
 

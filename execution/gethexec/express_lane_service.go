@@ -1,6 +1,8 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package gethexec
+
 import (
 	"bytes"
 	"context"
@@ -26,17 +28,22 @@ import (
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+
 var (
 	auctionResolutionLatency = metrics.NewRegisteredGauge("arb/sequencer/timeboost/auctionresolution", nil)
 )
+
 type transactionPublisher interface {
 	PublishTimeboostedTransaction(context.Context, *types.Transaction, *arbitrum_types.ConditionalOptions) error
 }
+
 type expressLaneRoundInfo struct {
 	sequence uint64
+
 	// The per-round sequence number reordering queue
 	msgBySequenceNumber map[uint64]*timeboost.ExpressLaneSubmission
 }
+
 type expressLaneService struct {
 	stopwaiter.StopWaiter
 	transactionPublisher transactionPublisher
@@ -49,6 +56,7 @@ type expressLaneService struct {
 
 	tracker *ExpressLaneTracker
 }
+
 func NewExpressLaneAuctionFromInternalAPI(
 	apiBackend *arbitrum.APIBackend,
 	filterSystem *filters.FilterSystem,
@@ -63,6 +71,7 @@ func NewExpressLaneAuctionFromInternalAPI(
 
 	return auctionContract, nil
 }
+
 func GetRoundTimingInfo(
 	auctionContract *express_lane_auctiongen.ExpressLaneAuction,
 ) (*timeboost.RoundTimingInfo, error) {
@@ -83,6 +92,7 @@ pending:
 	}
 	return timeboost.NewRoundTimingInfo(rawRoundTimingInfo)
 }
+
 func newExpressLaneService(
 	transactionPublisher transactionPublisher,
 	seqConfig SequencerConfigFetcher,
@@ -108,6 +118,7 @@ func newExpressLaneService(
 		tracker:              expressLaneTracker,
 	}, nil
 }
+
 func (es *expressLaneService) Start(ctxIn context.Context) {
 	es.StopWaiter.Start(ctxIn, es)
 
@@ -115,6 +126,7 @@ func (es *expressLaneService) Start(ctxIn context.Context) {
 		es.redisCoordinator.Start(ctxIn)
 	}
 }
+
 func (es *expressLaneService) StopAndWait() {
 	es.StopWaiter.StopAndWait()
 	if es.redisCoordinator != nil {
@@ -124,9 +136,11 @@ func (es *expressLaneService) StopAndWait() {
 		es.tracker.StopAndWait()
 	}
 }
+
 // DontCareSequence is a special sequence number that indicates a transaction should bypass the
 // normal sequence ordering requirements and be processed immediately
 const DontCareSequence = math.MaxUint64
+
 // sequenceExpressLaneSubmission with the roundInfo lock held, validates sequence number and sender address fields of the message
 // adds the message to the sequencer transaction queue
 func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.ExpressLaneSubmission) error {
@@ -244,6 +258,7 @@ func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.Expre
 
 	return retErr
 }
+
 func (es *expressLaneService) syncFromRedis() {
 	if es.redisCoordinator == nil {
 		return
@@ -276,6 +291,7 @@ func (es *expressLaneService) syncFromRedis() {
 		}
 	}
 }
+
 func (es *expressLaneService) currentRoundHasController() bool {
 	controller, err := es.tracker.RoundController(es.roundTimingInfo.RoundNumber())
 	if err != nil {
@@ -283,13 +299,11 @@ func (es *expressLaneService) currentRoundHasController() bool {
 	}
 	return controller != (common.Address{})
 }
+
 func (es *expressLaneService) AuctionContractAddr() common.Address {
 	return es.tracker.AuctionContractAddr()
 }
+
 func (es *expressLaneService) ValidateExpressLaneTx(msg *timeboost.ExpressLaneSubmission) error {
 	return es.tracker.ValidateExpressLaneTx(msg)
 }
-// Copyright 2024-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// sequenceExpressLaneSubmission with the roundInfo lock held, validates sequence number and sender address fields of the message
-// adds the message to the sequencer transaction queue
