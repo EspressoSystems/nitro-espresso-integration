@@ -10,8 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/types"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/ethereum/go-ethereum/core/types"
 
 	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
 )
@@ -94,6 +95,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		var users []string
 
 		const numUsers = 10
+		const numIncls = 5
 
 		for num := 0; num < numUsers; num++ {
 			userName := fmt.Sprintf("My_User_%d", num)
@@ -104,23 +106,31 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
 		Require(t, err)
 
-		for i, userName := range users {
-			tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
-			txBytes, err := tx.MarshalBinary()
-			Require(t, err)
+		for i := range numIncls {
+			var txns []*gethexec.Transaction
+			for _, userName := range users {
+				tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
+				txBytes, err := tx.MarshalBinary()
+				Require(t, err)
+
+				time := tx.Time().Unix()
+				if time < 0 {
+					t.Fatalf("Invalid timestamp %d", time)
+				}
+				protoTx := gethexec.Transaction{
+					EncodedTxn: txBytes,
+					Address:    []byte{0x00},
+					Timestamp:  uint64(time),
+				}
+				txns = append(txns, &protoTx)
+			}
 			if i < 0 {
-				return
+				t.Fatalf("Invalid index %d", i)
 			}
 			incl := &gethexec.InclusionList{
-				Round:              uint64(i),
-				ConsensusTimestamp: uint64(i),
-				EncodedTxns: []*gethexec.Transaction{
-					{
-						EncodedTxn: txBytes,
-						Address:    []byte{0x00},
-						Timestamp:  1,
-					},
-				},
+				Round:               uint64(i),
+				ConsensusTimestamp:  uint64(i),
+				EncodedTxns:         txns,
 				DelayedMessagesRead: 0,
 			}
 			incls = append(incls, incl)
@@ -129,7 +139,6 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		conn, err := net.Dial("tcp", "localhost:55000")
 		if err != nil {
 			t.Fatalf("Error connecting: %v", err)
-			return
 		}
 		defer conn.Close()
 		for _, incl := range incls {
@@ -190,14 +199,19 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			transactions = append(transactions, transactionsWithoutStartBlock...)
 		}
 
-		for i, tx := range transactions {
-			incl := incls[i]
-			var expected types.Transaction
-			err = expected.UnmarshalBinary(incl.EncodedTxns[0].EncodedTxn)
-			Require(t, err)
-			if tx.Hash() != expected.Hash() {
-				t.Fatalf("txHash doesn't match, got %s, want %s", tx.Hash().Hex(), expected.Hash().Hex())
+		count := 0
+		for _, incl := range incls {
+			for _, protoTxn := range incl.EncodedTxns {
+				tx := transactions[count]
+				var expected types.Transaction
+				err = expected.UnmarshalBinary(protoTxn.EncodedTxn)
+				Require(t, err)
+				if tx.Hash() != expected.Hash() {
+					t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
+				}
+				count++
 			}
+
 		}
 	})
 

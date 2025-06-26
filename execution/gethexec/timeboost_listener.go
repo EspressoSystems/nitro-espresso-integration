@@ -14,6 +14,7 @@ import (
 type TimeboostListener struct {
 	stopwaiter.StopWaiter
 	config TimeboostListenerConfig
+	conn   net.Conn
 }
 
 type TimeboostListenerConfig struct {
@@ -29,44 +30,48 @@ func NewTimeboostListener() (*TimeboostListener, error) {
 		config: TimeboostListenerConfig{
 			ListenPort: 55000,
 		},
+		conn: nil,
 	}, nil
 }
 
-func handleConnection(conn net.Conn, txChan chan<- []byte) {
-	defer conn.Close()
-	for {
-		sizeBuf := make([]byte, 4)
-		_, err := conn.Read(sizeBuf)
-		if err != nil {
-			log.Error("Txn listener error reading data size", "err", err)
-			return
-		}
-
-		size := binary.BigEndian.Uint32(sizeBuf)
-
-		data := make([]byte, size)
-		_, err = conn.Read(data)
-		if err != nil {
-			log.Error("Txn listener error reading data", "err", err)
-			return
-		}
-		txChan <- data
-
-		_, err = conn.Write([]byte{0xc0})
-		if err != nil {
-			log.Error("Txn listener srror sending acknowledge to timeboost", "err", err)
-			return
-		}
-
-	}
+func (l *TimeboostListener) HasConnection() bool {
+	return l.conn != nil
 }
 
-func listenAndServe(port uint16, txChan chan<- []byte) {
+func (l *TimeboostListener) Receive() ([]byte, error) {
+	sizeBuf := make([]byte, 4)
+	_, err := l.conn.Read(sizeBuf)
+	if err != nil {
+		log.Error("Txn listener error reading data size", "err", err)
+		return nil, err
+	}
+
+	size := binary.BigEndian.Uint32(sizeBuf)
+
+	inclBytes := make([]byte, size)
+	_, err = l.conn.Read(inclBytes)
+	if err != nil {
+		log.Error("Txn listener error reading data", "err", err)
+		return nil, err
+	}
+	return inclBytes, nil
+}
+
+func (l *TimeboostListener) WriteAck() error {
+	_, err := l.conn.Write([]byte{0xc0})
+	if err != nil {
+		log.Error("Txn listener srror sending acknowledge to timeboost", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (l *TimeboostListener) listenAndServe(port uint16) error {
 	addr := fmt.Sprintf(":%d", port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Txn listener failed to start", "port", port, "err", err)
-		return
+		return err
 	}
 	defer listener.Close()
 	log.Info("Listening", "port", port)
@@ -77,18 +82,20 @@ func listenAndServe(port uint16, txChan chan<- []byte) {
 			log.Info("Connection accept error", "port", port, "err", err)
 			continue
 		}
-		go handleConnection(conn, txChan)
+		l.conn = conn
 	}
 }
 
-func (s *TimeboostListener) Start(ctx context.Context, txChan chan<- []byte) {
-	s.StopWaiter.Start(ctx, s)
-	s.LaunchThread(func(ctx context.Context) {
-		listenAndServe(s.config.ListenPort, txChan)
+func (l *TimeboostListener) Start(ctx context.Context) {
+	l.StopWaiter.Start(ctx, l)
+	l.LaunchThread(func(ctx context.Context) {
+		err := l.listenAndServe(l.config.ListenPort)
+		if err != nil {
+			panic("Failed to start listener")
+		}
 	})
-
 }
 
-func (s *TimeboostListener) StopAndWait() {
-	s.StopWaiter.StopAndWait()
+func (l *TimeboostListener) StopAndWait() {
+	l.StopWaiter.StopAndWait()
 }

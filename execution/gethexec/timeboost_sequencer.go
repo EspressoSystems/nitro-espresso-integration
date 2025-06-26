@@ -480,7 +480,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) ProcessIncomingTx(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
 	inclusionList := &gethexec.InclusionList{}
 	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
 		log.Warn("Error decoding InclusionList", "err", err)
@@ -513,17 +513,33 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
 	}
-	txChan := make(chan []byte, 1000)
-	s.timeboostTxnListener.Start(ctx, txChan)
+	s.timeboostTxnListener.Start(ctx)
 	s.LaunchThread(func(ctx context.Context) {
+		backoff := time.Second
+		maxBackoff := 10 * time.Second
 		for {
-			select {
-			case tx := <-txChan:
-				if err := s.ProcessIncomingTx(ctx, tx, nil); err != nil {
-					log.Warn("Error processing transaction", "err", err)
-				}
-			case <-ctx.Done():
-				return
+			if !s.timeboostTxnListener.HasConnection() {
+				log.Warn("Connection with timeboost not yet established", "backoff delay", backoff)
+				time.Sleep(backoff)
+				backoff = min(backoff*2, maxBackoff)
+				continue
+			}
+			inclBytes, err := s.timeboostTxnListener.Receive()
+			if err != nil {
+				log.Warn("Error receiving inclusion list", "err", err)
+				continue
+			}
+
+			err = s.ProcessInclusionList(ctx, inclBytes, nil)
+			if err != nil {
+				log.Warn("Error processing inclusion list", "err", err)
+				continue
+			}
+
+			err = s.timeboostTxnListener.WriteAck()
+			if err != nil {
+				log.Warn("Error writing ack to timeboost", "err", err)
+				continue
 			}
 		}
 	})

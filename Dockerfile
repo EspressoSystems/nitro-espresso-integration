@@ -246,7 +246,7 @@ ENV NITRO_MODIFIED=$modified
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN apt-get update && \
-    apt-get install -y wabt pkg-config libssl-dev && \
+    apt-get install -y wabt pkg-config libssl-dev protobuf-compiler && \
     apt-get clean
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
