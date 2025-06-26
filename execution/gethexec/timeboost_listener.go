@@ -10,6 +10,7 @@ import (
 
 	flag "github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -28,8 +29,8 @@ type TimeboostListener struct {
 
 type TimeboostListenerConfig struct {
 	ListenPort    uint16        `koanf:"listen-port"`
-	ReadDeadline  time.Duration `koanf:"read-dealine"`
-	WriteDeadline time.Duration `koanf:"write-dealine"`
+	ReadDeadline  time.Duration `koanf:"read-deadline"`
+	WriteDeadline time.Duration `koanf:"write-deadline"`
 	MaxBackoff    time.Duration `koanf:"max-backoff"`
 }
 
@@ -42,8 +43,8 @@ var DefaultTimeboostListenerConfig = TimeboostListenerConfig{
 
 func TimeboostListenerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint16(prefix+".listen-port", DefaultTimeboostListenerConfig.ListenPort, "timeboost transaction listener listen port")
-	f.Duration(prefix+".read-dealine", DefaultTimeboostListenerConfig.ReadDeadline, "timeboost transaction listener read deadline")
-	f.Duration(prefix+".write-dealine", DefaultTimeboostListenerConfig.WriteDeadline, "timeboost transaction listener write deadline")
+	f.Duration(prefix+".read-deadline", DefaultTimeboostListenerConfig.ReadDeadline, "timeboost transaction listener read deadline")
+	f.Duration(prefix+".write-deadline", DefaultTimeboostListenerConfig.WriteDeadline, "timeboost transaction listener write deadline")
 	f.Duration(prefix+".max-backoff", DefaultTimeboostListenerConfig.MaxBackoff, "timeboost transaction listener max backoff")
 }
 
@@ -63,7 +64,7 @@ func NewTimeboostListener(config TimeboostListenerConfig) (*TimeboostListener, e
 /**
  * This function checks to see if we currently have a connection
  */
-func (l *TimeboostListener) HasConnection() bool {
+func (l *TimeboostListener) hasConnection() bool {
 	l.connectionLock.Lock()
 	defer l.connectionLock.Unlock()
 	return l.conn != nil
@@ -74,7 +75,7 @@ func (l *TimeboostListener) HasConnection() bool {
  * 1.) Read the encoded inclusion list bytes (u32) size
  * 2.) Read the exact bytes of encoded inclusion list
  */
-func (l *TimeboostListener) ReceiveInclusionList() ([]byte, error) {
+func (l *TimeboostListener) receiveInclusionList() ([]byte, error) {
 	l.connectionLock.Lock()
 	defer l.connectionLock.Unlock()
 	// Read encoded inclusion list size
@@ -102,7 +103,7 @@ func (l *TimeboostListener) ReceiveInclusionList() ([]byte, error) {
 /**
  * This function sends an acknowledgement flag back to timeboost AFTER it successfully processes the transactions
  */
-func (l *TimeboostListener) WriteAck() error {
+func (l *TimeboostListener) writeAck() error {
 	l.connectionLock.Lock()
 	defer l.connectionLock.Unlock()
 	// Send back acknowledgement to timeboost so it knows it can move on
@@ -142,7 +143,7 @@ func (l *TimeboostListener) setWriteDeadline() error {
 }
 
 /**
- * This function logs and error that happening over the connection and closes it.
+ * This function logs the error provided then closes the active connection.
  * Timeboost will retry to connect
  */
 func (l *TimeboostListener) onError(msg string, err error) error {
@@ -216,7 +217,50 @@ func (l *TimeboostListener) connectionHandler(ctx context.Context, port uint16) 
 	}
 }
 
-func (l *TimeboostListener) Start(ctx context.Context) {
+func process(
+	ctx context.Context,
+	l *TimeboostListener,
+	backoff *time.Duration,
+	processInclusionListFunc func(context.Context, []byte, *arbitrum_types.ConditionalOptions) error,
+) time.Duration {
+	maxBackoff := l.config.MaxBackoff
+	currentBackoff := *backoff
+
+	// On startup or on failures we may not have a connection, dont proceed
+	if !l.hasConnection() {
+		log.Warn("Connection with timeboost not yet established", "backoff delay", backoff)
+		*backoff = min(currentBackoff*2, maxBackoff)
+		return currentBackoff
+	}
+
+	*backoff = time.Second
+
+	// Get inclusion list bytes
+	inclBytes, err := l.receiveInclusionList()
+	if err != nil {
+		log.Warn("Error receiving inclusion list", "err", err)
+		return *backoff
+	}
+
+	// Decode and process inclusion list
+	if err := processInclusionListFunc(ctx, inclBytes, nil); err != nil {
+		log.Warn("Error processing inclusion list", "err", err)
+		return *backoff
+	}
+
+	// Send acknowledgement to timeboost we received and processed
+	if err := l.writeAck(); err != nil {
+		log.Warn("Error writing ack to timeboost", "err", err)
+		return *backoff
+	}
+
+	return 0
+}
+
+func (l *TimeboostListener) Start(
+	ctx context.Context,
+	processInclusionListFunc func(context.Context, []byte, *arbitrum_types.ConditionalOptions) error,
+) error {
 	l.StopWaiter.Start(ctx, l)
 	l.LaunchThread(func(ctx context.Context) {
 		err := l.connectionHandler(ctx, l.config.ListenPort)
@@ -224,6 +268,15 @@ func (l *TimeboostListener) Start(ctx context.Context) {
 			panic("Failed to start listener")
 		}
 	})
+	backoff := time.Second
+	err := l.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		return process(ctx, l, &backoff, processInclusionListFunc)
+	})
+	if err != nil {
+		log.Error("Timeboost txn listener failed to start inclusion list processor")
+		return err
+	}
+	return nil
 }
 
 func (l *TimeboostListener) StopAndWait() {

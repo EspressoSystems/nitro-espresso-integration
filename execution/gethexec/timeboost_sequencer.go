@@ -516,44 +516,15 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
 	}
-	s.timeboostTxnListener.Start(ctx)
-	backoff := time.Second
-	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		maxBackoff := s.timeboostTxnListener.config.MaxBackoff
 
-		// On startup or on failures we may not have a connection, dont proceed
-		if !s.timeboostTxnListener.HasConnection() {
-			log.Warn("Connection with timeboost not yet established", "backoff delay", backoff)
-			backoff = min(backoff*2, maxBackoff)
-			return backoff
-		}
-
-		// Get inclusion list bytes
-		inclBytes, err := s.timeboostTxnListener.ReceiveInclusionList()
-		if err != nil {
-			log.Warn("Error receiving inclusion list", "err", err)
-			return time.Second
-		}
-
-		// Decode and process inclusion list
-		if err := s.ProcessInclusionList(ctx, inclBytes, nil); err != nil {
-			log.Warn("Error processing inclusion list", "err", err)
-			return time.Second
-		}
-
-		// Send acknowledgement to timeboost we received and processed
-		if err := s.timeboostTxnListener.WriteAck(); err != nil {
-			log.Warn("Error writing ack to timeboost", "err", err)
-			return time.Second
-		}
-
-		backoff = time.Second
-		return 0
-	})
-	if err != nil {
+	processInclusionListFunc := func(ctx context.Context, inclusionListBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+		return s.ProcessInclusionList(ctx, inclusionListBytes, options)
+	}
+	if err := s.timeboostTxnListener.Start(ctx, processInclusionListFunc); err != nil {
 		return err
 	}
-	err = s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+
+	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
 		}
