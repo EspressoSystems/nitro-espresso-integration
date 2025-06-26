@@ -200,6 +200,7 @@ PROTO_FILE = $(PROTO_REL_PATH)/inclusion_list.proto
 PROTOC_GEN_GO := $(shell go env GOPATH)/bin/protoc-gen-go
 
 $(PROTOC_GEN_GO):
+	@echo "Installing protoc-gen-go..."
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 # user targets
@@ -220,7 +221,7 @@ all: build build-replay-env test-gen-proofs
 build: generate-proto $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
 	@printf $(done)
 
-generate-proto: $(PROTO_FILE)
+generate-proto: $(PROTOC_GEN_GO) $(PROTO_FILE)
 	protoc --proto_path=$(CURDIR) --go_out=$(CURDIR) --go_opt=paths=source_relative $(PROTO_FILE)
 
 .PHONY: build-node-deps
