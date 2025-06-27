@@ -55,6 +55,7 @@ TestArbTraceForwarding
 TestIpcRpc
 TestRedisForwarder
 TestRedisForwarderFallbackNoRedis
+TestRequestForwardingToArchiveNodes
 TestStaticForwarder
 
 # This test is failing and it is a bit complicated.

@@ -54,6 +54,7 @@ func encodeAddBatch(seqABI *abi.ABI, seqNum *big.Int, message []byte, afterDelay
 		gasRefunder,
 		new(big.Int).SetUint64(uint64(1)),
 		new(big.Int).SetUint64(uint64(1)),
+		createDummyEspressoMetadata(nil),
 	)
 	if err != nil {
 		return nil, err
