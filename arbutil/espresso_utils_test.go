@@ -185,7 +185,6 @@ func TestSerdeSubmittedEspressoTxBackwardCompatibility(t *testing.T) {
 	}
 
 	// First, validate that the artifact correctly decodes to the old struct format.
-	// This confirms the artifact's integrity and that our definition of OldSubmittedEspressoTx is correct.
 	var decodedOldTx OldSubmittedEspressoTx
 	if err := rlp.DecodeBytes(b, &decodedOldTx); err != nil {
 		t.Fatalf("Failed to decode artifact into OldSubmittedEspressoTx: %v", err)
