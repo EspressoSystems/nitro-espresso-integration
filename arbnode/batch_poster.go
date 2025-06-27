@@ -337,7 +337,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:   10 * time.Minute,
 	MaxBlockLagBeforeEscapeHatch: 350,
 	LightClientAddress:           "",
-	HotShotUrls:                  []string{""},
+	HotShotUrls:                  []string{},
 	EspressoTeeType:              "SGX",
 	EspressoRegisterSignerConfig: espressotee.DefaultEspressoRegisterSignerConfig,
 }

@@ -43,7 +43,6 @@ TestChallengeToFailedTooFar
 TestTwoNodesLong
 TestStylusOpcodeTraceEquivalence
 TestGettingState
-TestEmptyCliConfig
 TestBatchPosterDelayBufferDisabled
 
 # These tests are skipped because of invalid long paths of temporary directory
