@@ -39,9 +39,9 @@ type TimeboostListenerConfig struct {
 
 var DefaultTimeboostListenerConfig = TimeboostListenerConfig{
 	ListenPort:    55000,
-	ReadDeadline:  10 * time.Second,
-	WriteDeadline: 10 * time.Second,
-	MaxBackoff:    5 * time.Second,
+	ReadDeadline:  4 * time.Second,
+	WriteDeadline: 4 * time.Second,
+	MaxBackoff:    6 * time.Second,
 }
 
 func TimeboostListenerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -245,6 +245,15 @@ func (l *TimeboostListener) Start(
 	ctx context.Context,
 	processInclusionListFunc func(context.Context, []byte, *arbitrum_types.ConditionalOptions) error,
 ) error {
+	if l.config.MaxBackoff > 10*time.Second || l.config.MaxBackoff < 5*time.Second {
+		panic("max backoff needs to be between 5 and 10 seconds")
+	}
+	if l.config.ReadDeadline > 10*time.Second || l.config.ReadDeadline < 3*time.Second {
+		panic("read deadline needs to be between 3 and 10 seconds")
+	}
+	if l.config.WriteDeadline > 10*time.Second || l.config.WriteDeadline < 3*time.Second {
+		panic("write deadline needs to be between 3 and 10 seconds")
+	}
 	l.StopWaiter.Start(ctx, l)
 	l.LaunchThread(func(ctx context.Context) {
 		err := l.connectionHandler(ctx, l.config.ListenPort)
