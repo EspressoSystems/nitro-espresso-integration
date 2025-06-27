@@ -80,26 +80,22 @@ func (l *TimeboostListener) receiveInclusionList() ([]byte, error) {
 	// Read encoded inclusion list size
 	deadline := time.Now().Add(l.config.ReadDeadline)
 	if err := l.conn.SetReadDeadline(deadline); err != nil {
-		l.unsafeShutdown()
 		return nil, err
 	}
 
 	sizeBuf := make([]byte, 4)
 	if _, err := l.conn.Read(sizeBuf); err != nil {
-		l.unsafeShutdown()
 		return nil, err
 	}
 
 	// Read inclusion list
 	deadline = time.Now().Add(l.config.ReadDeadline)
 	if err := l.conn.SetReadDeadline(deadline); err != nil {
-		l.unsafeShutdown()
 		return nil, err
 	}
 
 	inclBytes := make([]byte, binary.BigEndian.Uint32(sizeBuf))
 	if _, err := l.conn.Read(inclBytes); err != nil {
-		l.unsafeShutdown()
 		return nil, err
 	}
 	return inclBytes, nil
@@ -119,28 +115,29 @@ func (l *TimeboostListener) writeAck() error {
 	// Send back acknowledgement to timeboost so it knows it can move on
 	deadline := time.Now().Add(l.config.WriteDeadline)
 	if err := l.conn.SetWriteDeadline(deadline); err != nil {
-		l.unsafeShutdown()
 		return err
 	}
 	if _, err := l.conn.Write([]byte{ACK_FLAG}); err != nil {
-		l.unsafeShutdown()
 		return err
 	}
 	return nil
 }
 
 /**
- * This function closes the connection and reassigns it to nil
- * Warning: Be absolutely sure when calling function to have the `connectionLock` lock acquired
+ * This function closes the connection and reassigns it to nil or a new connection
+ * Warning: Be absolutely sure when calling function that you are not be holding the `connectionLock`, this will cause a deadlock
  */
-func (l *TimeboostListener) unsafeShutdown() {
+func (l *TimeboostListener) resetConnection(conn net.Conn) {
+	l.connectionLock.Lock()
+	defer l.connectionLock.Unlock()
 	if l.conn != nil {
 		err := l.conn.Close()
 		if err != nil {
 			log.Error("timeboost txn listener error closing connection", err)
 		}
-		l.conn = nil
 	}
+	// Assign a new connection (this may also be nil which is fine)
+	l.conn = conn
 }
 
 /**
@@ -182,14 +179,9 @@ func (l *TimeboostListener) connectionHandler(ctx context.Context, port uint16) 
 			log.Info("received connection", "addr", conn.conn.RemoteAddr())
 			// There will only ever be 1 connection at a time between timeboost and sequencer
 			// So make sure old connection is closed, and assign it the new connection
-			l.connectionLock.Lock()
-			l.unsafeShutdown()
-			l.conn = conn.conn
-			l.connectionLock.Unlock()
+			l.resetConnection(conn.conn)
 		case <-ctx.Done():
-			l.connectionLock.Lock()
-			l.unsafeShutdown()
-			l.connectionLock.Unlock()
+			l.resetConnection(nil)
 			log.Info("timeboost txn listener has been terminated")
 			return nil
 		}
@@ -208,6 +200,7 @@ func process(
 	// Get inclusion list bytes
 	inclBytes, err := l.receiveInclusionList()
 	if err != nil {
+		l.resetConnection(nil)
 		log.Warn("error receiving inclusion list", "err", err, "backoff", currentBackoff)
 		// only do exponential delay if waiting for connection
 		if errors.Is(err, ErrConnectionNotEstablished) {
@@ -223,12 +216,14 @@ func process(
 
 	// Decode and process inclusion list
 	if err := processInclusionListFunc(ctx, inclBytes, nil); err != nil {
+		l.resetConnection(nil)
 		log.Warn("error processing inclusion list", "err", err, "backoff", currentBackoff)
 		return currentBackoff
 	}
 
 	// Send acknowledgement to timeboost we received and processed
 	if err := l.writeAck(); err != nil {
+		l.resetConnection(nil)
 		log.Warn("error writing ack to timeboost", "err", err, "backoff", currentBackoff)
 		// only do exponential delay if waiting for connection
 		if errors.Is(err, ErrConnectionNotEstablished) {
