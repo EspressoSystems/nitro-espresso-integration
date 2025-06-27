@@ -141,12 +141,12 @@ func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
 		Require(t, err)
 
 		// Rudely interrupt the connection
-		if i == 2 {
+		if i == 2 || i == 3 {
 			if err := conn.Close(); err != nil {
 				t.Fatalf("Test failed to close connection")
 			}
 			// Wait some time
-			time.Sleep(3 * time.Second)
+			time.Sleep(2 * time.Second)
 
 			// Reconnect and resend
 			conn, err = net.Dial("tcp", "localhost:55000")
@@ -160,6 +160,26 @@ func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
 		// Now that listener knows the length in bytes to read, send inclusion list over
 		_, err = conn.Write(inclBytes)
 		Require(t, err)
+
+		// Rudely interrupt the connection after succesfully writing size and inclusion list
+		if i == 5 {
+			if err := conn.Close(); err != nil {
+				t.Fatalf("Test failed to close connection")
+			}
+			// Wait some time
+			time.Sleep(1 * time.Second)
+
+			// Reconnect and resend
+			conn, err = net.Dial("tcp", "localhost:55000")
+			if err != nil {
+				t.Fatalf("Error connecting: %v", err)
+			}
+			_, err = conn.Write(lengthBuf)
+			Require(t, err)
+
+			_, err = conn.Write(inclBytes)
+			Require(t, err)
+		}
 
 		// Timeboost is expecting an acknowledgment from the server
 		// So it knows if it needs to resend the inclusion list or can send the next one
@@ -195,7 +215,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		var users []string
 
 		const numUsers = 10
-		const numIncls = 5
+		const numIncls = 10
 
 		for num := 0; num < numUsers; num++ {
 			userName := fmt.Sprintf("My_User_%d", num)
@@ -241,7 +261,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		}
 
 		count := 0
-		// Iterate over each inclusion list the order they were send
+		// Iterate over each inclusion list the order they were sent
 		for _, incl := range inclusionLists {
 			// And compare each transaction was sent and processed in order
 			for _, protoTxn := range incl.EncodedTxns {
@@ -254,7 +274,9 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 				}
 				count++
 			}
-
+		}
+		if count != numUsers*numIncls || len(transactions) != count {
+			t.Fatalf("expected inclusion and transaction to match. got %d inclusion txns, got %d processed transactions", count, len(transactions))
 		}
 	})
 

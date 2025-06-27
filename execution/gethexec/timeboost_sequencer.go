@@ -484,6 +484,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 }
 
 func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+	// TODO: This should write to a database
 	inclusionList := &gethexec.InclusionList{}
 	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
 		log.Warn("error decoding InclusionList", "err", err)
