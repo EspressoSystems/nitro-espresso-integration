@@ -142,17 +142,14 @@ func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
 
 		// Rudely interrupt the connection
 		if i == 2 || i == 3 {
-			if err := conn.Close(); err != nil {
-				t.Fatalf("Test failed to close connection")
-			}
+			err := conn.Close()
+			Require(t, err)
 			// Wait some time
 			time.Sleep(2 * time.Second)
 
 			// Reconnect and resend
 			conn, err = net.Dial("tcp", "localhost:55000")
-			if err != nil {
-				t.Fatalf("Error connecting: %v", err)
-			}
+			Require(t, err)
 			_, err = conn.Write(lengthBuf)
 			Require(t, err)
 		}
@@ -163,17 +160,15 @@ func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
 
 		// Rudely interrupt the connection after succesfully writing size and inclusion list
 		if i == 5 {
-			if err := conn.Close(); err != nil {
-				t.Fatalf("Test failed to close connection")
-			}
+			err := conn.Close()
+			Require(t, err)
 			// Wait some time
 			time.Sleep(1 * time.Second)
 
 			// Reconnect and resend
 			conn, err = net.Dial("tcp", "localhost:55000")
-			if err != nil {
-				t.Fatalf("Error connecting: %v", err)
-			}
+			Require(t, err)
+
 			_, err = conn.Write(lengthBuf)
 			Require(t, err)
 

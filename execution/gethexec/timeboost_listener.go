@@ -131,8 +131,7 @@ func (l *TimeboostListener) resetConnection(conn net.Conn) {
 	l.connectionLock.Lock()
 	defer l.connectionLock.Unlock()
 	if l.conn != nil {
-		err := l.conn.Close()
-		if err != nil {
+		if err := l.conn.Close(); err != nil {
 			log.Error("timeboost txn listener error closing connection", err)
 		}
 	}
@@ -158,14 +157,10 @@ func (l *TimeboostListener) connectionHandler(ctx context.Context, port uint16) 
 	go func() {
 		defer close(connCh)
 		// Incase of failures, timeboost will continuously disconnect and reconnect
-		// So keep accepting
+		// So keep accepting, then send through channel
 		for {
 			conn, err := listener.Accept()
-			if err != nil {
-				connCh <- connectionResult{nil, err}
-			} else {
-				connCh <- connectionResult{conn, nil}
-			}
+			connCh <- connectionResult{conn, err}
 		}
 	}()
 
@@ -249,18 +244,22 @@ func (l *TimeboostListener) Start(
 	if l.config.WriteDeadline > 10*time.Second || l.config.WriteDeadline < 3*time.Second {
 		panic("write deadline needs to be between 3 and 10 seconds")
 	}
+
 	l.StopWaiter.Start(ctx, l)
+
+	// Connection handler thread
 	l.LaunchThread(func(ctx context.Context) {
 		err := l.connectionHandler(ctx, l.config.ListenPort)
 		if err != nil {
 			panic("failed to start listener")
 		}
 	})
+
+	// Process inclusion list thread
 	backoff := time.Second
-	err := l.CallIterativelySafe(func(ctx context.Context) time.Duration {
+	if err := l.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		return process(ctx, l, &backoff, processInclusionListFunc)
-	})
-	if err != nil {
+	}); err != nil {
 		log.Error("timeboost txn listener failed to start inclusion list processor")
 		return err
 	}
