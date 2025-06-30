@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-8core
 
     # Creates a redis container for redis tests
     services:
@@ -34,39 +34,44 @@ jobs:
         test-mode: [defaults, pathdb, challenge, stylus, l3challenge]
 
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
+      # - name: Free Disk Space (Ubuntu)
+      #   uses: jlumbroso/free-disk-space@main
+      #   with:
+      #     tool-cache: true
+
+      - name: Collect Workflow Telemetry
+        uses: catchpoint/workflow-telemetry-action@v2
         with:
-          tool-cache: true
+          comment_on_pr: false
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: cargo-bins/cargo-binstall@main
-      - name: Make more disk space available on public runner
-        run: |
-          # rmz seems to be faster at deleting files than rm
-          cargo binstall -y --version 2.2.0 rmz
-          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+      # - uses: cargo-bins/cargo-binstall@main
+      # - name: Make more disk space available on public runner
+      #   run: |
+      #     # rmz seems to be faster at deleting files than rm
+      #     cargo binstall -y --version 2.2.0 rmz
+      #     sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
 
-          echo "Available storage before:"
-          sudo df -h
-          echo
-          sudo rmz -f /usr/share/dotnet
-          sudo rmz -f /usr/share/swift
-          sudo rmz -f /usr/share/gradle-*
-          sudo rmz -f /usr/share/az_*
-          sudo rmz -f /usr/local/lib/android
-          sudo rmz -f /opt/ghc
-          sudo rmz -f /opt/az
-          sudo rmz -f /opt/pipx
-          sudo rmz -f /opt/google
-          sudo rmz -f /opt/microsoft
-          echo "Available storage after:"
-          sudo df -h
-          echo
+      #     echo "Available storage before:"
+      #     sudo df -h
+      #     echo
+      #     sudo rmz -f /usr/share/dotnet
+      #     sudo rmz -f /usr/share/swift
+      #     sudo rmz -f /usr/share/gradle-*
+      #     sudo rmz -f /usr/share/az_*
+      #     sudo rmz -f /usr/local/lib/android
+      #     sudo rmz -f /opt/ghc
+      #     sudo rmz -f /opt/az
+      #     sudo rmz -f /opt/pipx
+      #     sudo rmz -f /opt/google
+      #     sudo rmz -f /opt/microsoft
+      #     echo "Available storage after:"
+      #     sudo df -h
+      #     echo
 
       - name: Install dependencies
         run: >
