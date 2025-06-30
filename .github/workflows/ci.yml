@@ -93,7 +93,15 @@ jobs:
       - name: Install go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.23.0
+      - run: go env -w GOTOOLCHAIN=auto
+      - name: Debug Go version info
+        run: |
+          echo "which go: $(which go)"
+          go version
+          go env GOTOOLCHAIN
+          cat go.mod | grep '^go '
+
 
       - name: Install wasm-ld
         run: |
