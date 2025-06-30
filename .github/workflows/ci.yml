@@ -101,6 +101,8 @@ jobs:
           go version
           go env GOTOOLCHAIN
           cat go.mod | grep '^go '
+      - name: Force PATH to use setup-go
+        run: echo "$GOROOT/bin" >> $GITHUB_PATH
 
 
       - name: Install wasm-ld
