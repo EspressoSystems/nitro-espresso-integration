@@ -39,11 +39,6 @@ jobs:
       #   with:
       #     tool-cache: true
 
-      - name: Collect Workflow Telemetry
-        uses: catchpoint/workflow-telemetry-action@v2
-        with:
-          comment_on_pr: false
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -218,7 +213,8 @@ jobs:
         if: matrix.test-mode == 'defaults'
         run: |
           echo "Running redis tests" >> full.log
-          gotestsum --format short-verbose -- -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./... -- --test_redis=redis://localhost:6379/0
+          skip_tests=$(grep -vE '^\s*#|\s*$' ci_skip_tests | tr '\n' '|')
+          gotestsum --format short-verbose -- -p 1 -run TestRedis -skip "$skip_tests" ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./... -- --test_redis=redis://localhost:6379/0
       
       - name: create block input json file
         if: matrix.test-mode == 'defaults'

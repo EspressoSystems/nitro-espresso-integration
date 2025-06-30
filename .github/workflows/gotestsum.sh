@@ -72,7 +72,7 @@ skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
 packages=$(go list ./...)
 for package in $packages; do
   cmd="stdbuf -oL gotestsum --format short-verbose --packages=\"$package\" --rerun-fails=2 --no-color=false --"
-  cmd="$cmd -p 1 -skip \"$skip_tests\""
+  cmd="$cmd -skip \"$skip_tests\""
   if [ "$timeout" != "" ]; then
     cmd="$cmd -timeout $timeout"
   fi
