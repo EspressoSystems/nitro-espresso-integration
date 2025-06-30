@@ -10,6 +10,7 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
@@ -25,6 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
+	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -35,7 +37,7 @@ type timeboostTransactionQueueItem struct {
 	txSize             int
 	options            *arbitrum_types.ConditionalOptions
 	roundId            uint64
-	consensusTimestamp int64
+	consensusTimestamp uint64
 }
 
 type synchronizedTimeboostTransactionQueue struct {
@@ -78,8 +80,9 @@ type TimeboostSequencer struct {
 	execEngine *ExecutionEngine
 	l1Reader   *headerreader.HeaderReader
 	// TODO: We should probably also store the txRetryQueue in storage
-	txRetryQueue synchronizedTimeboostTransactionQueue
-	nonceCache   *nonceCache
+	txRetryQueue         synchronizedTimeboostTransactionQueue
+	nonceCache           *nonceCache
+	timeboostTxnListener *TimeboostListener
 }
 
 type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
@@ -88,12 +91,13 @@ type TimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
 	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize               int           `koanf:"max-tx-data-size"`
-	NonceCacheSize              int           `koanf:"nonce-cache-size"`
-	MaxRevertGasReject          uint64        `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime time.Duration `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta time.Duration `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling             bool          `koanf:"enable-profiling"`
+	MaxTxDataSize               int                     `koanf:"max-tx-data-size"`
+	NonceCacheSize              int                     `koanf:"nonce-cache-size"`
+	MaxRevertGasReject          uint64                  `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime time.Duration           `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta time.Duration           `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling             bool                    `koanf:"enable-profiling"`
+	TimeboostListenerConfig     TimeboostListenerConfig `koanf:"timeboost-listener-config"`
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
@@ -105,6 +109,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 	ParentChainFinalizationTime: 20 * time.Minute,
 	MaxAcceptableTimestampDelta: time.Hour,
 	EnableProfiling:             false,
+	TimeboostListenerConfig:     DefaultTimeboostListenerConfig,
 }
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -116,14 +121,20 @@ func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".parent-chain-finalization-time", DefaultTimeboostSequencerConfig.ParentChainFinalizationTime, "parent chain finalization time")
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
+	TimeboostListenerConfigAddOptions(prefix+".timeboost-listener-config", f)
 }
 
 func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
+	timeboostListener := &TimeboostListener{
+		config: configFetcher().TimeboostListenerConfig,
+		conn:   nil,
+	}
 	return &TimeboostSequencer{
-		config:     configFetcher,
-		execEngine: execEngine,
-		l1Reader:   l1Reader,
-		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
+		config:               configFetcher,
+		execEngine:           execEngine,
+		l1Reader:             l1Reader,
+		nonceCache:           newNonceCache(configFetcher().NonceCacheSize),
+		timeboostTxnListener: timeboostListener,
 	}, nil
 }
 
@@ -255,7 +266,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		Kind:        arbostypes.L1MessageType_L2Message,
 		Poster:      l1pricing.BatchPosterAddress,
 		BlockNumber: l1Block.NumberU64(),
-		Timestamp:   arbmath.SaturatingUCast[uint64](timestamp),
+		Timestamp:   timestamp,
 		RequestId:   nil,
 		L1BaseFee:   nil,
 	}
@@ -472,21 +483,32 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) PublishTestTransaction(ctx context.Context, tx *types.Transaction, options *arbitrum_types.ConditionalOptions) error {
-	txBytes, err := tx.MarshalBinary()
-	if err != nil {
+func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+	// TODO: This should write to a database
+	inclusionList := &gethexec.InclusionList{}
+	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
+		log.Warn("error decoding InclusionList", "err", err)
 		return err
 	}
 
-	txQueueItem := timeboostTransactionQueueItem{
-		tx:                 tx,
-		txSize:             len(txBytes),
-		options:            options,
-		roundId:            1,
-		consensusTimestamp: time.Now().Unix(),
-	}
+	log.Info("processing inclusion list", "round", inclusionList.Round)
+	for _, protoTx := range inclusionList.EncodedTxns {
+		var tx types.Transaction
+		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
+			log.Warn("error unmarshalling encoded transaction", "err", err)
+			return err
+		}
+		txQueueItem := timeboostTransactionQueueItem{
+			tx:                 &tx,
+			txSize:             len(protoTx.EncodedTxn),
+			options:            options,
+			roundId:            inclusionList.Round,
+			consensusTimestamp: inclusionList.ConsensusTimestamp,
+		}
 
-	s.txQueue.Push(txQueueItem)
+		s.txQueue.Push(txQueueItem)
+
+	}
 	return nil
 }
 
@@ -494,6 +516,13 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
+	}
+
+	processInclusionListFunc := func(ctx context.Context, inclusionListBytes []byte, options *arbitrum_types.ConditionalOptions) error {
+		return s.ProcessInclusionList(ctx, inclusionListBytes, options)
+	}
+	if err := s.timeboostTxnListener.Start(ctx, processInclusionListFunc); err != nil {
+		return err
 	}
 
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {

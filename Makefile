@@ -194,6 +194,15 @@ else
 	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
 endif
 
+PROTO_REL_PATH = execution/gethexec/inclusion_list
+PROTO_FILE = $(PROTO_REL_PATH)/inclusion_list.proto
+
+PROTOC_GEN_GO := $(shell go env GOPATH)/bin/protoc-gen-go
+
+$(PROTOC_GEN_GO):
+	@echo "Installing protoc-gen-go..."
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
 # user targets
 .PHONY: build-espresso-crypto-lib
 build-espresso-crypto-lib:
@@ -209,8 +218,11 @@ all: build build-replay-env test-gen-proofs
 	@touch .make/all
 
 .PHONY: build
-build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
+build: generate-proto $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
 	@printf $(done)
+
+generate-proto: $(PROTOC_GEN_GO) $(PROTO_FILE)
+	protoc --proto_path=$(CURDIR) --go_out=$(CURDIR) --go_opt=paths=source_relative $(PROTO_FILE)
 
 .PHONY: build-node-deps
 build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
