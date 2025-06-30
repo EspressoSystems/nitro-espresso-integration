@@ -101,9 +101,6 @@ jobs:
           go version
           go env GOTOOLCHAIN
           cat go.mod | grep '^go '
-      - name: Force PATH to use setup-go
-        run: echo "$GOROOT/bin" >> $GITHUB_PATH
-
 
       - name: Install wasm-ld
         run: |
@@ -181,6 +178,9 @@ jobs:
       - name: Build cbrotli-wasm in docker
         if: steps.cache-cbrotli.outputs.cache-hit != 'true'
         run: ./scripts/build-brotli.sh -w -d
+
+      - name: Setup upterm session
+        uses: owenthereal/action-upterm@v1
 
       - name: Build
         run: make build test-go-deps -j8
