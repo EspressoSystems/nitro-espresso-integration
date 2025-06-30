@@ -172,9 +172,6 @@ jobs:
         if: steps.cache-cbrotli.outputs.cache-hit != 'true'
         run: ./scripts/build-brotli.sh -w -d
 
-      - name: Setup upterm session
-        uses: owenthereal/action-upterm@v1
-
       - name: Build
         run: make build test-go-deps -j8
 
