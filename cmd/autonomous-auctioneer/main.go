@@ -30,11 +30,8 @@ func main() {
 }
 
 // Checks metrics and PProf flag, runs them if enabled.
-
 // Note: they are separate so one can enable/disable them as they wish, the only
-
 // requirement is that they can't run on the same address and port.
-
 func startMetrics(cfg *AutonomousAuctioneerConfig) error {
 	mAddr := fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port)
 	pAddr := fmt.Sprintf("%v:%v", cfg.PprofCfg.Addr, cfg.PprofCfg.Port)
@@ -222,9 +219,3 @@ func parseAuctioneerArgs(ctx context.Context, args []string) (*AutonomousAuction
 	}
 	return &cfg, nil
 }
-
-// Checks metrics and PProf flag, runs them if enabled.
-
-// Note: they are separate so one can enable/disable them as they wish, the only
-
-// requirement is that they can't run on the same address and port.

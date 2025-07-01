@@ -1,5 +1,6 @@
 // Copyright 2022-2024, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 use crate::machine::WasmEnv;
 use arbutil::{Bytes32, PreimageType};
 use eyre::Ok;
@@ -8,6 +9,7 @@ use std::env;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+
 // local_target matches rawdb.LocalTarget() on the go side.
 // While generating json_inputs file, one should make sure user_wasms map
 // has entry for the system's arch that jit validation is being run on
@@ -22,6 +24,7 @@ pub fn local_target() -> String {
         "host".to_string()
     }
 }
+
 pub fn prepare_env(json_inputs: PathBuf, debug: bool) -> eyre::Result<WasmEnv> {
     let file = File::open(json_inputs)?;
     let reader = BufReader::new(file);
@@ -68,8 +71,3 @@ pub fn prepare_env(json_inputs: PathBuf, debug: bool) -> eyre::Result<WasmEnv> {
 
     Ok(env)
 }
-// Copyright 2022-2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-// local_target matches rawdb.LocalTarget() on the go side.
-// While generating json_inputs file, one should make sure user_wasms map
-// has entry for the system's arch that jit validation is being run on

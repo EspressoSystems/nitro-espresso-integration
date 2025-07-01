@@ -114,7 +114,6 @@ func (s *S3StorageService) Start(ctx context.Context) {
 }
 
 // Used in padding round numbers to a fixed length for naming the batch being uploaded to s3. <firstRound>-<lastRound>
-
 const fixedRoundStrLen = 7
 
 func (s *S3StorageService) getBatchName(firstRound, lastRound uint64) string {
@@ -122,7 +121,6 @@ func (s *S3StorageService) getBatchName(firstRound, lastRound uint64) string {
 	now := time.Now()
 	return fmt.Sprintf("%svalidated-timeboost-bids/%d/%02d/%02d/"+padder+"-"+padder+".csv.gzip", s.objectPrefix, now.Year(), now.Month(), now.Day(), firstRound, lastRound)
 }
-
 func (s *S3StorageService) uploadBatch(ctx context.Context, batch []byte, firstRound, lastRound uint64) error {
 	compressedData, err := gzip.CompressGzip(batch)
 	if err != nil {
@@ -141,7 +139,6 @@ func (s *S3StorageService) uploadBatch(ctx context.Context, batch []byte, firstR
 }
 
 // downloadBatch is only used for testing purposes
-
 func (s *S3StorageService) downloadBatch(ctx context.Context, key string) ([]byte, error) {
 	buf := manager.NewWriteAtBuffer([]byte{})
 	if _, err := s.client.Download(ctx, buf, &s3.GetObjectInput{
@@ -248,7 +245,3 @@ func (s *S3StorageService) uploadBatches(ctx context.Context) time.Duration {
 
 	return s.config.UploadInterval
 }
-
-// Used in padding round numbers to a fixed length for naming the batch being uploaded to s3. <firstRound>-<lastRound>
-
-// downloadBatch is only used for testing purposes

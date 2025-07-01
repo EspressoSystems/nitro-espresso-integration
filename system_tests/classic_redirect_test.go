@@ -1,5 +1,6 @@
 // Copyright 2021-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package arbtest
 
 import (
@@ -40,6 +41,3 @@ func TestClassicRedirectURLNotLeaked(t *testing.T) {
 		t.Fatalf("Expected error message to be %s, got %v", expectedErrMsg, err)
 	}
 }
-
-// Copyright 2021-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE

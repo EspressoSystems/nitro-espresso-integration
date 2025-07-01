@@ -1,5 +1,6 @@
 // Copyright 2024-2025, Offchain Labs, Inc.
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package timeboost
 
 import (
@@ -24,6 +25,7 @@ import (
 type SequencerEndpointManager interface {
 	GetSequencerRPC(ctx context.Context) (*rpc.Client, bool, error)
 }
+
 type RedisEndpointManager struct {
 	stopwaiter.StopWaiterSafe
 	redisCoordinator *redisutil.RedisCoordinator
@@ -39,6 +41,7 @@ func NewRedisEndpointManager(redisCoordinator *redisutil.RedisCoordinator, jwtPa
 		jwtPath:          jwtPath,
 	}
 }
+
 func (m *RedisEndpointManager) GetSequencerRPC(ctx context.Context) (*rpc.Client, bool, error) {
 	sequencerUrl, err := m.redisCoordinator.CurrentChosenSequencer(ctx)
 	if err != nil {
@@ -90,6 +93,7 @@ func NewStaticEndpointManager(endpoint string, jwtPath string) SequencerEndpoint
 		jwtPath:  jwtPath,
 	}
 }
+
 func (m *StaticEndpointManager) GetSequencerRPC(ctx context.Context) (*rpc.Client, bool, error) {
 	new := false
 	if m.client == nil {
@@ -102,6 +106,7 @@ func (m *StaticEndpointManager) GetSequencerRPC(ctx context.Context) (*rpc.Clien
 	}
 	return m.client, new, nil
 }
+
 func createRPCClient(ctx context.Context, endpoint string, jwtPath string) (*rpc.Client, error) {
 	if jwtPath == "" {
 		return rpc.DialContext(ctx, endpoint)
@@ -130,6 +135,3 @@ func createRPCClient(ctx context.Context, endpoint string, jwtPath string) (*rpc
 		return nil
 	}))
 }
-
-// Copyright 2024-2025, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
