@@ -1558,6 +1558,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		lastConfirmedPos = *lastConfirmedPosInDb
 	}
 
+	log.Info("last confirmed pos", "lastConfirmedPos", lastConfirmedPos)
+
 	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
 	if err != nil {
 		return fmt.Errorf("failed to set last confirmed pos: %w", err)

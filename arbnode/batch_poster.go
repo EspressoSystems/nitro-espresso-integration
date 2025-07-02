@@ -735,6 +735,8 @@ func (b *BatchPoster) checkEspressoValidation() bool {
 		return false // if we get an error we can't validate
 	}
 
+	log.Info("last confirmed pos in check espresso validation", "lastConfirmedPos", lastConfirmed)
+
 	// This message has passed the espresso verification
 	if lastConfirmed != nil && b.building.msgCount-1 <= *lastConfirmed {
 		return true
