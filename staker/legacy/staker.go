@@ -730,7 +730,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 	}
 	callOpts := s.getCallOpts(ctx)
 	s.builder.ClearTransactions()
-	var rawInfo *StakerInfo
+	var rawInfo *staker.StakerInfo
 	walletAddressOrZero := s.wallet.AddressOrZero()
 	if walletAddressOrZero != (common.Address{}) {
 		var err error
@@ -966,7 +966,7 @@ func (s *Staker) Act(ctx context.Context) (*types.Transaction, error) {
 	return s.builder.ExecuteTransactions(ctx)
 }
 
-func (s *Staker) handleConflict(ctx context.Context, info *StakerInfo) error {
+func (s *Staker) handleConflict(ctx context.Context, info *staker.StakerInfo) error {
 	if info.CurrentChallenge == nil {
 		s.activeChallenge = nil
 		return nil
@@ -1120,7 +1120,7 @@ func (s *Staker) advanceStake(ctx context.Context, info *OurStakerInfo, effectiv
 	}
 }
 
-func (s *Staker) createConflict(ctx context.Context, info *StakerInfo) error {
+func (s *Staker) createConflict(ctx context.Context, info *staker.StakerInfo) error {
 	if info.CurrentChallenge != nil {
 		return nil
 	}
@@ -1205,7 +1205,7 @@ func (s *Staker) Strategy() StakerStrategy {
 	return s.config().StrategyType()
 }
 
-func (s *Staker) Rollup() *RollupWatcher {
+func (s *Staker) Rollup() *staker.RollupWatcher {
 	return s.rollup
 }
 

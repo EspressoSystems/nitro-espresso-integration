@@ -32,6 +32,8 @@ ifneq ($(origin GOLANG_LDFLAGS),undefined)
 endif
 
 UNAME_S := $(shell uname -s)
+UNAME_M := $(shell uname -m)
+
 
 # In Mac OSX, there are a lot of warnings emitted if these environment variables aren't set.
 ifeq ($(UNAME_S), Darwin)
@@ -39,13 +41,14 @@ ifeq ($(UNAME_S), Darwin)
   export CGO_LDFLAGS := -Wl,-no_warn_duplicate_libraries
 endif
 
+
 precompile_names = AddressTable Aggregator BLS Debug FunctionTable GasInfo Info osTest Owner RetryableTx Statistics Sys
 precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 
 output_root=target
 output_latest=$(output_root)/machines/latest
 
-repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das precompiles solgen system_tests util validator wavmio
+repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das  precompiles solgen system_tests util validator wavmio
 go_source.go = $(wildcard $(patsubst %,%/*.go, $(repo_dirs)) $(patsubst %,%/*/*.go, $(repo_dirs)))
 go_source.s  = $(wildcard $(patsubst %,%/*.s, $(repo_dirs)) $(patsubst %,%/*/*.s, $(repo_dirs)))
 go_source = $(go_source.go) $(go_source.s)
@@ -154,10 +157,49 @@ stylus_test_hostio-test_src       = $(call get_stylus_test_rust,hostio-test)
 
 stylus_test_wasms = $(stylus_test_keccak_wasm) $(stylus_test_keccak-100_wasm) $(stylus_test_fallible_wasm) $(stylus_test_storage_wasm) $(stylus_test_multicall_wasm) $(stylus_test_log_wasm) $(stylus_test_create_wasm) $(stylus_test_math_wasm) $(stylus_test_sdk-storage_wasm) $(stylus_test_erc20_wasm) $(stylus_test_read-return-data_wasm) $(stylus_test_evm-data_wasm) $(stylus_test_hostio-test_wasm) $(stylus_test_bfs:.b=.wasm)
 stylus_benchmarks = $(wildcard $(stylus_dir)/*.toml $(stylus_dir)/src/*.rs) $(stylus_test_wasms)
+CBROTLI_WASM_BUILD_ARGS ?=-d
+
+
+# Normalize architecture names
+ifeq ($(UNAME_M),arm64)
+    # Apple Silicon reports as arm64, but Rust uses aarch64
+    DETECTED_ARCH := aarch64
+else
+    DETECTED_ARCH := $(UNAME_M)
+endif
+
+# Determine target triple
+ifeq ($(DETECTED_ARCH),aarch64)
+    ifeq ($(UNAME_S),Darwin)
+        TRIPLE := aarch64-apple-darwin
+    else
+        TRIPLE := aarch64-unknown-linux-gnu
+    endif
+else ifeq ($(DETECTED_ARCH),x86_64)
+    ifeq ($(UNAME_S),Darwin)
+        TRIPLE := x86_64-apple-darwin
+    else
+        TRIPLE := x86_64-unknown-linux-gnu
+    endif
+else
+    $(error Architecture $(DETECTED_ARCH) is not supported)
+endif
+
+# Set library extension based on OS
+ifeq ($(UNAME_S),Darwin)
+    LIB_EXT := dylib
+	espresso_crypto_filename = libespresso_crypto_helper.dylib
+else
+    LIB_EXT := so
+	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
+endif
 
 CBROTLI_WASM_BUILD_ARGS ?=-d
 
 # user targets
+.PHONY: build-espresso-crypto-lib
+build-espresso-crypto-lib:
+	./scripts/prepare-espresso-crypto-helper
 
 .PHONY: push
 push: lint test-go .make/fmt
@@ -173,7 +215,7 @@ build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daprovider daserver
 	@printf $(done)
 
 .PHONY: build-node-deps
-build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib
+build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
 
 .PHONY: test-go-deps
 test-go-deps: \
@@ -298,6 +340,13 @@ clean:
 	@rm -rf contracts-legacy/build contracts-legacy/cache
 	@rm -rf contracts-local/out contracts-local/forge-cache
 	@rm -f .make/*
+	rm -rf brotli/buildfiles
+	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
+	rm -f $(ESPRESSO_TAR)
+	rm -rf $(ESPRESSO_DIR)
+# Ensure lib64 is a symlink to lib
+	mkdir -p $(output_root)/lib
+	ln -s lib $(output_root)/lib64
 
 .PHONY: docker
 docker:
@@ -643,6 +692,11 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 .make:
 	mkdir .make
 
+local-sequencer:
+	./target/bin/nitro --conf.file ./config/sequencer_config.json --node.feed.output.enable --node.feed.output.port 9642  --http.api net,web3,eth,txpool,debug --node.seq-coordinator.my-url  ws://localhost:8548 --graphql.enable --execution.sequencer.espresso --execution.sequencer.hotshot-url "http://localhost:50000" --execution.rpc.espresso --execution.rpc.hotshot-url "http://localhost:50000" --execution.rpc.espresso-namespace 1 --execution.sequencer.espresso-namespace 1
+
+local-validator:
+	./target/bin/nitro --conf.file ./config/validator_config.json --http.port 8247 --http.api net,web3,arb,debug --ws.port 8548
 
 # Makefile settings
 

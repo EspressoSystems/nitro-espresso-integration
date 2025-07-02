@@ -82,6 +82,8 @@ type Config struct {
 	ConsensusExecutionSyncer ConsensusExecutionSyncerConfig `koanf:"consensus-execution-syncer"`
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
+
+	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node"`
 }
 
 func (c *Config) Validate() error {
@@ -97,6 +99,9 @@ func (c *Config) Validate() error {
 		}
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
+	}
+	if c.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
 		return err
@@ -153,6 +158,7 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feed
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
 }
 
 var ConfigDefault = Config{
@@ -177,6 +183,7 @@ var ConfigDefault = Config{
 	Maintenance:              DefaultMaintenanceConfig,
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
+	EspressoCaffNode:         DefaultEspressoCaffNodeConfig,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -280,6 +287,7 @@ type Node struct {
 	configFetcher            ConfigFetcher
 	ctx                      context.Context
 	ConsensusExecutionSyncer *ConsensusExecutionSyncer
+	EspressoCaffNode         *EspressoCaffNode
 }
 
 type SnapSyncConfig struct {
@@ -547,6 +555,50 @@ func getDelayedBridgeAndSequencerInbox(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	if config.EspressoCaffNode.Enable {
+		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
+			espressoCaffNode := NewEspressoCaffNode(
+				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				exec.ExecEngine,
+				delayedBridge,
+				l1Reader,
+				arbDb,
+				config.EspressoCaffNode.RecordPerformance,
+				config.EspressoCaffNode.BlocksToRead,
+			)
+
+			return &Node{
+				ArbDB:                   arbDb,
+				Stack:                   stack,
+				Execution:               exec,
+				L1Reader:                nil,
+				TxStreamer:              txStreamer,
+				DeployInfo:              nil,
+				BlobReader:              blobReader,
+				InboxReader:             nil,
+				InboxTracker:            nil,
+				DelayedSequencer:        nil,
+				BatchPoster:             nil,
+				MessagePruner:           nil,
+				BlockValidator:          nil,
+				StatelessBlockValidator: nil,
+				Staker:                  nil,
+				BroadcastServer:         broadcastServer,
+				BroadcastClients:        broadcastClients,
+				SeqCoordinator:          coordinator,
+				MaintenanceRunner:       maintenanceRunner,
+				DASLifecycleManager:     nil,
+				SyncMonitor:             syncMonitor,
+				configFetcher:           configFetcher,
+				EspressoCaffNode:        espressoCaffNode,
+				ctx:                     ctx,
+			}, nil
+
+		} else {
+			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
+		}
+	}
 	// #nosec G115
 	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
 	if err != nil {
@@ -620,6 +672,16 @@ func getDAS(
 		}
 	} else if l2Config.ArbitrumChainParams.DataAvailabilityCommittee {
 		return nil, nil, nil, errors.New("a data availability service is required for this chain, but it was not configured")
+	}
+
+	if config.Celestia.Enable {
+		celestiaService, err := celestia.NewCelestiaDASRPCClient(config.Celestia.URL)
+		if err != nil {
+			return nil, err
+		}
+
+		celestiaReader = celestiaService
+		celestiaWriter = celestiaService
 	}
 
 	// We support a nil txStreamer for the pruning code
@@ -931,9 +993,11 @@ func getBatchPoster(
 			Config:        func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
 			DeployInfo:    deployInfo,
 			TransactOpts:  txOptsBatchPoster,
-			DAPWriter:     dapWriter,
+			DAPWriters:    dapWriters,
 			ParentChainID: parentChainID,
 			DAPReaders:    dapReaders,
+
+			DataSigner: dataSigner,
 		})
 		if err != nil {
 			return nil, err
@@ -946,6 +1010,67 @@ func getBatchPoster(
 	}
 
 	return batchPoster, nil
+}
+
+func getEspressoCaffNode(
+	ctx context.Context,
+	config *Config,
+	configFetcher ConfigFetcher,
+	arbDb ethdb.Database,
+	exec execution.ExecutionClient,
+	l1Reader *headerreader.HeaderReader,
+	txStreamer *TransactionStreamer,
+	blobReader daprovider.BlobReader,
+	broadcastServer *broadcaster.Broadcaster,
+	broadcastClients *broadcastclients.BroadcastClients,
+	delayedBridge *DelayedBridge,
+	maintenanceRunner *MaintenanceRunner,
+	stack *node.Node,
+) (*Node, error) {
+	if config.EspressoCaffNode.Enable {
+		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
+			espressoCaffNode := NewEspressoCaffNode(
+				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				exec.ExecEngine,
+				delayedBridge,
+				l1Reader,
+				arbDb,
+				config.EspressoCaffNode.RecordPerformance,
+				config.EspressoCaffNode.BlocksToRead,
+			)
+
+			return &Node{
+				ArbDB:                   arbDb,
+				Stack:                   stack,
+				ExecutionClient:         exec,
+				L1Reader:                nil,
+				TxStreamer:              txStreamer,
+				DeployInfo:              nil,
+				BlobReader:              blobReader,
+				InboxReader:             nil,
+				InboxTracker:            nil,
+				DelayedSequencer:        nil,
+				BatchPoster:             nil,
+				MessagePruner:           nil,
+				BlockValidator:          nil,
+				StatelessBlockValidator: nil,
+				Staker:                  nil,
+				BroadcastServer:         broadcastServer,
+				BroadcastClients:        broadcastClients,
+				SeqCoordinator:          nil,
+				MaintenanceRunner:       maintenanceRunner,
+				DASLifecycleManager:     nil,
+				SyncMonitor:             nil,
+				configFetcher:           configFetcher,
+				EspressoCaffNode:        espressoCaffNode,
+				ctx:                     ctx,
+			}, nil
+
+		} else {
+			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
+		}
+	}
+	return nil, nil
 }
 
 func getDelayedSequencer(
@@ -1007,6 +1132,7 @@ func getNodeParentChainReaderDisabled(
 		SeqCoordinator:          coordinator,
 		MaintenanceRunner:       maintenanceRunner,
 		SyncMonitor:             syncMonitor,
+		blockMetadataFetcher:    blockMetadataFetcher,
 		configFetcher:           configFetcher,
 		ctx:                     ctx,
 		blockMetadataFetcher:    blockMetadataFetcher,
@@ -1354,10 +1480,6 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error populating feed backlog on startup: %w", err)
 		}
 	}
-	err = n.TxStreamer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("error starting transaction streamer: %w", err)
-	}
 	if n.InboxReader != nil {
 		err = n.InboxReader.Start(ctx)
 		if err != nil {
@@ -1384,6 +1506,10 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if n.BatchPoster != nil {
 		n.BatchPoster.Start(ctx)
+	}
+	err = n.TxStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting transaction streamer: %w", err)
 	}
 	if n.MessagePruner != nil {
 		n.MessagePruner.Start(ctx)
@@ -1438,6 +1564,13 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if n.configFetcher != nil {
 		n.configFetcher.Start(ctx)
+	}
+	if n.EspressoCaffNode != nil {
+		err = n.EspressoCaffNode.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("error starting espresso caff node: %w", err)
+		}
+		return nil
 	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
@@ -1553,4 +1686,8 @@ func (n *Node) ExpectChosenSequencer() containers.PromiseInterface[struct{}] {
 
 func (n *Node) BlockMetadataAtMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[common.BlockMetadata] {
 	return containers.NewReadyPromise(n.TxStreamer.BlockMetadataAtMessageIndex(msgIdx))
+}
+
+func (n *Node) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
+	return n.TxStreamer.BlockMetadataAtCount(count)
 }

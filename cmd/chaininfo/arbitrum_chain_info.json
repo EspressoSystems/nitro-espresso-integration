@@ -275,7 +275,10 @@
     "chain-name": "sepolia-rollup",
     "sequencer-url": "https://sepolia-rollup-sequencer.arbitrum.io/rpc",
     "feed-url": "wss://sepolia-rollup.arbitrum.io/feed",
+<<<<<<< HEAD
     "block-metadata-url": "https://sepolia-rollup.arbitrum.io/rpc",
+=======
+>>>>>>> celestia-integration
     "track-block-metadata-from": 123000000,
     "chain-config": {
       "chainId": 421614,

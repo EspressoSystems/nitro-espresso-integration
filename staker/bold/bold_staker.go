@@ -51,6 +51,10 @@ func init() {
 }
 
 type BoldConfig struct {
+<<<<<<< HEAD
+=======
+	Enable   bool   `koanf:"enable"`
+>>>>>>> celestia-integration
 	Strategy string `koanf:"strategy"`
 	// How often to post assertions onchain.
 	AssertionPostingInterval time.Duration `koanf:"assertion-posting-interval"`
@@ -72,7 +76,10 @@ type BoldConfig struct {
 	DelegatedStaking                    DelegatedStakingConfig `koanf:"delegated-staking"`
 	RPCBlockNumber                      string                 `koanf:"rpc-block-number"`
 	EnableFastConfirmation              bool                   `koanf:"enable-fast-confirmation"`
+<<<<<<< HEAD
 	ParentChainBlockTime                time.Duration          `koanf:"parent-chain-block-time"`
+=======
+>>>>>>> celestia-integration
 	// How long to wait since parent assertion was created to post a new assertion
 	MinimumGapToParentAssertion time.Duration `koanf:"minimum-gap-to-parent-assertion"`
 	strategy                    legacystaker.StakerStrategy
@@ -125,6 +132,10 @@ var DefaultStateProviderConfig = StateProviderConfig{
 }
 
 var DefaultBoldConfig = BoldConfig{
+<<<<<<< HEAD
+=======
+	Enable:                              false,
+>>>>>>> celestia-integration
 	Strategy:                            "Watchtower",
 	AssertionPostingInterval:            time.Minute * 15,
 	AssertionScanningInterval:           time.Minute,
@@ -141,10 +152,16 @@ var DefaultBoldConfig = BoldConfig{
 	AutoDeposit:                         true,
 	AutoIncreaseAllowance:               true,
 	DelegatedStaking:                    DefaultDelegatedStakingConfig,
+<<<<<<< HEAD
 	ParentChainBlockTime:                time.Second * 12,
 	RPCBlockNumber:                      "finalized",
 	EnableFastConfirmation:              false,
 	MaxGetLogBlocks:                     5000,
+=======
+	RPCBlockNumber:                      "finalized",
+	MaxGetLogBlocks:                     5000,
+	EnableFastConfirmation:              false,
+>>>>>>> celestia-integration
 }
 
 var BoldModes = map[legacystaker.StakerStrategy]boldtypes.Mode{
@@ -155,6 +172,10 @@ var BoldModes = map[legacystaker.StakerStrategy]boldtypes.Mode{
 }
 
 func BoldConfigAddOptions(prefix string, f *flag.FlagSet) {
+<<<<<<< HEAD
+=======
+	f.Bool(prefix+".enable", DefaultBoldConfig.Enable, "enable bold challenge protocol")
+>>>>>>> celestia-integration
 	f.String(prefix+".strategy", DefaultBoldConfig.Strategy, "define the bold validator staker strategy, either watchtower, defensive, stakeLatest, or makeNodes")
 	f.String(prefix+".rpc-block-number", DefaultBoldConfig.RPCBlockNumber, "define the block number to use for reading data onchain, either latest, safe, or finalized")
 	f.Int64(prefix+".max-get-log-blocks", DefaultBoldConfig.MaxGetLogBlocks, "maximum size for chunk of blocks when using get logs rpc")
@@ -163,7 +184,10 @@ func BoldConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".assertion-confirming-interval", DefaultBoldConfig.AssertionConfirmingInterval, "confirm assertion interval")
 	f.Duration(prefix+".minimum-gap-to-parent-assertion", DefaultBoldConfig.MinimumGapToParentAssertion, "minimum duration to wait since the parent assertion was created to post a new assertion")
 	f.Duration(prefix+".check-staker-switch-interval", DefaultBoldConfig.CheckStakerSwitchInterval, "how often to check if staker can switch to bold")
+<<<<<<< HEAD
 	f.Duration(prefix+".parent-chain-block-time", DefaultBoldConfig.ParentChainBlockTime, "the average block time of the parent chain where assertions are posted")
+=======
+>>>>>>> celestia-integration
 	f.Bool(prefix+".api", DefaultBoldConfig.API, "enable api")
 	f.String(prefix+".api-host", DefaultBoldConfig.APIHost, "bold api host")
 	f.Uint16(prefix+".api-port", DefaultBoldConfig.APIPort, "bold api port")
@@ -190,6 +214,7 @@ func DelegatedStakingConfigAddOptions(prefix string, f *flag.FlagSet) {
 
 type BOLDStaker struct {
 	stopwaiter.StopWaiter
+<<<<<<< HEAD
 	config             *BoldConfig
 	chalManager        *challengemanager.Manager
 	blockValidator     *staker.BlockValidator
@@ -202,6 +227,19 @@ type BOLDStaker struct {
 	confirmedNotifiers []legacystaker.LatestConfirmedNotifier
 	inboxTracker       staker.InboxTrackerInterface
 	inboxStreamer      staker.TransactionStreamerInterface
+=======
+	config                  *BoldConfig
+	chalManager             *challengemanager.Manager
+	blockValidator          *staker.BlockValidator
+	statelessBlockValidator *staker.StatelessBlockValidator
+	rollupAddress           common.Address
+	l1Reader                *headerreader.HeaderReader
+	client                  protocol.ChainBackend
+	callOpts                bind.CallOpts
+	wallet                  legacystaker.ValidatorWalletInterface
+	stakedNotifiers         []legacystaker.LatestStakedNotifier
+	confirmedNotifiers      []legacystaker.LatestConfirmedNotifier
+>>>>>>> celestia-integration
 }
 
 func NewBOLDStaker(
@@ -218,19 +256,27 @@ func NewBOLDStaker(
 	wallet legacystaker.ValidatorWalletInterface,
 	stakedNotifiers []legacystaker.LatestStakedNotifier,
 	confirmedNotifiers []legacystaker.LatestConfirmedNotifier,
+<<<<<<< HEAD
 	inboxTracker staker.InboxTrackerInterface,
 	inboxStreamer staker.TransactionStreamerInterface,
 	inboxReader staker.InboxReaderInterface,
+=======
+>>>>>>> celestia-integration
 ) (*BOLDStaker, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 	wrappedClient := util.NewBackendWrapper(l1Reader.Client(), rpc.LatestBlockNumber)
+<<<<<<< HEAD
 	manager, err := newBOLDChallengeManager(ctx, stack, rollupAddress, txOpts, l1Reader, wrappedClient, blockValidator, statelessBlockValidator, config, dataPoster, inboxTracker, inboxStreamer, inboxReader)
+=======
+	manager, err := newBOLDChallengeManager(ctx, stack, rollupAddress, txOpts, l1Reader, wrappedClient, blockValidator, statelessBlockValidator, config, dataPoster)
+>>>>>>> celestia-integration
 	if err != nil {
 		return nil, err
 	}
 	return &BOLDStaker{
+<<<<<<< HEAD
 		config:             config,
 		chalManager:        manager,
 		blockValidator:     blockValidator,
@@ -243,6 +289,19 @@ func NewBOLDStaker(
 		confirmedNotifiers: confirmedNotifiers,
 		inboxTracker:       inboxTracker,
 		inboxStreamer:      inboxStreamer,
+=======
+		config:                  config,
+		chalManager:             manager,
+		blockValidator:          blockValidator,
+		statelessBlockValidator: statelessBlockValidator,
+		rollupAddress:           rollupAddress,
+		l1Reader:                l1Reader,
+		client:                  wrappedClient,
+		callOpts:                callOpts,
+		wallet:                  wallet,
+		stakedNotifiers:         stakedNotifiers,
+		confirmedNotifiers:      confirmedNotifiers,
+>>>>>>> celestia-integration
 	}, nil
 }
 
@@ -276,7 +335,11 @@ func (b *BOLDStaker) Initialize(ctx context.Context) error {
 			}
 			latestStaked = latestConfirmed
 		}
+<<<<<<< HEAD
 		assertion, err := ReadBoldAssertionCreationInfo(
+=======
+		assertion, err := readBoldAssertionCreationInfo(
+>>>>>>> celestia-integration
 			ctx,
 			rollupUserLogic,
 			b.client,
@@ -348,7 +411,11 @@ func (b *BOLDStaker) getLatestState(ctx context.Context, confirmed bool) (arbuti
 	if err != nil {
 		return 0, nil, fmt.Errorf("error getting latest %s: %w", assertionType, err)
 	}
+<<<<<<< HEAD
 	caughtUp, count, err := staker.GlobalStateToMsgCount(b.inboxTracker, b.inboxStreamer, validator.GoGlobalState(globalState))
+=======
+	caughtUp, count, err := staker.GlobalStateToMsgCount(b.statelessBlockValidator.InboxTracker(), b.statelessBlockValidator.InboxStreamer(), validator.GoGlobalState(globalState))
+>>>>>>> celestia-integration
 	if err != nil {
 		if errors.Is(err, staker.ErrGlobalStateNotInChain) {
 			return 0, nil, fmt.Errorf("latest %s assertion of %v not yet in our node: %w", assertionType, globalState, err)
@@ -361,7 +428,11 @@ func (b *BOLDStaker) getLatestState(ctx context.Context, confirmed bool) (arbuti
 		return 0, nil, nil
 	}
 
+<<<<<<< HEAD
 	processedCount, err := b.inboxStreamer.GetProcessedMessageCount()
+=======
+	processedCount, err := b.statelessBlockValidator.InboxStreamer().GetProcessedMessageCount()
+>>>>>>> celestia-integration
 	if err != nil {
 		return 0, nil, err
 	}
@@ -414,9 +485,12 @@ func newBOLDChallengeManager(
 	statelessBlockValidator *staker.StatelessBlockValidator,
 	config *BoldConfig,
 	dataPoster *dataposter.DataPoster,
+<<<<<<< HEAD
 	inboxTracker staker.InboxTrackerInterface,
 	inboxStreamer staker.TransactionStreamerInterface,
 	inboxReader staker.InboxReaderInterface,
+=======
+>>>>>>> celestia-integration
 ) (*challengemanager.Manager, error) {
 	// Initializes the BOLD contract bindings and the assertion chain abstraction.
 	rollupBindings, err := boldrollup.NewRollupUserLogic(rollupAddress, client)
@@ -433,7 +507,10 @@ func newBOLDChallengeManager(
 	}
 	assertionChainOpts := []solimpl.Opt{
 		solimpl.WithRpcHeadBlockNumber(config.blockNum),
+<<<<<<< HEAD
 		solimpl.WithParentChainBlockCreationTime(config.ParentChainBlockTime),
+=======
+>>>>>>> celestia-integration
 	}
 	if config.DelegatedStaking.Enable && config.DelegatedStaking.CustomWithdrawalAddress != "" {
 		withdrawalAddr := common.HexToAddress(config.DelegatedStaking.CustomWithdrawalAddress)
@@ -507,9 +584,12 @@ func newBOLDChallengeManager(
 		blockChallengeLeafHeight,
 		&config.StateProviderConfig,
 		machineHashesPath,
+<<<<<<< HEAD
 		inboxTracker,
 		inboxStreamer,
 		inboxReader,
+=======
+>>>>>>> celestia-integration
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not create state manager: %w", err)
@@ -543,7 +623,10 @@ func newBOLDChallengeManager(
 		challengemanager.StackWithMinimumGapToParentAssertion(config.MinimumGapToParentAssertion),
 		challengemanager.StackWithTrackChallengeParentAssertionHashes(config.TrackChallengeParentAssertionHashes),
 		challengemanager.StackWithHeaderProvider(l1Reader),
+<<<<<<< HEAD
 		challengemanager.StackWithAverageBlockCreationTime(config.ParentChainBlockTime),
+=======
+>>>>>>> celestia-integration
 		challengemanager.StackWithSyncMaxGetLogBlocks(config.MaxGetLogBlocks),
 	}
 	if config.API {
@@ -576,10 +659,17 @@ func newBOLDChallengeManager(
 
 // Read the creation info for an assertion by looking up its creation
 // event from the rollup contracts.
+<<<<<<< HEAD
 func ReadBoldAssertionCreationInfo(
 	ctx context.Context,
 	rollup *boldrollup.RollupUserLogic,
 	client bind.ContractBackend,
+=======
+func readBoldAssertionCreationInfo(
+	ctx context.Context,
+	rollup *boldrollup.RollupUserLogic,
+	client bind.ContractFilterer,
+>>>>>>> celestia-integration
 	rollupAddress common.Address,
 	assertionHash common.Hash,
 ) (*protocol.AssertionCreatedInfo, error) {
@@ -629,10 +719,13 @@ func ReadBoldAssertionCreationInfo(
 		return nil, err
 	}
 	afterState := parsedLog.Assertion.AfterState
+<<<<<<< HEAD
 	creationL1Block, err := arbutil.CorrespondingL1BlockNumber(ctx, client, ethLog.BlockNumber)
 	if err != nil {
 		return nil, err
 	}
+=======
+>>>>>>> celestia-integration
 	return &protocol.AssertionCreatedInfo{
 		ConfirmPeriodBlocks: parsedLog.ConfirmPeriodBlocks,
 		RequiredStake:       parsedLog.RequiredStake,
@@ -645,7 +738,11 @@ func ReadBoldAssertionCreationInfo(
 		WasmModuleRoot:      parsedLog.WasmModuleRoot,
 		ChallengeManager:    parsedLog.ChallengeManager,
 		TransactionHash:     ethLog.TxHash,
+<<<<<<< HEAD
 		CreationParentBlock: ethLog.BlockNumber,
 		CreationL1Block:     creationL1Block,
+=======
+		CreationL1Block:     ethLog.BlockNumber,
+>>>>>>> celestia-integration
 	}, nil
 }

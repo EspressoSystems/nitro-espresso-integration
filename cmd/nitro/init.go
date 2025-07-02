@@ -782,6 +782,36 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 		genesisArbOSInit = gen.ArbOSInit
 	}
 
+	if config.Init.GenesisJsonFile != "" {
+		if initDataReader != nil {
+			return chainDb, nil, errors.New("multiple init methods supplied")
+		}
+		genesisJson, err := os.ReadFile(config.Init.GenesisJsonFile)
+		if err != nil {
+			return chainDb, nil, err
+		}
+		var gen core.Genesis
+		if err := json.Unmarshal(genesisJson, &gen); err != nil {
+			return chainDb, nil, err
+		}
+		var accounts []statetransfer.AccountInitializationInfo
+		for address, account := range gen.Alloc {
+			accounts = append(accounts, statetransfer.AccountInitializationInfo{
+				Addr:       address,
+				EthBalance: account.Balance,
+				Nonce:      account.Nonce,
+				ContractInfo: &statetransfer.AccountInitContractInfo{
+					Code:            account.Code,
+					ContractStorage: account.Storage,
+				},
+			})
+		}
+		initDataReader = statetransfer.NewMemoryInitDataReader(&statetransfer.ArbosInitializationInfo{
+			Accounts: accounts,
+		})
+		chainConfig = gen.Config
+	}
+
 	var l2BlockChain *core.BlockChain
 	txIndexWg := sync.WaitGroup{}
 	if initDataReader == nil {

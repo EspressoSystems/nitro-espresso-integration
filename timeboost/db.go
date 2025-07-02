@@ -151,7 +151,6 @@ func (d *SqliteDatabase) GetBids(maxDbRows int) ([]*SqliteDatabaseBid, uint64, e
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to fetch maxRound from bids: %w", err)
 	}
-
 	var sqlDBbids []*SqliteDatabaseBid
 	if maxDbRows == 0 {
 		if err := d.sqlDB.Select(&sqlDBbids, "SELECT * FROM Bids WHERE Round < ? ORDER BY Round ASC", maxRound); err != nil {

@@ -27,8 +27,13 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+<<<<<<< HEAD
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
+=======
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
+	"github.com/ethereum/go-ethereum/core/txpool"
+>>>>>>> celestia-integration
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -46,7 +51,10 @@ import (
 	redisstorage "github.com/offchainlabs/nitro/arbnode/dataposter/redis"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/slice"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
+<<<<<<< HEAD
 	"github.com/offchainlabs/nitro/arbnode/parent"
+=======
+>>>>>>> celestia-integration
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -330,6 +338,14 @@ func (p *DataPoster) Sender() common.Address {
 	return p.auth.From
 }
 
+func (p *DataPoster) BaseFee() (*big.Int, error) {
+	header, err := p.headerReader.LastHeader(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	return header.BaseFee, nil
+}
+
 func (p *DataPoster) MaxMempoolTransactions() uint64 {
 	if p.usingNoOpStorage {
 		return 1
@@ -442,7 +458,8 @@ func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight ui
 		if err := p.canPostWithNonce(ctx, nextNonce, thisWeight); err != nil {
 			return 0, nil, false, 0, err
 		}
-		return nextNonce, lastQueueItem.Meta, true, lastQueueItem.CumulativeWeight(), nil
+		value := len(lastQueueItem.Meta) > 0
+		return nextNonce, lastQueueItem.Meta, value, lastQueueItem.CumulativeWeight(), nil
 	}
 
 	if err := p.updateNonce(ctx); err != nil {
@@ -524,6 +541,11 @@ func (p *DataPoster) feeAndTipCaps(ctx context.Context, nonce uint64, gasLimit u
 
 	if latestHeader.BaseFee == nil {
 		return nil, nil, nil, fmt.Errorf("latest parent chain block %v missing BaseFee (either the parent chain does not have EIP-1559 or the parent chain node is not synced)", latestHeader.Number)
+	}
+	log.Info("Base fee", "baseFee", latestHeader.BaseFee, "maxBaseFee", (big.NewInt(int64(config.MaxBaseFee))))
+
+	if (*latestHeader.BaseFee).Cmp(big.NewInt(int64(config.MaxBaseFee))) > 0 {
+		return nil, nil, nil, fmt.Errorf("latest parent chain block %v BaseFee %v is greater than max base fee %v", latestHeader.Number, latestHeader.BaseFee, config.MaxBaseFee)
 	}
 	currentBlobFee := big.NewInt(0)
 	if numBlobs > 0 {
@@ -1135,9 +1157,13 @@ func (p *DataPoster) maybeLogError(err error, tx *storage.QueuedTransaction, msg
 	}
 	logLevel := log.Error
 	isStorageRace := errors.Is(err, storage.ErrStorageRace)
+<<<<<<< HEAD
 	isFutureReplacePending := strings.Contains(err.Error(), legacypool.ErrFutureReplacePending.Error())
 	isNonceTooHigh := strings.Contains(err.Error(), core.ErrNonceTooHigh.Error())
 	if isStorageRace || isFutureReplacePending || isNonceTooHigh {
+=======
+	if isStorageRace || strings.Contains(err.Error(), txpool.ErrFutureReplacePending.Error()) {
+>>>>>>> celestia-integration
 		p.errorCount[nonce]++
 		if p.errorCount[nonce] <= maxConsecutiveIntermittentErrors {
 			if isStorageRace {
@@ -1298,6 +1324,7 @@ type DataPosterConfig struct {
 	Dangerous              DangerousConfig   `koanf:"dangerous"`
 	ExternalSigner         ExternalSignerCfg `koanf:"external-signer"`
 	MaxFeeCapFormula       string            `koanf:"max-fee-cap-formula" reload:"hot"`
+	MaxBaseFee             int64             `koanf:"max-base-fee" reload:"hot"`
 	ElapsedTimeBase        time.Duration     `koanf:"elapsed-time-base" reload:"hot"`
 	ElapsedTimeImportance  float64           `koanf:"elapsed-time-importance" reload:"hot"`
 	// When set, dataposter will not post new batches, but will keep running to
@@ -1376,6 +1403,7 @@ func DataPosterConfigAddOptions(prefix string, f *pflag.FlagSet, defaultDataPost
 		"Currently available variables to construct the formula are BacklogOfBatches, UrgencyGWei, ElapsedTime, ElapsedTimeBase, ElapsedTimeImportance, and TargetPriceGWei")
 	f.Duration(prefix+".elapsed-time-base", defaultDataPosterConfig.ElapsedTimeBase, "unit to measure the time elapsed since creation of transaction used for maximum fee cap calculation")
 	f.Float64(prefix+".elapsed-time-importance", defaultDataPosterConfig.ElapsedTimeImportance, "weight given to the units of time elapsed used for maximum fee cap calculation")
+	f.Int64(prefix+".max-base-fee", defaultDataPosterConfig.MaxBaseFee, "maximum base fee")
 
 	signature.SimpleHmacConfigAddOptions(prefix+".redis-signer", f)
 	addDangerousOptions(prefix+".dangerous", f)
@@ -1419,6 +1447,7 @@ var DefaultDataPosterConfig = DataPosterConfig{
 	Dangerous:              DangerousConfig{ClearDBStorage: false},
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: false},
 	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
+	MaxBaseFee:             5000000000,
 	ElapsedTimeBase:        10 * time.Minute,
 	ElapsedTimeImportance:  10,
 	DisableNewTx:           false,
@@ -1454,6 +1483,7 @@ var TestDataPosterConfig = DataPosterConfig{
 	LegacyStorageEncoding:  false,
 	ExternalSigner:         ExternalSignerCfg{Method: "eth_signTransaction", InsecureSkipVerify: true},
 	MaxFeeCapFormula:       "((BacklogOfBatches * UrgencyGWei) ** 2) + ((ElapsedTime/ElapsedTimeBase) ** 2) * ElapsedTimeImportance + TargetPriceGWei",
+	MaxBaseFee:             5000000000,
 	ElapsedTimeBase:        10 * time.Minute,
 	ElapsedTimeImportance:  10,
 	DisableNewTx:           false,

@@ -110,7 +110,10 @@ func InitializeArbosInDatabase(db ethdb.Database, cacheConfig *core.CacheConfig,
 			return common.Hash{}, err
 		}
 	}
+<<<<<<< HEAD
 	// TODO: add init data native token owner handling
+=======
+>>>>>>> celestia-integration
 	addrTable := arbosState.AddressTable()
 	addrTableSize, err := addrTable.Size()
 	if err != nil {
@@ -175,7 +178,11 @@ func InitializeArbosInDatabase(db ethdb.Database, cacheConfig *core.CacheConfig,
 			return common.Hash{}, err
 		}
 		statedb.SetBalance(account.Addr, uint256.MustFromBig(account.EthBalance), tracing.BalanceChangeUnspecified)
+<<<<<<< HEAD
 		statedb.SetNonce(account.Addr, account.Nonce, tracing.NonceChangeUnspecified)
+=======
+		statedb.SetNonce(account.Addr, account.Nonce)
+>>>>>>> celestia-integration
 		if account.ContractInfo != nil {
 			statedb.SetCode(account.Addr, account.ContractInfo.Code)
 			for k, v := range account.ContractInfo.ContractStorage {

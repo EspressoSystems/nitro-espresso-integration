@@ -183,6 +183,7 @@ func TestFeeAndTipCaps_EnoughBalance_NoBacklog_NoUnconfirmed_BlobTx(t *testing.T
 			MaxTipCapGwei:          5,
 			MaxBlobTxTipCapGwei:    10,
 			MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
+			MaxBaseFee:             5000000000,
 			AllocateMempoolBalance: true,
 
 			UrgencyGwei:           2.,
@@ -319,6 +320,7 @@ func TestFeeAndTipCaps_RBF_RisingBlobFee_FallingBaseFee(t *testing.T) {
 			MaxTipCapGwei:          5,
 			MaxBlobTxTipCapGwei:    10,
 			MaxFeeBidMultipleBips:  arbmath.OneInUBips * 10,
+			MaxBaseFee:             5000000000,
 			AllocateMempoolBalance: true,
 
 			UrgencyGwei:           2.,

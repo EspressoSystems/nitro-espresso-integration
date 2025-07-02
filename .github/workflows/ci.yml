@@ -9,11 +9,25 @@ on:
     branches:
       - master
       - develop
+      - integration
+      - celestia-integration
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  free-disk-space:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
   test:
+    needs: free-disk-space
     name: Go Tests
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
 
     # Creates a redis container for redis tests
     services:
@@ -31,17 +45,53 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
+
+      - uses: cargo-bins/cargo-binstall@main
+      - name: Make more disk space available on public runner
+        run: |
+          # rmz seems to be faster at deleting files than rm
+          cargo binstall -y --version 2.2.0 rmz
+          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
+
+          echo "Available storage before:"
+          sudo df -h
+          echo
+          sudo rmz -f /usr/share/dotnet
+          sudo rmz -f /usr/share/swift
+          sudo rmz -f /usr/share/gradle-*
+          sudo rmz -f /usr/share/az_*
+          sudo rmz -f /usr/local/lib/android
+          sudo rmz -f /opt/ghc
+          sudo rmz -f /opt/az
+          sudo rmz -f /opt/pipx
+          sudo rmz -f /opt/google
+          sudo rmz -f /opt/microsoft
+          echo "Available storage after:"
+          sudo df -h
+          echo
 
       - name: Install dependencies
-        run: sudo apt update && sudo apt install -y wabt gotestsum
+        run: >
+          sudo apt update && sudo apt install -y wabt
+          build-essential bison golang clang make
+
+      - name: Install cmake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: "3.31.6"
+
+      - name: Install latest gotestsum
+        uses: autero1/action-gotestsum@v2.0.0
+        with:
+          gotestsum_version: v1.12.0
 
       - name: Setup nodejs
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'yarn'
-          cache-dependency-path: '**/yarn.lock'
+          node-version: "18"
+          cache: "yarn"
+          cache-dependency-path: "**/yarn.lock"
 
       - name: Install go
         uses: actions/setup-go@v5
@@ -125,6 +175,9 @@ jobs:
         if: steps.cache-cbrotli.outputs.cache-hit != 'true'
         run: ./scripts/build-brotli.sh -w -d
 
+      - name: Install solidty dependencies
+        run: cd contracts && yarn install && forge install
+
       - name: Build
         run: make build test-go-deps -j8
 
@@ -143,11 +196,10 @@ jobs:
 
       - name: Set environment variables
         run: |
-          mkdir -p target/tmp/deadbeefbee
-          echo "TMPDIR=$(pwd)/target/tmp/deadbeefbee" >> "$GITHUB_ENV"
           echo "GOMEMLIMIT=6GiB" >> "$GITHUB_ENV"
           echo "GOGC=80" >> "$GITHUB_ENV"
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$GITHUB_WORKSPACE/target/lib" >> "$GITHUB_ENV"
 
       - name: run tests without race detection and path state scheme
         if: matrix.test-mode == 'pathdb'
@@ -189,6 +241,7 @@ jobs:
 
       - name: build challenge tests
         if: matrix.test-mode == 'challenge'
+        shell: bash
         run: |
           go test -tags challengetest ./... -run=^$ -v
 
@@ -203,7 +256,7 @@ jobs:
       - name: Archive detailed run log
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.test-mode }}-full.log
+          name: ${{ matrix.test-mode }}-${{ matrix.test-state-scheme || 'default' }}-full.log
           path: full.log
 
       - name: Upload coverage to Codecov

@@ -663,6 +663,15 @@ func (c *SeqCoordinator) update(ctx context.Context) (time.Duration, error) {
 		}
 		c.prevRedisMessageCount = prevRemoteMsgCount
 	}
+	// Cache the previous redis coordinator's message count
+	if c.prevRedisCoordinator != nil && c.prevRedisMessageCount == 0 {
+		prevRemoteMsgCount, err := c.getRemoteMsgCountImpl(ctx, c.prevRedisCoordinator.Client)
+		if err != nil {
+			log.Warn("cannot get remote message count", "err", err)
+			return c.retryAfterRedisError()
+		}
+		c.prevRedisMessageCount = prevRemoteMsgCount
+	}
 	remoteFinalizedMsgCount, err := c.getRemoteFinalizedMsgCount(ctx)
 	if err != nil {
 		loglevel := log.Error
@@ -982,6 +991,44 @@ func (c *SeqCoordinator) trySwitchingRedis(ctx context.Context, newRedisCoordina
 	}
 	// If the chosen key is set to switch, we need to switch to the new redis coordinator.
 	if current == redisutil.SWITCHED_REDIS {
+		err = c.wantsLockoutUpdate(ctx, c.RedisCoordinator().Client)
+		if err != nil {
+			return err
+		}
+		c.setRedisCoordinator(newRedisCoordinator)
+	}
+	return nil
+}
+
+func (c *SeqCoordinator) chooseRedisAndUpdate(ctx context.Context, newRedisCoordinator *redisutil.RedisCoordinator) time.Duration {
+	// If we have a new redis coordinator, and we haven't switched to it yet, try to switch.
+	if c.config.NewRedisUrl != "" && c.prevRedisCoordinator == nil {
+		// If we fail to try to switch, we'll retry soon.
+		if err := c.trySwitchingRedis(ctx, newRedisCoordinator); err != nil {
+			log.Warn("error while trying to switch redis coordinator", "err", err)
+			return c.retryAfterRedisError()
+		}
+	}
+	return c.update(ctx)
+}
+
+func (c *SeqCoordinator) trySwitchingRedis(ctx context.Context, newRedisCoordinator *redisutil.RedisCoordinator) error {
+	err := c.wantsLockoutUpdate(ctx, newRedisCoordinator.Client)
+	if err != nil {
+		return err
+	}
+	current, err := c.RedisCoordinator().Client.Get(ctx, redisutil.CHOSENSEQ_KEY).Result()
+	var wasEmpty bool
+	if errors.Is(err, redis.Nil) {
+		wasEmpty = true
+		err = nil
+	}
+	if err != nil {
+		log.Warn("failed to get current chosen sequencer", "err", err)
+		return err
+	}
+	// If the chosen key is set to switch, we need to switch to the new redis coordinator.
+	if !wasEmpty && (current == redisutil.SWITCHED_REDIS) {
 		err = c.wantsLockoutUpdate(ctx, c.RedisCoordinator().Client)
 		if err != nil {
 			return err

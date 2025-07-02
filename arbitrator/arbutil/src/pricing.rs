@@ -6,6 +6,8 @@ use crate::{
     Bytes32,
 };
 
+use crate::evm::api::Ink;
+
 /// For hostios that may return something.
 pub const HOSTIO_INK: Ink = Ink(8400);
 

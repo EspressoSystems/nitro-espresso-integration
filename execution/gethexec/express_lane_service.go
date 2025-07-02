@@ -203,6 +203,10 @@ func (es *expressLaneService) sequenceExpressLaneSubmission(msg *timeboost.Expre
 	}
 
 	seqConfig := es.seqConfig()
+<<<<<<< HEAD
+=======
+
+>>>>>>> celestia-integration
 	// Log an informational warning if the message's sequence number is in the future.
 	if msg.SequenceNumber > roundInfo.sequence {
 		if msg.SequenceNumber > roundInfo.sequence+seqConfig.Timeboost.MaxFutureSequenceDistance {

@@ -437,6 +437,7 @@ func NewSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderRead
 		}
 		senderWhitelist[common.HexToAddress(address)] = struct{}{}
 	}
+
 	s := &Sequencer{
 		execEngine:                        execEngine,
 		txQueue:                           make(chan txQueueItem, config.QueueSize),
@@ -1201,6 +1202,7 @@ func (s *Sequencer) createBlock(ctx context.Context) (returnValue bool) {
 		block *types.Block
 		err   error
 	)
+
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(header, txes, hooks, timeboostedTxs)
 	} else {

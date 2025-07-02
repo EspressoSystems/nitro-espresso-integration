@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"testing"
@@ -78,7 +79,7 @@ func NewArbTestInfo(t *testing.T, chainId *big.Int) *BlockchainTestInfo {
 }
 
 func NewL1TestInfo(t *testing.T) *BlockchainTestInfo {
-	return NewBlockChainTestInfo(t, types.NewLondonSigner(simulatedChainID), big.NewInt(params.GWei*100), params.TxGas)
+	return NewBlockChainTestInfo(t, types.LatestSignerForChainID(simulatedChainID), big.NewInt(params.GWei*100), params.TxGas)
 }
 
 func GetTestKeyForAccountName(t *testing.T, name string) *ecdsa.PrivateKey {
@@ -122,6 +123,33 @@ func (b *BlockchainTestInfo) GenerateGenesisAccount(name string, balance *big.In
 	})
 }
 
+func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic string, idx uint) error {
+	if b.Accounts[name] != nil {
+		b.T.Fatal("account already exists")
+	}
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	path := hdwallet.MustParseDerivationPath(fmt.Sprintf("m/44'/60'/0'/0/%d", idx))
+	account, err := wallet.Derive(path, false)
+	if err != nil {
+		return err
+	}
+	privateKey, err := wallet.PrivateKey(account)
+	if err != nil {
+		return err
+	}
+
+	b.Accounts[name] = &AccountInfo{
+		Address:    account.Address,
+		PrivateKey: privateKey,
+		Nonce:      atomic.Uint64{},
+	}
+	log.Info("New Key ", "name", name, "Address", b.Accounts[name].Address)
+	return nil
+}
+
 func (b *BlockchainTestInfo) GetGenesisAlloc() types.GenesisAlloc {
 	alloc := make(types.GenesisAlloc)
 	for _, info := range b.ArbInitData.Accounts {
@@ -160,6 +188,7 @@ func (b *BlockchainTestInfo) SetFullAccountInfo(name string, info *AccountInfo) 
 
 func (b *BlockchainTestInfo) GetAddress(name string) common.Address {
 	b.T.Helper()
+
 	info, ok := b.Accounts[name]
 	if !ok {
 		b.T.Fatal("not found account: ", name)

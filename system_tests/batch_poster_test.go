@@ -147,7 +147,7 @@ func testBatchPosterParallel(t *testing.T, useRedis bool) {
 				Config:        func() *arbnode.BatchPosterConfig { return &batchPosterConfig },
 				DeployInfo:    builder.L2.ConsensusNode.DeployInfo,
 				TransactOpts:  &seqTxOpts,
-				DAPWriter:     nil,
+				DAPWriters:    []daprovider.Writer{},
 				ParentChainID: parentChainID,
 			},
 		)
@@ -297,7 +297,7 @@ func testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t *testing.T, e
 	seqInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 	Require(t, err)
 	seqOpts := builder.L1Info.GetDefaultTransactOpts("Sequencer", ctx)
-	tx, err := seqInbox.AddSequencerL2Batch(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10))
+	tx, err := seqInbox.AddSequencerL2Batch99020501(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10), createDummyEspressoMetadata(t))
 	Require(t, err)
 	_, err = builder.L1.EnsureTxSucceeded(tx)
 	Require(t, err)
@@ -387,9 +387,6 @@ func testBatchPosterDelayBuffer(t *testing.T, delayBufferEnabled bool) {
 	builder.nodeConfig.BatchPoster.PollInterval = time.Hour // set a high poll interval to avoid continuous polling
 	// and prevent race conditions due to config changes during the test. We'll call MaybePostSequencerBatch manually.
 	cleanup := builder.Build(t)
-	defer cleanup()
-	testClientB, cleanupB := builder.Build2ndNode(t, &SecondNodeParams{})
-	defer cleanupB()
 
 	// Advance L1 to force a batch given the delay buffer threshold
 	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, int(threshold)) // #nosec G115
