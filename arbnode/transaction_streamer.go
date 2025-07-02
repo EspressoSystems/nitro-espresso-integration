@@ -1550,6 +1550,14 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	}
 
+	if lastConfirmedPos == 0 {
+		lastConfirmedPosInDb, err := s.getLastConfirmedPos()
+		if err != nil || lastConfirmedPosInDb == nil {
+			return fmt.Errorf("failed to get last confirmed pos: %w", err)
+		}
+		lastConfirmedPos = *lastConfirmedPosInDb
+	}
+
 	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
 	if err != nil {
 		return fmt.Errorf("failed to set last confirmed pos: %w", err)
@@ -1875,7 +1883,7 @@ func getLogLevel(err error) func(string, ...interface{}) {
 * Checks if the submitted transaction has been finalized by Espresso  and verifies it.
  */
 func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
+	retryRate := s.espressoTxnsPollingInterval * 2
 	var err error
 	if s.UseEscapeHatch {
 		err = s.checkEspressoLiveness()
