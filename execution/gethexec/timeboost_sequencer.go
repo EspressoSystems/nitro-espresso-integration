@@ -222,6 +222,10 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		queueItems = append(queueItems, queueItem)
 	}
 
+	if len(queueItems) == 0 {
+		return true
+	}
+
 	s.nonceCache.Resize(config.NonceCacheSize)
 	s.nonceCache.BeginNewBlock()
 	queueItems = s.precheckNonces(queueItems)
