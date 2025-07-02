@@ -197,12 +197,6 @@ endif
 PROTO_REL_PATH = execution/gethexec/inclusion_list
 PROTO_FILE = $(PROTO_REL_PATH)/inclusion_list.proto
 
-PROTOC_GEN_GO := $(shell go env GOPATH)/bin/protoc-gen-go
-
-$(PROTOC_GEN_GO):
-	@echo "Installing protoc-gen-go..."
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-
 # user targets
 .PHONY: build-espresso-crypto-lib
 build-espresso-crypto-lib:
