@@ -518,10 +518,7 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 		return errors.New("l1Reader is nil")
 	}
 
-	processInclusionListFunc := func(ctx context.Context, inclusionListBytes []byte, options *arbitrum_types.ConditionalOptions) error {
-		return s.ProcessInclusionList(ctx, inclusionListBytes, options)
-	}
-	if err := s.timeboostTxnListener.Start(ctx, processInclusionListFunc); err != nil {
+	if err := s.timeboostTxnListener.Start(ctx, s.ProcessInclusionList); err != nil {
 		return err
 	}
 
