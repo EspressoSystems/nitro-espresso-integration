@@ -38,10 +38,10 @@ type TimeboostListenerConfig struct {
 }
 
 var DefaultTimeboostListenerConfig = TimeboostListenerConfig{
-	ListenPort:    55000,
-	ReadDeadline:  4 * time.Second,
-	WriteDeadline: 4 * time.Second,
-	MaxBackoff:    6 * time.Second,
+	ListenPort:    55000,           // Default listen port that timeboost will try and connect to
+	ReadDeadline:  4 * time.Second, // Max time we wait on socket `read` to receive inclusion list from timeboost
+	WriteDeadline: 4 * time.Second, // Max time we wait while trying to send the acknowledgement back to timeboost
+	MaxBackoff:    6 * time.Second, // Max time we wait for backing off and retrying to process the inclusion list when there is no connection
 }
 
 func TimeboostListenerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -64,7 +64,7 @@ func NewTimeboostListener(config TimeboostListenerConfig) (*TimeboostListener, e
 	}, nil
 }
 
-/**
+/*
  * This function receives the encoded inclusion list from timeboost and has a deadline for each read operation
  * 1.) Read the encoded inclusion list bytes (u32) size
  * 2.) Read the exact bytes of encoded inclusion list
@@ -77,13 +77,14 @@ func (l *TimeboostListener) receiveInclusionList() ([]byte, error) {
 		return nil, ErrConnectionNotEstablished
 	}
 
-	// Read encoded inclusion list size
+	// Read encoded inclusion list size (u32)
 	deadline := time.Now().Add(l.config.ReadDeadline)
 	if err := l.conn.SetReadDeadline(deadline); err != nil {
 		return nil, err
 	}
 
-	sizeBuf := make([]byte, 4)
+	// The size of the inclusion list will be 4 bytes (u32)
+	sizeBuf := make([]byte, binary.Size(uint32(0)))
 	if _, err := l.conn.Read(sizeBuf); err != nil {
 		return nil, err
 	}
@@ -101,7 +102,7 @@ func (l *TimeboostListener) receiveInclusionList() ([]byte, error) {
 	return inclBytes, nil
 }
 
-/**
+/*
  * This function sends an acknowledgement flag back to timeboost AFTER it successfully processes the transactions
  */
 func (l *TimeboostListener) writeAck() error {
@@ -123,7 +124,7 @@ func (l *TimeboostListener) writeAck() error {
 	return nil
 }
 
-/**
+/*
  * This function closes the connection and reassigns it to nil or a new connection
  * Warning: Be absolutely sure when calling function that you are not be holding the `connectionLock`, this will cause a deadlock
  */
@@ -139,7 +140,7 @@ func (l *TimeboostListener) resetConnection(conn net.Conn) {
 	l.conn = conn
 }
 
-/**
+/*
  * This function listens for incoming connections in its own go routine
  * If there is another successful connection we drop the old connection
  */
@@ -183,6 +184,13 @@ func (l *TimeboostListener) connectionHandler(ctx context.Context, port uint16) 
 	}
 }
 
+/*
+ * This function will do 3 steps
+ * 1.) Read inclusion list from timeboost
+ * 2.) Process the inclusion list in the sequencer
+ * 3.) Write an acknowledgement to timeboost notifying it succeeded
+ * If there are any failures, it will reset the connection and wait for timeboost to reconnect and resend
+ */
 func process(
 	ctx context.Context,
 	l *TimeboostListener,
@@ -251,7 +259,7 @@ func (l *TimeboostListener) Start(
 	l.LaunchThread(func(ctx context.Context) {
 		err := l.connectionHandler(ctx, l.config.ListenPort)
 		if err != nil {
-			panic("failed to start listener")
+			panic(err)
 		}
 	})
 
