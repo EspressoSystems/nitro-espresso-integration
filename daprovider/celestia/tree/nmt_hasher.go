@@ -5,6 +5,7 @@ import (
 	"hash"
 
 	"github.com/ethereum/go-ethereum/common"
+
 	"github.com/offchainlabs/nitro/arbutil"
 )
 
@@ -15,7 +16,7 @@ type NmtPreimageHasher struct {
 	data   []byte
 }
 
-// Need to make sure this is writting relevant data into the tree
+// Need to make sure this is writing relevant data into the tree
 // Override the Sum method to capture the preimage
 func (h *NmtPreimageHasher) Sum(b []byte) []byte {
 	hashed := h.Hash.Sum(nil)

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/celestiaorg/rsmt2d"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 

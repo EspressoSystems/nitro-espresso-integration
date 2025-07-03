@@ -16,12 +16,15 @@ linters:
         - assignOp
         - unlambda
         - exitAfterDefer
+        - appendAssign
+        - singleCaseSwitch
       disabled-tags:
         - experimental
         - opinionated
     gosec:
       excludes:
         - G404
+        - G115
     govet:
       disable:
         - shadow

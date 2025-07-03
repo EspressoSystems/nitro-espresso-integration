@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
 	"github.com/spf13/pflag"
 
@@ -34,10 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
-
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/parent"
@@ -622,9 +621,9 @@ func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client 
 	// Setup nitro contract interface
 	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %v", err)
+		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
 	}
-	log.Info("succesfully retrieved nitro contract verifier address", "address", nitroAddr)
+	log.Info("successfully retrieved nitro contract verifier address", "address", nitroAddr)
 
 	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
 		nitroAddr,
