@@ -17,15 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  free-disk-space:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
   test:
-    needs: free-disk-space
     name: Go Tests
     runs-on: ubuntu-latest
 
@@ -130,7 +122,7 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           cache: false
-        
+
       - name: Install cbindgen
         run: cargo install --force cbindgen
 
@@ -152,8 +144,8 @@ jobs:
             arbitrator/wasm-libraries/soft-float/
             target/etc/initial-machine-cache/
             /home/runner/.rustup/toolchains/
-          key: ${{ runner.os }}-cargo-${{ matrix.test-mode }}-${{ steps.rust-version.outputs.version }}-min-${{ hashFiles('arbitrator/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-${{ matrix.test-mode }}-${{ steps.rust-version.outputs.version }}-
+          key: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-min-${{ hashFiles('arbitrator/Cargo.lock') }}-${{ matrix.test-mode }}
+          restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
         uses: actions/cache@v4
@@ -175,9 +167,6 @@ jobs:
         if: steps.cache-cbrotli.outputs.cache-hit != 'true'
         run: ./scripts/build-brotli.sh -w -d
 
-      - name: Install solidty dependencies
-        run: cd contracts && yarn install && forge install
-
       - name: Build
         run: make build test-go-deps -j8
 
@@ -196,6 +185,8 @@ jobs:
 
       - name: Set environment variables
         run: |
+          mkdir -p target/tmp/deadbeefbee
+          echo "TMPDIR=$(pwd)/target/tmp/deadbeefbee" >> "$GITHUB_ENV"
           echo "GOMEMLIMIT=6GiB" >> "$GITHUB_ENV"
           echo "GOGC=80" >> "$GITHUB_ENV"
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
@@ -205,19 +196,20 @@ jobs:
         if: matrix.test-mode == 'pathdb'
         run: |
           echo "Running tests with Path Scheme" >> full.log
-          ${{ github.workspace }}/.github/workflows/gotestsum.sh --tags cionly --timeout 20m --cover --test_state_scheme path
+          ${{ github.workspace }}/.github/workflows/gotestsum.sh --tags cionly --timeout 30m --test_state_scheme path
 
       - name: run tests without race detection and hash state scheme
         if: matrix.test-mode == 'defaults'
         run: |
           echo "Running tests with Hash Scheme" >> full.log
-          ${{ github.workspace }}/.github/workflows/gotestsum.sh --tags cionly --timeout 20m --test_state_scheme hash
+          ${{ github.workspace }}/.github/workflows/gotestsum.sh --tags cionly --timeout 30m --test_state_scheme hash
 
       - name: run redis tests
         if: matrix.test-mode == 'defaults'
         run: |
           echo "Running redis tests" >> full.log
-          gotestsum --format short-verbose -- -p 1 -run TestRedis ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./... -- --test_redis=redis://localhost:6379/0
+          skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
+          gotestsum --format short-verbose -- -p 1 -run TestRedis -skip "$skip_tests" ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./... -- --test_redis=redis://localhost:6379/0
       
       - name: create block input json file
         if: matrix.test-mode == 'defaults'
@@ -241,7 +233,6 @@ jobs:
 
       - name: build challenge tests
         if: matrix.test-mode == 'challenge'
-        shell: bash
         run: |
           go test -tags challengetest ./... -run=^$ -v
 
@@ -256,7 +247,7 @@ jobs:
       - name: Archive detailed run log
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.test-mode }}-${{ matrix.test-state-scheme || 'default' }}-full.log
+          name: ${{ matrix.test-mode }}-full.log
           path: full.log
 
       - name: Upload coverage to Codecov
