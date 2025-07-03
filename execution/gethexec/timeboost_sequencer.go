@@ -45,11 +45,11 @@ type synchronizedTimeboostTransactionQueue struct {
 
 func (q *synchronizedTimeboostTransactionQueue) Push(item timeboostTransactionQueueItem) {
 	q.mutex.Lock()
+	defer q.mutex.Unlock()
 	q.queue = append(q.queue, item)
-	q.mutex.Unlock()
 }
 
-func (q *synchronizedTimeboostTransactionQueue) Pop() timeboostTransactionQueueItem {
+func (q *synchronizedTimeboostTransactionQueue) deQueue() timeboostTransactionQueueItem {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	// Remove the first element from the queue and then return it
@@ -64,10 +64,10 @@ func (q *synchronizedTimeboostTransactionQueue) Len() int {
 	return len(q.queue)
 }
 
-func (q *synchronizedTimeboostTransactionQueue) Peek() timeboostTransactionQueueItem {
+func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueueItem {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
-	return q.queue[0]
+	return &q.queue[0]
 }
 
 type TimeboostSequencer struct {
@@ -109,7 +109,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
-	f.Duration(prefix+".block-retry-duration", DefaultTimeboostSequencerConfig.BlockRetryDuration, "maximum block creation speed")
+	f.Duration(prefix+".block-retry-duration", DefaultTimeboostSequencerConfig.BlockRetryDuration, "retry duration after failing to create a block")
 	f.Int(prefix+".max-tx-data-size", DefaultTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
 	f.Int(prefix+".nonce-cache-size", DefaultTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
 	f.Uint64(prefix+".max-revert-gas-reject", DefaultTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
@@ -130,8 +130,9 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
 
 	// First we need to create the current list of transactions that we will process
-	var queueItems []timeboostTransactionQueueItem
+	queueItems := make([]timeboostTransactionQueueItem, 0)
 	var totalBlockSize int
+	madeBlock := false
 
 	defer func() {
 		panicErr := recover()
@@ -152,37 +153,30 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 	for {
 		var queueItem timeboostTransactionQueueItem
-		done := false
 		//  Transaction retry queue should only
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
-			queueItem = s.txRetryQueue.Pop()
+			queueItem = s.txRetryQueue.deQueue()
 		} else if s.txQueue.Len() == 0 {
 			// This means we have no transactions in the txRetryQueue and
 			// we also dont have any sailfish rounds to process
-			done = true
+			break
 		} else {
 			// Only add transactions from the same round id or if the queue is empty
-			if queueItems == nil {
-				queueItems = make([]timeboostTransactionQueueItem, 0)
-				queueItem = s.txQueue.Pop()
-			} else if queueItems[len(queueItems)-1].roundId == s.txQueue.Peek().roundId {
-				queueItem = s.txQueue.Pop()
+			if len(queueItems) == 0 {
+				queueItem = s.txQueue.deQueue()
+			} else if s.txQueue.Peek() != nil && queueItems[len(queueItems)-1].roundId == s.txQueue.Peek().roundId {
+				queueItem = s.txQueue.deQueue()
 			} else {
-				done = true
+				break
 			}
 		}
 
 		// If context is done, return false
 		select {
 		case <-ctx.Done():
-			return false
+			return madeBlock
 		default:
-		}
-
-		if done {
-			// We have added as many transactions as we can
-			break
 		}
 
 		if queueItem.txSize > s.config().MaxTxDataSize {
@@ -211,6 +205,10 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		queueItems = append(queueItems, queueItem)
 	}
 
+	if len(queueItems) == 0 {
+		return madeBlock
+	}
+
 	s.nonceCache.Resize(config.NonceCacheSize)
 	s.nonceCache.BeginNewBlock()
 	queueItems = s.precheckNonces(queueItems)
@@ -233,22 +231,19 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			"totalBlockSize", totalBlockSize,
 			"maxTxDataSize", config.MaxTxDataSize,
 		)
-		return false
-	}
-	if len(queueItems) == 0 {
-		return true
+		return madeBlock
 	}
 
 	timestamp := queueItems[0].consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
-		return false
+		return madeBlock
 	}
 	// finalized l1 block <= consensus timestamp - parent chain finalization time
 	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Int64(), header.Time)
 	if err != nil {
-		return false
+		return madeBlock
 	}
 
 	l1IncomingMessageHeader := &arbostypes.L1IncomingMessageHeader{
@@ -261,14 +256,13 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	}
 
 	start := time.Now()
-	var (
-		block *types.Block
-	)
+	var block *types.Block
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(l1IncomingMessageHeader, txes, hooks, nil)
 	} else {
 		block, err = s.execEngine.SequenceTransactions(l1IncomingMessageHeader, txes, hooks, nil)
 	}
+
 	elapsed := time.Since(start)
 	blockCreationTimer.Update(elapsed)
 	if elapsed >= time.Second*5 {
@@ -289,7 +283,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		for _, queueItem := range queueItems {
 			s.txRetryQueue.Push(queueItem)
 		}
-		return false
+		return madeBlock
 	}
 
 	if err != nil {
@@ -305,15 +299,13 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			// TODO: should send the error back to the user
 			log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
 		}
-		return false
+		return madeBlock
 	}
 
 	if block != nil {
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
 	}
-
-	madeBlock := false
 
 	for i, err := range hooks.TxErrors {
 		if err == nil {
@@ -456,10 +448,11 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 					continue
 				}
 				// TODO send the error back to the user
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to get nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
