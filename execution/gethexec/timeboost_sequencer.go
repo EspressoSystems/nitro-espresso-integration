@@ -255,6 +255,10 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		return madeBlock
 	}
 
+	if len(queueItems) == 0 {
+		return madeBlock
+	}
+
 	// Get the consensus timestamp of the first transaction in the queue
 	// It should be the same for all transactions in the queue because
 	// each transaction is a part of the same round
