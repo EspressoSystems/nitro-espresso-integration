@@ -1,504 +1,379 @@
+// Copyright 2021-2022, Offchain Labs, Inc.
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
+
 package arbtest
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
+	"encoding/base64"
+	"errors"
 	"math/big"
+	"net"
+	"net/http"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/gasestimator"
-	"github.com/ethereum/go-ethereum/eth/tracers"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/offchainlabs/nitro/arbos/arbosState"
-	"github.com/offchainlabs/nitro/arbos/burn"
-	"github.com/offchainlabs/nitro/arbos/l2pricing"
-	"github.com/offchainlabs/nitro/arbos/retryables"
-	"github.com/offchainlabs/nitro/arbos/util"
-	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/solgen/go/node_interfacegen"
+	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/blsSignatures"
+	"github.com/offchainlabs/nitro/cmd/chaininfo"
+	"github.com/offchainlabs/nitro/cmd/genericconf"
+	"github.com/offchainlabs/nitro/daprovider/das"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
-	"github.com/offchainlabs/nitro/util/arbmath"
-	"github.com/offchainlabs/nitro/util/colors"
+	"github.com/offchainlabs/nitro/util/headerreader"
+	"github.com/offchainlabs/nitro/util/testhelpers"
 )
 
-var (
-	txsSeenByTracer    map[common.Hash]struct{}
-	blocksSeenByTracer uint64
-)
+func startLocalDASServer(
+	t *testing.T,
+	ctx context.Context,
+	dataDir string,
+	l1client *ethclient.Client,
+	seqInboxAddress common.Address,
+) (*http.Server, *blsSignatures.PublicKey, das.BackendConfig, *das.RestfulDasServer, string) {
+	keyDir := t.TempDir()
+	pubkey, _, err := das.GenerateAndStoreKeys(keyDir)
+	Require(t, err)
 
-type testTracer struct{}
+	config := das.DefaultDataAvailabilityConfig
+	config.Enable = true
+	config.Key = das.KeyConfig{KeyDir: keyDir}
+	config.ParentChainNodeURL = "none"
+	config.LocalFileStorage = das.DefaultLocalFileStorageConfig
+	config.LocalFileStorage.Enable = true
+	config.LocalFileStorage.DataDir = dataDir
 
-func newTestTracer(_ json.RawMessage) (*tracing.Hooks, error) {
-	t := &testTracer{}
-	return &tracing.Hooks{
-		OnTxStart:    t.OnTxStart,
-		OnBlockStart: t.OnBlockStart,
-		OnBlockEnd:   t.OnBlockEnd,
-	}, nil
-}
+	storageService, lifecycleManager, err := das.CreatePersistentStorageService(ctx, &config)
+	defer lifecycleManager.StopAndWaitUntil(time.Second)
 
-func (t *testTracer) OnTxStart(vm *tracing.VMContext, tx *types.Transaction, from common.Address) {
-	if from != types.ArbosAddress {
-		txsSeenByTracer[tx.Hash()] = struct{}{}
+	Require(t, err)
+	seqInboxCaller, err := bridgegen.NewSequencerInboxCaller(seqInboxAddress, l1client)
+	Require(t, err)
+	daWriter, err := das.NewSignAfterStoreDASWriter(ctx, config, storageService)
+	Require(t, err)
+	signatureVerifier, err := das.NewSignatureVerifierWithSeqInboxCaller(seqInboxCaller, "")
+	Require(t, err)
+	rpcLis, err := net.Listen("tcp", "localhost:0")
+	Require(t, err)
+	rpcServer, err := das.StartDASRPCServerOnListener(ctx, rpcLis, genericconf.HTTPServerTimeoutConfigDefault, genericconf.HTTPServerBodyLimitDefault, storageService, daWriter, storageService, signatureVerifier)
+	Require(t, err)
+	restLis, err := net.Listen("tcp", "localhost:0")
+	Require(t, err)
+	restServer, err := das.NewRestfulDasServerOnListener(restLis, genericconf.HTTPServerTimeoutConfigDefault, storageService, storageService)
+	Require(t, err)
+	beConfig := das.BackendConfig{
+		URL:    "http://" + rpcLis.Addr().String(),
+		Pubkey: blsPubToBase64(pubkey),
 	}
-	log.Info("TestTracerLogging", "txHash", tx.Hash(), "from", from)
+	return rpcServer, pubkey, beConfig, restServer, "http://" + restLis.Addr().String()
 }
 
-func (t *testTracer) OnBlockStart(ev tracing.BlockEvent) {
-	blocksSeenByTracer++
-	log.Info("TestTracerLogging OnBlockStart")
+func blsPubToBase64(pubkey *blsSignatures.PublicKey) string {
+	pubkeyBytes := blsSignatures.PublicKeyToBytes(*pubkey)
+	encodedPubkey := make([]byte, base64.StdEncoding.EncodedLen(len(pubkeyBytes)))
+	base64.StdEncoding.Encode(encodedPubkey, pubkeyBytes)
+	return string(encodedPubkey)
 }
 
-func (t *testTracer) OnBlockEnd(err error) {
-	log.Info("TestTracerLogging OnBlockEnd")
+func aggConfigForBackend(backendConfig das.BackendConfig) das.AggregatorConfig {
+	return das.AggregatorConfig{
+		Enable:                true,
+		AssumedHonest:         1,
+		Backends:              das.BackendConfigList{backendConfig},
+		MaxStoreChunkBodySize: 512 * 1024,
+		EnableChunkedStore:    true,
+	}
 }
 
-// TestLiveTracingInNode: currently live tracing is only available when building a 2nd node
-func TestLiveTracingInNode(t *testing.T) {
-	txsSeenByTracer = make(map[common.Hash]struct{})
-
+func TestDASRekey(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Setup L1 chain and contracts
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	cleanup := builder.Build(t)
-	defer cleanup()
+	builder.BuildL1(t)
 
-	builder.L2Info.GenerateAccount("User")
-	user := builder.L2Info.GetDefaultTransactOpts("User", ctx)
+	// Setup DAS servers
+	dasDataDir := t.TempDir()
+	dasRpcServerA, pubkeyA, backendConfigA, _, restServerUrlA := startLocalDASServer(t, ctx, dasDataDir, builder.L1.Client, builder.addresses.SequencerInbox)
+	l1NodeConfigB := arbnode.ConfigDefaultL1NonSequencerTest()
+	{
+		authorizeDASKeyset(t, ctx, pubkeyA, builder.L1Info, builder.L1.Client)
 
-	// Create transactions to progress blockchain
-	var err error
-	var lastTx *types.Transaction
-	numTxs := 20
-	txs := make(map[common.Hash]struct{})
-	for i := 0; i < numTxs; i++ {
-		lastTx, _ = builder.L2.TransferBalanceTo(t, "Owner", util.RemapL1Address(user.From), big.NewInt(1e18), builder.L2Info)
-		txs[lastTx.Hash()] = struct{}{}
+		// Setup DAS config
+		builder.nodeConfig.DataAvailability.Enable = true
+		builder.nodeConfig.DataAvailability.RPCAggregator = aggConfigForBackend(backendConfigA)
+		builder.nodeConfig.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+		builder.nodeConfig.DataAvailability.RestAggregator.Enable = true
+		builder.nodeConfig.DataAvailability.RestAggregator.Urls = []string{restServerUrlA}
+		builder.nodeConfig.DataAvailability.ParentChainNodeURL = "none"
+
+		// Setup L2 chain
+		builder.L2Info.GenerateAccount("User2")
+		builder.BuildL2OnL1(t)
+
+		// Setup second node
+		l1NodeConfigB.BlockValidator.Enable = false
+		l1NodeConfigB.DataAvailability.Enable = true
+		l1NodeConfigB.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+		l1NodeConfigB.DataAvailability.RestAggregator.Enable = true
+		l1NodeConfigB.DataAvailability.RestAggregator.Urls = []string{restServerUrlA}
+		l1NodeConfigB.DataAvailability.ParentChainNodeURL = "none"
+		nodeBParams := SecondNodeParams{
+			nodeConfig: l1NodeConfigB,
+			initData:   &builder.L2Info.ArbInitData,
+		}
+		l2B, cleanupB := builder.Build2ndNode(t, &nodeBParams)
+		checkBatchPosting(t, ctx, builder.L1.Client, builder.L2.Client, builder.L1Info, builder.L2Info, big.NewInt(1e12), l2B.Client)
+
+		builder.L2.cleanup()
+		cleanupB()
 	}
 
-	// Start second node with live tracing
-	execConfig := builder.execConfig
-	execConfig.VmTrace = gethexec.LiveTracingConfig{TracerName: "testTracer"}
-	tracers.LiveDirectory.Register("testTracer", newTestTracer)
-	testClientB, cleanupB := builder.Build2ndNode(t, &SecondNodeParams{execConfig: execConfig})
+	err := dasRpcServerA.Shutdown(ctx)
+	Require(t, err)
+	dasRpcServerB, pubkeyB, backendConfigB, _, _ := startLocalDASServer(t, ctx, dasDataDir, builder.L1.Client, builder.addresses.SequencerInbox)
+	defer func() {
+		err = dasRpcServerB.Shutdown(ctx)
+		Require(t, err)
+	}()
+	authorizeDASKeyset(t, ctx, pubkeyB, builder.L1Info, builder.L1.Client)
+
+	// Restart the node on the new keyset against the new DAS server running on the same disk as the first with new keys
+	builder.nodeConfig.DataAvailability.RPCAggregator = aggConfigForBackend(backendConfigB)
+	builder.l2StackConfig = testhelpers.CreateStackConfigForTest(builder.dataDir)
+	cleanup := builder.BuildL2OnL1(t)
+	defer cleanup()
+
+	nodeBParams := SecondNodeParams{
+		nodeConfig: l1NodeConfigB,
+		initData:   &builder.L2Info.ArbInitData,
+	}
+	l2B, cleanup := builder.Build2ndNode(t, &nodeBParams)
+	defer cleanup()
+	checkBatchPosting(t, ctx, builder.L1.Client, builder.L2.Client, builder.L1Info, builder.L2Info, big.NewInt(2e12), l2B.Client)
+}
+
+func checkBatchPosting(t *testing.T, ctx context.Context, l1client, l2clientA *ethclient.Client, l1info, l2info info, expectedBalance *big.Int, l2ClientsToCheck ...*ethclient.Client) {
+	tx := l2info.PrepareTx("Owner", "User2", l2info.TransferGas, big.NewInt(1e12), nil)
+	err := l2clientA.SendTransaction(ctx, tx)
+	Require(t, err)
+
+	_, err = EnsureTxSucceeded(ctx, l2clientA, tx)
+	Require(t, err)
+
+	// give the inbox reader a bit of time to pick up the delayed message
+	time.Sleep(time.Millisecond * 100)
+
+	// sending l1 messages creates l1 blocks.. make enough to get that delayed inbox message in
+	for i := 0; i < 30; i++ {
+		SendWaitTestTransactions(t, ctx, l1client, []*types.Transaction{
+			l1info.PrepareTx("Faucet", "User", 30000, big.NewInt(1e12), nil),
+		})
+	}
+
+	for _, client := range l2ClientsToCheck {
+		_, err = WaitForTx(ctx, client, tx.Hash(), time.Second*30)
+		Require(t, err)
+
+		l2balance, err := client.BalanceAt(ctx, l2info.GetAddress("User2"), nil)
+		Require(t, err)
+
+		if l2balance.Cmp(expectedBalance) != 0 {
+			Fatal(t, "Unexpected balance:", l2balance)
+		}
+
+	}
+}
+
+func TestDASComplexConfigAndRestMirror(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Setup L1 chain and contracts
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
+	builder.chainConfig = chaininfo.ArbitrumDevTestDASChainConfig()
+	builder.BuildL1(t)
+
+	arbSys, _ := precompilesgen.NewArbSys(types.ArbSysAddress, builder.L1.Client)
+	l1Reader, err := headerreader.New(ctx, builder.L1.Client, func() *headerreader.Config { return &headerreader.TestConfig }, arbSys)
+	Require(t, err)
+	l1Reader.Start(ctx)
+	defer l1Reader.StopAndWait()
+
+	keyDir, fileDataDir, dbDataDir := t.TempDir(), t.TempDir(), t.TempDir()
+	pubkey, _, err := das.GenerateAndStoreKeys(keyDir)
+	Require(t, err)
+
+	dbConfig := das.DefaultLocalDBStorageConfig
+	dbConfig.Enable = true
+	dbConfig.DataDir = dbDataDir
+
+	serverConfig := das.DataAvailabilityConfig{
+		Enable: true,
+
+		LocalCache: das.TestCacheConfig,
+
+		LocalFileStorage: das.LocalFileStorageConfig{
+			Enable:  true,
+			DataDir: fileDataDir,
+		},
+		LocalDBStorage: dbConfig,
+
+		Key: das.KeyConfig{
+			KeyDir: keyDir,
+		},
+
+		RequestTimeout: 5 * time.Second,
+		// L1NodeURL: normally we would have to set this but we are passing in the already constructed client and addresses to the factory
+	}
+
+	daReader, daWriter, signatureVerifier, daHealthChecker, lifecycleManager, err := das.CreateDAComponentsForDaserver(ctx, &serverConfig, l1Reader, &builder.addresses.SequencerInbox)
+	Require(t, err)
+	defer lifecycleManager.StopAndWaitUntil(time.Second)
+	rpcLis, err := net.Listen("tcp", "localhost:0")
+	Require(t, err)
+	_, err = das.StartDASRPCServerOnListener(ctx, rpcLis, genericconf.HTTPServerTimeoutConfigDefault, genericconf.HTTPServerBodyLimitDefault, daReader, daWriter, daHealthChecker, signatureVerifier)
+	Require(t, err)
+	restLis, err := net.Listen("tcp", "localhost:0")
+	Require(t, err)
+	restServer, err := das.NewRestfulDasServerOnListener(restLis, genericconf.HTTPServerTimeoutConfigDefault, daReader, daHealthChecker)
+	Require(t, err)
+
+	pubkeyA := pubkey
+	authorizeDASKeyset(t, ctx, pubkeyA, builder.L1Info, builder.L1.Client)
+
+	//
+	builder.nodeConfig.DataAvailability = das.DataAvailabilityConfig{
+		Enable: true,
+
+		// AggregatorConfig set up below
+		RequestTimeout: 5 * time.Second,
+	}
+	beConfigA := das.BackendConfig{
+		URL:    "http://" + rpcLis.Addr().String(),
+		Pubkey: blsPubToBase64(pubkey),
+	}
+	builder.nodeConfig.DataAvailability.RPCAggregator = aggConfigForBackend(beConfigA)
+	builder.nodeConfig.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+	builder.nodeConfig.DataAvailability.RestAggregator.Enable = true
+	builder.nodeConfig.DataAvailability.RestAggregator.Urls = []string{"http://" + restLis.Addr().String()}
+	builder.nodeConfig.DataAvailability.ParentChainNodeURL = "none"
+
+	// Setup L2 chain
+	builder.L2Info = NewArbTestInfo(t, builder.chainConfig.ChainID)
+	builder.L2Info.GenerateAccount("User2")
+	cleanup := builder.BuildL2OnL1(t)
+	defer cleanup()
+
+	// Create node to sync from chain
+	l1NodeConfigB := arbnode.ConfigDefaultL1NonSequencerTest()
+	l1NodeConfigB.DataAvailability = das.DataAvailabilityConfig{
+		Enable: true,
+
+		// AggregatorConfig set up below
+
+		ParentChainNodeURL: "none",
+		RequestTimeout:     5 * time.Second,
+	}
+
+	l1NodeConfigB.BlockValidator.Enable = false
+	l1NodeConfigB.DataAvailability.Enable = true
+	l1NodeConfigB.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+	l1NodeConfigB.DataAvailability.RestAggregator.Enable = true
+	l1NodeConfigB.DataAvailability.RestAggregator.Urls = []string{"http://" + restLis.Addr().String()}
+	l1NodeConfigB.DataAvailability.ParentChainNodeURL = "none"
+	nodeBParams := SecondNodeParams{
+		nodeConfig: l1NodeConfigB,
+		initData:   &builder.L2Info.ArbInitData,
+	}
+	l2B, cleanupB := builder.Build2ndNode(t, &nodeBParams)
 	defer cleanupB()
 
-	// Wait for second node to catchup
-	_, err = WaitForTx(ctx, testClientB.Client, lastTx.Hash(), time.Second*5)
-	Require(t, err)
-	if len(txsSeenByTracer) != numTxs {
-		t.Fatalf("unexpected number of txs seen by testTracer. Want: %d, Got: %d", numTxs, len(txsSeenByTracer))
-	}
-	for txHash := range txs {
-		if _, ok := txsSeenByTracer[txHash]; !ok {
-			t.Fatalf("transaction: %s not seen by testTracer", txHash.String())
-		}
-	}
+	checkBatchPosting(t, ctx, builder.L1.Client, builder.L2.Client, builder.L1Info, builder.L2Info, big.NewInt(1e12), l2B.Client)
 
-	totalBlocks, err := testClientB.Client.BlockNumber(ctx)
+	err = restServer.Shutdown()
 	Require(t, err)
-	if blocksSeenByTracer != totalBlocks {
-		t.Fatalf("unexpected number of txs seen by testTracer. Want: %d, Got: %d", totalBlocks, blocksSeenByTracer)
-	}
 }
 
-func TestDebugAPI(t *testing.T) {
+func TestDASBatchPosterFallback(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Setup L1
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	cleanup := builder.Build(t)
-	defer cleanup()
+	builder.chainConfig = chaininfo.ArbitrumDevTestDASChainConfig()
+	builder.BuildL1(t)
+	l1client := builder.L1.Client
+	l1info := builder.L1Info
 
-	l2rpc := builder.L2.Stack.Attach()
+	// Setup DAS server
+	dasDataDir := t.TempDir()
+	dasRpcServer, pubkey, backendConfig, _, restServerUrl := startLocalDASServer(
+		t, ctx, dasDataDir, l1client, builder.addresses.SequencerInbox)
+	authorizeDASKeyset(t, ctx, pubkey, l1info, l1client)
 
-	var dump state.Dump
-	err := l2rpc.CallContext(ctx, &dump, "debug_dumpBlock", rpc.LatestBlockNumber)
-	Require(t, err)
-	err = l2rpc.CallContext(ctx, &dump, "debug_dumpBlock", rpc.PendingBlockNumber)
-	Require(t, err)
-
-	var badBlocks []eth.BadBlockArgs
-	err = l2rpc.CallContext(ctx, &badBlocks, "debug_getBadBlocks")
-	Require(t, err)
-
-	var dumpIt state.Dump
-	err = l2rpc.CallContext(ctx, &dumpIt, "debug_accountRange", rpc.LatestBlockNumber, hexutil.Bytes{}, 10, true, true, false)
-	Require(t, err)
-	err = l2rpc.CallContext(ctx, &dumpIt, "debug_accountRange", rpc.PendingBlockNumber, hexutil.Bytes{}, 10, true, true, false)
-	Require(t, err)
-
-	arbSys, err := precompilesgen.NewArbSys(types.ArbSysAddress, builder.L2.Client)
-	Require(t, err)
-	auth := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
-	withdrawalValue := big.NewInt(1000000000)
-	auth.Value = withdrawalValue
-	tx, err := arbSys.SendTxToL1(&auth, common.Address{}, []byte{})
-	Require(t, err)
-	receipt, err := builder.L2.EnsureTxSucceeded(tx)
-	Require(t, err)
-	if len(receipt.Logs) != 1 {
-		Fatal(t, "Unexpected number of logs", len(receipt.Logs))
-	}
-
-	// Use JS tracer
-	js := `{
-		"onBalanceChange": function(balanceChange) { 
-			if (!this.balanceChanges) {
-				this.balanceChanges = [];
-			}
-			this.balanceChanges.push({
-				addr: balanceChange.addr,
-				prev: balanceChange.prev,
-				new: balanceChange.new,
-				reason: balanceChange.reason
-        	});
-		},
-		"result": function() { return this.balanceChanges || []; },
-		"fault":  function() { return this.names; },
-		names: []
-	}`
-	type balanceChangeJS struct {
-		Addr   common.Address `json:"addr"`
-		Prev   big.Int        `json:"prev"`
-		New    big.Int        `json:"new"`
-		Reason string         `json:"reason"`
-	}
-	var jsTrace []balanceChangeJS
-	err = l2rpc.CallContext(ctx, &jsTrace, "debug_traceTransaction", tx.Hash(), &tracers.TraceConfig{Tracer: &js})
-	Require(t, err)
-	found := false
-	for _, balChange := range jsTrace {
-		if balChange.Reason == tracing.BalanceDecreaseWithdrawToL1.Str() &&
-			balChange.Addr == types.ArbSysAddress &&
-			balChange.Prev.Cmp(withdrawalValue) == 0 &&
-			balChange.New.Cmp(common.Big0) == 0 {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("balanceChanges in tracing via js tracer didn't register withdrawal of funds to L1")
-	}
-
-	var result json.RawMessage
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", tx.Hash(), &tracers.TraceConfig{Tracer: &js})
-	Require(t, err)
-	colors.PrintGrey("balance changes: ", string(result))
-}
-
-type account struct {
-	Balance *hexutil.Big                `json:"balance,omitempty"`
-	Code    []byte                      `json:"code,omitempty"`
-	Nonce   uint64                      `json:"nonce,omitempty"`
-	Storage map[common.Hash]common.Hash `json:"storage,omitempty"`
-}
-type prestateTrace struct {
-	Post map[common.Address]*account `json:"post"`
-	Pre  map[common.Address]*account `json:"pre"`
-}
-
-func TestPrestateTracingSimple(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	cleanup := builder.Build(t)
-	defer cleanup()
-
+	// Setup sequence/batch-poster L2 node
+	builder.nodeConfig.DataAvailability.Enable = true
+	builder.nodeConfig.DataAvailability.RPCAggregator = aggConfigForBackend(backendConfig)
+	builder.nodeConfig.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+	builder.nodeConfig.DataAvailability.RestAggregator.Enable = true
+	builder.nodeConfig.DataAvailability.RestAggregator.Urls = []string{restServerUrl}
+	builder.nodeConfig.DataAvailability.ParentChainNodeURL = "none"
+	builder.nodeConfig.BatchPoster.DisableDapFallbackStoreDataOnChain = true // Disable DAS fallback
+	builder.nodeConfig.BatchPoster.ErrorDelay = time.Millisecond * 250       // Increase error delay because we expect errors
+	builder.L2Info = NewArbTestInfo(t, builder.chainConfig.ChainID)
 	builder.L2Info.GenerateAccount("User2")
-	sender := builder.L2Info.GetAddress("Owner")
-	receiver := builder.L2Info.GetAddress("User2")
-	ownerOldBalance, err := builder.L2.Client.BalanceAt(ctx, sender, nil)
-	Require(t, err)
-	user2OldBalance, err := builder.L2.Client.BalanceAt(ctx, receiver, nil)
-	Require(t, err)
+	cleanup := builder.BuildL2OnL1(t)
+	defer cleanup()
+	l2client := builder.L2.Client
+	l2info := builder.L2Info
 
-	value := big.NewInt(1e6)
-	tx := builder.L2Info.PrepareTx("Owner", "User2", builder.L2Info.TransferGas, value, nil)
-	Require(t, builder.L2.Client.SendTransaction(ctx, tx))
-	receipt, err := builder.L2.EnsureTxSucceeded(tx)
-	Require(t, err)
+	// Setup secondary L2 node
+	nodeConfigB := arbnode.ConfigDefaultL1NonSequencerTest()
+	nodeConfigB.BlockValidator.Enable = false
+	nodeConfigB.DataAvailability.Enable = true
+	nodeConfigB.DataAvailability.RestAggregator = das.DefaultRestfulClientAggregatorConfig
+	nodeConfigB.DataAvailability.RestAggregator.Enable = true
+	nodeConfigB.DataAvailability.RestAggregator.Urls = []string{restServerUrl}
+	nodeConfigB.DataAvailability.ParentChainNodeURL = "none"
+	nodeBParams := SecondNodeParams{
+		nodeConfig: nodeConfigB,
+		initData:   &l2info.ArbInitData,
+	}
+	l2B, cleanupB := builder.Build2ndNode(t, &nodeBParams)
+	defer cleanupB()
 
-	l2rpc := builder.L2.Stack.Attach()
+	// Check batch posting using the DAS
+	checkBatchPosting(t, ctx, l1client, l2client, l1info, l2info, big.NewInt(1e12), l2B.Client)
 
-	var result prestateTrace
-	traceConfig := map[string]interface{}{
-		"tracer": "prestateTracer",
-		"tracerConfig": map[string]interface{}{
-			"diffMode": true,
-		},
-	}
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", tx.Hash(), traceConfig)
-	Require(t, err)
-
-	if !arbmath.BigEquals(result.Pre[sender].Balance.ToInt(), ownerOldBalance) {
-		Fatal(t, "Unexpected initial balance of sender")
-	}
-	if !arbmath.BigEquals(result.Pre[receiver].Balance.ToInt(), user2OldBalance) {
-		Fatal(t, "Unexpected initial balance of receiver")
-	}
-	expBalance := arbmath.BigSub(ownerOldBalance, value)
-	gas := arbmath.BigMulByUint(receipt.EffectiveGasPrice, receipt.GasUsed)
-	expBalance = arbmath.BigSub(expBalance, gas)
-	if !arbmath.BigEquals(result.Post[sender].Balance.ToInt(), expBalance) {
-		Fatal(t, "Unexpected final balance of sender")
-	}
-	onchain, err := builder.L2.Client.BalanceAt(ctx, sender, receipt.BlockNumber)
-	Require(t, err)
-	if !arbmath.BigEquals(result.Post[sender].Balance.ToInt(), onchain) {
-		Fatal(t, "Final balance of sender does not fit chain")
-	}
-	if !arbmath.BigEquals(result.Post[receiver].Balance.ToInt(), value) {
-		Fatal(t, "Unexpected final balance of receiver")
-	}
-	if result.Post[sender].Nonce != result.Pre[sender].Nonce+1 {
-		Fatal(t, "sender nonce increment wasn't registered")
-	}
-	if result.Post[receiver].Nonce != result.Pre[receiver].Nonce {
-		Fatal(t, "receiver nonce shouldn't change")
-	}
-}
-
-func TestArbTxTypesTracingPrestateTracerAndCallTracer(t *testing.T) {
-	builder, delayedInbox, lookupL2Tx, ctx, teardown := retryableSetup(t)
-	defer teardown()
-
-	// Test prestate tracing of a ArbitrumDepositTx type tx
-	faucetAddr := builder.L1Info.GetAddress("Faucet")
-	oldBalance, err := builder.L2.Client.BalanceAt(ctx, faucetAddr, nil)
+	// Shutdown the DAS
+	err := dasRpcServer.Shutdown(ctx)
 	Require(t, err)
 
-	txOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
-	txOpts.Value = big.NewInt(13)
-
-	l1tx, err := delayedInbox.DepositEth439370b1(&txOpts)
-	Require(t, err)
-
-	l1Receipt, err := builder.L1.EnsureTxSucceeded(l1tx)
-	Require(t, err)
-	if l1Receipt.Status != types.ReceiptStatusSuccessful {
-		t.Errorf("Got transaction status: %v, want: %v", l1Receipt.Status, types.ReceiptStatusSuccessful)
-	}
-	waitForL1DelayBlocks(t, builder)
-
-	l2Tx := lookupL2Tx(l1Receipt)
-	l2Receipt, err := builder.L2.EnsureTxSucceeded(l2Tx)
-	Require(t, err)
-	newBalance, err := builder.L2.Client.BalanceAt(ctx, faucetAddr, l2Receipt.BlockNumber)
-	Require(t, err)
-	if got := new(big.Int); got.Sub(newBalance, oldBalance).Cmp(txOpts.Value) != 0 {
-		t.Errorf("Got transferred: %v, want: %v", got, txOpts.Value)
+	// Send 2nd transaction and check it doesn't arrive on second node
+	tx, _ := TransferBalanceTo(t, "Owner", l2info.GetAddress("User2"), big.NewInt(1e12), l2info, l2client, ctx)
+	_, err = WaitForTx(ctx, l2B.Client, tx.Hash(), time.Second*3)
+	if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+		Fatal(t, "expected context-deadline exceeded error, but got:", err)
 	}
 
-	l2rpc := builder.L2.Stack.Attach()
-	var result prestateTrace
-	traceConfig := map[string]interface{}{
-		"tracer": "prestateTracer",
-		"tracerConfig": map[string]interface{}{
-			"diffMode": true,
-		},
-	}
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", l2Tx.Hash(), traceConfig)
+	// Enable the DAP fallback and check the transaction on the second node.
+	// (We don't need to restart the node because of the hot-reload.)
+	builder.nodeConfig.BatchPoster.DisableDapFallbackStoreDataOnChain = false
+	_, err = WaitForTx(ctx, l2B.Client, tx.Hash(), time.Second*3)
 	Require(t, err)
-
-	if _, ok := result.Pre[faucetAddr]; !ok {
-		Fatal(t, "Faucet account not found in the result of prestate tracer")
-	}
-	// Nonce shouldn't exist (in this case defaults to 0) in the Post map of the trace in DiffMode
-	if l2Tx.SkipNonceChecks() && result.Post[faucetAddr].Nonce != 0 {
-		Fatal(t, "Faucet account's nonce should remain unchanged ")
-	}
-	if !arbmath.BigEquals(result.Pre[faucetAddr].Balance.ToInt(), oldBalance) {
-		Fatal(t, "Unexpected initial balance of Faucet")
-	}
-	if !arbmath.BigEquals(result.Post[faucetAddr].Balance.ToInt(), arbmath.BigAdd(oldBalance, txOpts.Value)) {
-		Fatal(t, "Unexpected final balance of Faucet")
-	}
-
-	var blockTrace json.RawMessage
-	blockTraceConfig := map[string]interface{}{"tracer": "callTracer"}
-
-	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": false}
-	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(l2Receipt.BlockNumber.Int64()), blockTraceConfig)
+	l2balance, err := l2B.Client.BalanceAt(ctx, l2info.GetAddress("User2"), nil)
 	Require(t, err)
-
-	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": true}
-	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(l2Receipt.BlockNumber.Int64()), blockTraceConfig)
-	Require(t, err)
-
-	// Test prestate tracing of a ArbitrumSubmitRetryableTx type tx
-	user2Address := builder.L2Info.GetAddress("User2")
-	beneficiaryAddress := builder.L2Info.GetAddress("Beneficiary")
-
-	deposit := arbmath.BigMul(big.NewInt(1e12), big.NewInt(1e12))
-	callValue := big.NewInt(1e6)
-
-	nodeInterface, err := node_interfacegen.NewNodeInterface(types.NodeInterfaceAddress, builder.L2.Client)
-	Require(t, err, "failed to deploy NodeInterface")
-
-	// estimate the gas needed to auto redeem the retryable
-	usertxoptsL2 := builder.L2Info.GetDefaultTransactOpts("Faucet", ctx)
-	usertxoptsL2.NoSend = true
-	usertxoptsL2.GasMargin = 0
-	tx, err := nodeInterface.EstimateRetryableTicket(
-		&usertxoptsL2,
-		usertxoptsL2.From,
-		deposit,
-		user2Address,
-		callValue,
-		beneficiaryAddress,
-		beneficiaryAddress,
-		[]byte{0x32, 0x42, 0x32, 0x88}, // increase the cost to beyond that of params.TxGas
-	)
-	Require(t, err, "failed to estimate retryable submission")
-	estimate := tx.Gas()
-	expectedEstimate := params.TxGas + params.TxDataNonZeroGasEIP2028*4
-	if float64(estimate) > float64(expectedEstimate)*(1+gasestimator.EstimateGasErrorRatio) {
-		t.Errorf("estimated retryable ticket at %v gas but expected %v, with error margin of %v",
-			estimate,
-			expectedEstimate,
-			gasestimator.EstimateGasErrorRatio,
-		)
-	}
-
-	// submit & auto redeem the retryable using the gas estimate
-	usertxoptsL1 := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
-	usertxoptsL1.Value = deposit
-	l1tx, err = delayedInbox.CreateRetryableTicket(
-		&usertxoptsL1,
-		user2Address,
-		callValue,
-		big.NewInt(1e16),
-		beneficiaryAddress,
-		beneficiaryAddress,
-		arbmath.UintToBig(estimate),
-		big.NewInt(l2pricing.InitialBaseFeeWei*2),
-		[]byte{0x32, 0x42, 0x32, 0x88},
-	)
-	Require(t, err)
-
-	l1Receipt, err = builder.L1.EnsureTxSucceeded(l1tx)
-	Require(t, err)
-	if l1Receipt.Status != types.ReceiptStatusSuccessful {
-		Fatal(t, "l1Receipt indicated failure")
-	}
-
-	waitForL1DelayBlocks(t, builder)
-
-	l2Tx = lookupL2Tx(l1Receipt)
-	receipt, err := builder.L2.EnsureTxSucceeded(l2Tx)
-	Require(t, err)
-	if receipt.Status != types.ReceiptStatusSuccessful {
-		Fatal(t)
-	}
-
-	l2balance, err := builder.L2.Client.BalanceAt(ctx, builder.L2Info.GetAddress("User2"), nil)
-	Require(t, err)
-	if !arbmath.BigEquals(l2balance, callValue) {
+	if l2balance.Cmp(big.NewInt(2e12)) != 0 {
 		Fatal(t, "Unexpected balance:", l2balance)
 	}
 
-	ticketId := receipt.Logs[0].Topics[1]
-	firstRetryTxId := receipt.Logs[1].Topics[2]
-	fmt.Println("submitretryable txid ", ticketId)
-	fmt.Println("auto redeem txid ", firstRetryTxId)
-
-	// Trace ArbitrumSubmitRetryableTx
-	result = prestateTrace{}
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", l2Tx.Hash(), traceConfig)
-	Require(t, err)
-
-	escrowAddr := retryables.RetryableEscrowAddress(ticketId)
-	if _, ok := result.Pre[escrowAddr]; !ok {
-		Fatal(t, "Escrow account not found in the result of prestate tracer for a ArbitrumSubmitRetryableTx transaction")
-	}
-
-	if !arbmath.BigEquals(result.Pre[escrowAddr].Balance.ToInt(), common.Big0) {
-		Fatal(t, "Unexpected initial balance of Escrow")
-	}
-	if !arbmath.BigEquals(result.Post[escrowAddr].Balance.ToInt(), callValue) {
-		Fatal(t, "Unexpected final balance of Escrow")
-	}
-
-	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": false}
-	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(receipt.BlockNumber.Int64()), blockTraceConfig)
-	Require(t, err)
-	fmt.Println(string(blockTrace))
-
-	blockTraceConfig["tracerConfig"] = map[string]interface{}{"onlyTopCall": true}
-	err = l2rpc.CallContext(ctx, &blockTrace, "debug_traceBlockByNumber", rpc.BlockNumber(receipt.BlockNumber.Int64()), blockTraceConfig)
-	Require(t, err)
-	fmt.Println(string(blockTrace))
-
-	// Trace ArbitrumRetryTx
-	result = prestateTrace{}
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", firstRetryTxId, traceConfig)
-	Require(t, err)
-
-	if !arbmath.BigEquals(result.Pre[user2Address].Balance.ToInt(), common.Big0) {
-		Fatal(t, "Unexpected initial balance of User2")
-	}
-	if !arbmath.BigEquals(result.Post[user2Address].Balance.ToInt(), callValue) {
-		Fatal(t, "Unexpected final balance of User2")
-	}
-}
-
-func TestPrestateTracerRegistersArbitrumStorage(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
-	cleanup := builder.Build(t)
-	defer cleanup()
-
-	auth := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
-	arbOwner, err := precompilesgen.NewArbOwner(common.HexToAddress("0x70"), builder.L2.Client)
-	Require(t, err, "could not bind ArbOwner contract")
-
-	// Schedule a noop upgrade
-	tx, err := arbOwner.ScheduleArbOSUpgrade(&auth, 1, 1)
-	Require(t, err)
-	_, err = builder.L2.EnsureTxSucceeded(tx)
-	Require(t, err)
-
-	statedb, err := builder.L2.ExecNode.Backend.ArbInterface().BlockChain().State()
-	Require(t, err)
-	burner := burn.NewSystemBurner(nil, false)
-	arbosSt, err := arbosState.OpenArbosState(statedb, burner)
-	Require(t, err)
-
-	l2rpc := builder.L2.Stack.Attach()
-	var result map[common.Address]*account
-	prestateTracer := "prestateTracer"
-	err = l2rpc.CallContext(ctx, &result, "debug_traceTransaction", tx.Hash(), &tracers.TraceConfig{Tracer: &prestateTracer})
-	Require(t, err)
-
-	// ArbOSVersion and BrotliCompressionLevel storage slots should be accessed by arbos so we check if the current values of these appear in the prestateTrace
-	arbOSVersionHash := common.BigToHash(new(big.Int).SetUint64(arbosSt.ArbOSVersion()))
-	bcl, err := arbosSt.BrotliCompressionLevel()
-	Require(t, err)
-	bclHash := common.BigToHash(new(big.Int).SetUint64(bcl))
-
-	if _, ok := result[types.ArbosStateAddress]; !ok {
-		t.Fatal("ArbosStateAddress storage accesses not logged in the prestateTracer's trace")
-	}
-
-	found := 0
-	for _, val := range result[types.ArbosStateAddress].Storage {
-		if val == arbOSVersionHash || val == bclHash {
-			found++
-		}
-	}
-	if found != 2 {
-		t.Fatal("ArbosStateAddress storage accesses for ArbOSVersion and BrotliCompressionLevel not logged in the prestateTracer's trace")
-	}
+	// Send another transaction with fallback on
+	checkBatchPosting(t, ctx, l1client, l2client, l1info, l2info, big.NewInt(3e12), l2B.Client)
 }
