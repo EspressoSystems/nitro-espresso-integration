@@ -86,16 +86,16 @@ var (
 
 const (
 	batchPosterSimpleRedisLockKey = "node.batch-poster.redis-lock.simple-lock-key"
-	// oldSequencerBatchPostMethodName uses automatically generated solidity function
-	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
-	oldSequencerBatchPostMethodName                 = "addSequencerL2BatchFromOrigin1"
-	newSequencerBatchPostMethodName                 = "addSequencerL2BatchFromOrigin"
-	sequencerBatchPostWithBlobsMethodName           = "addSequencerL2BatchFromBlobs"
+
 	sequencerBatchPostDelayProofMethodName          = "addSequencerL2BatchFromOriginDelayProof"
 	sequencerBatchPostWithBlobsDelayProofMethodName = "addSequencerL2BatchFromBlobsDelayProof"
-	oldSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs"
-	newSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs0"
-	espressoTransactionSizeLimit                    = 900 * 1024
+	// oldSequencerBatchPostMethodName uses automatically generated solidity function
+	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
+	oldSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin1"
+	newSequencerBatchPostMethodName          = "addSequencerL2BatchFromOrigin"
+	oldSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs"
+	newSequencerBatchPostWithBlobsMethodName = "addSequencerL2BatchFromBlobs0"
+	espressoTransactionSizeLimit             = 900 * 1024
 )
 
 type batchPosterPosition struct {
@@ -118,8 +118,8 @@ type BatchPoster struct {
 	bridgeAddr         common.Address
 	gasRefunderAddr    common.Address
 	building           *buildingBatch
-	dapReaders         []daprovider.Reader
 	dapWriter          daprovider.Writer
+	dapReaders         []daprovider.Reader
 	dataPoster         *dataposter.DataPoster
 	redisLock          *redislock.Simple
 	messagesPerBatch   *arbmath.MovingAverage[uint64]
@@ -148,6 +148,7 @@ type BatchPoster struct {
 type l1BlockBound int
 
 // This enum starts at 1 to avoid the empty initialization of 0 being valid
+
 const (
 	// Default is Safe if the L1 reader has finality data enabled, otherwise Latest
 	l1BlockBoundDefault l1BlockBound = iota + 1
@@ -283,12 +284,12 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	f.Uint64(prefix+".delay-buffer-threshold-margin", DefaultBatchPosterConfig.DelayBufferThresholdMargin, "the number of blocks to post the batch before reaching the delay buffer threshold")
-	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
-	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
+	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
+	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -326,17 +327,19 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ReorgResistanceMargin:          10 * time.Minute,
 	CheckBatchCorrectness:          true,
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
-	DelayBufferThresholdMargin:     25, // 5 minutes considering 12-second blocks
-	DelayBufferAlwaysUpdatable:     true,
-	ParentChainEip7623:             "auto",
-	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Second,
-	ResubmitEspressoTxDeadline:     10 * time.Minute,
-	MaxBlockLagBeforeEscapeHatch:   350,
-	LightClientAddress:             "",
-	HotShotUrls:                    []string{},
-	EspressoTeeType:                "SGX",
-	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
+	DelayBufferThresholdMargin:     25,
+	// 5 minutes considering 12-second blocks,
+	DelayBufferAlwaysUpdatable: true,
+	ParentChainEip7623:         "auto",
+	// 5 minutes considering 12-second blocks,
+	UseEscapeHatch:               false,
+	EspressoTxnsPollingInterval:  time.Second,
+	ResubmitEspressoTxDeadline:   10 * time.Minute,
+	MaxBlockLagBeforeEscapeHatch: 350,
+	LightClientAddress:           "",
+	HotShotUrls:                  []string{},
+	EspressoTeeType:              "SGX",
+	EspressoRegisterSignerConfig: espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -658,9 +661,12 @@ func (b *simulatedMuxBackend) PeekSequencerInbox() ([]byte, common.Hash, error) 
 	return b.seqMsg, common.Hash{}, nil
 }
 
-func (b *simulatedMuxBackend) GetSequencerInboxPosition() uint64   { return b.batchSeqNum }
-func (b *simulatedMuxBackend) AdvanceSequencerInbox()              {}
-func (b *simulatedMuxBackend) GetPositionWithinMessage() uint64    { return b.positionWithinMessage }
+func (b *simulatedMuxBackend) GetSequencerInboxPosition() uint64 { return b.batchSeqNum }
+
+func (b *simulatedMuxBackend) AdvanceSequencerInbox() {}
+
+func (b *simulatedMuxBackend) GetPositionWithinMessage() uint64 { return b.positionWithinMessage }
+
 func (b *simulatedMuxBackend) SetPositionWithinMessage(pos uint64) { b.positionWithinMessage = pos }
 
 func (b *simulatedMuxBackend) ReadDelayedInbox(seqNum uint64) (*arbostypes.L1IncomingMessage, error) {
@@ -681,6 +687,7 @@ type AccessListOpts struct {
 }
 
 // AccessList returns access list (contracts, storage slots) for batchposter.
+
 func AccessList(opts *AccessListOpts) types.AccessList {
 	l := types.AccessList{
 		types.AccessTuple{
@@ -745,6 +752,7 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 }
 
 var EspressoValidationErr = errors.New("failed to check espresso validation")
+
 var EspressoFetchTransactionErr = errors.New("failed to fetch the espresso transaction")
 
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
@@ -898,7 +906,9 @@ func (b *BatchPoster) ParentChainIsUsingEIP7623(ctx context.Context, latestHeade
 }
 
 // getTxsInfoByBlock fetches all the transactions inside block of id 'number' using json rpc
+
 // and returns an array of txInfo which has fields that are necessary in checking for batch reverts
+
 func (b *BatchPoster) getTxsInfoByBlock(ctx context.Context, number int64) ([]txInfo, error) {
 	blockNrStr := rpc.BlockNumber(number).String()
 	rawRpcClient := b.l1Reader.Client().Client()
@@ -913,9 +923,13 @@ func (b *BatchPoster) getTxsInfoByBlock(ctx context.Context, number int64) ([]tx
 }
 
 // checkReverts checks blocks with number in range [from, to] whether they
+
 // contain reverted batch_poster transaction.
+
 // It returns true if it finds batch posting needs to halt, which is true if a batch reverts
+
 // unless the data poster is configured with noop storage which can tolerate reverts.
+
 func (b *BatchPoster) checkReverts(ctx context.Context, to int64) (bool, error) {
 	if b.nextRevertCheckBlock > to {
 		return false, fmt.Errorf("wrong range, from: %d > to: %d", b.nextRevertCheckBlock, to)
@@ -1019,7 +1033,9 @@ func (b *BatchPoster) pollForL1PriceData(ctx context.Context) {
 }
 
 // pollForReverts runs a gouroutine that listens to l1 block headers, checks
+
 // if any transaction made by batch poster was reverted.
+
 func (b *BatchPoster) pollForReverts(ctx context.Context) {
 	headerCh, unsubscribe := b.l1Reader.Subscribe(false)
 	defer unsubscribe()
@@ -1200,6 +1216,7 @@ func (s *batchSegments) testForOverflow(isHeader bool) (bool, error) {
 			"current", s.totalUncompressedSize,
 			"max", arbstate.MaxDecompressedLen,
 			"isHeader", isHeader)
+		log.Debug("Adding to batch would cause overflow: s.totalUncompressedSize > arbstate.MaxDecompressedLen", "s.totalUncompressedSize", s.totalUncompressedSize, "arbstate.MaxDecompressedLen", arbstate.MaxDecompressedLen)
 		return true, nil
 	}
 	// we've reached the max number of segments
@@ -1208,6 +1225,7 @@ func (s *batchSegments) testForOverflow(isHeader bool) (bool, error) {
 			"segments", len(s.rawSegments),
 			"max", arbstate.MaxSegmentsPerSequencerMessage,
 			"isHeader", isHeader)
+		log.Debug("Adding to batch would cause overflow: len(s.rawSegments) >= arbstate.MaxSegmentsPerSequencerMessage", "len(s.rawSegments)", len(s.rawSegments), "arbstate.MaxSegmentsPerSequencerMessage", arbstate.MaxSegmentsPerSequencerMessage)
 		return true, nil
 	}
 	// there is room, no need to flush
@@ -1230,6 +1248,7 @@ func (s *batchSegments) testForOverflow(isHeader bool) (bool, error) {
 			"compressedSize", s.lastCompressedSize,
 			"limit", s.sizeLimit,
 			"isHeader", isHeader)
+		log.Debug("Adding to batch would cause overflow: s.lastCompressedSize >= s.sizeLimit", "s.lastCompressedSize", s.lastCompressedSize, "s.sizeLimit", s.sizeLimit)
 		return true, nil
 	}
 	return false, nil
@@ -1258,6 +1277,7 @@ func (s *batchSegments) addSegmentToCompressed(segment []byte) error {
 }
 
 // returns false if segment was too large, error in case of real error
+
 func (s *batchSegments) addSegment(segment []byte, isHeader bool) (bool, error) {
 	if s.isDone {
 		return false, errBatchAlreadyClosed
@@ -1358,6 +1378,7 @@ func (s *batchSegments) IsDone() bool {
 }
 
 // Returns nil (as opposed to []byte{}) if there's no segments to put in the batch
+
 func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 	if !s.isDone {
 		err := s.close()
@@ -1380,6 +1401,7 @@ func (s *batchSegments) CloseAndGetBytes() ([]byte, error) {
 }
 
 // Make the batch wait for validation Add this so we don't need to export the structs state to set it as we shouldn't need to set it to false again.
+
 func (s *batchSegments) SetWaitingForValidation() {
 	if !s.isWaitingForEspressoValidation {
 		log.Info("Set current batch segments to waiting for validation")
@@ -1400,6 +1422,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
+	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
 		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
@@ -1424,6 +1447,8 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		hotshotBlockNumber,
 	)
 
+	// Later append the delay proof if needed for getting the attestion quote.
+	// If not, only append at the end of the calldata as done below.
 	if err != nil {
 		return nil, err
 	}
@@ -1513,7 +1538,8 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	if err != nil {
 		return nil, err
 	}
-
+	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
+	// This will allow us to get the attestation quote on the hash of the dataPoster
 	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
 
 	if err != nil {
@@ -1521,6 +1547,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
+	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
 		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
