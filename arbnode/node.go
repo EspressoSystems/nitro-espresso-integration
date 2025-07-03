@@ -852,11 +852,13 @@ func createNodeImpl(
 
 	var timeboostSequencer *gethexec.TimeboostSequencer
 	if configFetcher.Get().TimeboostSequencer.Enable {
-		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			timeboostSequencer, err = gethexec.NewTimeboostSequencer(exec.ExecEngine, l1Reader, func() *gethexec.TimeboostSequencerConfig { return &configFetcher.Get().TimeboostSequencer })
-			if err != nil {
-				return nil, err
-			}
+		exec, ok := exec.(*gethexec.ExecutionNode)
+		if !ok {
+			log.Crit("Timeboost sequencer is enabled but execution client is not a gethexec.ExecutionNode")
+		}
+		timeboostSequencer, err = gethexec.NewTimeboostSequencer(exec.ExecEngine, l1Reader, func() *gethexec.TimeboostSequencerConfig { return &configFetcher.Get().TimeboostSequencer })
+		if err != nil {
+			return nil, err
 		}
 	}
 

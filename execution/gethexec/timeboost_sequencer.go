@@ -94,6 +94,7 @@ type TimeboostSequencerConfig struct {
 	ParentChainFinalizationTime time.Duration `koanf:"parent-chain-finalization-time"`
 	MaxAcceptableTimestampDelta time.Duration `koanf:"max-acceptable-timestamp-delta"`
 	EnableProfiling             bool          `koanf:"enable-profiling"`
+	MetricTimeForBlockCreation  time.Duration `koanf:"metric-time-for-block-creation"`
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
@@ -105,6 +106,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 	ParentChainFinalizationTime: 20 * time.Minute,
 	MaxAcceptableTimestampDelta: time.Hour,
 	EnableProfiling:             false,
+	MetricTimeForBlockCreation:  time.Second * 5,
 }
 
 func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -116,6 +118,7 @@ func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".parent-chain-finalization-time", DefaultTimeboostSequencerConfig.ParentChainFinalizationTime, "parent chain finalization time")
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
+	f.Duration(prefix+".metric-time-for-block-creation", DefaultTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
 }
 
 func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
@@ -210,17 +213,24 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	}
 
 	s.nonceCache.Resize(config.NonceCacheSize)
+	// Nonce cache is updated to indicate a new block creation has started
 	s.nonceCache.BeginNewBlock()
+	// Check nonces for each transaction in the queue
 	queueItems = s.precheckNonces(queueItems)
 	txes := make([]*types.Transaction, len(queueItems))
+	// Add hooks which include pre tx filter and post tx filter
 	hooks := s.makeSequencingHooks()
 	hooks.ConditionalOptionsForTx = make([]*arbitrum_types.ConditionalOptions, len(queueItems))
 	totalBlockSize = 0
+	// Add each queue's item to the txes list and add the total block size
 	for i, queueItem := range queueItems {
 		txes[i] = queueItem.tx
 		totalBlockSize = arbmath.SaturatingAdd(totalBlockSize, queueItem.txSize)
 		hooks.ConditionalOptionsForTx[i] = queueItem.options
 	}
+
+	// if for some reason the total block size is greater than the max tx data size
+	// then we need to add the transactions to the retry queue
 	if totalBlockSize > config.MaxTxDataSize {
 		for _, queueItem := range queueItems {
 			s.txRetryQueue.Push(queueItem)
@@ -234,6 +244,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		return madeBlock
 	}
 
+	// Get the consensus timestamp of the first transaction in the queue
+	// It should be the same for all transactions in the queue because
+	// each transaction is a part of the same round
 	timestamp := queueItems[0].consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
@@ -263,16 +276,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		block, err = s.execEngine.SequenceTransactions(l1IncomingMessageHeader, txes, hooks, nil)
 	}
 
-	elapsed := time.Since(start)
-	blockCreationTimer.Update(elapsed)
-	if elapsed >= time.Second*5 {
-		var blockNum *big.Int
-		if block != nil {
-			blockNum = block.Number()
-		}
-		log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2Block", blockNum)
-	}
-
+	// The hooks.TxErrors should match the txes. For case where there is no error, we should have a nil error
 	if err == nil && len(hooks.TxErrors) != len(txes) {
 		err = fmt.Errorf("unexpected number of error results: %v vs number of txes %v", len(hooks.TxErrors), len(txes))
 	}
@@ -292,7 +296,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			for _, queueItem := range queueItems {
 				s.txRetryQueue.Push(queueItem)
 			}
-			return true // don't return failure to avoid retrying immediately
+			return madeBlock
 		}
 		log.Error("error sequencing transactions", "err", err)
 		for _, queueItem := range queueItems {
@@ -305,6 +309,14 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	if block != nil {
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
+		// Add a metric to indicate how long it took to create the block
+		elapsed := time.Since(start)
+		blockCreationTimer.Update(elapsed)
+		if elapsed >= config.MetricTimeForBlockCreation {
+			blockNum := block.Number()
+			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2Block", blockNum)
+		}
+
 	}
 
 	for i, err := range hooks.TxErrors {
@@ -346,7 +358,7 @@ func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber i
 	if block.Time() <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
 		return block, nil
 	}
-
+	// Keep going backward only block at a time until we find a block which satifies the constraint
 	return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 }
 
