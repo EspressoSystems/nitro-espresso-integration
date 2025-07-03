@@ -101,7 +101,7 @@ func main() {
 	if !common.IsHexAddress(*espressoTEEVerifierAddressString) {
 		panic("specified espressoTEEVerifier address is invalid")
 	}
-	esperssoTEEVerifierAddress := common.HexToAddress(*espressoTEEVerifierAddressString)
+	espressoTEEVerifierAddress := common.HexToAddress(*espressoTEEVerifierAddressString) // This might be unused as a result of using mergiraf the one time, it meant that the creation of the rollup config here no longer takes the tee verifier address. TODO
 	sequencerAddress := common.HexToAddress(*sequencerAddressString)
 
 	if !common.IsHexAddress(*ownerAddressString) {
@@ -111,6 +111,10 @@ func main() {
 
 	if *prod && !common.IsHexAddress(*loserEscrowAddressString) {
 		panic("please specify a valid loser escrow address")
+	}
+
+	if !common.IsHexAddress(*espressoTEEVerifierAddressString) {
+		panic("please specify a valid espresso tee verifier address")
 	}
 
 	var batchPosters []common.Address
@@ -144,7 +148,6 @@ func main() {
 	}
 
 	loserEscrowAddress := common.HexToAddress(*loserEscrowAddressString)
-
 	if sequencerAddress != (common.Address{}) && ownerAddress != l1TransactionOpts.From {
 		panic("cannot specify sequencer address if owner is not deployer")
 	}
@@ -192,11 +195,7 @@ func main() {
 		batchPosters,
 		batchPosterManagerAddress,
 		*authorizevalidators,
-<<<<<<< HEAD
-		deploycode.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress),
-=======
-		arbnode.GenerateRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress, esperssoTEEVerifierAddress),
->>>>>>> celestia-integration
+		deploycode.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress, espressoTEEVerifierAddress),
 		nativeToken,
 		maxDataSize,
 		true,

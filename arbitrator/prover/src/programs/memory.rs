@@ -3,8 +3,6 @@
 
 use arbutil::evm::api::Gas;
 
-use arbutil::evm::api::Gas;
-
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct MemoryModel {

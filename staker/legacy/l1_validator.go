@@ -45,7 +45,7 @@ const (
 )
 
 type L1Validator struct {
-	rollup         *staker.RollupWatcher
+	rollup         *RollupWatcher
 	rollupAddress  common.Address
 	validatorUtils *rollup_legacy_gen.ValidatorUtils
 	client         *ethclient.Client
@@ -148,7 +148,7 @@ func (v *L1Validator) resolveTimedOutChallenges(ctx context.Context) (*types.Tra
 	return v.wallet.TimeoutChallenges(ctx, challengesToEliminate, challengeManagerAddress)
 }
 
-func (v *L1Validator) resolveNextNode(ctx context.Context, info *staker.StakerInfo, latestConfirmedNode *uint64) (bool, error) {
+func (v *L1Validator) resolveNextNode(ctx context.Context, info *StakerInfo, latestConfirmedNode *uint64) (bool, error) {
 	callOpts := v.getCallOpts(ctx)
 	confirmType, err := v.validatorUtils.CheckDecidableNextNode(callOpts, v.rollupAddress)
 	if err != nil {
@@ -204,7 +204,7 @@ func (v *L1Validator) isRequiredStakeElevated(ctx context.Context) (bool, error)
 }
 
 type createNodeAction struct {
-	assertion         *staker.Assertion
+	assertion         *Assertion
 	prevInboxMaxCount *big.Int
 	hash              common.Hash
 }
@@ -221,7 +221,7 @@ type OurStakerInfo struct {
 	LatestStakedNodeHash common.Hash
 	CanProgress          bool
 	StakeExists          bool
-	*staker.StakerInfo
+	*StakerInfo
 }
 
 func (v *L1Validator) generateNodeAction(
@@ -512,7 +512,7 @@ func (v *L1Validator) createNewNodeAction(
 		hasSiblingByte[0] = 1
 	}
 	assertionNumBlocks := uint64(validatedCount - startCount)
-	assertion := &staker.Assertion{
+	assertion := &Assertion{
 		BeforeState: startState,
 		AfterState: &validator.ExecutionState{
 			GlobalState:   validatedGS,
@@ -542,7 +542,7 @@ func (v *L1Validator) createNewNodeAction(
 }
 
 // Returns (execution state, inbox max count, L1 block proposed, parent chain block proposed, error)
-func lookupNodeStartState(ctx context.Context, rollup *staker.RollupWatcher, nodeNum uint64, nodeHash common.Hash) (*validator.ExecutionState, *big.Int, uint64, uint64, error) {
+func lookupNodeStartState(ctx context.Context, rollup *RollupWatcher, nodeNum uint64, nodeHash common.Hash) (*validator.ExecutionState, *big.Int, uint64, uint64, error) {
 	if nodeNum == 0 {
 		creationEvent, err := rollup.LookupCreation(ctx)
 		if err != nil {

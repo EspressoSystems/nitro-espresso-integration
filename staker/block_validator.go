@@ -104,9 +104,6 @@ type BlockValidator struct {
 	// For troubleshooting failed validations
 	validationInputsWriter *inputs.Writer
 
-	// For troubleshooting failed validations
-	validationInputsWriter *inputs.Writer
-
 	fatalErr chan<- error
 
 	MemoryFreeLimitChecker resourcemanager.LimitChecker

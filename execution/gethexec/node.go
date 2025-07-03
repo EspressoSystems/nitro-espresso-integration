@@ -10,8 +10,6 @@ import (
 
 	flag "github.com/spf13/pflag"
 
-	flag "github.com/spf13/pflag"
-
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -510,9 +508,6 @@ func (n *ExecutionNode) MessageIndexToBlockNumber(messageNum arbutil.MessageInde
 func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) containers.PromiseInterface[arbutil.MessageIndex] {
 	return containers.NewReadyPromise(n.ExecEngine.BlockNumberToMessageIndex(blockNum))
 }
-func (n *ExecutionNode) BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error) {
-	return n.ExecEngine.BlockNumberToMessageIndex(blockNum)
-}
 
 func (n *ExecutionNode) Maintenance() containers.PromiseInterface[struct{}] {
 	trieCapLimitBytes := arbmath.SaturatingUMul(uint64(n.ConfigFetcher().Caching.TrieCapLimit), 1024*1024)
@@ -541,54 +536,6 @@ func (n *ExecutionNode) SetFinalityData(
 ) containers.PromiseInterface[struct{}] {
 	err := n.SyncMonitor.SetFinalityData(ctx, safeFinalityData, finalizedFinalityData, validatedFinalityData)
 	return containers.NewReadyPromise(struct{}{}, err)
-}
-
-func (n *ExecutionNode) InitializeTimeboost(ctx context.Context, chainConfig *params.ChainConfig) error {
-	execNodeConfig := n.ConfigFetcher()
-	if execNodeConfig.Sequencer.Timeboost.Enable {
-		auctionContractAddr := common.HexToAddress(execNodeConfig.Sequencer.Timeboost.AuctionContractAddress)
-
-		auctionContract, err := NewExpressLaneAuctionFromInternalAPI(
-			n.Backend.APIBackend(),
-			n.FilterSystem,
-			auctionContractAddr)
-		if err != nil {
-			return err
-		}
-
-		roundTimingInfo, err := GetRoundTimingInfo(auctionContract)
-		if err != nil {
-			return err
-		}
-
-		expressLaneTracker := NewExpressLaneTracker(
-			*roundTimingInfo,
-			execNodeConfig.Sequencer.MaxBlockSpeed,
-			n.Backend.APIBackend(),
-			auctionContract,
-			auctionContractAddr,
-			chainConfig,
-			execNodeConfig.Sequencer.Timeboost.EarlySubmissionGrace,
-		)
-
-		n.TxPreChecker.SetExpressLaneTracker(expressLaneTracker)
-
-		if execNodeConfig.Sequencer.Enable {
-			err := n.Sequencer.InitializeExpressLaneService(
-				common.HexToAddress(execNodeConfig.Sequencer.Timeboost.AuctioneerAddress),
-				roundTimingInfo,
-				expressLaneTracker,
-			)
-			if err != nil {
-				log.Error("failed to create express lane service", "err", err)
-			}
-			n.Sequencer.StartExpressLaneService(ctx)
-		}
-
-		expressLaneTracker.Start(ctx)
-	}
-
-	return nil
 }
 
 func (n *ExecutionNode) InitializeTimeboost(ctx context.Context, chainConfig *params.ChainConfig) error {

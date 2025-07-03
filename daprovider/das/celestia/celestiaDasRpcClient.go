@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/rpc"
-	celestiaTypes "github.com/offchainlabs/nitro/das/celestia/types"
+	celestiaTypes "github.com/offchainlabs/nitro/daprovider/celestia/types"
 	"github.com/offchainlabs/nitro/util/pretty"
 )
 

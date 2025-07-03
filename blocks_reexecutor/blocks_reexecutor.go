@@ -180,17 +180,14 @@ func New(c *Config, blockchain *core.BlockChain, ethDb ethdb.Database, fatalErrC
 		}
 		return sdb, arbitrum.NoopStateRelease, err
 	}
+	return blocksReExecutor, nil
 }
+
+// LaunchBlocksReExecution launches the thread to apply blocks of range [currentBlock-s.config.MinBlocksPerThread, currentBlock] to the last available valid state
 func (s *BlocksReExecutor) LaunchBlocksReExecution(ctx context.Context, startBlock, currentBlock, minBlocksPerThread uint64) uint64 {
 	start := arbmath.SaturatingUSub(currentBlock, minBlocksPerThread)
 	if start < startBlock {
 		start = startBlock
-=======
-func (s *BlocksReExecutor) LaunchBlocksReExecution(ctx context.Context, currentBlock uint64) uint64 {
-	start := arbmath.SaturatingUSub(currentBlock, s.minBlocksPerThread)
-	if start < s.startBlock {
-		start = s.startBlock
->>>>>>> celestia-integration
 	}
 	startState, startHeader, release, err := arbitrum.FindLastAvailableState(ctx, s.blockchain, s.stateFor, s.blockchain.GetHeaderByNumber(start), nil, -1)
 	if err != nil {

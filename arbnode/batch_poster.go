@@ -34,14 +34,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-<<<<<<< HEAD
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
-=======
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 
->>>>>>> celestia-integration
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/parent"
@@ -51,15 +47,11 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
-<<<<<<< HEAD
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/execution"
-=======
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
->>>>>>> celestia-integration
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
@@ -83,7 +75,9 @@ var (
 
 	batchPosterEstimatedBatchBacklogGauge = metrics.NewRegisteredGauge("arb/batchposter/estimated_batch_backlog", nil)
 
-	batchPosterDAFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/da_failure", nil)
+	batchPosterDALastSuccessfulActionGauge = metrics.NewRegisteredGauge("arb/batchPoster/action/da_last_success", nil)
+	batchPosterDASuccessCounter            = metrics.NewRegisteredCounter("arb/batchPoster/action/da_success", nil)
+	batchPosterDAFailureCounter            = metrics.NewRegisteredCounter("arb/batchPoster/action/da_failure", nil)
 
 	batchPosterFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/failure", nil)
 
@@ -93,13 +87,6 @@ var (
 
 const (
 	batchPosterSimpleRedisLockKey = "node.batch-poster.redis-lock.simple-lock-key"
-<<<<<<< HEAD
-
-	sequencerBatchPostMethodName                    = "addSequencerL2BatchFromOrigin0"
-	sequencerBatchPostWithBlobsMethodName           = "addSequencerL2BatchFromBlobs"
-	sequencerBatchPostDelayProofMethodName          = "addSequencerL2BatchFromOriginDelayProof"
-	sequencerBatchPostWithBlobsDelayProofMethodName = "addSequencerL2BatchFromBlobsDelayProof"
-=======
 	// oldSequencerBatchPostMethodName uses automatically generated solidity function
 	// binding with selector 8f111f3c for "addSequencerL2BatchFromOrigin1"
 	oldSequencerBatchPostMethodName                 = "addSequencerL2BatchFromOrigin1"
@@ -110,7 +97,6 @@ const (
 	oldSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs"
 	newSequencerBatchPostWithBlobsMethodName        = "addSequencerL2BatchFromBlobs0"
 	espressoTransactionSizeLimit                    = 900 * 1024
->>>>>>> celestia-integration
 )
 
 type batchPosterPosition struct {
@@ -133,8 +119,8 @@ type BatchPoster struct {
 	bridgeAddr         common.Address
 	gasRefunderAddr    common.Address
 	building           *buildingBatch
-	dapReaders         []daprovider.Reader
 	dapWriter          daprovider.Writer
+	dapReaders         []daprovider.Reader
 	dataPoster         *dataposter.DataPoster
 	redisLock          *redislock.Simple
 	messagesPerBatch   *arbmath.MovingAverage[uint64]
@@ -153,7 +139,11 @@ type BatchPoster struct {
 	parentChain  *parent.ParentChain
 	checkEip7623 bool
 	useEip7623   bool
-	espressoStreamer *espressostreamer.EspressoStreamer
+	// Types for packing the blob hashes into the data used to generate the batchers attestation quote.
+	bytesType                 abi.Type
+	bytes32ArrayType          abi.Type
+	blobsAttestationArguments abi.Arguments
+	espressoStreamer          *espressostreamer.EspressoStreamer
 }
 
 type l1BlockBound int
@@ -209,11 +199,8 @@ type BatchPosterConfig struct {
 	CheckBatchCorrectness          bool                        `koanf:"check-batch-correctness"`
 	MaxEmptyBatchDelay             time.Duration               `koanf:"max-empty-batch-delay"`
 	DelayBufferThresholdMargin     uint64                      `koanf:"delay-buffer-threshold-margin"`
-<<<<<<< HEAD
 	DelayBufferAlwaysUpdatable     bool                        `koanf:"delay-buffer-always-updatable"`
 	ParentChainEip7623             string                      `koanf:"parent-chain-eip7623"`
-=======
->>>>>>> celestia-integration
 
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
@@ -297,16 +284,13 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	f.Uint64(prefix+".delay-buffer-threshold-margin", DefaultBatchPosterConfig.DelayBufferThresholdMargin, "the number of blocks to post the batch before reaching the delay buffer threshold")
-<<<<<<< HEAD
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
-=======
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
->>>>>>> celestia-integration
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -409,7 +393,7 @@ type BatchPosterOpts struct {
 	Config        BatchPosterConfigFetcher
 	DeployInfo    *chaininfo.RollupAddresses
 	TransactOpts  *bind.TransactOpts
-	DAPWriters    []daprovider.Writer
+	DAPWriter     daprovider.Writer
 	ParentChainID *big.Int
 	DAPReaders    []daprovider.Reader
 
@@ -535,25 +519,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	b := &BatchPoster{
-<<<<<<< HEAD
-		l1Reader:           opts.L1Reader,
-		inbox:              opts.Inbox,
-		streamer:           opts.Streamer,
-		arbOSVersionGetter: opts.VersionGetter,
-		syncMonitor:        opts.SyncMonitor,
-		config:             opts.Config,
-		seqInbox:           seqInbox,
-		seqInboxABI:        seqInboxABI,
-		seqInboxAddr:       opts.DeployInfo.SequencerInbox,
-		gasRefunderAddr:    opts.Config().gasRefunder,
-		bridgeAddr:         opts.DeployInfo.Bridge,
-		dapWriter:          opts.DAPWriter,
-		redisLock:          redisLock,
-		dapReaders:         opts.DAPReaders,
-		parentChain:        &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.L1Reader},
-		checkEip7623:       checkEip7623,
-		useEip7623:         useEip7623,
-=======
 		l1Reader:                  opts.L1Reader,
 		inbox:                     opts.Inbox,
 		streamer:                  opts.Streamer,
@@ -565,13 +530,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		seqInboxAddr:              opts.DeployInfo.SequencerInbox,
 		gasRefunderAddr:           opts.Config().gasRefunder,
 		bridgeAddr:                opts.DeployInfo.Bridge,
-		dapWriters:                opts.DAPWriters,
+		dapWriter:                 opts.DAPWriter,
 		redisLock:                 redisLock,
 		dapReaders:                opts.DAPReaders,
+		parentChain:               &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.L1Reader},
+		checkEip7623:              checkEip7623,
+		useEip7623:                useEip7623,
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
->>>>>>> celestia-integration
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1658,20 +1625,12 @@ func (b *BatchPoster) encodeAddBatch(
 		if delayProof != nil {
 			methodName = sequencerBatchPostWithBlobsDelayProofMethodName
 		} else {
-<<<<<<< HEAD
-			methodName = sequencerBatchPostWithBlobsMethodName
-=======
 			methodName = newSequencerBatchPostWithBlobsMethodName
->>>>>>> celestia-integration
 		}
 	} else if delayProof != nil {
 		methodName = sequencerBatchPostDelayProofMethodName
 	} else {
-<<<<<<< HEAD
-		methodName = sequencerBatchPostMethodName
-=======
 		methodName = newSequencerBatchPostMethodName
->>>>>>> celestia-integration
 	}
 	method, ok := b.seqInboxABI.Methods[methodName]
 	if !ok {
@@ -1681,10 +1640,6 @@ func (b *BatchPoster) encodeAddBatch(
 	var kzgBlobs []kzg4844.Blob
 	var fullCalldata []byte
 	var err error
-<<<<<<< HEAD
-	args = append(args, seqNum)
-	if use4844 {
-=======
 	switch methodName {
 	case newSequencerBatchPostMethodName:
 		log.Info("Encoding Espresso validated batch via:", "method", methodName)
@@ -1694,30 +1649,10 @@ func (b *BatchPoster) encodeAddBatch(
 		}
 	case newSequencerBatchPostWithBlobsMethodName:
 		log.Info("Encoding Espresso validated batch via testing:", "method", methodName)
->>>>>>> celestia-integration
 		kzgBlobs, err = blobs.EncodeBlobs(l2MessageData)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to encode blobs: %w", err)
 		}
-<<<<<<< HEAD
-	} else {
-		// EIP4844 transactions to the sequencer inbox will not use transaction calldata for L2 info.
-		args = append(args, l2MessageData)
-	}
-	args = append(args, new(big.Int).SetUint64(delayedMsg))
-	args = append(args, b.config().gasRefunder)
-	args = append(args, new(big.Int).SetUint64(uint64(prevMsgNum)))
-	args = append(args, new(big.Int).SetUint64(uint64(newMsgNum)))
-	if delayProof != nil {
-		args = append(args, delayProof)
-	}
-	calldata, err := method.Inputs.Pack(args...)
-	if err != nil {
-		return nil, nil, err
-	}
-	fullCalldata := append([]byte{}, method.ID...)
-	fullCalldata = append(fullCalldata, calldata...)
-=======
 		fullCalldata, err = b.getCalldataForEspressoBlobBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
 		if err != nil {
 			return nil, nil, err
@@ -1749,7 +1684,6 @@ func (b *BatchPoster) encodeAddBatch(
 		fullCalldata = append(fullCalldata, calldata...)
 
 	}
->>>>>>> celestia-integration
 	return fullCalldata, kzgBlobs, nil
 }
 
@@ -1770,11 +1704,7 @@ type OverrideAccount struct {
 
 type StateOverride map[common.Address]OverrideAccount
 
-<<<<<<< HEAD
 func estimateGas(client rpc.ClientInterface, ctx context.Context, params estimateGasParams, blockHex string) (uint64, error) {
-=======
-func estimateGas(client rpc.ClientInterface, ctx context.Context, params estimateGasParams) (uint64, error) {
->>>>>>> celestia-integration
 	var gas hexutil.Uint64
 	err := client.CallContext(ctx, &gas, "eth_estimateGas", params, blockHex)
 	// If eth_estimateGas fails due to a revert, we try again with eth_call to get a detailed error.
@@ -1811,11 +1741,7 @@ func (b *BatchPoster) estimateGasSimple(
 		MaxFeePerGas: (*hexutil.Big)(maxFeePerGas),
 		BlobHashes:   realBlobHashes,
 		AccessList:   realAccessList,
-<<<<<<< HEAD
 	}, "latest")
-=======
-	})
->>>>>>> celestia-integration
 	if err != nil {
 		return 0, fmt.Errorf("%w: %w", ErrNormalGasEstimationFailed, err)
 	}
@@ -1912,7 +1838,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.streamer.EspressoKeyManager != nil {
 		registered := b.streamer.EspressoKeyManager.HasRegistered()
 		if !registered {
-			return false, fmt.Errorf("ephemeral keys are not yet registed in Espresso TEE Contract")
+			return false, fmt.Errorf("ephemeral keys are not yet registered in Espresso TEE Contract")
 		}
 	}
 
@@ -1940,13 +1866,8 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		var use4844 bool
 		config := b.config()
-<<<<<<< HEAD
 		if config.Post4844Blobs && b.dapWriter == nil && latestHeader.ExcessBlobGas != nil && latestHeader.BlobGasUsed != nil {
 			arbOSVersion, err := b.arbOSVersionGetter.ArbOSVersionForMessageIndex(arbutil.MessageIndex(arbmath.SaturatingUSub(uint64(batchPosition.MessageCount), 1)))
-=======
-		if config.Post4844Blobs && len(b.dapWriters) == 0 && latestHeader.ExcessBlobGas != nil && latestHeader.BlobGasUsed != nil {
-			arbOSVersion, err := b.arbOSVersionGetter.ArbOSVersionForMessageNumber(arbutil.MessageIndex(arbmath.SaturatingUSub(uint64(batchPosition.MessageCount), 1)))
->>>>>>> celestia-integration
 			if err != nil {
 				return false, err
 			}
@@ -2178,7 +2099,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-<<<<<<< HEAD
 	var delayBufferConfig *DelayBufferConfig
 	if b.building.firstDelayedMsg != nil { // Only fetch delayBufferConfig config when needed
 		delayBufferConfig, err = GetDelayBufferConfig(ctx, b.seqInbox)
@@ -2200,26 +2120,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 					"latestBlock", latestBlock)
 				forcePostBatch = true
 			}
-=======
-	delayBuffer, err := GetDelayBufferConfig(ctx, b.seqInbox)
-	if err != nil {
-		return false, err
-	}
-	if delayBuffer.Enabled && b.building.firstDelayedMsg != nil {
-		latestHeader, err := b.l1Reader.LastHeader(ctx)
-		if err != nil {
-			return false, err
-		}
-		latestBlock := latestHeader.Number.Uint64()
-		firstDelayedMsgBlock := b.building.firstDelayedMsg.Message.Header.BlockNumber
-		threasholdLimit := firstDelayedMsgBlock + delayBuffer.Threshold - b.config().DelayBufferThresholdMargin
-		if latestBlock >= threasholdLimit {
-			log.Info("force post batch because of the delay buffer",
-				"firstDelayedMsgBlock", firstDelayedMsgBlock,
-				"threshold", delayBuffer.Threshold,
-				"latestBlock", latestBlock)
-			forcePostBatch = true
->>>>>>> celestia-integration
 		}
 	}
 
@@ -2264,7 +2164,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, nil
 	}
 
-	if len(b.dapWriters) > 0 {
+	if b.dapWriter != nil {
 		if !b.redisLock.AttemptLock(ctx) {
 			return false, errAttemptLockFailed
 		}
@@ -2278,8 +2178,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			batchPosterDAFailureCounter.Inc(1)
 			return false, fmt.Errorf("%w: nonce changed from %d to %d while creating batch", storage.ErrStorageRace, nonce, gotNonce)
 		}
-
-<<<<<<< HEAD
 		// #nosec G115
 		sequencerMsg, err = b.dapWriter.Store(ctx, sequencerMsg, uint64(time.Now().Add(config.DASRetentionPeriod).Unix()), config.DisableDapFallbackStoreDataOnChain)
 		if err != nil {
@@ -2289,26 +2187,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 
 		batchPosterDASuccessCounter.Inc(1)
 		batchPosterDALastSuccessfulActionGauge.Update(time.Now().Unix())
-
-=======
-		// attempt to store data using one of the dapWriters, if it fails and fallbacks are disabled, return a hard error
-		seqMsg := sequencerMsg
-		for _, writer := range b.dapWriters {
-			log.Info("Attempting to store data with dapWriter", "type", writer.Type())
-			sequencerMsg, err = writer.Store(ctx, seqMsg, uint64(time.Now().Add(config.DASRetentionPeriod).Unix()), config.DisableDapFallbackStoreDataOnChain)
-			if err != nil {
-				if config.DisableDapFallbackStoreDataOnChain {
-					log.Error("Error while attempting to post batch and on chain fallback is disabled", "error", err)
-					return false, err
-				}
-				log.Error("Error when trying to store data with dapWriter", "type", writer.Type())
-				continue
-			}
-			// if we succesffuly posted a batch with a dapWriter, we move on and ignore the rest
-			break
-		}
-
->>>>>>> celestia-integration
 	}
 
 	prevMessageCount := batchPosition.MessageCount
@@ -2342,18 +2220,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	var delayProof *bridgegen.DelayProof
-<<<<<<< HEAD
 	latestHeader, err := b.l1Reader.LastHeader(ctx)
-=======
-	if delayBuffer.Enabled && b.building.firstDelayedMsg != nil {
-		delayProof, err = GenDelayProof(ctx, b.building.firstDelayedMsg, b.inbox)
-		if err != nil {
-			return false, fmt.Errorf("failed to generate delay proof: %w", err)
-		}
-	}
-
-	data, kzgBlobs, err := b.encodeAddBatch(new(big.Int).SetUint64(batchPosition.NextSeqNum), prevMessageCount, b.building.msgCount, sequencerMsg, b.building.segments.delayedMsg, b.building.use4844, delayProof)
->>>>>>> celestia-integration
 	if err != nil {
 		return false, err
 	}

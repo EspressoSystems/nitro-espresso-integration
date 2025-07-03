@@ -531,11 +531,7 @@ func (n NodeInterface) GasEstimateL1Component(
 	if !ok {
 		return 0, nil, nil, errors.New("failed to cast to stateDB")
 	}
-<<<<<<< HEAD
 	msg := args.ToMessage(evm.Context.BaseFee, randomGas, n.header, sdb, core.MessageEthcallMode, true, true)
-=======
-	msg := args.ToMessage(evm.Context.BaseFee, randomGas, n.header, sdb, core.MessageEthcallMode)
->>>>>>> celestia-integration
 
 	pricing := c.State.L1PricingState()
 	l1BaseFeeEstimate, err := pricing.PricePerUnit()
@@ -595,11 +591,7 @@ func (n NodeInterface) GasEstimateComponents(
 	if !ok {
 		return 0, 0, nil, nil, errors.New("failed to cast to stateDB")
 	}
-<<<<<<< HEAD
 	msg := args.ToMessage(evm.Context.BaseFee, gasCap, n.header, sdb, core.MessageGasEstimationMode, true, true)
-=======
-	msg := args.ToMessage(evm.Context.BaseFee, gasCap, n.header, sdb, core.MessageGasEstimationMode)
->>>>>>> celestia-integration
 	brotliCompressionLevel, err := c.State.BrotliCompressionLevel()
 	if err != nil {
 		return 0, 0, nil, nil, fmt.Errorf("failed to get brotli compression level: %w", err)

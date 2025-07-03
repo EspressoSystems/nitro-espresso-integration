@@ -575,6 +575,7 @@ func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
 			}
 			return nil
 		}, retryInterval, roundEndTime); err != nil {
+			return err
 		}
 
 		// Wait for the transaction to be mined until this round ends
@@ -600,6 +601,39 @@ func (a *AuctioneerServer) resolveAuction(ctx context.Context) error {
 			log.Error("Error resolving auction", "error", err)
 			return err
 		}
+	}
+
+	log.Info("Auction resolved successfully", "txHash", tx.Hash().Hex())
+	return nil
+}
+
+func (a *AuctioneerServer) acknowledgeAllBids(ctx context.Context, round uint64) {
+	a.unackedBidsMutex.Lock()
+	defer a.unackedBidsMutex.Unlock()
+
+	var acknowledgedCount int
+	for msgID, msg := range a.unackedBids {
+		bid := msg.Value
+		if uint64(bid.Round) <= round {
+			msg.Ack() // Stop the heartbeat goroutine
+
+			// SetResult calls XAck to remove the msg from the consumer group's
+			// pending list and then removes it from the stream with XDel.
+			if err := a.consumer.SetResult(ctx, msgID, nil); err != nil {
+				log.Warn("Error marking bid message as consumed by auctioneer", "msgID", msgID, "error", err)
+				// We still need delete that bid from unacked bids since
+				// it can't be Ack()ed more than once.
+				// It will be cleaned up when it's re-read or by the producer
+				// after it expires.
+			}
+			delete(a.unackedBids, msgID)
+			acknowledgedCount++
+		}
+	}
+
+	log.Info("Acknowledged bids in redis stream", "count", acknowledgedCount)
+}
+
 // retryUntil retries a given operation defined by the closure until the specified duration
 // has passed or the operation succeeds. It waits for the specified retry interval between
 // attempts. The function returns an error if all attempts fail.

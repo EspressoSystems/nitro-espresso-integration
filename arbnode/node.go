@@ -158,7 +158,6 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feed
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
-	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
 }
 
 var ConfigDefault = Config{
@@ -183,7 +182,6 @@ var ConfigDefault = Config{
 	Maintenance:              DefaultMaintenanceConfig,
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
-	EspressoCaffNode:         DefaultEspressoCaffNodeConfig,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -287,7 +285,8 @@ type Node struct {
 	configFetcher            ConfigFetcher
 	ctx                      context.Context
 	ConsensusExecutionSyncer *ConsensusExecutionSyncer
-	EspressoCaffNode         *EspressoCaffNode
+
+	EspressoCaffNode *EspressoCaffNode
 }
 
 type SnapSyncConfig struct {
@@ -555,50 +554,6 @@ func getDelayedBridgeAndSequencerInbox(
 	if err != nil {
 		return nil, nil, err
 	}
-
-	if config.EspressoCaffNode.Enable {
-		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
-				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
-				exec.ExecEngine,
-				delayedBridge,
-				l1Reader,
-				arbDb,
-				config.EspressoCaffNode.RecordPerformance,
-				config.EspressoCaffNode.BlocksToRead,
-			)
-
-			return &Node{
-				ArbDB:                   arbDb,
-				Stack:                   stack,
-				Execution:               exec,
-				L1Reader:                nil,
-				TxStreamer:              txStreamer,
-				DeployInfo:              nil,
-				BlobReader:              blobReader,
-				InboxReader:             nil,
-				InboxTracker:            nil,
-				DelayedSequencer:        nil,
-				BatchPoster:             nil,
-				MessagePruner:           nil,
-				BlockValidator:          nil,
-				StatelessBlockValidator: nil,
-				Staker:                  nil,
-				BroadcastServer:         broadcastServer,
-				BroadcastClients:        broadcastClients,
-				SeqCoordinator:          coordinator,
-				MaintenanceRunner:       maintenanceRunner,
-				DASLifecycleManager:     nil,
-				SyncMonitor:             syncMonitor,
-				configFetcher:           configFetcher,
-				EspressoCaffNode:        espressoCaffNode,
-				ctx:                     ctx,
-			}, nil
-
-		} else {
-			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
-		}
-	}
 	// #nosec G115
 	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
 	if err != nil {
@@ -672,16 +627,6 @@ func getDAS(
 		}
 	} else if l2Config.ArbitrumChainParams.DataAvailabilityCommittee {
 		return nil, nil, nil, errors.New("a data availability service is required for this chain, but it was not configured")
-	}
-
-	if config.Celestia.Enable {
-		celestiaService, err := celestia.NewCelestiaDASRPCClient(config.Celestia.URL)
-		if err != nil {
-			return nil, err
-		}
-
-		celestiaReader = celestiaService
-		celestiaWriter = celestiaService
 	}
 
 	// We support a nil txStreamer for the pruning code
@@ -969,6 +914,7 @@ func getBatchPoster(
 	parentChainID *big.Int,
 	dapReaders []daprovider.Reader,
 	stakerAddr common.Address,
+	dataSigner signature.DataSignerFunc,
 ) (*BatchPoster, error) {
 	var batchPoster *BatchPoster
 	if config.BatchPoster.Enable {
@@ -993,7 +939,7 @@ func getBatchPoster(
 			Config:        func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
 			DeployInfo:    deployInfo,
 			TransactOpts:  txOptsBatchPoster,
-			DAPWriters:    dapWriters,
+			DAPWriter:     dapWriter,
 			ParentChainID: parentChainID,
 			DAPReaders:    dapReaders,
 
@@ -1132,7 +1078,6 @@ func getNodeParentChainReaderDisabled(
 		SeqCoordinator:          coordinator,
 		MaintenanceRunner:       maintenanceRunner,
 		SyncMonitor:             syncMonitor,
-		blockMetadataFetcher:    blockMetadataFetcher,
 		configFetcher:           configFetcher,
 		ctx:                     ctx,
 		blockMetadataFetcher:    blockMetadataFetcher,
@@ -1217,11 +1162,19 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	dapWriter, dasServerCloseFn, dapReaders, err := getDAS(ctx, config, l2Config, txStreamer, blobReader, l1Reader, deployInfo, dataSigner, l1client, stack)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack)
 	if err != nil {
 		return nil, err
 	}
 
+	if caffNode != nil {
+		return caffNode, nil
+	}
+
+	dapWriter, dasServerCloseFn, dapReaders, err := getDAS(ctx, config, l2Config, txStreamer, blobReader, l1Reader, deployInfo, dataSigner, l1client, stack)
+	if err != nil {
+		return nil, err
+	}
 	inboxTracker, inboxReader, err := getInboxTrackerAndReader(ctx, arbDb, txStreamer, dapReaders, config, configFetcher, l1client, l1Reader, deployInfo, delayedBridge, sequencerInbox, executionSequencer)
 	if err != nil {
 		return nil, err
@@ -1242,7 +1195,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, l1Reader, inboxTracker, txStreamer, executionBatchPoster, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr)
+	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, l1Reader, inboxTracker, txStreamer, executionBatchPoster, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr, dataSigner)
 	if err != nil {
 		return nil, err
 	}
@@ -1480,6 +1433,10 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error populating feed backlog on startup: %w", err)
 		}
 	}
+	err = n.TxStreamer.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("error starting transaction streamer: %w", err)
+	}
 	if n.InboxReader != nil {
 		err = n.InboxReader.Start(ctx)
 		if err != nil {
@@ -1506,10 +1463,6 @@ func (n *Node) Start(ctx context.Context) error {
 	}
 	if n.BatchPoster != nil {
 		n.BatchPoster.Start(ctx)
-	}
-	err = n.TxStreamer.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("error starting transaction streamer: %w", err)
 	}
 	if n.MessagePruner != nil {
 		n.MessagePruner.Start(ctx)
@@ -1637,7 +1590,12 @@ func (n *Node) StopAndWait() {
 		// Just stops the redis client (most other stuff was stopped earlier)
 		n.SeqCoordinator.StopAndWait()
 	}
-	n.SyncMonitor.StopAndWait()
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
+	if n.SyncMonitor != nil {
+		n.SyncMonitor.StopAndWait()
+	}
 	if n.dasServerCloseFn != nil {
 		n.dasServerCloseFn()
 	}
@@ -1686,8 +1644,4 @@ func (n *Node) ExpectChosenSequencer() containers.PromiseInterface[struct{}] {
 
 func (n *Node) BlockMetadataAtMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[common.BlockMetadata] {
 	return containers.NewReadyPromise(n.TxStreamer.BlockMetadataAtMessageIndex(msgIdx))
-}
-
-func (n *Node) BlockMetadataAtCount(count arbutil.MessageIndex) (common.BlockMetadata, error) {
-	return n.TxStreamer.BlockMetadataAtCount(count)
 }

@@ -27,13 +27,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-<<<<<<< HEAD
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
-=======
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
-	"github.com/ethereum/go-ethereum/core/txpool"
->>>>>>> celestia-integration
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -51,10 +46,7 @@ import (
 	redisstorage "github.com/offchainlabs/nitro/arbnode/dataposter/redis"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/slice"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
-<<<<<<< HEAD
 	"github.com/offchainlabs/nitro/arbnode/parent"
-=======
->>>>>>> celestia-integration
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/blobs"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -1157,13 +1149,9 @@ func (p *DataPoster) maybeLogError(err error, tx *storage.QueuedTransaction, msg
 	}
 	logLevel := log.Error
 	isStorageRace := errors.Is(err, storage.ErrStorageRace)
-<<<<<<< HEAD
 	isFutureReplacePending := strings.Contains(err.Error(), legacypool.ErrFutureReplacePending.Error())
 	isNonceTooHigh := strings.Contains(err.Error(), core.ErrNonceTooHigh.Error())
 	if isStorageRace || isFutureReplacePending || isNonceTooHigh {
-=======
-	if isStorageRace || strings.Contains(err.Error(), txpool.ErrFutureReplacePending.Error()) {
->>>>>>> celestia-integration
 		p.errorCount[nonce]++
 		if p.errorCount[nonce] <= maxConsecutiveIntermittentErrors {
 			if isStorageRace {
