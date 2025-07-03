@@ -171,7 +171,7 @@ jobs:
         run: make build test-go-deps -j8
 
       - name: Build all lint dependencies
-        run: make -j8 build-node-deps
+        run: make -j8 build-node-deps -o build-espresso-crypto-lib
 
       - name: Lint
         uses: golangci/golangci-lint-action@v8
