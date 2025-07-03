@@ -71,7 +71,11 @@ COPY --from=wasm-libs-builder /workspace/ /
 
 FROM wasm-base AS wasm-bin-builder
 RUN apt update && apt install -y wabt
+# pinned go version
 RUN curl -L https://golang.org/dl/go1.23.1.linux-`dpkg --print-architecture`.tar.gz | tar -C /usr/local -xzf -
+COPY ./Makefile ./go.mod ./go.sum ./
+COPY ./arbcompress ./arbcompress
+COPY ./arbos ./arbos
 COPY ./arbstate ./arbstate
 COPY ./arbutil ./arbutil
 COPY ./gethhook ./gethhook
@@ -81,6 +85,11 @@ COPY ./cmd/replay ./cmd/replay
 COPY ./daprovider ./daprovider
 COPY ./daprovider/das/dasutil ./daprovider/das/dasutil
 COPY ./daprovider/das/dastree ./daprovider/das/dastree
+COPY ./daprovider/celestia ./daprovider/celestia
+COPY ./precompiles ./precompiles
+COPY ./statetransfer ./statetransfer
+COPY ./util ./util
+COPY ./wavmio ./wavmio
 COPY ./zeroheavy ./zeroheavy
 COPY ./contracts-legacy/package.json ./contracts-legacy/yarn.lock ./contracts-legacy/
 COPY ./contracts-legacy/src/precompiles/ ./contracts-legacy/src/precompiles/

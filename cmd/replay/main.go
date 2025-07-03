@@ -186,7 +186,7 @@ func (dasReader *PreimageCelestiaReader) Read(ctx context.Context, blobPointer *
 	squareSize := uint64(len(leaves)) / 2
 	// split leaves in half to get row roots
 	rowRoots := leaves[:squareSize]
-	// We get the original data square size, which is (size_of_the_extended_square / 2)
+	// We get the original data square size, wich is (size_of_the_extended_square / 2)
 	odsSize := squareSize / 2
 
 	startRow := blobPointer.Start / odsSize

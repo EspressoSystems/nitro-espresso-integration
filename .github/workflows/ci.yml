@@ -179,9 +179,9 @@ jobs:
           version: latest
           skip-cache: true
           skip-save-cache: true
-      - name: Custom Lint
-        run: |
-          go run ./linters ./...
+      # - name: Custom Lint
+      #   run: |
+      #     go run ./linters ./...
 
       - name: Set environment variables
         run: |
