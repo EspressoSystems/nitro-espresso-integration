@@ -45,13 +45,13 @@ type synchronizedTimeboostTransactionQueue struct {
 	mutex sync.RWMutex
 }
 
-func (q *synchronizedTimeboostTransactionQueue) Push(item timeboostTransactionQueueItem) {
+func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactionQueueItem) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.queue = append(q.queue, item)
 }
 
-func (q *synchronizedTimeboostTransactionQueue) deQueue() timeboostTransactionQueueItem {
+func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQueueItem {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	// Remove the first element from the queue and then return it
@@ -142,7 +142,6 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 }
 
 func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
-
 	// First we need to create the current list of transactions that we will process
 	queueItems := make([]timeboostTransactionQueueItem, 0)
 	var totalBlockSize int
@@ -170,7 +169,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		//  Transaction retry queue should only
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
-			queueItem = s.txRetryQueue.deQueue()
+			queueItem = s.txRetryQueue.dequeue()
 		} else if s.txQueue.Len() == 0 {
 			// This means we have no transactions in the txRetryQueue and
 			// we also dont have any sailfish rounds to process
@@ -178,9 +177,9 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		} else {
 			// Only add transactions from the same round id or if the queue is empty
 			if len(queueItems) == 0 {
-				queueItem = s.txQueue.deQueue()
+				queueItem = s.txQueue.dequeue()
 			} else if s.txQueue.Peek() != nil && queueItems[len(queueItems)-1].roundId == s.txQueue.Peek().roundId {
-				queueItem = s.txQueue.deQueue()
+				queueItem = s.txQueue.dequeue()
 			} else {
 				break
 			}
@@ -211,7 +210,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
 			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
-			s.txRetryQueue.Push(queueItem)
+			s.txRetryQueue.enqueue(queueItem)
 			// End the batch here to put this tx in the next one
 			break
 		}
@@ -244,7 +243,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	// then we need to add the transactions to the retry queue
 	if totalBlockSize > config.MaxTxDataSize {
 		for _, queueItem := range queueItems {
-			s.txRetryQueue.Push(queueItem)
+			s.txRetryQueue.enqueue(queueItem)
 		}
 		log.Error(
 			"put too many transactions in a block",
@@ -300,7 +299,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		log.Warn("error sequencing transactions", "err", err)
 
 		for _, queueItem := range queueItems {
-			s.txRetryQueue.Push(queueItem)
+			s.txRetryQueue.enqueue(queueItem)
 		}
 		return madeBlock
 	}
@@ -309,7 +308,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		if errors.Is(err, context.Canceled) {
 			// thread closed. We'll later try to forward these messages.
 			for _, queueItem := range queueItems {
-				s.txRetryQueue.Push(queueItem)
+				s.txRetryQueue.enqueue(queueItem)
 			}
 			return madeBlock
 		}
@@ -343,7 +342,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			// There's not enough gas left in the block for this tx.
 			if madeBlock {
 				// There was already an earlier tx in the block; retry in a fresh block.
-				s.txRetryQueue.Push(queueItem)
+				s.txRetryQueue.enqueue(queueItem)
 				continue
 			}
 		}
@@ -515,7 +514,7 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
 		}
 
-		s.txQueue.Push(txQueueItem)
+		s.txQueue.enqueue(txQueueItem)
 
 	}
 	return nil
