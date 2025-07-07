@@ -607,6 +607,7 @@ func (s *ExecutionEngine) sequenceTransactionsWithBlockMutex(header *arbostypes.
 	if err != nil {
 		return nil, err
 	}
+
 	s.cacheL1PriceDataOfMsg(pos, receipts, block, false)
 
 	return block, nil
