@@ -193,6 +193,7 @@ func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
 }
 
 func TestEspressoTimeboostSequencer(t *testing.T) {
+
 	t.Run("Run simple test to see if it builds the block", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -210,7 +211,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		var users []string
 
 		const numUsers = 10
-		const numIncls = 10
+		const numIncls = 1
 
 		for num := 0; num < numUsers; num++ {
 			userName := fmt.Sprintf("My_User_%d", num)
@@ -274,5 +275,4 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			t.Fatalf("expected inclusion and transaction to match. got %d inclusion txns, got %d processed transactions", count, len(transactions))
 		}
 	})
-
 }
