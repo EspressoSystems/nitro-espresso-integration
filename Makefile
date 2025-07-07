@@ -215,6 +215,7 @@ all: build build-replay-env test-gen-proofs
 build: generate-proto $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
 	@printf $(done)
 
+.PHONY: proto
 generate-proto: $(PROTO_FILE)
 	protoc --proto_path=$(CURDIR) --go_out=$(CURDIR) --go_opt=paths=source_relative $(PROTO_FILE)
 
