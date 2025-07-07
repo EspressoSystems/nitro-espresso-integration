@@ -447,7 +447,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		}
 	})
 
-	t.Run("test timeboost sequencer removes transactions with invalid gas fee", func(t *testing.T) {
+	t.Run("timeboost sequencer removes transactions with invalid gas fee", func(t *testing.T) {
 
 		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
 		Require(t, err)
@@ -462,6 +462,43 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		// Transactions with invalid gas fee
 		txnWithHigherGasFee := builder.L2Info.PrepareTxWithInvalidGasFee(users[6], users[7], builder.L2Info.TransferGas, big.NewInt(1), nil)
 		txns = append(txns, txnWithHigherGasFee)
+		txnsList = append(txnsList, txns)
+
+		// Generate and send inclusion lists
+		inclusionLists := GenerateInclusionLists(t, users, builder, numIncls, txnsList)
+		SendInclusionLists(t, inclusionLists)
+
+		// Wait for sometime for the block to be produced
+		time.Sleep(time.Second * 60)
+
+		blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
+		if blockNumberAfter > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+		}
+
+		// No blocks should be created
+		if blockNumberAfter-blockNumberBefore > 0 {
+			t.Fatalf("expected no blocks to be created, got: %d", blockNumberAfter-blockNumberBefore)
+		}
+	})
+
+	t.Run("timeboost sequencer removes transactions with invalid size", func(t *testing.T) {
+
+		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
+		if blockNumberBefore > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberBefore)
+		}
+		// Create three transactions list where each user is the sender to another user
+		txnsList := make([][]*types.Transaction, 0)
+
+		// Create three transaction lists, each transaction list will form a different inclusion list with a different round id
+		txns := make([]*types.Transaction, 0)
+		// Add data bytes which are greater than 95000
+		data := make([]byte, 195000)
+		txnWithInvalidSize := builder.L2Info.PrepareTx(users[4], users[5], builder.L2Info.TransferGas, big.NewInt(1), data)
+		txns = append(txns, txnWithInvalidSize)
 		txnsList = append(txnsList, txns)
 
 		// Generate and send inclusion lists
