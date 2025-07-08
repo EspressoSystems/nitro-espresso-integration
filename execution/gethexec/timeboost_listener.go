@@ -249,7 +249,7 @@ func process(
 	return 0
 }
 
-func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint64, evidence []byte) error {
+func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint64) error {
 	txns, err := rlp.EncodeToBytes(block.Transactions())
 	if err != nil {
 		return err
@@ -259,7 +259,6 @@ func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint6
 		Round:     round,
 		Hash:      block.Hash().Bytes(),
 		Payload:   txns,
-		Evidence:  evidence,
 	}
 	ctx := context.Background()
 	if _, err := l.grpcClient.SubmitBlock(ctx, protoBlock); err != nil {

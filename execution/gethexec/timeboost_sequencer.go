@@ -38,7 +38,6 @@ type timeboostTransactionQueueItem struct {
 	options            *arbitrum_types.ConditionalOptions
 	roundId            uint64
 	consensusTimestamp uint64
-	evidence           []byte
 }
 
 type synchronizedTimeboostTransactionQueue struct {
@@ -360,7 +359,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 	if madeBlock && block != nil {
 		queueItem := queueItems[0]
-		if err = s.timeboostTxnListener.SendBlockToTimeboost(block, queueItem.roundId, queueItem.evidence); err != nil {
+		if err = s.timeboostTxnListener.SendBlockToTimeboost(block, queueItem.roundId); err != nil {
 			// TODO: How to handle failures
 			log.Error("failed to send block to timeboost", "err", err)
 		}
@@ -520,10 +519,8 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
-			evidence:           inclusionList.Evidence,
 		}
 		s.txQueue.enqueue(txQueueItem)
-
 	}
 	return nil
 }

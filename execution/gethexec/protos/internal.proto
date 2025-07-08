@@ -8,5 +8,5 @@ import "google/protobuf/empty.proto";
 import "execution/gethexec/protos/block.proto";
 
 service InternalApi {
-    rpc SubmitBlock (gethexec.Block) returns (google.protobuf.Empty) {}
+    rpc SubmitBlock (block.Block) returns (google.protobuf.Empty) {}
 }

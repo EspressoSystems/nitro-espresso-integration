@@ -34,7 +34,7 @@ func runDecentralizedTimeboost() func() {
 		var stderr bytes.Buffer
 		p.Stderr = &stderr
 		if err := p.Run(); err != nil {
-			log.Error("failed to run 'docker compose down", "err", err, "str", stderr.String())
+			log.Error("failed to run 'docker compose down`", "err", err, "str", stderr.String())
 			panic(err)
 		}
 		time.Sleep(5 * time.Second)
@@ -46,7 +46,7 @@ func runDecentralizedTimeboost() func() {
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		log.Error("failed to run 'docker compose up", "err", err, "str", stderr.String())
+		log.Error("failed to run 'docker compose up`", "err", err, "str", stderr.String())
 		panic(err)
 	}
 
