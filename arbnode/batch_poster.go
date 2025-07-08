@@ -780,11 +780,7 @@ func (b *BatchPoster) checkEspressoValidation() bool {
 	log.Info("last confirmed pos in check espresso validation", "lastConfirmedPos", *lastConfirmed)
 
 	// This message has passed the espresso verification
-	if b.building.msgCount-1 <= *lastConfirmed {
-		return true
-	}
-	// If we aren't skipping validation for this batch, or we can't validate the proofs, we need to retry.
-	return false
+	return b.building.msgCount-1 <= *lastConfirmed
 }
 
 type txInfo struct {

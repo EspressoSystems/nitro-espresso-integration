@@ -1317,7 +1317,7 @@ func (s *TransactionStreamer) BlockMetadataAtMessageIndex(msgIdx arbutil.Message
 		if dbutil.IsErrNotFound(err) {
 			return nil, nil
 		}
-		return nil, er
+		return nil, err
 	}
 	return blockMetadata, nil
 }
@@ -1334,13 +1334,8 @@ func (s *TransactionStreamer) enqueuePendingTransaction(pos []arbutil.MessageInd
 	return nil
 }
 
-func (s *TransactionStreamer) ResultAtCount(count arbutil.MessageIndex) (*execution.MessageResult, error) {
-	if count == 0 {
-		return &execution.MessageResult{}, nil
-	}
-	pos := count - 1
-
-	key := dbKey(messageResultPrefix, uint64(pos))
+func (s *TransactionStreamer) ResultAtMessageIndex(msgIdx arbutil.MessageIndex) (*execution.MessageResult, error) {
+	key := dbKey(messageResultPrefix, uint64(msgIdx))
 	data, err := s.db.Get(key)
 	if err == nil {
 		var msgResult execution.MessageResult
@@ -1631,22 +1626,8 @@ func (s *TransactionStreamer) BlockMetadataAtCount(count arbutil.MessageIndex) (
 	return blockMetadata, nil
 }
 
-func (s *TransactionStreamer) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
-	// Store the pos in the database to be used later to submit the message
-	// to hotshot for finalization.
-	err := s.SubmitEspressoTransactionPos(pos)
-	if err != nil {
-		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
-		return err
-	}
-
-	return nil
-}
-
 // Check if the latest submitted transaction has been finalized on L1 and verify it.
-
 // Return a bool indicating whether a new transaction can be submitted to HotShot
-
 func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
