@@ -1278,10 +1278,6 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
 				log.Info("Enqueuing pending transaction to Espresso", "pos", indexToSubmit)
 				messagesToEnqueue = append(messagesToEnqueue, indexToSubmit)
-				if err != nil {
-					log.Error("Failed to enqueue pending transaction to Espresso", "pos", firstMsgIdx+arbutil.MessageIndex(idx), "err", err)
-					return err
-				}
 				log.Info("Enqueued pending transaction to Espresso was successful", "pos", firstMsgIdx+arbutil.MessageIndex(idx))
 			}
 
