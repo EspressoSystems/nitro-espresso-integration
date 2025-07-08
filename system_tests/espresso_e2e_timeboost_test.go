@@ -199,12 +199,12 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
 
-	// msgCntAfter should be 1 greater than msgCntBefore
+	// msgCntAfter should be greater than msgCntBefore
 	if blockNumberAfter-blockNumberBefore <= 0 {
 		t.Fatalf("expected difference between blockNumberAfter and blockNumberBefore to be greater than 0, got: %d", blockNumberAfter-blockNumberBefore)
 	}
 
-	// Check that if that block contains all the tx hashes
+	// Insanity check
 	if blockNumberAfter > math.MaxInt64 {
 		t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
 	}

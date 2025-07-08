@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"runtime/debug"
 	"sync"
@@ -359,8 +360,14 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 
 	if madeBlock && block != nil {
 		queueItem := queueItems[0]
-		if err = s.timeboostTxnListener.SendBlockToTimeboost(block, queueItem.roundId); err != nil {
-			// TODO: How to handle failures
+		// TODO: Max size of arbitrum chain id
+		chainID := s.execEngine.bc.Config().ChainID.Uint64()
+		if chainID > math.MaxUint32 {
+			panic("chain id is too high")
+		}
+		id := uint32(chainID)
+		if err = s.timeboostTxnListener.SendBlockToTimeboost(block, queueItem.roundId, id); err != nil {
+			// TODO: Handle failures appropiately
 			log.Error("failed to send block to timeboost", "err", err)
 		}
 	}

@@ -249,16 +249,17 @@ func process(
 	return 0
 }
 
-func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint64) error {
+func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint64, chainId uint32) error {
 	txns, err := rlp.EncodeToBytes(block.Transactions())
 	if err != nil {
 		return err
 	}
 	protoBlock := &gethexec.Block{
-		Namespace: 0,
+		Namespace: chainId,
 		Round:     round,
 		Hash:      block.Hash().Bytes(),
-		Payload:   txns,
+		// TODO: Proper hotshot payload
+		Payload: txns,
 	}
 	ctx := context.Background()
 	if _, err := l.grpcClient.SubmitBlock(ctx, protoBlock); err != nil {
