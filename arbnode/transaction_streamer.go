@@ -1175,6 +1175,7 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 	//  to be used later to submit the message to hotshot for finalization.
 	if s.lightClientReader != nil && s.espressoClient != nil {
 		//  Only submit the transaction if escape hatch is not enabled
+		var messagesToEnqueue []arbutil.MessageIndex
 		for i := range messages {
 			idx, err := safecast.ToUint64(i)
 			if err != nil {
@@ -1188,8 +1189,8 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 				return err
 			}
 			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
-				log.Info("Enqueuing pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx))
-				err = s.enqueuePendingTransaction(pos + arbutil.MessageIndex(idx))
+				log.Info("Enqueuing pending transaction to Espresso", "pos", indexToSubmit)
+				messagesToEnqueue = append(messagesToEnqueue, indexToSubmit)
 				if err != nil {
 					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
 					return err
@@ -1197,6 +1198,11 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
 			}
 
+		}
+		err = s.enqueuePendingTransaction(messagesToEnqueue)
+		if err != nil {
+			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
+			return err
 		}
 	}
 
@@ -1233,7 +1239,8 @@ func (s *TransactionStreamer) BlockMetadataAtCount(count arbutil.MessageIndex) (
 	}
 	return blockMetadata, nil
 }
-func (s *TransactionStreamer) enqueuePendingTransaction(pos arbutil.MessageIndex) error {
+
+func (s *TransactionStreamer) enqueuePendingTransaction(pos []arbutil.MessageIndex) error {
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
 	err := s.SubmitEspressoTransactionPos(pos)
@@ -1541,6 +1548,16 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 	}
 
+	if lastConfirmedPos == 0 {
+		lastConfirmedPosInDb, err := s.getLastConfirmedPos()
+		if err != nil || lastConfirmedPosInDb == nil {
+			return fmt.Errorf("failed to get last confirmed pos: %w", err)
+		}
+		lastConfirmedPos = *lastConfirmedPosInDb
+	}
+
+	log.Info("last confirmed pos", "lastConfirmedPos", lastConfirmedPos)
+
 	err = s.setEspressoLastConfirmedPos(batch, &lastConfirmedPos)
 	if err != nil {
 		return fmt.Errorf("failed to set last confirmed pos: %w", err)
@@ -1690,7 +1707,7 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 }
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
-func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIndex) error {
+func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos []arbutil.MessageIndex) error {
 	s.espressoTxnsStateInsertionMutex.Lock()
 	defer s.espressoTxnsStateInsertionMutex.Unlock()
 
@@ -1702,9 +1719,9 @@ func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos arbutil.MessageIn
 
 	if pendingTxnsPos == nil {
 		// if the key doesn't exist, create a new array with the pos
-		pendingTxnsPos = []arbutil.MessageIndex{pos}
+		pendingTxnsPos = pos
 	} else {
-		pendingTxnsPos = append(pendingTxnsPos, pos)
+		pendingTxnsPos = append(pendingTxnsPos, pos...)
 	}
 	err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 	if err != nil {
@@ -1866,7 +1883,7 @@ func getLogLevel(err error) func(string, ...interface{}) {
 * Checks if the submitted transaction has been finalized by Espresso  and verifies it.
  */
 func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
+	retryRate := s.espressoTxnsPollingInterval * 2
 	var err error
 	if s.UseEscapeHatch {
 		err = s.checkEspressoLiveness()
