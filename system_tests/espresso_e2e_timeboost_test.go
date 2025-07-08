@@ -55,7 +55,7 @@ func runDecentralizedTimeboost() func() {
 
 func waitForTimeboostNodes(ctx context.Context) error {
 	for _, timeboostUrl := range timeboostUrls {
-		if err := waitForWith(ctx, 3*time.Minute, 1*time.Second, func() bool {
+		if err := waitForWith(ctx, 1*time.Minute, 1*time.Second, func() bool {
 			resp, err := http.Get(timeboostUrl + timeBoostHealth)
 			if err != nil {
 				log.Warn("retry to check the timeboost health", "err", err)

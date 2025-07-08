@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:20250627
+    image: ghcr.io/espressosystems/timeboost:20250708
     command:
       [
         "/app/timeboost",
@@ -23,6 +23,7 @@ services:
       - "8800:8800"
       - "11000:11000"
       - "9000:9000"
+      - "5000:5000"
     volumes:
       - ./timeboost-keyset.json:/app/timeboost-keyset.json
     extra_hosts:
@@ -30,7 +31,7 @@ services:
     networks:
       - timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:20250627
+    image: ghcr.io/espressosystems/timeboost:20250708
     command:
       [
         "/app/timeboost",

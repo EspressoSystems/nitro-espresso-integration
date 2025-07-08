@@ -14,7 +14,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 
-	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
+	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
 )
 
 // Acknowledgement flag that timeboost will wait for to know sequencer processed
@@ -68,6 +68,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.TimeboostSequencer.ParentChainFinalizationTime = 20 * time.Minute
 	builder.nodeConfig.TimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.TimeboostSequencer.EnableProfiling = false
+	builder.nodeConfig.TimeboostSequencer.TimeboostListenerConfig.InternalTimeboostGrpcUrl = "localhost:5000"
 
 	cleanup := builder.Build(t)
 

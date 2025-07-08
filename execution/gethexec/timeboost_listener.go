@@ -6,14 +6,20 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"sync"
 	"time"
 
 	flag "github.com/spf13/pflag"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/arbitrum_types"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 
+	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -28,20 +34,23 @@ type TimeboostListener struct {
 	config         TimeboostListenerConfig
 	conn           net.Conn
 	connectionLock sync.Mutex
+	grpcClient     gethexec.InternalApiClient
 }
 
 type TimeboostListenerConfig struct {
-	ListenPort    uint16        `koanf:"listen-port"`
-	ReadDeadline  time.Duration `koanf:"read-deadline"`
-	WriteDeadline time.Duration `koanf:"write-deadline"`
-	MaxBackoff    time.Duration `koanf:"max-backoff"`
+	ListenPort               uint16        `koanf:"listen-port"`
+	ReadDeadline             time.Duration `koanf:"read-deadline"`
+	WriteDeadline            time.Duration `koanf:"write-deadline"`
+	MaxBackoff               time.Duration `koanf:"max-backoff"`
+	InternalTimeboostGrpcUrl string        `koanf:"internal-timeboost-grpc-url"`
 }
 
 var DefaultTimeboostListenerConfig = TimeboostListenerConfig{
-	ListenPort:    55000,           // Default listen port that timeboost will try and connect to
-	ReadDeadline:  4 * time.Second, // Max time we wait on socket `read` to receive inclusion list from timeboost
-	WriteDeadline: 4 * time.Second, // Max time we wait while trying to send the acknowledgement back to timeboost
-	MaxBackoff:    6 * time.Second, // Max time we wait for backing off and retrying to process the inclusion list when there is no connection
+	ListenPort:               55000,           // Default listen port that timeboost will try and connect to
+	ReadDeadline:             4 * time.Second, // Max time we wait on socket `read` to receive inclusion list from timeboost
+	WriteDeadline:            4 * time.Second, // Max time we wait while trying to send the acknowledgement back to timeboost
+	MaxBackoff:               6 * time.Second, // Max time we wait for backing off and retrying to process the inclusion list when there is no connection
+	InternalTimeboostGrpcUrl: "localhost:5000",
 }
 
 func TimeboostListenerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -49,6 +58,7 @@ func TimeboostListenerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".read-deadline", DefaultTimeboostListenerConfig.ReadDeadline, "timeboost transaction listener read deadline")
 	f.Duration(prefix+".write-deadline", DefaultTimeboostListenerConfig.WriteDeadline, "timeboost transaction listener write deadline")
 	f.Duration(prefix+".max-backoff", DefaultTimeboostListenerConfig.MaxBackoff, "timeboost transaction listener max backoff")
+	f.String(prefix+".internal-timeboost-grpc-url", DefaultTimeboostListenerConfig.InternalTimeboostGrpcUrl, "timeboost grpc server url")
 }
 
 // Result from the listener accepting new connections
@@ -239,10 +249,33 @@ func process(
 	return 0
 }
 
+func (l *TimeboostListener) SendBlockToTimeboost(block *types.Block, round uint64, evidence []byte) error {
+	txns, err := rlp.EncodeToBytes(block.Transactions())
+	if err != nil {
+		return err
+	}
+	protoBlock := &gethexec.Block{
+		Namespace: 0,
+		Round:     round,
+		Hash:      block.Hash().Bytes(),
+		Payload:   txns,
+		Evidence:  evidence,
+	}
+	ctx := context.Background()
+	if _, err := l.grpcClient.SubmitBlock(ctx, protoBlock); err != nil {
+		log.Error("failed to submit block", "err", err)
+		return err
+	}
+	return nil
+}
+
 func (l *TimeboostListener) Start(
 	ctx context.Context,
 	processInclusionListFunc func(context.Context, []byte, *arbitrum_types.ConditionalOptions) error,
 ) error {
+	if _, err := url.ParseRequestURI(l.config.InternalTimeboostGrpcUrl); err != nil {
+		panic("timeboost grpc url must be a valid url")
+	}
 	if l.config.MaxBackoff > 10*time.Second || l.config.MaxBackoff < 5*time.Second {
 		panic("max backoff needs to be between 5 and 10 seconds")
 	}
@@ -254,6 +287,13 @@ func (l *TimeboostListener) Start(
 	}
 
 	l.StopWaiter.Start(ctx, l)
+
+	grpcConn, err := grpc.NewClient(l.config.InternalTimeboostGrpcUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Error("Failed to connect to gRPC server", "err", err)
+		return err
+	}
+	l.grpcClient = gethexec.NewInternalApiClient(grpcConn)
 
 	// Connection handler thread
 	l.LaunchThread(func(ctx context.Context) {
@@ -268,7 +308,7 @@ func (l *TimeboostListener) Start(
 	if err := l.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		return process(ctx, l, &backoff, processInclusionListFunc)
 	}); err != nil {
-		log.Error("timeboost txn listener failed to start inclusion list processor")
+		log.Error("timeboost txn listener failed to start inclusion list processor", "err", err)
 		return err
 	}
 	return nil

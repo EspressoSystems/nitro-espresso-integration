@@ -26,7 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
-	gethexec "github.com/offchainlabs/nitro/execution/gethexec/inclusion_list"
+	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -38,6 +38,7 @@ type timeboostTransactionQueueItem struct {
 	options            *arbitrum_types.ConditionalOptions
 	roundId            uint64
 	consensusTimestamp uint64
+	evidence           []byte
 }
 
 type synchronizedTimeboostTransactionQueue struct {
@@ -330,7 +331,6 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			blockNum := block.Number()
 			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2Block", blockNum)
 		}
-
 	}
 
 	for i, err := range hooks.TxErrors {
@@ -355,6 +355,14 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 		if errors.As(err, &nonceError) && nonceError.txNonce > nonceError.stateNonce {
 			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash())
 			continue
+		}
+	}
+
+	if madeBlock && block != nil {
+		queueItem := queueItems[0]
+		if err = s.timeboostTxnListener.SendBlockToTimeboost(block, queueItem.roundId, queueItem.evidence); err != nil {
+			// TODO: How to handle failures
+			log.Error("failed to send block to timeboost", "err", err)
 		}
 	}
 
@@ -499,7 +507,7 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 		return err
 	}
 
-	log.Info("processing inclusion list", "round", inclusionList.Round)
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns))
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
 		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
@@ -512,8 +520,8 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
+			evidence:           inclusionList.Evidence,
 		}
-
 		s.txQueue.enqueue(txQueueItem)
 
 	}
