@@ -1194,10 +1194,6 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
 				log.Info("adding transaction to list of pending tx's to submit to Espresso", "pos", indexToSubmit)
 				messagesToEnqueue = append(messagesToEnqueue, indexToSubmit)
-				if err != nil {
-					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
-					return err
-				}
 			}
 		}
 
@@ -1761,22 +1757,21 @@ func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, 
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
 	s.espressoPendingTxnPosMutex.Lock()
+	defer s.espressoPendingTxnPosMutex.Unlock()
+
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		s.espressoPendingTxnPosMutex.Unlock()
 		return err
 	}
 	if len(pendingTxnsPos) > 0 {
 		fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
 			msg, err := s.GetMessage(pos)
 			if err != nil {
-				s.espressoPendingTxnPosMutex.Unlock()
 				return nil, err
 			}
 			if pos > 1 {
 				prevMsg, err := s.GetMessage(pos - 1)
 				if err != nil {
-					s.espressoPendingTxnPosMutex.Unlock()
 					return nil, err
 				}
 				if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
@@ -1790,7 +1785,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			}
 			b, err := rlp.EncodeToBytes(msg)
 			if err != nil {
-				s.espressoPendingTxnPosMutex.Unlock()
 				return nil, err
 			}
 			return b, nil
@@ -1798,21 +1792,12 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		batch := s.db.NewBatch()
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
+
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 
 		if err != nil {
-			s.espressoPendingTxnPosMutex.Unlock()
 			return fmt.Errorf("failed to set the pending txn list in the db batch: %w", err)
 		}
-
-		err = batch.Write()
-
-		if err != nil {
-			s.espressoPendingTxnPosMutex.Unlock()
-			return fmt.Errorf("failed to write pending txn list batch to db: %w", err)
-		}
-
-		s.espressoPendingTxnPosMutex.Unlock()
 
 		if msgCnt == 0 {
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
@@ -1836,12 +1821,10 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return fmt.Errorf("failed to submit transaction to espresso: %w", err)
 		}
 
-		batch = s.db.NewBatch()
-		submittedPos := pendingTxnsPos[:msgCnt]
-
 		s.espressoSubmittedTxnsMutex.Lock()
 		defer s.espressoSubmittedTxnsMutex.Unlock()
 
+		submittedPos := pendingTxnsPos[:msgCnt]
 		submittedTxns, err := s.getEspressoSubmittedTxns()
 		if err != nil {
 			return fmt.Errorf("failed to get the submitted txns: %w", err)
