@@ -1503,7 +1503,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	if lastConfirmedPosInDb, _ := s.getLastConfirmedPos(); lastConfirmedPosInDb != nil {
 		lastConfirmedPos = *lastConfirmedPosInDb
 	}
-	dataArray := []espressoTypes.TransactionQueryData{}
+	blockHeights := []uint64{}
 	posArray := []int{}
 	for i, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
@@ -1512,7 +1512,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			return fmt.Errorf("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
 		}
 
-		data, err := s.checkEspressoQueryNodesForTransaction(ctx, submittedTxHash)
+		blockHeight, err := s.checkEspressoQueryNodesForTransaction(ctx, submittedTxHash)
 		if err != nil {
 			resubmittedTxn, err := s.resubmitTransactionIfPastDelay(ctx, submittedTx)
 			if err != nil {
@@ -1526,15 +1526,14 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			log.Info("encountered an error trying to check espresso for a submitted txn", "err", err)
 			continue
 		}
-		log.Info("transaction checked", "hash", hash, "data", data)
+		log.Info("transaction checked", "hash", hash, "data", blockHeight)
 
-		dataArray = append(dataArray, data)
+		blockHeights = append(blockHeights, blockHeight)
 		posArray = append(posArray, i)
 	}
 
-	for i, data := range dataArray {
+	for i, height := range blockHeights {
 		submittedTx := submittedTxns[posArray[i]]
-		height := data.BlockHeight
 
 		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 		if err != nil {
@@ -1593,13 +1592,13 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	return nil
 }
 
-func (s *TransactionStreamer) checkEspressoQueryNodesForTransaction(ctx context.Context, hash *tagged_base64.TaggedBase64) (espressoTypes.TransactionQueryData, error) {
-	tx, err := s.espressoClient.FetchTransactionByHash(ctx, hash)
+func (s *TransactionStreamer) checkEspressoQueryNodesForTransaction(ctx context.Context, hash *tagged_base64.TaggedBase64) (uint64, error) {
+	payload, err := s.espressoClient.FetchExplorerTransactionByHash(ctx, hash)
 	if err != nil {
-		return espressoTypes.TransactionQueryData{}, fmt.Errorf("failed to fetch transaction from espresso: %w", err)
+		return 0, fmt.Errorf("failed to fetch transaction from espresso: %w", err)
 	}
 
-	return tx, nil
+	return payload.TransactionsDetails.ExplorerDetails.BlockHeight, nil
 }
 
 func (s *TransactionStreamer) resubmitTransaction(ctx context.Context, submittedTx arbutil.SubmittedEspressoTx) (*arbutil.SubmittedEspressoTx, error) {
@@ -2007,7 +2006,7 @@ func (s *TransactionStreamer) shouldResubmitEspressoTransactions(ctx context.Con
 		return false
 	}
 
-	_, err = s.espressoClient.FetchTransactionByHash(ctx, submittedTxHash)
+	_, err = s.espressoClient.FetchExplorerTransactionByHash(ctx, submittedTxHash)
 	if err == nil {
 		// if we are able to fetch the transaction, we dont need to resubmit
 		return false
