@@ -89,6 +89,7 @@ type TransactionStreamer struct {
 	espressoClient               espressoClient.EspressoClient
 	lightClientReader            lightclient.LightClientReaderInterface
 	espressoTxnsPollingInterval  time.Duration
+	espressoTxnsSendingInterval  time.Duration
 	maxBlockLagBeforeEscapeHatch uint64
 	espressoMaxTransactionSize   int64
 	resubmitEspressoTxDeadline   time.Duration
@@ -1940,7 +1941,7 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
  */
 func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
-	retryRate := s.espressoTxnsPollingInterval * 2
+	retryRate := s.espressoTxnsSendingInterval * 2
 	shouldSubmit := s.shouldSubmitEspressoTransaction(nil)
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
@@ -1951,13 +1952,13 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 			return retryRate
 		}
 	}
-	return s.espressoTxnsPollingInterval
+	return s.espressoTxnsSendingInterval
 }
 
 func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
 	s.espressoSubmittedTxnsMutex.Lock()
 	defer s.espressoSubmittedTxnsMutex.Unlock()
-	retryRate := s.espressoTxnsPollingInterval * 2
+	retryRate := s.espressoTxnsSendingInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
 		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
@@ -1978,7 +1979,7 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 		// Reset the last submit failure time because we successfully resubmitted the transactions
 		s.lastSubmitFailureAt = nil
 	}
-	return s.espressoTxnsPollingInterval
+	return s.espressoTxnsSendingInterval
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool {
