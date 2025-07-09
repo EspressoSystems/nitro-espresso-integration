@@ -1559,9 +1559,15 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
 			continue
 		}
+		max := submittedTx.Pos[0]
+		for _, pos := range submittedTx.Pos {
+			if pos > max {
+				max = pos
+			}
+		}
 
-		if submittedTx.Pos[len(submittedTx.Pos)-1] > lastConfirmedPos {
-			lastConfirmedPos = submittedTx.Pos[len(submittedTx.Pos)-1]
+		if max > lastConfirmedPos {
+			lastConfirmedPos = max
 		}
 
 	}
