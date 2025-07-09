@@ -1861,6 +1861,8 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		if err != nil {
 			return fmt.Errorf("failed to write to db: %w", err)
 		}
+	} else {
+		s.espressoPendingTxnPosMutex.Unlock()
 	}
 	return nil
 }
