@@ -1503,7 +1503,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	if lastConfirmedPosInDb, _ := s.getLastConfirmedPos(); lastConfirmedPosInDb != nil {
 		lastConfirmedPos = *lastConfirmedPosInDb
 	}
-	hasInterrupted := false
 	dataArray := []espressoTypes.TransactionQueryData{}
 	posArray := []int{}
 	for i, submittedTx := range submittedTxns {
@@ -1524,16 +1523,13 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			} else {
 				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			}
-			log.Info("encountered an error trying to check espresso for a submitted txn", "err")
-			hasInterrupted = true
+			log.Info("encountered an error trying to check espresso for a submitted txn", "err", err)
+			continue
 		}
 		log.Info("transaction checked", "hash", hash, "data", data)
 
-		if !hasInterrupted {
-			// This is essentially the same as checking that data is nil.
-			dataArray = append(dataArray, data)
-			posArray = append(posArray, i)
-		}
+		dataArray = append(dataArray, data)
+		posArray = append(posArray, i)
 	}
 
 	for i, data := range dataArray {
