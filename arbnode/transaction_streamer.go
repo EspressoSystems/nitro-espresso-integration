@@ -1941,8 +1941,6 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 }
 
 func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
-	s.espressoSubmittedTxnsMutex.Lock()
-	defer s.espressoSubmittedTxnsMutex.Unlock()
 	retryRate := s.espressoTxnsSendingInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
