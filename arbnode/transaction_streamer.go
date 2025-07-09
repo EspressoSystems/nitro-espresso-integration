@@ -1498,7 +1498,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	}
 
 	batch := s.db.NewBatch()
-	newSubmittedTxns := []arbutil.SubmittedEspressoTx{}
+	unfinalizedTxns := []arbutil.SubmittedEspressoTx{}
 	lastConfirmedPos := arbutil.MessageIndex(0)
 	if lastConfirmedPosInDb, _ := s.getLastConfirmedPos(); lastConfirmedPosInDb != nil {
 		lastConfirmedPos = *lastConfirmedPosInDb
@@ -1515,16 +1515,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 
 		data, err := s.checkEspressoQueryNodesForTransaction(ctx, submittedTxHash)
 		if err != nil {
-			resubmittedTxn, err := s.resubmitTransactionIfPastDelay(ctx, submittedTx)
-			if err != nil {
-				log.Error("failed to resubmit transaction", "err", err)
-			}
-			if resubmittedTxn != nil {
-				newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
-			} else {
-				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
-			}
-			log.Info("encountered an error trying to check espresso for a submitted txn", "err")
+			log.Info("encountered an error trying to check espresso for a submitted txn", "err", err)
+			unfinalizedTxns = append(unfinalizedTxns, submittedTx)
 			hasInterrupted = true
 		}
 		log.Info("transaction checked", "hash", hash, "data", data)
@@ -1543,25 +1535,16 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 		if err != nil {
 			log.Warn("Failed to fetch transactions in block referenced in fetch transaction by hash", "height", height, "error", err)
+			// if we haven't seen the txn, keep it in the submitted list
+			unfinalizedTxns = append(unfinalizedTxns, submittedTx)
 			continue
 		}
 
 		validated := arbutil.ValidateIfPayloadIsInBlock(submittedTx.Payload, resp.Transactions)
 		if !validated {
-			// This may seem redundant as we have a resubmission loop, but hitting this code path means that we were able to find the submitted tx hash across a quorom of
-			// the query nodes, and got a result for what block it should be in. However, we were unable to validate that the payload was in the block.
+			// Keep the tx in the submitted list if we have not validated it.
 			log.Warn("Transaction payload not found in block,The txn should be re-submitted", "height", height, "tx", submittedTx.Hash)
-			resubmittedTxn, err := s.resubmitTransaction(ctx, submittedTx)
-			if err != nil {
-				log.Error("failed to resubmit transaction", "err", err)
-				continue
-			}
-			if resubmittedTxn == nil {
-				// This should never happen
-				log.Error("failed to resubmit transaction", "err", err)
-				continue
-			}
-			newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
+			unfinalizedTxns = append(unfinalizedTxns, submittedTx)
 			continue
 		}
 		max := submittedTx.Pos[0]
@@ -1583,9 +1566,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	if err != nil {
 		return fmt.Errorf("failed to set last confirmed pos: %w", err)
 	}
-
-	// this will be remmoved in other PRs
-	err = s.setEspressoSubmittedTxns(batch, newSubmittedTxns)
+	// Update the submitted txn's with the current unfinalized txns so that we can handle resubmissions.
+	err = s.setEspressoSubmittedTxns(batch, unfinalizedTxns)
 	if err != nil {
 		return fmt.Errorf("failed to set espresso submitted txns: %w", err)
 	}
@@ -1958,27 +1940,36 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 	return s.espressoTxnsSendingInterval
 }
 
+// This method aquires the submitted txn mutex lock. This wil cause the thread tht polls for finality and this thread to fight over the mutex.
 func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
 	retryRate := s.espressoTxnsResubmissionInterval * 2
+	batch := s.db.NewBatch()
+	s.espressoSubmittedTxnsMutex.Lock()
+	defer s.espressoSubmittedTxnsMutex.Unlock()
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
 		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
 		return retryRate
 	}
-
-	shouldResubmit := s.shouldResubmitEspressoTransactions(ctx, submittedTxns)
-	if shouldResubmit {
-		for _, tx := range submittedTxns {
-			log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
-			txHash, err := s.ResubmitEspressoTransactions(ctx, tx)
-			if err != nil {
-				log.Warn("failed to resubmit espresso transactions", "err", err)
-				return retryRate
-			}
-			log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
+	for i, tx := range submittedTxns {
+		log.Info("Resubmitting tx to Espresso", "tx", tx.Hash)
+		submittedTxData, err := s.resubmitTransactionIfPastDelay(ctx, tx)
+		if err != nil {
+			log.Warn("failed to resubmit espresso transactions", "err", err)
+			// if we fail to resubmit a single transaction, still consider the rest.
+			continue
 		}
-		// Reset the last submit failure time because we successfully resubmitted the transactions
-		s.lastSubmitFailureAt = nil
+		log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", submittedTxData.Hash))
+		submittedTxns[i] = *submittedTxData
+
+	}
+	err = s.setEspressoSubmittedTxns(batch, submittedTxns)
+	if err != nil {
+		log.Warn("encountered an error setting the submitted txns in the database", "err", err)
+	}
+	err = batch.Write()
+	if err != nil {
+		log.Warn("Failed to write db batch in pollToResubmitEspressoTransactions", "err", err)
 	}
 	return s.espressoTxnsResubmissionInterval
 }
