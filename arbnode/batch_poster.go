@@ -200,15 +200,16 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress   string                                   `koanf:"espresso-tee-verifier-address"`
-	EspressoTeeType              string                                   `koanf:"espresso-tee-type"`
-	EspressoRegisterSignerConfig espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
-	LightClientAddress           string                                   `koanf:"light-client-address"`
-	HotShotUrls                  []string                                 `koanf:"hotshot-urls"`
-	UseEscapeHatch               bool                                     `koanf:"use-escape-hatch"`
-	EspressoTxnsPollingInterval  time.Duration                            `koanf:"espresso-txns-polling-interval"`
-	EspressoTxnsSendingInterval  time.Duration                            `koanf:"espresso-txns-sending-interval"`
-	ResubmitEspressoTxDeadline   time.Duration                            `koanf:"resubmit-espresso-tx-deadline"`
+	EspressoTeeVerifierAddress       string                                   `koanf:"espresso-tee-verifier-address"`
+	EspressoTeeType                  string                                   `koanf:"espresso-tee-type"`
+	EspressoRegisterSignerConfig     espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
+	LightClientAddress               string                                   `koanf:"light-client-address"`
+	HotShotUrls                      []string                                 `koanf:"hotshot-urls"`
+	UseEscapeHatch                   bool                                     `koanf:"use-escape-hatch"`
+	EspressoTxnsPollingInterval      time.Duration                            `koanf:"espresso-txns-polling-interval"`
+	EspressoTxnsSendingInterval      time.Duration                            `koanf:"espresso-txns-sending-interval"`
+	EspressoTxnsResubmissionInterval time.Duration                            `koanf:"espresso-txns-resubmission-interval"`
+	ResubmitEspressoTxDeadline       time.Duration                            `koanf:"resubmit-espresso-tx-deadline"`
 	// MaxBlockLagBeforeEscapeHatch specifies the maximum number of L1 blocks that HotShot
 	// state updates can lag behind before triggering the escape hatch. If the difference
 	// between the current L1 block number and the latest state update's block number
@@ -283,6 +284,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".use-escape-hatch", DefaultBatchPosterConfig.UseEscapeHatch, "if true, Escape Hatch functionality will be used")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
 	f.Duration(prefix+".espresso-txns-sending-interval", DefaultBatchPosterConfig.EspressoTxnsSendingInterval, "interval between sending transactions to Espresso Network")
+	f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Uint64(prefix+".max-block-lag-before-escape-hatch", DefaultBatchPosterConfig.MaxBlockLagBeforeEscapeHatch, "specifies the switch delay threshold used to determine hotshot liveness")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
@@ -298,38 +300,39 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
 	MaxSize: 100000,
 	// Try to fill 3 blobs per batch
-	Max4844BatchSize:               blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
-	PollInterval:                   time.Second * 10,
-	PollIntervalAfterBatchPost:     time.Second * 10,
-	ErrorDelay:                     time.Second * 10,
-	MaxDelay:                       time.Hour,
-	WaitForMaxDelay:                false,
-	CompressionLevel:               brotli.BestCompression,
-	DASRetentionPeriod:             daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:             "",
-	ExtraBatchGas:                  50_000,
-	Post4844Blobs:                  false,
-	IgnoreBlobPrice:                false,
-	DataPoster:                     dataposter.DefaultDataPosterConfig,
-	ParentChainWallet:              DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                   "",
-	L1BlockBoundBypass:             time.Hour,
-	UseAccessLists:                 true,
-	RedisLock:                      redislock.DefaultCfg,
-	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
-	ReorgResistanceMargin:          10 * time.Minute,
-	CheckBatchCorrectness:          true,
-	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
-	DelayBufferThresholdMargin:     25, // 5 minutes considering 12-second blocks
-	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Second,
-	EspressoTxnsSendingInterval:    time.Second,
-	ResubmitEspressoTxDeadline:     10 * time.Minute,
-	MaxBlockLagBeforeEscapeHatch:   350,
-	LightClientAddress:             "",
-	HotShotUrls:                    []string{""},
-	EspressoTeeType:                "SGX",
-	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
+	Max4844BatchSize:                 blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
+	PollInterval:                     time.Second * 10,
+	PollIntervalAfterBatchPost:       time.Second * 10,
+	ErrorDelay:                       time.Second * 10,
+	MaxDelay:                         time.Hour,
+	WaitForMaxDelay:                  false,
+	CompressionLevel:                 brotli.BestCompression,
+	DASRetentionPeriod:               daprovider.DefaultDASRetentionPeriod,
+	GasRefunderAddress:               "",
+	ExtraBatchGas:                    50_000,
+	Post4844Blobs:                    false,
+	IgnoreBlobPrice:                  false,
+	DataPoster:                       dataposter.DefaultDataPosterConfig,
+	ParentChainWallet:                DefaultBatchPosterL1WalletConfig,
+	L1BlockBound:                     "",
+	L1BlockBoundBypass:               time.Hour,
+	UseAccessLists:                   true,
+	RedisLock:                        redislock.DefaultCfg,
+	GasEstimateBaseFeeMultipleBips:   arbmath.OneInUBips * 3 / 2,
+	ReorgResistanceMargin:            10 * time.Minute,
+	CheckBatchCorrectness:            true,
+	MaxEmptyBatchDelay:               3 * 24 * time.Hour,
+	DelayBufferThresholdMargin:       25, // 5 minutes considering 12-second blocks
+	UseEscapeHatch:                   false,
+	EspressoTxnsPollingInterval:      time.Second,
+	EspressoTxnsSendingInterval:      time.Second,
+	EspressoTxnsResubmissionInterval: 2 * time.Second,
+	ResubmitEspressoTxDeadline:       10 * time.Minute,
+	MaxBlockLagBeforeEscapeHatch:     350,
+	LightClientAddress:               "",
+	HotShotUrls:                      []string{""},
+	EspressoTeeType:                  "SGX",
+	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -341,37 +344,38 @@ var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 }
 
 var TestBatchPosterConfig = BatchPosterConfig{
-	Enable:                         true,
-	MaxSize:                        100000,
-	Max4844BatchSize:               DefaultBatchPosterConfig.Max4844BatchSize,
-	PollInterval:                   time.Millisecond * 10,
-	PollIntervalAfterBatchPost:     time.Millisecond * 10,
-	ErrorDelay:                     time.Millisecond * 10,
-	MaxDelay:                       0,
-	WaitForMaxDelay:                false,
-	CompressionLevel:               2,
-	DASRetentionPeriod:             daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:             "",
-	ExtraBatchGas:                  10_000,
-	Post4844Blobs:                  false,
-	IgnoreBlobPrice:                false,
-	DataPoster:                     dataposter.TestDataPosterConfig,
-	ParentChainWallet:              DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                   "",
-	L1BlockBoundBypass:             time.Hour,
-	UseAccessLists:                 true,
-	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
-	CheckBatchCorrectness:          true,
-	DelayBufferThresholdMargin:     0,
-	UseEscapeHatch:                 false,
-	EspressoTxnsPollingInterval:    time.Second,
-	EspressoTxnsSendingInterval:    time.Second,
-	MaxBlockLagBeforeEscapeHatch:   10,
-	LightClientAddress:             "",
-	ResubmitEspressoTxDeadline:     10 * time.Second,
-	HotShotUrls:                    []string{},
-	EspressoTeeType:                "SGX",
-	EspressoRegisterSignerConfig:   espressotee.DefaultEspressoRegisterSignerConfig,
+	Enable:                           true,
+	MaxSize:                          100000,
+	Max4844BatchSize:                 DefaultBatchPosterConfig.Max4844BatchSize,
+	PollInterval:                     time.Millisecond * 10,
+	PollIntervalAfterBatchPost:       time.Millisecond * 10,
+	ErrorDelay:                       time.Millisecond * 10,
+	MaxDelay:                         0,
+	WaitForMaxDelay:                  false,
+	CompressionLevel:                 2,
+	DASRetentionPeriod:               daprovider.DefaultDASRetentionPeriod,
+	GasRefunderAddress:               "",
+	ExtraBatchGas:                    10_000,
+	Post4844Blobs:                    false,
+	IgnoreBlobPrice:                  false,
+	DataPoster:                       dataposter.TestDataPosterConfig,
+	ParentChainWallet:                DefaultBatchPosterL1WalletConfig,
+	L1BlockBound:                     "",
+	L1BlockBoundBypass:               time.Hour,
+	UseAccessLists:                   true,
+	GasEstimateBaseFeeMultipleBips:   arbmath.OneInUBips * 3 / 2,
+	CheckBatchCorrectness:            true,
+	DelayBufferThresholdMargin:       0,
+	UseEscapeHatch:                   false,
+	EspressoTxnsPollingInterval:      time.Second,
+	EspressoTxnsSendingInterval:      time.Second,
+	EspressoTxnsResubmissionInterval: 2 * time.Second,
+	MaxBlockLagBeforeEscapeHatch:     10,
+	LightClientAddress:               "",
+	ResubmitEspressoTxDeadline:       10 * time.Second,
+	HotShotUrls:                      []string{},
+	EspressoTeeType:                  "SGX",
+	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
 }
 
 type BatchPosterOpts struct {
@@ -492,6 +496,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		opts.Streamer.UseEscapeHatch = opts.Config().UseEscapeHatch
 		opts.Streamer.espressoTxnsPollingInterval = opts.Config().EspressoTxnsPollingInterval
 		opts.Streamer.espressoTxnsSendingInterval = opts.Config().EspressoTxnsSendingInterval
+		opts.Streamer.espressoTxnsResubmissionInterval = opts.Config().EspressoTxnsResubmissionInterval
 		opts.Streamer.maxBlockLagBeforeEscapeHatch = opts.Config().MaxBlockLagBeforeEscapeHatch
 		opts.Streamer.espressoMaxTransactionSize = espressoTransactionSizeLimit
 		opts.Streamer.resubmitEspressoTxDeadline = opts.Config().ResubmitEspressoTxDeadline

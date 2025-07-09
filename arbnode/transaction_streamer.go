@@ -86,14 +86,15 @@ type TransactionStreamer struct {
 
 	trackBlockMetadataFrom arbutil.MessageIndex
 	// Espresso specific fields. These fields are set from batch poster
-	espressoClient               espressoClient.EspressoClient
-	lightClientReader            lightclient.LightClientReaderInterface
-	espressoTxnsPollingInterval  time.Duration
-	espressoTxnsSendingInterval  time.Duration
-	maxBlockLagBeforeEscapeHatch uint64
-	espressoMaxTransactionSize   int64
-	resubmitEspressoTxDeadline   time.Duration
-	lastSubmitFailureAt          *time.Time
+	espressoClient                   espressoClient.EspressoClient
+	lightClientReader                lightclient.LightClientReaderInterface
+	espressoTxnsPollingInterval      time.Duration
+	espressoTxnsSendingInterval      time.Duration
+	espressoTxnsResubmissionInterval time.Duration
+	maxBlockLagBeforeEscapeHatch     uint64
+	espressoMaxTransactionSize       int64
+	resubmitEspressoTxDeadline       time.Duration
+	lastSubmitFailureAt              *time.Time
 	// Public these fields for testing
 	EscapeHatchEnabled                    bool
 	UseEscapeHatch                        bool
@@ -1767,10 +1768,10 @@ func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, 
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
 	s.espressoPendingTxnPosMutex.Lock()
-	defer s.espressoPendingTxnPosMutex.Unlock()
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
+		s.espressoPendingTxnPosMutex.Unlock()
 		return err
 	}
 	if len(pendingTxnsPos) > 0 {
@@ -1807,9 +1808,10 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 
 		if err != nil {
+			s.espressoPendingTxnPosMutex.Unlock()
 			return fmt.Errorf("failed to set the pending txn list in the db batch: %w", err)
 		}
-
+		s.espressoPendingTxnPosMutex.Unlock()
 		if msgCnt == 0 {
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
@@ -1951,7 +1953,7 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 }
 
 func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsSendingInterval * 2
+	retryRate := s.espressoTxnsResubmissionInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
 		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
@@ -1972,7 +1974,7 @@ func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Con
 		// Reset the last submit failure time because we successfully resubmitted the transactions
 		s.lastSubmitFailureAt = nil
 	}
-	return s.espressoTxnsSendingInterval
+	return s.espressoTxnsResubmissionInterval
 }
 
 func (s *TransactionStreamer) shouldSubmitEspressoTransaction(pos *uint64) bool {
