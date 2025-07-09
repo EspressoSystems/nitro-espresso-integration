@@ -1201,14 +1201,16 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 			}
 		}
 
-		err = s.enqueuePendingTransaction(messagesToEnqueue)
-		if err != nil {
-			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
-			return err
+		if len(messagesToEnqueue) > 0 {
+			err = s.enqueuePendingTransaction(messagesToEnqueue)
+			if err != nil {
+				log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
+				return err
+			}
+			startIdx := messagesToEnqueue[0]
+			endIdx := messagesToEnqueue[len(messagesToEnqueue)-1]
+			log.Info("Successfully enqueued range of transactions from startIdx to endIdx", "startIdx", startIdx, "endIdx", endIdx)
 		}
-		startIdx := messagesToEnqueue[0]
-		endIdx := messagesToEnqueue[len(messagesToEnqueue)-1]
-		log.Info("Successfully enqueued range of transactions from startIdx to endIdx", "startIdx", startIdx, "endIdx", endIdx)
 	}
 
 	err = batch.Write()
