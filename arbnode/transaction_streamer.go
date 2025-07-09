@@ -1499,6 +1499,11 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	batch := s.db.NewBatch()
 	newSubmittedTxns := []arbutil.SubmittedEspressoTx{}
 	lastConfirmedPos := arbutil.MessageIndex(0)
+	if lastConfirmedPosInDb, _ := s.getLastConfirmedPos(); lastConfirmedPosInDb != nil {
+		lastConfirmedPos = *lastConfirmedPosInDb
+	}
+	hasInterrupted := false
+	dataArray := []espressoTypes.TransactionQueryData{}
 	for _, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
 		submittedTxHash, err := tagged_base64.Parse(hash)
@@ -1511,16 +1516,23 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			resubmittedTxn, err := s.resubmitTransactionIfPastDelay(ctx, submittedTx)
 			if err != nil {
 				log.Error("failed to resubmit transaction", "err", err)
-				continue
 			}
 			if resubmittedTxn != nil {
 				newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
 			} else {
 				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			}
-			continue
+			hasInterrupted = true
 		}
+		log.Info("transaction checked", "hash", hash, "data", data)
 
+		if !hasInterrupted {
+			dataArray = append(dataArray, data)
+		}
+	}
+
+	for i, data := range dataArray {
+		submittedTx := submittedTxns[i]
 		height := data.BlockHeight
 
 		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
@@ -1552,14 +1564,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			lastConfirmedPos = submittedTx.Pos[len(submittedTx.Pos)-1]
 		}
 
-	}
-
-	if lastConfirmedPos == 0 {
-		lastConfirmedPosInDb, err := s.getLastConfirmedPos()
-		if err != nil || lastConfirmedPosInDb == nil {
-			return fmt.Errorf("failed to get last confirmed pos: %w", err)
-		}
-		lastConfirmedPos = *lastConfirmedPosInDb
 	}
 
 	log.Info("last confirmed pos", "lastConfirmedPos", lastConfirmedPos)
@@ -1791,6 +1795,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		}
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
 		batch := s.db.NewBatch()
+		submittedPos := pendingTxnsPos[:msgCnt]
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
 
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
@@ -1824,7 +1829,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		s.espressoSubmittedTxnsMutex.Lock()
 		defer s.espressoSubmittedTxnsMutex.Unlock()
 
-		submittedPos := pendingTxnsPos[:msgCnt]
 		submittedTxns, err := s.getEspressoSubmittedTxns()
 		if err != nil {
 			return fmt.Errorf("failed to get the submitted txns: %w", err)
