@@ -1505,7 +1505,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	}
 	hasInterrupted := false
 	dataArray := []espressoTypes.TransactionQueryData{}
-	for _, submittedTx := range submittedTxns {
 	posArray := []int{}
 	for i, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
@@ -1538,7 +1537,6 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	}
 
 	for i, data := range dataArray {
-		submittedTx := submittedTxns[i]
 		submittedTx := submittedTxns[posArray[i]]
 		height := data.BlockHeight
 
