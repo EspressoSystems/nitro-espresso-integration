@@ -1190,21 +1190,23 @@ func (s *TransactionStreamer) writeMessages(pos arbutil.MessageIndex, messages [
 				return err
 			}
 			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
-				log.Info("Enqueuing pending transaction to Espresso", "pos", indexToSubmit)
+				log.Info("adding transaction to list of pending tx's to submit to Espresso", "pos", indexToSubmit)
 				messagesToEnqueue = append(messagesToEnqueue, indexToSubmit)
 				if err != nil {
 					log.Error("Failed to enqueue pending transaction to Espresso", "pos", pos+arbutil.MessageIndex(idx), "err", err)
 					return err
 				}
-				log.Info("Enqueued pending transaction to Espresso was successful", "pos", pos+arbutil.MessageIndex(idx))
 			}
-
 		}
+
 		err = s.enqueuePendingTransaction(messagesToEnqueue)
 		if err != nil {
 			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
 			return err
 		}
+		startIdx := messagesToEnqueue[0]
+		endIdx := messagesToEnqueue[len(messagesToEnqueue)-1]
+		log.Info("Successfully enqueued range of transactions from startIdx to endIdx", "startIdx", startIdx, "endIdx", endIdx)
 	}
 
 	err = batch.Write()
@@ -1757,17 +1759,20 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 	s.espressoTxnsStateInsertionMutex.Lock()
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
+		s.espressoTxnsStateInsertionMutex.Unlock()
 		return err
 	}
 	if len(pendingTxnsPos) > 0 {
 		fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
 			msg, err := s.GetMessage(pos)
 			if err != nil {
+				s.espressoTxnsStateInsertionMutex.Unlock()
 				return nil, err
 			}
 			if pos > 1 {
 				prevMsg, err := s.GetMessage(pos - 1)
 				if err != nil {
+					s.espressoTxnsStateInsertionMutex.Unlock()
 					return nil, err
 				}
 				if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
@@ -1781,6 +1786,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			}
 			b, err := rlp.EncodeToBytes(msg)
 			if err != nil {
+				s.espressoTxnsStateInsertionMutex.Unlock()
 				return nil, err
 			}
 			return b, nil
@@ -1791,12 +1797,14 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 
 		if err != nil {
+			s.espressoTxnsStateInsertionMutex.Unlock()
 			return fmt.Errorf("failed to set the pending txn list in the db batch: %w", err)
 		}
 
 		err = batch.Write()
 
 		if err != nil {
+			s.espressoTxnsStateInsertionMutex.Unlock()
 			return fmt.Errorf("failed to write pending txn list batch to db: %w", err)
 		}
 
