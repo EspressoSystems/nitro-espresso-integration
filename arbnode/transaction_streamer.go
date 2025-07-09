@@ -65,9 +65,10 @@ type TransactionStreamer struct {
 	config         TransactionStreamerConfigFetcher
 	snapSyncConfig *SnapSyncConfig
 
-	insertionMutex                  sync.Mutex // cannot be acquired while reorgMutex is held
-	reorgMutex                      sync.RWMutex
-	espressoTxnsStateInsertionMutex sync.Mutex
+	insertionMutex             sync.Mutex // cannot be acquired while reorgMutex is held
+	reorgMutex                 sync.RWMutex
+	espressoPendingTxnPosMutex sync.Mutex
+	espressoSubmittedTxnsMutex sync.Mutex
 
 	newMessageNotifier     chan struct{}
 	newSovereignTxNotifier chan struct{}
@@ -1485,8 +1486,8 @@ func (s *TransactionStreamer) backfillTrackersForMissingBlockMetadata(ctx contex
 // Check if the latest submitted transaction has been finalized on L1 and verify it.
 // Return a bool indicating whether a new transaction can be submitted to HotShot
 func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.Context) error {
-	s.espressoTxnsStateInsertionMutex.Lock()
-	defer s.espressoTxnsStateInsertionMutex.Unlock()
+	s.espressoSubmittedTxnsMutex.Lock()
+	defer s.espressoSubmittedTxnsMutex.Unlock()
 
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
@@ -1714,8 +1715,8 @@ func (s *TransactionStreamer) setEspressoPendingTxnsPos(batch ethdb.KeyValueWrit
 
 // Append a position to the pending queue. Please ensure this position is valid beforehand.
 func (s *TransactionStreamer) SubmitEspressoTransactionPos(pos []arbutil.MessageIndex) error {
-	s.espressoTxnsStateInsertionMutex.Lock()
-	defer s.espressoTxnsStateInsertionMutex.Unlock()
+	s.espressoPendingTxnPosMutex.Lock()
+	defer s.espressoPendingTxnPosMutex.Unlock()
 
 	batch := s.db.NewBatch()
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
@@ -1756,23 +1757,23 @@ func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, 
 }
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
-	s.espressoTxnsStateInsertionMutex.Lock()
+	s.espressoPendingTxnPosMutex.Lock()
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		s.espressoTxnsStateInsertionMutex.Unlock()
+		s.espressoPendingTxnPosMutex.Unlock()
 		return err
 	}
 	if len(pendingTxnsPos) > 0 {
 		fetcher := func(pos arbutil.MessageIndex) ([]byte, error) {
 			msg, err := s.GetMessage(pos)
 			if err != nil {
-				s.espressoTxnsStateInsertionMutex.Unlock()
+				s.espressoPendingTxnPosMutex.Unlock()
 				return nil, err
 			}
 			if pos > 1 {
 				prevMsg, err := s.GetMessage(pos - 1)
 				if err != nil {
-					s.espressoTxnsStateInsertionMutex.Unlock()
+					s.espressoPendingTxnPosMutex.Unlock()
 					return nil, err
 				}
 				if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
@@ -1786,7 +1787,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			}
 			b, err := rlp.EncodeToBytes(msg)
 			if err != nil {
-				s.espressoTxnsStateInsertionMutex.Unlock()
+				s.espressoPendingTxnPosMutex.Unlock()
 				return nil, err
 			}
 			return b, nil
@@ -1797,18 +1798,18 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 
 		if err != nil {
-			s.espressoTxnsStateInsertionMutex.Unlock()
+			s.espressoPendingTxnPosMutex.Unlock()
 			return fmt.Errorf("failed to set the pending txn list in the db batch: %w", err)
 		}
 
 		err = batch.Write()
 
 		if err != nil {
-			s.espressoTxnsStateInsertionMutex.Unlock()
+			s.espressoPendingTxnPosMutex.Unlock()
 			return fmt.Errorf("failed to write pending txn list batch to db: %w", err)
 		}
 
-		s.espressoTxnsStateInsertionMutex.Unlock()
+		s.espressoPendingTxnPosMutex.Unlock()
 
 		if msgCnt == 0 {
 			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
@@ -1835,8 +1836,8 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		batch = s.db.NewBatch()
 		submittedPos := pendingTxnsPos[:msgCnt]
 
-		s.espressoTxnsStateInsertionMutex.Lock()
-		defer s.espressoTxnsStateInsertionMutex.Unlock()
+		s.espressoSubmittedTxnsMutex.Lock()
+		defer s.espressoSubmittedTxnsMutex.Unlock()
 
 		submittedTxns, err := s.getEspressoSubmittedTxns()
 		if err != nil {
@@ -1954,6 +1955,8 @@ func (s *TransactionStreamer) submitTransactionsToEspresso(ctx context.Context, 
 }
 
 func (s *TransactionStreamer) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
+	s.espressoSubmittedTxnsMutex.Lock()
+	defer s.espressoSubmittedTxnsMutex.Unlock()
 	retryRate := s.espressoTxnsPollingInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
