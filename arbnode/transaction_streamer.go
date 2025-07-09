@@ -1506,6 +1506,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	hasInterrupted := false
 	dataArray := []espressoTypes.TransactionQueryData{}
 	for _, submittedTx := range submittedTxns {
+	posArray := []int{}
+	for i, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
 		submittedTxHash, err := tagged_base64.Parse(hash)
 		if err != nil || submittedTxHash == nil {
@@ -1523,17 +1525,21 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			} else {
 				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			}
+			log.Info("encountered an error trying to check espresso for a submitted txn", "err")
 			hasInterrupted = true
 		}
 		log.Info("transaction checked", "hash", hash, "data", data)
 
 		if !hasInterrupted {
+			// This is essentially the same as checking that data is nil.
 			dataArray = append(dataArray, data)
+			posArray = append(posArray, i)
 		}
 	}
 
 	for i, data := range dataArray {
 		submittedTx := submittedTxns[i]
+		submittedTx := submittedTxns[posArray[i]]
 		height := data.BlockHeight
 
 		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
@@ -1546,7 +1552,7 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		if !validated {
 			// This may seem redundant as we have a resubmission loop, but hitting this code path means that we were able to find the submitted tx hash across a quorom of
 			// the query nodes, and got a result for what block it should be in. However, we were unable to validate that the payload was in the block.
-			log.Warn("Transaction payload not found in block, attempt to resubmit", "height", height, "tx", submittedTx.Hash)
+			log.Warn("Transaction payload not found in block,The txn should be re-submitted", "height", height, "tx", submittedTx.Hash)
 			resubmittedTxn, err := s.resubmitTransaction(ctx, submittedTx)
 			if err != nil {
 				log.Error("failed to resubmit transaction", "err", err)
