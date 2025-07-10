@@ -274,6 +274,12 @@ type mockEspressoClient struct {
 	mock.Mock
 }
 
+func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context, hash *types.TaggedBase64) (types.ExplorerTransactionQueryData, error) {
+	args := m.Called(ctx, hash)
+	//nolint:errcheck
+	return args.Get(0).(types.ExplorerTransactionQueryData), args.Error(1)
+}
+
 func (m *mockEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	args := m.Called(ctx)
 	//nolint:errcheck
