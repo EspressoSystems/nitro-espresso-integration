@@ -244,6 +244,7 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 		false,
 		false,
 		10,
+		builder.L2.ConsensusNode.InboxReader,
 	)
 
 	fatalErrChan := make(chan error)

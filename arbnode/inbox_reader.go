@@ -138,6 +138,7 @@ func (r *InboxReader) Start(ctxIn context.Context) error {
 	for i := 0; ; i++ {
 		batchCount, err := r.tracker.GetBatchCount()
 		if err != nil {
+			log.Info("????????????????")
 			return err
 		}
 		if batchCount > 0 {

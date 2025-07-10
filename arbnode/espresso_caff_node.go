@@ -111,6 +111,7 @@ func NewEspressoCaffNode(
 	seqInboxAddr common.Address,
 	fatalErrChan chan error,
 	httpPort int,
+	inboxReader *InboxReader,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -147,7 +148,7 @@ func NewEspressoCaffNode(
 	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
-		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth)
+		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, inboxReader)
 
 	seqInbox, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
 	if err != nil {
@@ -197,7 +198,7 @@ func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.M
 		return nil, nil
 	}
 
-	messageWithMetadataAndPos, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
+	messageWithMetadataAndPos, err := n.delayedMessageFetcher.processDelayedMessage(ctx, messageWithMetadataAndPos)
 	if err != nil {
 		log.Error("unable to get the next delayed message", "err", err)
 		return nil, err

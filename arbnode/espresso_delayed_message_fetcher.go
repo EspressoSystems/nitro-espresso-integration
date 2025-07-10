@@ -27,7 +27,7 @@ var (
 type DelayedMessageFetcherInterface interface {
 	reset(parentChainBlockNumber uint64, seqNum uint64)
 	getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
-	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
+	processDelayedMessage(ctx context.Context, messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 }
 
 type DelayedMessageFetcher struct {
@@ -40,6 +40,7 @@ type DelayedMessageFetcher struct {
 	waitForFinalization  bool
 	waitForConfirmations bool
 	requiredBlockDepth   uint64
+	inboxReader          *InboxReader
 }
 
 func NewDelayedMessageFetcher(
@@ -50,6 +51,7 @@ func NewDelayedMessageFetcher(
 	waitForFinalization bool,
 	waitForConfirmations bool,
 	requiredBlockDepth uint64,
+	inboxReader *InboxReader,
 ) *DelayedMessageFetcher {
 	var fromBlock uint64
 	fromBlock, err := readCurrentL1BlockFromDb(db)
@@ -81,6 +83,7 @@ func NewDelayedMessageFetcher(
 		waitForFinalization:  waitForFinalization,
 		waitForConfirmations: waitForConfirmations,
 		requiredBlockDepth:   requiredBlockDepth,
+		inboxReader:          inboxReader,
 	}
 }
 
@@ -184,7 +187,7 @@ func (f *DelayedMessageFetcher) getDelayedMessage(index uint64) (*arbostypes.L1I
 	return result.Message, nil
 }
 
-func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (f *DelayedMessageFetcher) processDelayedMessage(ctx context.Context, messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 	if delayedMessagesRead > f.delayedCount+1 || delayedMessagesRead < f.delayedCount {
 		log.Error("messages are not processed in order", "delayedMessagesRead", delayedMessagesRead, "delayedCount", f.delayedCount)
@@ -196,19 +199,8 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 		// and replace the message in the messageWithMetadataAndPos
 		// Note: here we are using DelayedMessagesRead - 1 because that is the index of the delayed message
 		// that needs to be read
-		message, err := f.getDelayedMessage(f.delayedCount)
-		if err != nil {
-			log.Error("failed to get delayed message", "err", err)
-			return messageWithMetadataAndPos, err
-		}
+		message, err := f.inboxReader.tracker.GetDelayedMessage(ctx, f.delayedCount)
 		messageWithMetadataAndPos.MessageWithMeta.Message = message
-		isDelayedMessageWithinSafetyTolerance, err := f.isDelayedMessageWithinSafetyTolerance(messageWithMetadataAndPos)
-		if err != nil {
-			return messageWithMetadataAndPos, err
-		}
-		if !isDelayedMessageWithinSafetyTolerance {
-			return messageWithMetadataAndPos, fmt.Errorf("delayed message was not within safety tolerance parameters, the node needs to wait until it is")
-		}
 		f.delayedCount++
 		err = storeDelayedMessageCount(f.db, f.delayedCount)
 		if err != nil {

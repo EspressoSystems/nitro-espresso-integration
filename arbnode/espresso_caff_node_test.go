@@ -79,7 +79,7 @@ func (m *MockDelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber ui
 	return 1, nil
 }
 
-func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (m *MockDelayedMessageFetcher) processDelayedMessage(ctx context.Context, messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == 2 {
 		return &espressostreamer.MessageWithMetadataAndPos{
 			MessageWithMeta: arbostypes.MessageWithMetadata{

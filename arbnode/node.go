@@ -558,52 +558,6 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	if config.EspressoCaffNode.Enable {
-		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
-				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
-				exec.ExecEngine,
-				delayedBridge,
-				l1Reader,
-				arbDb,
-				config.EspressoCaffNode.RecordPerformance,
-				config.EspressoCaffNode.BlocksToRead,
-				deployInfo.SequencerInbox,
-				fatalErrChan,
-				stack.Config().HTTPPort,
-			)
-
-			return &Node{
-				ArbDB:                   arbDb,
-				Stack:                   stack,
-				Execution:               exec,
-				L1Reader:                nil,
-				TxStreamer:              txStreamer,
-				DeployInfo:              nil,
-				BlobReader:              blobReader,
-				InboxReader:             nil,
-				InboxTracker:            nil,
-				DelayedSequencer:        nil,
-				BatchPoster:             nil,
-				MessagePruner:           nil,
-				BlockValidator:          nil,
-				StatelessBlockValidator: nil,
-				Staker:                  nil,
-				BroadcastServer:         broadcastServer,
-				BroadcastClients:        broadcastClients,
-				SeqCoordinator:          coordinator,
-				MaintenanceRunner:       maintenanceRunner,
-				DASLifecycleManager:     nil,
-				SyncMonitor:             syncMonitor,
-				configFetcher:           configFetcher,
-				EspressoCaffNode:        espressoCaffNode,
-				ctx:                     ctx,
-			}, nil
-
-		} else {
-			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
-		}
-	}
 	// #nosec G115
 	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
 	if err != nil {
@@ -674,6 +628,54 @@ func createNodeImpl(
 		return nil, err
 	}
 	txStreamer.SetInboxReaders(inboxReader, delayedBridge)
+
+	if config.EspressoCaffNode.Enable {
+		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
+			espressoCaffNode := NewEspressoCaffNode(
+				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				exec.ExecEngine,
+				delayedBridge,
+				l1Reader,
+				arbDb,
+				config.EspressoCaffNode.RecordPerformance,
+				config.EspressoCaffNode.BlocksToRead,
+				deployInfo.SequencerInbox,
+				fatalErrChan,
+				stack.Config().HTTPPort,
+				inboxReader,
+			)
+
+			return &Node{
+				ArbDB:                   arbDb,
+				Stack:                   stack,
+				Execution:               exec,
+				L1Reader:                nil,
+				TxStreamer:              txStreamer,
+				DeployInfo:              nil,
+				BlobReader:              nil,
+				InboxReader:             inboxReader,
+				InboxTracker:            inboxTracker,
+				DelayedSequencer:        nil,
+				BatchPoster:             nil,
+				MessagePruner:           nil,
+				BlockValidator:          nil,
+				StatelessBlockValidator: nil,
+				Staker:                  nil,
+				BroadcastServer:         broadcastServer,
+				BroadcastClients:        nil,
+				SeqCoordinator:          nil,
+				MaintenanceRunner:       maintenanceRunner,
+				DASLifecycleManager:     nil,
+				SyncMonitor:             syncMonitor,
+				configFetcher:           configFetcher,
+				EspressoCaffNode:        espressoCaffNode,
+				ctx:                     ctx,
+			}, nil
+
+		} else {
+			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
+		}
+	}
 
 	var statelessBlockValidator *staker.StatelessBlockValidator
 	if config.BlockValidator.RedisValidationClientConfig.Enabled() || config.BlockValidator.ValidationServerConfigs[0].URL != "" {
