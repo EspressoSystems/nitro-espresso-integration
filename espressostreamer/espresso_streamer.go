@@ -68,6 +68,7 @@ type EspressoStreamer struct {
 
 	PerfRecorder    *PerfRecorder
 	batchPosterAddr common.Address
+	parseRetryLimit int
 }
 
 func NewEspressoStreamer(
@@ -78,6 +79,7 @@ func NewEspressoStreamer(
 	recordPerformance bool,
 	batchPosterAddr common.Address,
 	retryTime time.Duration,
+	parseRetryLimit int,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -93,6 +95,7 @@ func NewEspressoStreamer(
 		PerfRecorder:        PerfRecorder,
 		batchPosterAddr:     batchPosterAddr,
 		retryTime:           retryTime,
+		parseRetryLimit:     parseRetryLimit,
 	}
 }
 
@@ -165,7 +168,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 
-	messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace)
+	messages, err := fetchNextHotshotBlock(ctx, s.espressoClient, s.nextHotshotBlockNum, parseHotShotPayloadFn, s.namespace, s.parseRetryLimit)
 	if err != nil {
 		return err
 	}
@@ -326,6 +329,7 @@ func fetchNextHotshotBlock(
 	nextHotshotBlockNum uint64,
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error),
 	namespace uint64,
+	parseRetryLimit int,
 ) ([]*MessageWithMetadataAndPos, error) {
 	arbTxns, err := espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, namespace)
 	if err != nil {
@@ -336,8 +340,15 @@ func fetchNextHotshotBlock(
 
 	for _, tx := range arbTxns.Transactions {
 		messages, err := parseHotShotPayloadFn(tx)
+		for i := 0; i < parseRetryLimit; i++ {
+			messages, err = parseHotShotPayloadFn(tx)
+			if err == nil {
+				break
+			}
+			log.Warn("failed to parse espresso transaction, retrying", "attempt", i+1, "err", err)
+		}
 		if err != nil {
-			log.Warn("failed to verify espresso transaction", "err", err)
+			log.Warn("failed to parse espresso transaction after multiple retries", "err", err)
 			continue
 		}
 		result = append(result, messages...)

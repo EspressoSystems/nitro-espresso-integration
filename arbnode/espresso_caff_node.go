@@ -31,6 +31,7 @@ type EspressoCaffNodeConfig struct {
 	RetryTime               time.Duration           `koanf:"retry-time"`
 	HotshotPollingInterval  time.Duration           `koanf:"hotshot-polling-interval"`
 	HotshotPollingTimeout   time.Duration           `koanf:"hotshot-polling-timeout"`
+	ParseRetryLimit         int                     `koanf:"parse-retry-limit"`
 	EspressoSGXVerifierAddr string                  `koanf:"espresso-sgx-verifier-addr"`
 	BatchPosterAddr         string                  `koanf:"batch-poster-addr"`
 	RecordPerformance       bool                    `koanf:"record-performance"`
@@ -58,6 +59,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RetryTime:               time.Second * 2,
 	HotshotPollingInterval:  time.Millisecond * 100,
 	HotshotPollingTimeout:   time.Minute * 2,
+	ParseRetryLimit:         3,
 	EspressoSGXVerifierAddr: "",
 	BatchPosterAddr:         "",
 	RecordPerformance:       false,
@@ -77,6 +79,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
 	f.Duration(prefix+".hotshot-polling-timeout", DefaultEspressoCaffNodeConfig.HotshotPollingTimeout, "timeout for hotshot polling")
+	f.Int(prefix+".parse-retry-limit", DefaultEspressoCaffNodeConfig.ParseRetryLimit, "number of times to retry parsing the hotshot transaction")
 	f.String(prefix+".espresso-sgx-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoSGXVerifierAddr, "espresso legacy SGX verifier address that is used to verify the signature of the Hotshot transactions")
 	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the Hotshot transactions")
 	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the Caff node")
@@ -148,6 +151,7 @@ func NewEspressoCaffNode(
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 		configFetcher().RetryTime,
+		configFetcher().ParseRetryLimit,
 	)
 
 	fromBlock := configFetcher().FromBlock
