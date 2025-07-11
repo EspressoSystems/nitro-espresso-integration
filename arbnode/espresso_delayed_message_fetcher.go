@@ -200,11 +200,15 @@ func (f *DelayedMessageFetcher) processDelayedMessage(ctx context.Context, messa
 		// Note: here we are using DelayedMessagesRead - 1 because that is the index of the delayed message
 		// that needs to be read
 		message, err := f.inboxReader.tracker.GetDelayedMessage(ctx, f.delayedCount)
+		if err != nil {
+			log.Error("Failed to get delayed message", "err", err)
+			return nil, err
+		}
 		messageWithMetadataAndPos.MessageWithMeta.Message = message
 		f.delayedCount++
 		err = storeDelayedMessageCount(f.db, f.delayedCount)
 		if err != nil {
-			return messageWithMetadataAndPos, err
+			return nil, err
 		}
 	}
 
