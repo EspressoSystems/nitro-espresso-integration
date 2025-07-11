@@ -17,18 +17,20 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	// Protobuf imports for grpc calls
 	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 type ForwardService struct {
 	gethexec.UnimplementedForwardApiServer
-	processInclusionListFunc func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error
+	processInclusionList func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error
 }
 
 // Implement the SubmitInclusionList RPC
 func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *gethexec.InclusionList) (*emptypb.Empty, error) {
-	if err := s.processInclusionListFunc(ctx, req, nil); err != nil {
+	if err := s.processInclusionList(ctx, req, nil); err != nil {
+		log.Error("failed to process inclusion list", "err", err)
 		return nil, err
 	}
 	return &emptypb.Empty{}, nil
@@ -71,6 +73,7 @@ func NewTimeboostBridge(config TimeboostBridgeConfig) (*TimeboostBridge, error) 
 	}, nil
 }
 
+// Send block to timeboost who will get certificate over the block hash and forward to hotshot
 func (l *TimeboostBridge) SendBlockToTimeboost(block *types.Block, round uint64, chainId uint32) error {
 	txns, err := rlp.EncodeToBytes(block.Transactions())
 	if err != nil {
@@ -93,7 +96,7 @@ func (l *TimeboostBridge) SendBlockToTimeboost(block *types.Block, round uint64,
 
 func (l *TimeboostBridge) Start(
 	ctx context.Context,
-	processInclusionListFunc func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error,
+	processInclusionList func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error,
 ) error {
 	if _, err := url.ParseRequestURI(l.config.InternalTimeboostGrpcUrl); err != nil {
 		panic("timeboost grpc url must be a valid url")
@@ -101,6 +104,7 @@ func (l *TimeboostBridge) Start(
 
 	l.StopWaiter.Start(ctx, l)
 
+	// Grpc connection to timeboost for block submission
 	grpcConn, err := grpc.NewClient(l.config.InternalTimeboostGrpcUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Error("Failed to connect to gRPC server", "err", err)
@@ -117,7 +121,7 @@ func (l *TimeboostBridge) Start(
 		}
 		server := grpc.NewServer(grpc.MaxRecvMsgSize(l.config.MaxSendMsgSize), grpc.MaxSendMsgSize(l.config.MaxSendMsgSize), grpc.ConnectionTimeout(l.config.ConnectionTimeout))
 		gethexec.RegisterForwardApiServer(server, &ForwardService{
-			processInclusionListFunc: processInclusionListFunc,
+			processInclusionList: processInclusionList,
 		})
 		go func() {
 			<-ctx.Done()
