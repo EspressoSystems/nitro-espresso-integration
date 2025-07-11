@@ -1,5 +1,10 @@
 package espressostreamer
 
+import (
+	"errors"
+	"fmt"
+)
+
 const (
 	FilterAndFind_Remove = iota
 	FilterAndFind_Keep
@@ -64,4 +69,56 @@ func CountUniqueEntries[T any](arr *[]T) uint64 {
 
 	}
 	return uniqueCount
+}
+
+// Error types
+
+type EphemeralError struct {
+	Err error
+}
+
+func (e *EphemeralError) Error() string {
+	if e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+
+func (e *EphemeralError) Unwrap() error {
+	return e.Err
+}
+
+type FatalError struct {
+	Err error
+}
+
+func (c *FatalError) Error() string {
+	if c.Err == nil {
+		return ""
+	}
+	return c.Err.Error()
+}
+
+func (c *FatalError) Unwrap() error {
+	return c.Err
+}
+
+// Error type helpers
+
+func ErrorIsEphemeral(err error) bool {
+	var ephemeralError *EphemeralError
+	return errors.As(err, &ephemeralError)
+}
+
+func ErrorIsFatal(err error) bool {
+	var FatalError *FatalError
+	return errors.As(err, &FatalError)
+}
+
+func NewEphemeralError(format string, a ...any) error {
+	return &EphemeralError{Err: fmt.Errorf(format, a...)}
+}
+
+func NewFatalError(format string, a ...any) error {
+	return &FatalError{Err: fmt.Errorf(format, a...)}
 }
