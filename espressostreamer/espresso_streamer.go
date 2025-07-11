@@ -357,13 +357,13 @@ func fetchNextHotshotBlock(
 
 			// If the error is Fatal (e.g., batch poster signature verification failed), we skip to the next transaction.
 			if ErrorIsFatal(err) {
-				log.Warn("Fatal error parsing payload, skipping transaction", "err", err)
+				log.Warn("Fatal error while parsing payload, skipping transaction", "err", err)
 				break
 			}
 
-			// In the case of an rpc error, we retry after a delay.
 			retryCount++
-			log.Warn("Retriable error parsing payload, will retry", "err", err, "retryCount", retryCount)
+			log.Warn("Retriable error while parsing payload, will retry", "err", err, "retryCount", retryCount)
+			// In the case of an rpc error, we retry after a delay.
 			time.Sleep(parseTxPayloadRetryBackoff)
 		}
 	}
