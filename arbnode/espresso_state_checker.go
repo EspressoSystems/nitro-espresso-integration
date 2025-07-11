@@ -92,6 +92,9 @@ func (s *StateChecker) StartMonitoring(ctx context.Context) error {
 		}
 		if strings.Contains(err.Error(), StateUnmatchedErr.Error()) {
 			log.Error("shutting down due to state unmatched", "err", err)
+			if s.config.Debugging {
+				return 1 * time.Hour
+			}
 			s.fatalErrChan <- err
 			return 0
 		}
@@ -99,6 +102,9 @@ func (s *StateChecker) StartMonitoring(ctx context.Context) error {
 			firstErrFound = time.Now()
 		} else if time.Since(firstErrFound) > s.config.ErrorToleranceDuration {
 			log.Error("shutting down due to error tolerance duration exceeded", "err", err)
+			if s.config.Debugging {
+				return 1 * time.Hour
+			}
 			s.fatalErrChan <- err
 		} else if strings.Contains(err.Error(), "connection refused") && strings.Contains(err.Error(), "my node") {
 			// This case is for the situation where the node haven't started yet
