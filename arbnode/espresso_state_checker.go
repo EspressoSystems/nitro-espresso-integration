@@ -137,7 +137,7 @@ func (s *StateChecker) checkState(ctx context.Context) error {
 	}
 
 	if block.Hash() != myBlock.Hash() {
-		err := fmt.Errorf("%s: trusted node: %s, my node: %s", StateUnmatchedErr.Error(), block.Hash(), myBlock.Hash())
+		err := fmt.Errorf("block number: %d, %s: trusted node: %s, my node: %s", blockNumber, StateUnmatchedErr.Error(), block.Hash(), myBlock.Hash())
 		return err
 	}
 	return nil
