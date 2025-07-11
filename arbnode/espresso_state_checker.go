@@ -23,17 +23,20 @@ type StateCheckerConfig struct {
 
 	// http endpoint of the trusted node
 	TrustedNodeUrl string `koanf:"trusted-node-url"`
+	Debugging      bool   `koanf:"debugging"`
 }
 
 var DefaultStateCheckerConfig = StateCheckerConfig{
 	PollingInterval:        time.Second * 100,
 	ErrorToleranceDuration: time.Minute * 10,
+	Debugging:              false,
 }
 
 func EspressoStateCheckerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".polling-interval", DefaultStateCheckerConfig.PollingInterval, "time after a success")
 	f.Duration(prefix+".error-tolerance-duration", DefaultStateCheckerConfig.ErrorToleranceDuration, "error tolerance duration")
 	f.String(prefix+".trusted-node-url", DefaultStateCheckerConfig.TrustedNodeUrl, "http endpoint of the trusted node")
+	f.Bool(prefix+".debugging", DefaultStateCheckerConfig.Debugging, "Enables debugging mode")
 }
 
 type StateChecker struct {

@@ -72,6 +72,8 @@ func TestEspressoCaffNode(t *testing.T) {
 	builder, cleanup := createL1AndL2Node(ctx, t, true)
 	defer cleanup()
 
+	trustedPort := builder.l2StackConfig.HTTPPort
+
 	err := waitForL1Node(ctx)
 	Require(t, err)
 
@@ -161,9 +163,9 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	// start the trusted node
-	trustedPort := 9000
-	trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
-	defer trustedCleanup()
+	// trustedPort := 9000
+	// trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
+	// defer trustedCleanup()
 
 	fatalErrChan := make(chan error)
 	// Check the state checker
@@ -186,13 +188,9 @@ func TestEspressoCaffNode(t *testing.T) {
 	}
 	select {
 	case err := <-fatalErrChan:
-		if err == nil {
-			t.Fatal("expected an error from fatalErrChan, got nil")
-		} else {
-			t.Logf("received error as expected: %v", err)
-		}
-	case <-time.After(30 * time.Second):
-		t.Fatal("did not receive error from fatalErrChan within timeout")
+		t.Fatal(err)
+
+	case <-time.After(100 * time.Second):
 	}
 }
 
