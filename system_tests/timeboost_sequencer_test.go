@@ -68,7 +68,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.TimeboostSequencer.ParentChainFinalizationTime = 20 * time.Minute
 	builder.nodeConfig.TimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.TimeboostSequencer.EnableProfiling = false
-	builder.nodeConfig.TimeboostSequencer.TimeboostListenerConfig.InternalTimeboostGrpcUrl = "localhost:5000"
+	builder.nodeConfig.TimeboostSequencer.TimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:5000"
 
 	cleanup := builder.Build(t)
 

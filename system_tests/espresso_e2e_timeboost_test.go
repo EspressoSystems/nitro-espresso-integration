@@ -76,20 +76,20 @@ func waitForTimeboostNodes(ctx context.Context) error {
 }
 
 type Bundle struct {
-	Chain int      `json:"chain"`
-	Epoch uint64   `json:"epoch"`
-	Data  string   `json:"data"`
-	Kid   *uint64  `json:"kid"`
-	Hash  [32]byte `json:"hash"`
+	Chain     int      `json:"chain"`
+	Epoch     uint64   `json:"epoch"`
+	Data      string   `json:"data"`
+	Encrypted bool     `json:"encrypted"`
+	Hash      [32]byte `json:"hash"`
 }
 
 func NewBundle(chain int, epoch uint64, data []byte, hash common.Hash) Bundle {
 	return Bundle{
-		Chain: chain,
-		Epoch: epoch,
-		Data:  "0x" + hex.EncodeToString(data),
-		Kid:   nil,
-		Hash:  hash,
+		Chain:     chain,
+		Epoch:     epoch,
+		Data:      "0x" + hex.EncodeToString(data),
+		Encrypted: false,
+		Hash:      hash,
 	}
 }
 

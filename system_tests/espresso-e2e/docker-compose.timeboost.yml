@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:20250708
+    image: ghcr.io/espressosystems/timeboost:20250711
     command:
       [
         "/app/timeboost",
@@ -11,10 +11,10 @@ services:
         "--stamp", "/tmp/timeboost.stamp"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=warn,cliquenet=info
+      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error
       - TIMEBOOST_SAILFISH_PORT=8000
       - TIMEBOOST_DECRYPT_PORT=10000
-      - TIMEBOOST_PRODUCER_PORT=11000
+      - TIMEBOOST_CERTIFIER_PORT=11000
       - TIMEBOOST_RPC_PORT=8800
       - TIMEBOOST_METRICS_PORT=9000
     ports:
@@ -31,7 +31,7 @@ services:
     networks:
       - timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:20250708
+    image: ghcr.io/espressosystems/timeboost:20250711
     command:
       [
         "/app/timeboost",
@@ -42,10 +42,10 @@ services:
         "--stamp", "/tmp/timeboost.stamp"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=info,cliquenet=info
+      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error
       - TIMEBOOST_SAILFISH_PORT=8001
       - TIMEBOOST_DECRYPT_PORT=10001
-      - TIMEBOOST_PRODUCER_PORT=11001
+      - TIMEBOOST_CERTIFIER_PORT=11001
       - TIMEBOOST_RPC_PORT=8801
       - TIMEBOOST_METRICS_PORT=9001
     ports:

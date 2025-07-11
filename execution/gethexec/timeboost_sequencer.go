@@ -11,7 +11,6 @@ import (
 	"time"
 
 	flag "github.com/spf13/pflag"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
@@ -83,7 +82,7 @@ type TimeboostSequencer struct {
 	// TODO: We should probably also store the txRetryQueue in storage
 	txRetryQueue         synchronizedTimeboostTransactionQueue
 	nonceCache           *nonceCache
-	timeboostTxnListener *TimeboostListener
+	timeboostTxnListener *TimeboostBridge
 }
 
 type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
@@ -92,14 +91,14 @@ type TimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
 	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize               int                     `koanf:"max-tx-data-size"`
-	NonceCacheSize              int                     `koanf:"nonce-cache-size"`
-	MaxRevertGasReject          uint64                  `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime time.Duration           `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta time.Duration           `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling             bool                    `koanf:"enable-profiling"`
-	TimeboostListenerConfig     TimeboostListenerConfig `koanf:"timeboost-listener-config"`
-	MetricTimeForBlockCreation  time.Duration           `koanf:"metric-time-for-block-creation"`
+	MaxTxDataSize               int                   `koanf:"max-tx-data-size"`
+	NonceCacheSize              int                   `koanf:"nonce-cache-size"`
+	MaxRevertGasReject          uint64                `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime time.Duration         `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta time.Duration         `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling             bool                  `koanf:"enable-profiling"`
+	TimeboostBridgeConfig       TimeboostBridgeConfig `koanf:"timeboost-bridge-config"`
+	MetricTimeForBlockCreation  time.Duration         `koanf:"metric-time-for-block-creation"`
 }
 
 var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
@@ -111,7 +110,7 @@ var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
 	ParentChainFinalizationTime: 20 * time.Minute,
 	MaxAcceptableTimestampDelta: time.Hour,
 	EnableProfiling:             false,
-	TimeboostListenerConfig:     DefaultTimeboostListenerConfig,
+	TimeboostBridgeConfig:       DefaultTimeboostBridgeConfig,
 	MetricTimeForBlockCreation:  time.Second * 5,
 }
 
@@ -125,20 +124,19 @@ func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 	f.Duration(prefix+".metric-time-for-block-creation", DefaultTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
-	TimeboostListenerConfigAddOptions(prefix+".timeboost-listener-config", f)
+	TimeboostBridgeConfigAddOptions(prefix+".timeboost-bridge-config", f)
 }
 
 func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
-	timeboostListener := &TimeboostListener{
-		config: configFetcher().TimeboostListenerConfig,
-		conn:   nil,
-	}
 	return &TimeboostSequencer{
-		config:               configFetcher,
-		execEngine:           execEngine,
-		l1Reader:             l1Reader,
-		nonceCache:           newNonceCache(configFetcher().NonceCacheSize),
-		timeboostTxnListener: timeboostListener,
+		config:     configFetcher,
+		execEngine: execEngine,
+		l1Reader:   l1Reader,
+		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
+		timeboostTxnListener: &TimeboostBridge{
+			config:     configFetcher().TimeboostBridgeConfig,
+			grpcClient: nil,
+		},
 	}, nil
 }
 
@@ -505,14 +503,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionBytes []byte, options *arbitrum_types.ConditionalOptions) error {
-	// TODO: This should write to a database
-	inclusionList := &gethexec.InclusionList{}
-	if err := proto.Unmarshal(inclusionBytes, inclusionList); err != nil {
-		log.Warn("error decoding InclusionList", "err", err)
-		return err
-	}
-
+func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *gethexec.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns))
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
