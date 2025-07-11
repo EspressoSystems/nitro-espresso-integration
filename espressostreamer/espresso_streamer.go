@@ -339,7 +339,8 @@ func fetchNextHotshotBlock(
 	result := []*MessageWithMetadataAndPos{}
 
 	for _, tx := range arbTxns.Transactions {
-		messages, err := parseHotShotPayloadFn(tx)
+		var messages []*MessageWithMetadataAndPos
+		var err error
 		for i := 0; i < parseRetryLimit; i++ {
 			messages, err = parseHotShotPayloadFn(tx)
 			if err == nil {

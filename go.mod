@@ -219,20 +219,3 @@ require (
 	golang.org/x/oauth2 v0.22.0
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
-
-require (
-	github.com/benbjohnson/clock v1.3.5 // indirect
-	github.com/btcsuite/btcd v0.22.1 // indirect
-	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
-	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce // indirect
-	github.com/rs/cors v1.7.0 // indirect
-	github.com/sigurn/crc8 v0.0.0-20220107193325-2243fe600f9f // indirect
-	github.com/tklauser/go-sysconf v0.3.12 // indirect
-	github.com/tklauser/numcpus v0.6.1 // indirect
-	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
-)
-
-require (
-	github.com/fxamacker/cbor/v2 v2.2.0 // indirect
-	github.com/x448/float16 v0.8.4 // indirect
-)
