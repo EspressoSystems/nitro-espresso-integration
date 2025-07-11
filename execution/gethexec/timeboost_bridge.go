@@ -2,7 +2,6 @@ package gethexec
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -22,11 +21,18 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-// Acknowledgement flag that timeboost will wait for
-// This is to know sequencer processed Inclusion list succesfully
-const ACK_FLAG = 0xc0
+type ForwardService struct {
+	gethexec.UnimplementedForwardApiServer
+	processInclusionListFunc func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error
+}
 
-var ErrConnectionNotEstablished = errors.New("timeboost txn listener connection not established")
+// Implement the SubmitInclusionList RPC
+func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *gethexec.InclusionList) (*emptypb.Empty, error) {
+	if err := s.processInclusionListFunc(ctx, req, nil); err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
 
 type TimeboostBridge struct {
 	stopwaiter.StopWaiter
@@ -85,19 +91,6 @@ func (l *TimeboostBridge) SendBlockToTimeboost(block *types.Block, round uint64,
 	return nil
 }
 
-type ForwardService struct {
-	gethexec.UnimplementedForwardApiServer
-	processInclusionListFunc func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error
-}
-
-// Implement the SubmitInclusionList RPC
-func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *gethexec.InclusionList) (*emptypb.Empty, error) {
-	if err := s.processInclusionListFunc(ctx, req, nil); err != nil {
-		return nil, err
-	}
-	return &emptypb.Empty{}, nil
-}
-
 func (l *TimeboostBridge) Start(
 	ctx context.Context,
 	processInclusionListFunc func(context.Context, *gethexec.InclusionList, *arbitrum_types.ConditionalOptions) error,
@@ -126,6 +119,11 @@ func (l *TimeboostBridge) Start(
 		gethexec.RegisterForwardApiServer(server, &ForwardService{
 			processInclusionListFunc: processInclusionListFunc,
 		})
+		go func() {
+			<-ctx.Done()
+			log.Info("Shutting down gRPC server...")
+			server.GracefulStop()
+		}()
 		err = server.Serve(lis)
 		if err != nil {
 			panic(err)
