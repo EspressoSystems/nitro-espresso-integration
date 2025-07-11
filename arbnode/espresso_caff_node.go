@@ -23,23 +23,23 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
-	Enable                  bool                    `koanf:"enable"`
-	HotShotUrls             []string                `koanf:"hotshot-urls"`
-	NextHotshotBlock        uint64                  `koanf:"next-hotshot-block"`
-	FromBlock               uint64                  `koanf:"from-block"`
-	Namespace               uint64                  `koanf:"namespace"`
-	RetryTime               time.Duration           `koanf:"retry-time"`
-	HotshotPollingInterval  time.Duration           `koanf:"hotshot-polling-interval"`
-	HotshotPollingTimeout   time.Duration           `koanf:"hotshot-polling-timeout"`
-	ParseRetryLimit         int                     `koanf:"parse-retry-limit"`
-	EspressoSGXVerifierAddr string                  `koanf:"espresso-sgx-verifier-addr"`
-	BatchPosterAddr         string                  `koanf:"batch-poster-addr"`
-	RecordPerformance       bool                    `koanf:"record-performance"`
-	WaitForFinalization     bool                    `koanf:"wait-for-finalization"`
-	WaitForConfirmations    bool                    `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth      uint64                  `koanf:"required-block-depth"`
-	BlocksToRead            uint64                  `koanf:"blocks-to-read"`
-	Dangerous               DangerousCaffNodeConfig `koanf:"dangerous"`
+	Enable                     bool                    `koanf:"enable"`
+	HotShotUrls                []string                `koanf:"hotshot-urls"`
+	NextHotshotBlock           uint64                  `koanf:"next-hotshot-block"`
+	FromBlock                  uint64                  `koanf:"from-block"`
+	Namespace                  uint64                  `koanf:"namespace"`
+	RetryTime                  time.Duration           `koanf:"retry-time"`
+	HotshotPollingInterval     time.Duration           `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout      time.Duration           `koanf:"hotshot-polling-timeout"`
+	ParseTxPayloadRetryBackoff time.Duration           `koanf:"parse-tx-payload-retry-backoff"`
+	EspressoSGXVerifierAddr    string                  `koanf:"espresso-sgx-verifier-addr"`
+	BatchPosterAddr            string                  `koanf:"batch-poster-addr"`
+	RecordPerformance          bool                    `koanf:"record-performance"`
+	WaitForFinalization        bool                    `koanf:"wait-for-finalization"`
+	WaitForConfirmations       bool                    `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth         uint64                  `koanf:"required-block-depth"`
+	BlocksToRead               uint64                  `koanf:"blocks-to-read"`
+	Dangerous                  DangerousCaffNodeConfig `koanf:"dangerous"`
 }
 
 type DangerousCaffNodeConfig struct {
@@ -52,23 +52,23 @@ var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
-	Enable:                  false,
-	HotShotUrls:             []string{},
-	NextHotshotBlock:        1,
-	Namespace:               0,
-	RetryTime:               time.Second * 2,
-	HotshotPollingInterval:  time.Millisecond * 100,
-	HotshotPollingTimeout:   time.Minute * 2,
-	ParseRetryLimit:         3,
-	EspressoSGXVerifierAddr: "",
-	BatchPosterAddr:         "",
-	RecordPerformance:       false,
-	WaitForFinalization:     true,
-	WaitForConfirmations:    false,
-	RequiredBlockDepth:      6,
-	BlocksToRead:            10000,
-	Dangerous:               DefaultDangerousCaffNodeConfig,
-	FromBlock:               1,
+	Enable:                     false,
+	HotShotUrls:                []string{},
+	NextHotshotBlock:           1,
+	Namespace:                  0,
+	RetryTime:                  time.Second * 2,
+	HotshotPollingInterval:     time.Millisecond * 100,
+	HotshotPollingTimeout:      time.Minute * 2,
+	ParseTxPayloadRetryBackoff: time.Millisecond * 500,
+	EspressoSGXVerifierAddr:    "",
+	BatchPosterAddr:            "",
+	RecordPerformance:          false,
+	WaitForFinalization:        true,
+	WaitForConfirmations:       false,
+	RequiredBlockDepth:         6,
+	BlocksToRead:               10000,
+	Dangerous:                  DefaultDangerousCaffNodeConfig,
+	FromBlock:                  1,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -79,7 +79,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
 	f.Duration(prefix+".hotshot-polling-timeout", DefaultEspressoCaffNodeConfig.HotshotPollingTimeout, "timeout for hotshot polling")
-	f.Int(prefix+".parse-retry-limit", DefaultEspressoCaffNodeConfig.ParseRetryLimit, "number of times to retry parsing the hotshot transaction")
+	f.Duration(prefix+".parse-tx-payload-retry-backoff", DefaultEspressoCaffNodeConfig.ParseTxPayloadRetryBackoff, "number of times to retry parsing the hotshot transaction")
 	f.String(prefix+".espresso-sgx-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoSGXVerifierAddr, "espresso legacy SGX verifier address that is used to verify the signature of the Hotshot transactions")
 	f.String(prefix+".batch-poster-addr", DefaultEspressoCaffNodeConfig.BatchPosterAddr, "batch poster address that is used to verify the signature of the Hotshot transactions")
 	f.Bool(prefix+".record-performance", DefaultEspressoCaffNodeConfig.RecordPerformance, "record performance of the Caff node")
@@ -151,7 +151,7 @@ func NewEspressoCaffNode(
 		recordPerformance,
 		common.HexToAddress(configFetcher().BatchPosterAddr),
 		configFetcher().RetryTime,
-		configFetcher().ParseRetryLimit,
+		configFetcher().ParseTxPayloadRetryBackoff,
 	)
 
 	fromBlock := configFetcher().FromBlock

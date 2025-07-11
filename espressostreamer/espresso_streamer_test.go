@@ -225,6 +225,43 @@ func TestEspressoStreamer(t *testing.T) {
 
 		require.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
 	})
+
+	t.Run("Fatal error skips transaction", func(t *testing.T) {
+		ctx := context.Background()
+		mockEspressoClient := new(mockEspressoClient)
+		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		namespace := uint64(1)
+		blockNum := uint64(3)
+
+		tx1, tx2, tx3 := espressoTypes.Bytes{0x01}, espressoTypes.Bytes{0x02}, espressoTypes.Bytes{0x03}
+		mockEspressoClient.On("FetchTransactionsInBlock", ctx, blockNum, namespace).Return(espressoClient.TransactionsInBlock{
+			Transactions: []espressoTypes.Bytes{tx1, tx2, tx3},
+		}, nil).Once()
+
+		streamer := NewEspressoStreamer(namespace, blockNum, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{}, 1*time.Second, 3)
+
+		parseFn := func(tx types.Bytes) ([]*MessageWithMetadataAndPos, error) {
+			if assert.ObjectsAreEqual(tx, tx2) {
+				return nil, NewFatalError("this is a fatal error for tx2")
+			}
+			return []*MessageWithMetadataAndPos{{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             uint64(tx[0]), // Dummy pos
+				HotshotHeight:   blockNum,
+			}}, nil
+		}
+
+		err := streamer.QueueMessagesFromHotshot(ctx, parseFn)
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, len(streamer.messageWithMetadataAndPos))
+		if len(streamer.messageWithMetadataAndPos) == 2 {
+			assert.Equal(t, uint64(tx1[0]), streamer.messageWithMetadataAndPos[0].Pos)
+			assert.Equal(t, uint64(tx3[0]), streamer.messageWithMetadataAndPos[1].Pos)
+		}
+
+		mockEspressoClient.AssertExpectations(t)
+	})
 }
 
 // ExpectErr:
@@ -254,7 +291,7 @@ func TestEspressoEmptyTransaction(t *testing.T) {
 	}
 	signedPayload, _ := arbutil.SignHotShotPayload(payload, signerFunc)
 	_, err := streamer.parseEspressoTransaction(signedPayload)
-	ExpectErr(t, err, PayloadHadNoMessagesErr)
+	ExpectErr(t, err, ErrPayloadHadNoMessages)
 }
 
 type TestBlock struct {
