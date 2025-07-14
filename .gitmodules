@@ -13,7 +13,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/celestiaorg/nitro-contracts.git
-	branch = jh/celestia-3.1.0
+	branch = celestia-v3.1.0
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
