@@ -392,7 +392,91 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 	})
 
 	t.Run("if a block is full, the next block should be created using the transactions left from the previous round", func(t *testing.T) {
-		// TODO: Implement this test
+
+		blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
+		if blockNumberBefore > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberBefore)
+		}
+		numIncls := 3
+		// Create three transactions list where each user is the sender to another user
+		txnsList := make([][]*types.Transaction, 0)
+
+		// Create three transaction lists, each transaction list will form a different inclusion list with a different round id
+		for i := 0; i < numIncls; i++ {
+			txns := make([]*types.Transaction, 0)
+			// For inclusion list with round id 0, add multiple transactions so that it forms multiple nitro blocks
+			if i == 0 {
+				for j := 0; j < 30; j++ {
+					txn := builder.L2Info.PrepareTx(users[i], users[i+1], builder.L2Info.TransferGas, big.NewInt(1), nil)
+					txns = append(txns, txn)
+				}
+			} else {
+				txn := builder.L2Info.PrepareTx(users[i], users[1+1], builder.L2Info.TransferGas, big.NewInt(1), nil)
+				txns = append(txns, txn)
+			}
+			txnsList = append(txnsList, txns)
+		}
+		// Generate and send inclusion lists
+		inclusionLists := GenerateInclusionLists(t, users, builder, numIncls, txnsList)
+		SendInclusionLists(t, inclusionLists)
+
+		// Wait for sometime for the block to be produced
+		time.Sleep(time.Second * 120)
+
+		blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
+		Require(t, err)
+		if blockNumberAfter > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+		}
+
+		if numIncls < 0 {
+			t.Fatalf("expected numIncls to be greater than 0, got: %d", numIncls)
+		}
+		// This check ensures that more blocks were created than the number of inclusion lists
+		if blockNumberAfter-blockNumberBefore <= uint64(numIncls) {
+			t.Fatalf("expected difference between blockNumberAfter and blockNumberBefore should be greater than 0, got: %d", blockNumberAfter-blockNumberBefore)
+		}
+
+		// Initially the round number should be 0 and roundTransactions should contain the transactions from the first inclusion list
+		roundNumber := 0
+		roundsTransactions := make([]*types.Transaction, 0)
+		roundsTransactions = append(roundsTransactions, txnsList[0]...)
+
+		// Initially we will fill the roundsTransactions with the transactions from the first inclusion list
+		// Iterate over each block and check that the round id is correct
+		for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
+			if i > math.MaxInt64 {
+				t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+			}
+			block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+			Require(t, err)
+			txns := block.Transactions()
+			// Remove the first transaction because that is the transaction which just marks the start of the block
+			txns = txns[1:]
+
+			for _, txn := range txns {
+				var expected types.Transaction
+				encodedTransaction, err := txn.MarshalBinary()
+				Require(t, err)
+				err = expected.UnmarshalBinary(encodedTransaction)
+				Require(t, err)
+				if expected.Hash() != roundsTransactions[0].Hash() {
+					t.Fatalf("txHash doesn't match, got %s, want %s.", expected.Hash().Hex(), roundsTransactions[0].Hash().Hex())
+				}
+				if len(roundsTransactions) == 1 {
+					// Remove the roundsTransactions[0] from the roundsTransactions
+					roundNumber++
+					if roundNumber == numIncls {
+						// This condition means that everything was processing successfully
+						break
+					}
+					roundsTransactions = txnsList[roundNumber]
+				} else {
+					roundsTransactions = roundsTransactions[1:]
+				}
+			}
+		}
 	})
 
 	/**
