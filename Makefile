@@ -217,8 +217,8 @@ build: proto $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver auto
 
 .PHONY: proto
 proto: $(PROTO_FILES)
-	protoc --proto_path=$(CURDIR) --go_out=$(CURDIR) --go_opt=paths=source_relative $(PROTO_FILES) \
-	--go-grpc_out=$(CURDIR) --go-grpc_opt=paths=source_relative
+	protoc --proto_path=$(PROTO_REL_PATH) --go_out=$(CURDIR)/$(PROTO_REL_PATH) --go_opt=paths=source_relative $(PROTO_FILES) \
+    --go-grpc_out=$(CURDIR)/$(PROTO_REL_PATH) --go-grpc_opt=paths=source_relative
 
 .PHONY: build-node-deps
 build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib

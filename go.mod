@@ -223,11 +223,13 @@ require (
 require (
 	github.com/ferranbt/fastssz v0.1.2 // indirect
 	github.com/fxamacker/cbor/v2 v2.2.0 // indirect
+	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/protolambda/zssz v0.1.5 // indirect
 	github.com/prysmaticlabs/go-bitfield v0.0.0-00010101000000-000000000000 // indirect
+	github.com/spf13/cobra v1.5.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
