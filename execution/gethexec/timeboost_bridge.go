@@ -18,7 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	// Protobuf imports for grpc calls
-	"github.com/offchainlabs/nitro/execution/gethexec/protos"
+	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 

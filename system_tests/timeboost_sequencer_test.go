@@ -12,8 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/core/types"
-
-	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
+	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 )
 
 // Acknowledgement flag that timeboost will wait for to know sequencer processed
@@ -79,11 +78,11 @@ func createL1AndL2NodeForTimeboost(
 	return builder, cleanup
 }
 
-func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, numIncls int) []*gethexec.InclusionList {
-	var incls []*gethexec.InclusionList
+func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, numIncls int) []*protos.InclusionList {
+	var incls []*protos.InclusionList
 	// Create given number of inclusion lists
 	for i := range numIncls {
-		var txns []*gethexec.Transaction
+		var txns []*protos.Transaction
 		// Every user generates a transaction and put into inclusion list
 		for _, userName := range users {
 			tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
@@ -94,7 +93,7 @@ func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, 
 			if time < 0 {
 				t.Fatalf("Invalid timestamp %d", time)
 			}
-			protoTx := gethexec.Transaction{
+			protoTx := protos.Transaction{
 				EncodedTxn: txBytes,
 				Address:    []byte{0x00},
 				Timestamp:  uint64(time),
@@ -104,7 +103,7 @@ func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, 
 		if i < 0 {
 			t.Fatalf("Invalid index %d", i)
 		}
-		incl := &gethexec.InclusionList{
+		incl := &protos.InclusionList{
 			Round:               uint64(i),
 			ConsensusTimestamp:  uint64(i),
 			EncodedTxns:         txns,
@@ -115,11 +114,11 @@ func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, 
 	return incls
 }
 
-func SendInclusionLists(t *testing.T, incls []*gethexec.InclusionList) {
+func SendInclusionLists(t *testing.T, incls []*protos.InclusionList) {
 	// Connect to the default port of listener
 	grpcConn, err := grpc.NewClient("localhost:55000", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	Require(t, err)
-	grpcClient := gethexec.NewForwardApiClient(grpcConn)
+	grpcClient := protos.NewForwardApiClient(grpcConn)
 	defer grpcConn.Close()
 
 	// Iterate over each inclusion list

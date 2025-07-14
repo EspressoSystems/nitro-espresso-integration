@@ -25,7 +25,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
-	"github.com/offchainlabs/nitro/execution/gethexec/protos"
+	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
