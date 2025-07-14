@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/core/types"
+
 	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 )
 
