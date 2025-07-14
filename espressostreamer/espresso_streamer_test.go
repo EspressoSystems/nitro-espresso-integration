@@ -308,6 +308,7 @@ func (m *mockEspressoClient) FetchTransactionByHash(ctx context.Context, hash *t
 	panic("not implemented")
 }
 
+
 func (m *mockEspressoClient) FetchVidCommonByHeight(ctx context.Context, blockHeight uint64) (types.VidCommon, error) {
 	panic("not implemented")
 }
