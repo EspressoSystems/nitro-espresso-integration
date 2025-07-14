@@ -101,6 +101,16 @@ func (l *TimeboostBridge) Start(
 	if _, err := url.ParseRequestURI(l.config.InternalTimeboostGrpcUrl); err != nil {
 		panic("timeboost grpc url must be a valid url")
 	}
+	oneMb := 1024 * 1024
+	if l.config.MaxSendMsgSize < 5*oneMb || l.config.MaxSendMsgSize > 10*oneMb {
+		panic("max send message size should be between 5 and 10 mb")
+	}
+	if l.config.MaxReceiveMsgSize < 5*oneMb || l.config.MaxReceiveMsgSize > 10*oneMb {
+		panic("max receive message size should be bettern 5 and 10 mb")
+	}
+	if l.config.ConnectionTimeout < 3*time.Second || l.config.ConnectionTimeout > 10*time.Second {
+		panic("connection timeout should be between 3 and 10 seconds")
+	}
 
 	l.StopWaiter.Start(ctx, l)
 
@@ -119,7 +129,11 @@ func (l *TimeboostBridge) Start(
 		if err != nil {
 			panic(err)
 		}
-		server := grpc.NewServer(grpc.MaxRecvMsgSize(l.config.MaxSendMsgSize), grpc.MaxSendMsgSize(l.config.MaxSendMsgSize), grpc.ConnectionTimeout(l.config.ConnectionTimeout))
+		server := grpc.NewServer(
+			grpc.MaxRecvMsgSize(l.config.MaxSendMsgSize),
+			grpc.MaxSendMsgSize(l.config.MaxSendMsgSize),
+			grpc.ConnectionTimeout(l.config.ConnectionTimeout),
+		)
 		gethexec.RegisterForwardApiServer(server, &ForwardService{
 			processInclusionList: processInclusionList,
 		})
@@ -128,8 +142,7 @@ func (l *TimeboostBridge) Start(
 			log.Info("Shutting down gRPC server...")
 			server.GracefulStop()
 		}()
-		err = server.Serve(lis)
-		if err != nil {
+		if err = server.Serve(lis); err != nil {
 			panic(err)
 		}
 	})

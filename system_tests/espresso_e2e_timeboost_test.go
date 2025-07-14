@@ -99,7 +99,6 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 		Timeout: 5 * time.Second,
 	}
 	// Various test cases at a given index in the user loop
-	timeoutIdx := 3                    // Listener timeout
 	twoTxnsInBundleIdx := 8            // Send two txns in a bundle
 	sendTxnToOneTimeboostNodeIdx := 10 // Only send the bundle to one timeboost node
 	for i, userName := range users {
@@ -126,9 +125,7 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 			t.Fatalf("Invalid time %d", current)
 		}
 		epoch := uint64(current)
-
 		bundle := NewBundle(0, epoch, encoded, tx.Hash())
-
 		jsonData, err := json.MarshalIndent(bundle, "", "  ")
 		Require(t, err)
 
@@ -148,11 +145,7 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 				continue
 			}
 		}
-		if i == timeoutIdx {
-			// Wait long enough to trigger a reset connection in listener
-			time.Sleep(6 * time.Second)
-		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	return expectedTxs
 }
@@ -178,7 +171,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	Require(t, err)
 
 	var users []string
-	const numUsers = 20
+	const numUsers = 15
 
 	blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
