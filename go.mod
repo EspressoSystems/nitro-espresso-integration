@@ -8,10 +8,12 @@ replace github.com/ethereum/go-ethereum => ./go-ethereum
 
 replace github.com/offchainlabs/bold => ./bold
 
+replace github.com/prysmaticlabs/go-bitfield => github.com/OffchainLabs/go-bitfield v0.0.0-20250408211841-ad7364de91a5
+
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/EspressoSystems/espresso-network/sdks/go v0.2.2
+	github.com/EspressoSystems/espresso-network/sdks/go v0.2.4
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/alicebob/miniredis/v2 v2.32.1
@@ -49,6 +51,7 @@ require (
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/offchainlabs/bold v0.0.0-00010101000000-000000000000
 	github.com/pkg/errors v0.9.1
+	github.com/prysmaticlabs/go-ssz v0.0.0-20210121151755-f6208871c388
 	github.com/r3labs/diff/v3 v3.0.1
 	github.com/redis/go-redis/v9 v9.6.1
 	github.com/rivo/tview v0.0.0-20240307173318-e804876934a1
@@ -93,7 +96,7 @@ require (
 	google.golang.org/genproto v0.0.0-20240624140628-dc46fd24d27d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20240617180043-68d350f18fd4 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d // indirect
-	google.golang.org/grpc v1.64.1 // indirect
+	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
@@ -218,8 +221,13 @@ require (
 )
 
 require (
+	github.com/ferranbt/fastssz v0.1.2 // indirect
 	github.com/fxamacker/cbor/v2 v2.2.0 // indirect
-	github.com/inconshreveable/mousetrap v1.0.0 // indirect
-	github.com/spf13/cobra v1.5.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/minio/highwayhash v1.0.3 // indirect
+	github.com/minio/sha256-simd v1.0.0 // indirect
+	github.com/protolambda/zssz v0.1.5 // indirect
+	github.com/prysmaticlabs/go-bitfield v0.0.0-00010101000000-000000000000 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
