@@ -795,19 +795,19 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 
 func (b *BatchPoster) checkEspressoValidation() bool {
 	b.building.segments.SetWaitingForValidation()
-	if b.streamer.espressoSubmitter == nil {
+	espressoSubmitter := b.streamer.espressoSubmitter
+
+	if espressoSubmitter == nil {
 		// We are not using espresso mode since these haven't been set, return true to advance batch posting
 		return true
 	}
 
-	// We assume that submitter is not nil here.
-	submitter := b.streamer.espressoSubmitter
-
-	if submitter.IsEscapeHatchEnabled() {
+	if espressoSubmitter.IsEscapeHatchEnabled() {
 		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
 		return true // return true to skip verification of batch
 	}
-	lastConfirmed, err := submitter.GetLastConfirmedPosition()
+
+	lastConfirmed, err := espressoSubmitter.GetLastConfirmedPosition()
 	if err != nil {
 		log.Error("failed call to get last confirmed pos", "err", err)
 		return false // if we get an error we can't validate
@@ -1497,8 +1497,8 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 
 	var signature []byte
 	teeType := espresso_key_manager.SGX
-	if submitter := b.streamer.espressoSubmitter; submitter != nil {
-		keyManager := submitter.GetKeyManager()
+	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
+		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignBatch(calldata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
@@ -1620,8 +1620,8 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 
 	var signature []byte
 	teeType := espresso_key_manager.SGX
-	if submitter := b.streamer.espressoSubmitter; submitter != nil {
-		keyManager := submitter.GetKeyManager()
+	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
+		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignBatch(calldata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
@@ -1905,8 +1905,8 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.batchReverted.Load() {
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
-	if submitter := b.streamer.espressoSubmitter; submitter != nil {
-		registered := submitter.GetKeyManager().HasRegistered()
+	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
+		registered := espressoSubmitter.GetKeyManager().HasRegistered()
 		if !registered {
 			return false, fmt.Errorf("ephemeral keys are not yet registered in Espresso TEE Contract")
 		}
