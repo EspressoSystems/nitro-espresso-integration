@@ -232,77 +232,46 @@ func TestEspressoStreamer(t *testing.T) {
 		require.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
 	})
 
-	t.Run("Persistent error skips transaction", func(t *testing.T) {
-		ctx := context.Background()
-		mockEspressoClient := new(mockEspressoClient)
-		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		namespace := uint64(1)
-		blockNum := uint64(3)
-
-		tx1, tx2, tx3 := espressoTypes.Bytes{0x01}, espressoTypes.Bytes{0x02}, espressoTypes.Bytes{0x03}
-		mockEspressoClient.On("FetchTransactionsInBlock", ctx, blockNum, namespace).Return(espressoClient.TransactionsInBlock{
-			Transactions: []espressoTypes.Bytes{tx1, tx2, tx3},
-		}, nil).Once()
-
-		streamer := NewEspressoStreamer(namespace, blockNum, mockEspressoTEEVerifierClient, mockEspressoClient, false, common.Address{}, 1*time.Second, 3)
-
-		parseFn := func(tx types.Bytes) ([]*MessageWithMetadataAndPos, error) {
-			if assert.ObjectsAreEqual(tx, tx2) {
-				return nil, NewPersistentError("this is a fatal error for tx2")
-			}
-			return []*MessageWithMetadataAndPos{{
-				MessageWithMeta: arbostypes.MessageWithMetadata{},
-				Pos:             uint64(tx[0]), // Dummy pos
-				HotshotHeight:   blockNum,
-			}}, nil
-		}
-
-		err := streamer.QueueMessagesFromHotshot(ctx, parseFn)
-		require.NoError(t, err)
-
-		assert.Equal(t, 2, len(streamer.messageWithMetadataAndPos))
-		if len(streamer.messageWithMetadataAndPos) == 2 {
-			assert.Equal(t, uint64(tx1[0]), streamer.messageWithMetadataAndPos[0].Pos)
-			assert.Equal(t, uint64(tx3[0]), streamer.messageWithMetadataAndPos[1].Pos)
-		}
-
-		mockEspressoClient.AssertExpectations(t)
-	})
-
-	t.Run("Contract revert is not retried", func(t *testing.T) {
+	t.Run("Persistent errors are not retried and are skipped", func(t *testing.T) {
 		ctx := context.Background()
 		mockEspressoClient := new(mockEspressoClient)
 		namespace := uint64(1)
 		blockNum := uint64(3)
 		retryBackoff := 1 * time.Millisecond
 
-		// 1. Setup mocks to return a single transaction
-		tx1 := espressoTypes.Bytes{0x01}
+		tx1, tx2, tx3 := espressoTypes.Bytes{0x01}, espressoTypes.Bytes{0x02}, espressoTypes.Bytes{0x03}
 		mockEspressoClient.On("FetchTransactionsInBlock", ctx, blockNum, namespace).Return(espressoClient.TransactionsInBlock{
-			Transactions: []espressoTypes.Bytes{tx1},
+			Transactions: []espressoTypes.Bytes{tx1, tx2, tx3},
 		}, nil).Once()
 
-		// 2. Track calls and define the parse function to always return our mock contract revert error
 		parseAttemptCount := 0
 		parseFn := func(tx types.Bytes) ([]*MessageWithMetadataAndPos, error) {
-			parseAttemptCount++
-			return nil, &mockRpcErrorWithData{}
+			if assert.ObjectsAreEqual(tx, tx2) {
+				parseAttemptCount++
+				return nil, &mockRpcErrorWithData{}
+			}
+			return []*MessageWithMetadataAndPos{{
+				MessageWithMeta: arbostypes.MessageWithMetadata{},
+				Pos:             uint64(tx[0]),
+				HotshotHeight:   blockNum,
+			}}, nil
 		}
 
-		// 3. Directly call the internal function with the retry loop
 		messages, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace, retryBackoff)
 		require.NoError(t, err)
 
-		// 4. Assertions
-		// We should not have processed any messages because the error was fatal
-		require.Empty(t, messages)
+		require.Equal(t, 2, len(messages), "Expected to process two messages")
+		if len(messages) == 2 {
+			assert.Equal(t, uint64(tx1[0]), messages[0].Pos)
+			assert.Equal(t, uint64(tx3[0]), messages[1].Pos)
+		}
 
-		// Crucially, assert that we did NOT retry
-		require.Equal(t, 1, parseAttemptCount, "Expected the transaction parsing to be attempted only once")
+		require.Equal(t, 1, parseAttemptCount, "Expected the failing transaction to be attempted only once")
+
+		mockEspressoClient.AssertExpectations(t)
 	})
 }
 
-// ExpectErr:
 // This serves to assert that we should be expecting a specific error during the test, and if the error does not match, fail the test.
 func ExpectErr(t *testing.T, err error, expectedError error) {
 	t.Helper()
