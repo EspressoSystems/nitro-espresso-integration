@@ -1913,10 +1913,10 @@ func (s *TransactionStreamer) ResubmitEspressoTransactions(ctx context.Context, 
 
 func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) error {
 	s.espressoPendingTxnPosMutex.Lock()
+	defer s.espressoPendingTxnPosMutex.Unlock()
 
 	pendingTxnsPos, err := s.getEspressoPendingTxnsPos()
 	if err != nil {
-		s.espressoPendingTxnPosMutex.Unlock()
 		return err
 	}
 	if len(pendingTxnsPos) > 0 {
@@ -1946,6 +1946,9 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 			return b, nil
 		}
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, fetcher, s.espressoMaxTransactionSize)
+		if msgCnt == 0 {
+			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
+		}
 		batch := s.db.NewBatch()
 		submittedPos := pendingTxnsPos[:msgCnt]
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
@@ -1953,12 +1956,7 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		err = s.setEspressoPendingTxnsPos(batch, pendingTxnsPos)
 
 		if err != nil {
-			s.espressoPendingTxnPosMutex.Unlock()
 			return fmt.Errorf("failed to set the pending txn list in the db batch: %w", err)
-		}
-		s.espressoPendingTxnPosMutex.Unlock()
-		if msgCnt == 0 {
-			return fmt.Errorf("failed to build the hotshot transaction: a large message has exceeded the size limit or failed to get a message from storage")
 		}
 
 		payload, err = arbutil.SignHotShotPayload(payload, s.EspressoKeyManager.SignHotShotPayload)
@@ -2006,8 +2004,6 @@ func (s *TransactionStreamer) submitEspressoTransactions(ctx context.Context) er
 		if err != nil {
 			return fmt.Errorf("failed to write to db: %w", err)
 		}
-	} else {
-		s.espressoPendingTxnPosMutex.Unlock()
 	}
 	return nil
 }
