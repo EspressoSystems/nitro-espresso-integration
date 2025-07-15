@@ -355,6 +355,12 @@ func (m *mockEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64
 	return args.Get(0).(uint64), args.Error(1)
 }
 
+func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context, hash *types.TaggedBase64) (types.ExplorerTransactionQueryData, error) {
+	args := m.Called(ctx, hash)
+	//nolint:errcheck
+	return args.Get(0).(types.ExplorerTransactionQueryData), args.Error(1)
+}
+
 func (m *mockEspressoClient) FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error) {
 	args := m.Called(ctx, blockHeight, namespace)
 	//nolint:errcheck
@@ -382,10 +388,6 @@ func (m *mockEspressoClient) FetchVidCommonByHeight(ctx context.Context, blockHe
 }
 
 func (m *mockEspressoClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
-	panic("not implemented")
-}
-
-func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context, hash *types.TaggedBase64) (types.ExplorerTransactionQueryData, error) {
 	panic("not implemented")
 }
 
