@@ -20,11 +20,6 @@ import (
 	"testing"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
-	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
-	"github.com/ccoveille/go-safecast"
 	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
@@ -37,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/nitro/arbnode/espresso/submitter"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/broadcastclient"
@@ -57,7 +53,7 @@ type TransactionStreamer struct {
 	stopwaiter.StopWaiter
 
 	chainConfig    *params.ChainConfig
-	exec           execution.ExecutionClient
+	exec           TransactionStreamerExecutionSequencer
 	prevHeadMsgIdx *arbutil.MessageIndex
 	validator      *staker.BlockValidator
 
@@ -66,12 +62,10 @@ type TransactionStreamer struct {
 	config         TransactionStreamerConfigFetcher
 	snapSyncConfig *SnapSyncConfig
 
-	insertionMutex                  sync.Mutex // cannot be acquired while reorgMutex is held
-	reorgMutex                      sync.RWMutex
-	espressoTxnsStateInsertionMutex sync.Mutex
+	insertionMutex sync.Mutex // cannot be acquired while reorgMutex is held
+	reorgMutex     sync.RWMutex
 
-	newMessageNotifier     chan struct{}
-	newSovereignTxNotifier chan struct{}
+	newMessageNotifier chan struct{}
 
 	nextAllowedFeedReorgLog time.Time
 
@@ -85,19 +79,7 @@ type TransactionStreamer struct {
 	delayedBridge   *DelayedBridge
 
 	trackBlockMetadataFrom arbutil.MessageIndex
-	// Espresso specific fields. These fields are set from batch poster
-	espressoClient               espressoClient.EspressoClient
-	lightClientReader            lightclient.LightClientReaderInterface
-	espressoTxnsPollingInterval  time.Duration
-	maxBlockLagBeforeEscapeHatch uint64
-	espressoMaxTransactionSize   int64
-	resubmitEspressoTxDeadline   time.Duration
-	lastSubmitFailureAt          *time.Time
-	// Public these fields for testing
-	EscapeHatchEnabled                    bool
-	UseEscapeHatch                        bool
-	EspressoKeyManager                    EspressoKeyManagerInterface
-	InitialFinalizedSequencerMessageCount *big.Int
+	espressoSubmitter      submitter.EspressoSubmitter
 }
 
 type TransactionStreamerConfig struct {
@@ -144,7 +126,7 @@ func NewTransactionStreamer(
 	ctx context.Context,
 	db ethdb.Database,
 	chainConfig *params.ChainConfig,
-	exec execution.ExecutionClient,
+	exec TransactionStreamerExecutionSequencer,
 	broadcastServer *broadcaster.Broadcaster,
 	fatalErrChan chan<- error,
 	config TransactionStreamerConfigFetcher,
@@ -165,7 +147,6 @@ func NewTransactionStreamer(
 		fatalErrChan:       fatalErrChan,
 		config:             config,
 		snapSyncConfig:     snapSyncConfig,
-		EscapeHatchEnabled: false,
 	}
 
 	err := streamer.cleanupInconsistentState()
@@ -1265,30 +1246,9 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 
 	//  If light client reader and espresso client are set, then we need to store the pos in the database
 	//  to be used later to submit the message to hotshot for finalization.
-	if s.lightClientReader != nil && s.espressoClient != nil {
-		//  Only submit the transaction if escape hatch is not enabled
-		var messagesToEnqueue []arbutil.MessageIndex
-		for i := range messages {
-			idx, err := safecast.ToUint64(i)
-			if err != nil {
-				return err
-			}
-			indexToSubmit := (firstMsgIdx + arbutil.MessageIndex(idx))
-
-			// convert to uint64
-			indexToSubmitUint64, err := safecast.ToUint64(indexToSubmit)
-			if err != nil {
-				return err
-			}
-			if s.shouldSubmitEspressoTransaction(&indexToSubmitUint64) {
-				log.Info("Enqueuing pending transaction to Espresso", "pos", indexToSubmit)
-				messagesToEnqueue = append(messagesToEnqueue, indexToSubmit)
-			}
-
-		}
-		err = s.enqueuePendingTransaction(messagesToEnqueue)
+	if submitter := s.espressoSubmitter; submitter != nil {
+		err = s.espressoSubmitter.NotifyNewPendingMessages(firstMsgIdx, messages)
 		if err != nil {
-			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
 			return err
 		}
 	}
@@ -1580,24 +1540,8 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
 
-	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := s.RegisterSigner()
-		if err != nil {
-			log.Error("failed to register espresso key manager", "err", err)
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.submitTransactionsToEspresso, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollToResubmitEspressoTransactions, s.newSovereignTxNotifier)
-		if err != nil {
-			return err
-		}
+	if submitter := s.espressoSubmitter; submitter != nil {
+		submitter.Start(&s.StopWaiter)
 	} else {
 		log.Warn("light client reader or espresso client not set, skipping espresso verification")
 	}

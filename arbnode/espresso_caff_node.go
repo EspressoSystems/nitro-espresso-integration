@@ -295,7 +295,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
 		nextHotshotBlock = n.configFetcher().NextHotshotBlock
 		if nextHotshotBlock == 0 {
-			return errors.New("No next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
+			return errors.New("no next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
 		}
 	}
 	// The reason we do the reset here is because database is only initialized after Caff node is initialized

@@ -19,6 +19,8 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/arbnode/espresso/submitter"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -391,7 +393,8 @@ func TestEspressoE2E(t *testing.T) {
 	Require(t, err)
 
 	// Submit the transaction to hotshot
-	txhash, err := l2Node.ConsensusNode.TxStreamer.ResubmitEspressoTransactions(ctx, arbutil.SubmittedEspressoTx{Hash: "", Pos: []arbutil.MessageIndex{0}, Payload: payload})
+	submitter := arbnode.GetEspressoSubmitter(l2Node.ConsensusNode.TxStreamer).(*submitter.EspressoOriginalSubmitter)
+	txhash, err := submitter.ResubmitEspressoTransactions(ctx, arbutil.SubmittedEspressoTx{Hash: "", Pos: []arbutil.MessageIndex{0}, Payload: payload})
 	Require(t, err)
 	// Check if the txHash is already finalized in hotshot
 	// curl hotshot availability endpoint and this transaction should not be in the response
