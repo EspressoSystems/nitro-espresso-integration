@@ -114,6 +114,7 @@ func NewEspressoStreamer(
 func (s *EspressoStreamer) GetMessageCount() uint64 {
 	return CountUniqueEntries(&s.messageWithMetadataAndPos)
 }
+
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
 	s.currentMessagePos = currentMessagePos
 	s.nextHotshotBlockNum = currentHostshotBlock
@@ -215,24 +216,24 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
 	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature)
-	if err != nil {
-		return fmt.Errorf("call to the espressoTEEVerifier contract failed: %w", err)
+	if err == nil {
+		return nil
 	}
-	return nil
+	return classifyVerificationError(err)
 }
 
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*MessageWithMetadataAndPos, error) {
 	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
 	if err != nil {
 		log.Warn("failed to parse hotshot payload", "err", err)
-		return nil, NewFatalError("failed to parse hotshot payload: %w", err)
+		return nil, NewPersistentError("failed to parse hotshot payload: %w", err)
 	}
 	if len(messages) == 0 {
-		return nil, &FatalError{Err: ErrPayloadHadNoMessages}
+		return nil, &PersistentError{Err: ErrPayloadHadNoMessages}
 	}
 	if len(userDataHash) != 32 {
 		log.Warn("user data hash is not 32 bytes")
-		return nil, &FatalError{Err: ErrUserDataHashNot32Bytes}
+		return nil, &PersistentError{Err: ErrUserDataHashNot32Bytes}
 	}
 
 	userDataHashArr := [32]byte(userDataHash)
@@ -249,7 +250,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes) ([]*
 		err = s.verifyLegacy(signature, userDataHashArr)
 		if err != nil {
 			log.Warn("failed to verify attestation quote", "err", err)
-			return nil, NewFatalError("failed to verify attestation quote: %w", err)
+			return nil, err
 		}
 	}
 
@@ -355,8 +356,8 @@ func fetchNextHotshotBlock(
 				break
 			}
 
-			// If the error is Fatal (e.g., batch poster signature verification failed), we skip to the next transaction.
-			if ErrorIsFatal(err) {
+			// If the error is Fatal (e.g., it has ErrorData, indicating a contract revert), we skip to the next transaction.
+			if _, ok := err.(interface{ ErrorData() interface{} }); ok {
 				log.Warn("Fatal error while parsing payload, skipping transaction", "err", err)
 				break
 			}

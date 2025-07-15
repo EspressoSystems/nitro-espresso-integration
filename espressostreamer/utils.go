@@ -1,7 +1,6 @@
 package espressostreamer
 
 import (
-	"errors"
 	"fmt"
 )
 
@@ -88,37 +87,51 @@ func (e *EphemeralError) Unwrap() error {
 	return e.Err
 }
 
-type FatalError struct {
+type PersistentError struct {
 	Err error
 }
 
-func (c *FatalError) Error() string {
+type rpcError interface {
+	ErrorData() interface{}
+}
+
+func (c *PersistentError) Error() string {
 	if c.Err == nil {
 		return ""
 	}
 	return c.Err.Error()
 }
 
-func (c *FatalError) Unwrap() error {
+func (c *PersistentError) Unwrap() error {
 	return c.Err
 }
 
+// ErrorData makes PersistentError satisfy an interface that has an ErrorData method.
+// Its presence signals that this is a persistent error that should not be retried.
+func (c *PersistentError) ErrorData() interface{} {
+	// We only need to implement the method to satisfy the interface for type assertions.
+	// The actual error data, if it exists, is in the wrapped error.
+	// We return nil because this specific wrapper doesn't add any new data itself.
+	return nil
+}
+
 // Error type helpers
-
-func ErrorIsEphemeral(err error) bool {
-	var ephemeralError *EphemeralError
-	return errors.As(err, &ephemeralError)
-}
-
-func ErrorIsFatal(err error) bool {
-	var FatalError *FatalError
-	return errors.As(err, &FatalError)
-}
 
 func NewEphemeralError(format string, a ...any) error {
 	return &EphemeralError{Err: fmt.Errorf(format, a...)}
 }
 
-func NewFatalError(format string, a ...any) error {
-	return &FatalError{Err: fmt.Errorf(format, a...)}
+func NewPersistentError(format string, a ...any) error {
+	return &PersistentError{Err: fmt.Errorf(format, a...)}
+}
+
+func classifyVerificationError(err error) error {
+	_, ok := err.(rpcError)
+	if ok {
+		// The presence of error data indicates a contract revert, which is a persistent error.
+		return NewPersistentError("verifying legacy attestation failed with a contract revert: %w", err)
+	}
+
+	// If there's no error data, it's likely a transient network or RPC issue.
+	return NewEphemeralError("verifying legacy attestation failed: %w", err)
 }
