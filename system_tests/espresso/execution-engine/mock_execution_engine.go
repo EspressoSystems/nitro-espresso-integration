@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	geth_crypo "github.com/ethereum/go-ethereum/crypto"
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -28,14 +29,37 @@ type MockExecutionEngine struct {
 	Hasher  MessageHasher
 }
 
-type MessageHasher interface {
-	Hash(msg *arbostypes.MessageWithMetadata) common.Hash
+// Hasher defines the arbitraty
+type Hasher interface {
+	Write(bytes []byte) (n int, err error)
+	Sum(bytes []byte) []byte
 }
 
-type sha256MessageHasher struct{}
+type MessageHasher interface {
+	HashMessageWithMetadata(msg *arbostypes.MessageWithMetadata) common.Hash
+}
 
-func (sha256MessageHasher) Hash(msg *arbostypes.MessageWithMetadata) common.Hash {
-	hasher := crypto.SHA256.New()
+// StdLibCryptoHasher is a struct to wrap the crypto.Hash interface defined
+// by the Go standard library. This allows for the substitution or swapping
+// of the hashing algorithms provided by the Go standard library's crypto
+// package.
+type StdLibCryptoHasher struct {
+	Hash crypto.Hash
+}
+
+// Compile time check to ensure that StdLibCryptoHasher implements the
+// MessageHasher interface.
+var _ MessageHasher = StdLibCryptoHasher{}
+
+// NewStdLibHasher creates a new instance of StdLibCryptoHasher with the
+// specified crypto.Hash algorithm.
+func NewStdLibHasher(hash crypto.Hash) StdLibCryptoHasher {
+	return StdLibCryptoHasher{Hash: hash}
+}
+
+// HashMessageWithMetadata implements MessageHasher
+func (h StdLibCryptoHasher) HashMessageWithMetadata(msg *arbostypes.MessageWithMetadata) common.Hash {
+	hasher := h.Hash.New()
 	hasher.Write([]byte{msg.Message.Header.Kind})
 	hasher.Write(msg.Message.L2msg)
 	var hash common.Hash
@@ -43,7 +67,27 @@ func (sha256MessageHasher) Hash(msg *arbostypes.MessageWithMetadata) common.Hash
 	return hash
 }
 
-var DefaultMessageHasher MessageHasher = sha256MessageHasher{}
+// KeccakHasher is a struct that is a place holder for the Keccak hashing
+// algorithm provided by the go-ethereum library.
+type KeccakHasher struct{}
+
+// Compile time check to ensure that KeccakHasher implements the
+// MessageHasher interface.
+var _ MessageHasher = KeccakHasher{}
+
+// HashMessageWithMetadata implements MessageHasher
+func (h KeccakHasher) HashMessageWithMetadata(msg *arbostypes.MessageWithMetadata) common.Hash {
+	keccak := geth_crypo.NewKeccakState()
+	keccak.Write([]byte{msg.Message.Header.Kind})
+	keccak.Write(msg.Message.L2msg)
+	var hash common.Hash
+	keccak.Read(hash[:])
+	return hash
+}
+
+// DefaultMessageHasher is the default MessageHasher used by the
+// MockExecutionEngine.
+var DefaultMessageHasher MessageHasher = KeccakHasher{}
 
 var _ arbnode.TransactionStreamerExecutionSequencer = &MockExecutionEngine{}
 
@@ -66,7 +110,7 @@ func (m *MockExecutionEngine) BlockNumberToMessageIndex(blockNum uint64) contain
 func (m *MockExecutionEngine) DigestMessage(msgIdx arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) containers.PromiseInterface[*execution.MessageResult] {
 	m.Lock.Lock()
 	defer m.Lock.Unlock()
-	hash := m.Hasher.Hash(msg)
+	hash := m.Hasher.HashMessageWithMetadata(msg)
 	var blockHash common.Hash
 	copy(blockHash[:], hash[:])
 	result := execution.MessageResult{
