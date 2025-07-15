@@ -7,12 +7,12 @@ package arbnode
 // not intended to general common usage.
 
 import (
-	"github.com/offchainlabs/nitro/arbnode/espresso/submitter"
+	"github.com/offchainlabs/nitro/espresso/submitter"
 )
 
 // SetEspressoSubmitter sets the EspressoSubmitter for the TransactionStreamer.
 //
-// Since the espressoSubnmitter is an internal, optional field of the
+// Since the espressoSubmitter field is an internal, optional field of the
 // TransactionStreamer, this function allows you to set it after the streamer
 // has been created.
 //

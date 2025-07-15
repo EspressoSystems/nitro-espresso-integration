@@ -1,7 +1,7 @@
 package lightclient
 
 import (
-	"github.com/offchainlabs/nitro/arbnode/espresso"
+	"github.com/offchainlabs/nitro/espresso"
 )
 
 // MockAlwaysLiveLightClientReader is a mock implementation of the

@@ -6,9 +6,6 @@ import (
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espresso_common "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
-	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/execution"
 )
 
 // TransactionStreamerEspressoClient defines the interface under which the
@@ -47,24 +44,4 @@ type TransactionStreamerEspressoClient interface {
 // as explicit documentation of the methods utilized by the TransactionStreamer.
 type TransactionStreamerLightClientReadeInterface interface {
 	IsHotShotLive(delayThreshold uint64) (bool, error)
-}
-
-// TransactionStreamerExecutionSequencer defines the interface under which
-// the TransactionStreamer interacts with the ExecutionSequencer interface.
-//
-// It derives the method definitions from the execution package:
-// "github.com/offchainlabs/nitro/execution"
-//
-// It is defined separately here from the execution.ExecutionSequencer
-// interface in order to minimize the defined and exposed methods.  This
-// allows this interface to be much easier to mock in tests, and to serve
-// as explicit documentation of the methods utilized by the TransactionStreamer.
-type TransactionStreamerExecutionSequencer interface {
-	Reorg(count arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) ([]*execution.MessageResult, error)
-	HeadMessageNumber() (arbutil.MessageIndex, error)
-	MarkFeedStart(to arbutil.MessageIndex)
-	ResultAtPos(pos arbutil.MessageIndex) (*execution.MessageResult, error)
-	DigestMessage(num arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) (*execution.MessageResult, error)
-
-	BlockNumberToMessageIndex(blockNum uint64) (arbutil.MessageIndex, error)
 }

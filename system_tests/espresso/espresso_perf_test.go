@@ -14,15 +14,15 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/offchainlabs/nitro/arbnode"
-	"github.com/offchainlabs/nitro/arbnode/espresso"
-	chain "github.com/offchainlabs/nitro/arbnode/espresso/chain"
-	execution_engine "github.com/offchainlabs/nitro/arbnode/espresso/execution-engine"
-	key_manager "github.com/offchainlabs/nitro/arbnode/espresso/key-manager"
-	light_client "github.com/offchainlabs/nitro/arbnode/espresso/light-client"
-	"github.com/offchainlabs/nitro/arbnode/espresso/submitter"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/espresso"
+	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/execution"
+	chain "github.com/offchainlabs/nitro/system_tests/espresso/chain"
+	execution_engine "github.com/offchainlabs/nitro/system_tests/espresso/execution-engine"
+	key_manager "github.com/offchainlabs/nitro/system_tests/espresso/key-manager"
+	light_client "github.com/offchainlabs/nitro/system_tests/espresso/light-client"
 )
 
 // GeneratedMessage is a struct that holds the generated message data that
@@ -99,6 +99,12 @@ func generateMessages(
 	}
 }
 
+// generateNMessages is a function that is meant to run in a separate goroutine.
+// It generates up to the specified number of messages and sends them to the
+// provided channel.  The index of each message starts at 0 and will increment
+// for each message generated.
+//
+// When the function exits, the provided channel will be closed.
 func generateNMessages(
 	ctx context.Context,
 	hasher execution_engine.MessageHasher,
@@ -120,25 +126,12 @@ func generateNMessages(
 	}
 }
 
-func TeeChan[T any](ctx context.Context, in <-chan T, out1, out2 chan<- T) {
-	for entry := range in {
-		select {
-		default:
-		case <-ctx.Done():
-			return
-		}
-
-		out1 <- entry
-		out2 <- entry
-	}
-}
-
-// produceMessagesAtInterval is a goroutine that reads messages from the
-// provided channel and writes them to the TransactionStreamer at a specified
-// interval.
+// writeMessagesToSequencerAtInterval is a goroutine that reads messages from
+// the provided channel and writes them to the TransactionStreamer at a
+// specified interval.
 //
 // This function is meant to be called in a separate goroutine.
-func produceMessagesAtInterval(
+func writeMessagesToSequencerAtInterval(
 	ctx context.Context,
 	streamer *arbnode.TransactionStreamer,
 	ch <-chan GeneratedMessage,
@@ -273,8 +266,7 @@ func TestEspressoPerformance(t *testing.T) {
 			// Produce the messages in the channel, so that the TransactionStreamer can
 			// process them.
 			go generateNMessages(ctx, hasher, messagesInChannel, N)
-			// go generateMessages(ctx, DefaultMessageHasher, messagesChannel)
-			go produceMessagesAtInterval(ctx, streamer, messagesInChannel, time.Millisecond)
+			go writeMessagesToSequencerAtInterval(ctx, streamer, messagesInChannel, time.Millisecond)
 
 			// Wait for some time to allow for the transactions to be sent to and
 			// processed by the mock espresso chain.

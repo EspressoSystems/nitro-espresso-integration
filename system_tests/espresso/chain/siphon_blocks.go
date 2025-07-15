@@ -6,7 +6,7 @@ import (
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espresso_common "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
-	"github.com/offchainlabs/nitro/arbnode/espresso"
+	"github.com/offchainlabs/nitro/espresso"
 )
 
 type SiphonBlocksWithTransactions struct {

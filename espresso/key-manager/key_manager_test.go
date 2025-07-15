@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	espresso_key_manager "github.com/offchainlabs/nitro/arbnode/espresso/key-manager"
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressotee"
 )
 

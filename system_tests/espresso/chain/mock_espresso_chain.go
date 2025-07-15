@@ -11,7 +11,7 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espresso_common "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
-	"github.com/offchainlabs/nitro/arbnode/espresso"
+	"github.com/offchainlabs/nitro/espresso"
 )
 
 // MockEspressoChain is a mock implementation of an Espresso Blockchain for

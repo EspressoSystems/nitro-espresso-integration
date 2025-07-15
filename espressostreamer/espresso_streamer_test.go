@@ -274,6 +274,8 @@ type mockEspressoClient struct {
 	mock.Mock
 }
 
+var _ espressoClient.EspressoClient = (*mockEspressoClient)(nil)
+
 func (m *mockEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	args := m.Called(ctx)
 	//nolint:errcheck
@@ -313,6 +315,10 @@ func (m *mockEspressoClient) FetchVidCommonByHeight(ctx context.Context, blockHe
 }
 
 func (m *mockEspressoClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+	panic("not implemented")
+}
+
+func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context, hash *types.TaggedBase64) (types.ExplorerTransactionQueryData, error) {
 	panic("not implemented")
 }
 

@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/offchainlabs/nitro/arbnode/espresso"
-	espresso_key_manager "github.com/offchainlabs/nitro/arbnode/espresso/key-manager"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/espresso"
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 

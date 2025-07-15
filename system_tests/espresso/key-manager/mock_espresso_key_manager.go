@@ -7,6 +7,7 @@ import (
 	crypto_rand "crypto/rand"
 	"fmt"
 
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressotee"
 )
 
@@ -20,7 +21,7 @@ type MockEspressoKeyManager struct {
 	Key *ecdsa.PrivateKey
 }
 
-var _ EspressoKeyManagerInterface = &MockEspressoKeyManager{}
+var _ espresso_key_manager.EspressoKeyManagerInterface = &MockEspressoKeyManager{}
 
 // NewMockEspressoKeyManager creates a new instance of MockEspressoKeyManager
 // with a randomly generated private key.
