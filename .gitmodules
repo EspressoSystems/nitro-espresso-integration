@@ -40,7 +40,3 @@
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
 	branch = release-v3.5.6-2e27869
-
-[submodule "execution/gethexec/protos"]
-	path = execution/gethexec/protos
-	url = https://github.com/EspressoSystems/timeboost-proto.git

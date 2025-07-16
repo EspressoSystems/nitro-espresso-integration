@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
+	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/core/types"
-
-	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 )
 
 // Acknowledgement flag that timeboost will wait for to know sequencer processed

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
@@ -25,7 +26,6 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
-	protos "github.com/offchainlabs/nitro/execution/gethexec/proto-gen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
