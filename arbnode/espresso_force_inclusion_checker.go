@@ -99,22 +99,27 @@ func (f *ForceInclusionChecker) checkIfMessageCanBeForceIncluded(ctx context.Con
 	if err != nil {
 		return fmt.Errorf("error getting total delayed messages read: %w", err)
 	}
+	log.Debug("Total delayed messages read", "totalDelayedMessagesRead", totalDelayedMessagesRead)
 
 	// Get the earliest block number that is without the force inclusion tolerance
 	badBlockNumber, err := f.getForceInclusionToleranceBlockNumber(ctx)
 	if err != nil {
 		return fmt.Errorf("error getting force inclusion tolerance block number: %w", err)
 	}
+	log.Debug("Force inclusion tolerance bad block number", "blockNumber", badBlockNumber)
 	// Check the delayed message count at this block number
 	count, err := f.delayedMessageFetcher.getDelayedMessageCountAtBlock(badBlockNumber)
 	if err != nil {
 		return fmt.Errorf("error getting delayed message count at block %d: %w", badBlockNumber, err)
 	}
+	log.Debug("Delayed message count at block", "count", count, "blockNumber", badBlockNumber)
 	// If the message count in delay inbox is less than or equal to the total delayed messages read
 	// then no force inclusion is going to happen.
 	if count <= arbmath.BigToUintSaturating(totalDelayedMessagesRead) {
+		log.Debug("force inclusion wont happen")
 		return nil
 	}
+	log.Debug("Force inclusion is going to happen")
 	// Force inclusion is going to happen, panic the node.
 	return ForceInclusionErr
 }
@@ -123,12 +128,6 @@ func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 	f.StopWaiter.Start(ctx, f)
 	var firstErrFound time.Time
 
-	// Do the check first before caff node starts
-	err := f.checkIfMessageCanBeForceIncluded(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to check force inclusion: %w", err)
-	}
-
 	return f.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		err := f.checkIfMessageCanBeForceIncluded(ctx)
 		if err == nil {
@@ -136,12 +135,14 @@ func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 			return f.config.PollingInterval
 		}
 		if errors.Is(err, ForceInclusionErr) {
+			log.Error("rorce inclusion error", "err", err)
 			f.fatalErrChan <- err
 			return 0
 		}
 		if firstErrFound.IsZero() {
 			firstErrFound = time.Now()
 		} else if time.Since(firstErrFound) > f.config.ErrorToleranceDuration {
+			log.Error("error tolerance duration exceeded", "firstErrFound", firstErrFound, "timeSinceFirstErrFound", time.Since(firstErrFound))
 			f.fatalErrChan <- err
 		}
 		log.Error("error checking force inclusion", "err", err)
@@ -154,6 +155,7 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 	if err != nil {
 		return 0, err
 	}
+	log.Debug("Max time variation delay blocks", "maxTimeVariationDelayBlocks", maxTimeVariationDelayBlocks, "maxTimeVariationDelaySeconds", maxTimeVariationDelaySeconds)
 
 	parentLatestHeader, err := f.l1Reader.LastHeader(ctx)
 	if err != nil {
@@ -163,6 +165,8 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 	l1BlockNumber := parentLatestHeader.Number.Uint64()
 	l1TimeStamp := parentLatestHeader.Time
 
+	log.Debug("L1 block number", "l1BlockNumber", l1BlockNumber, "l1TimeStamp", l1TimeStamp)
+
 	if f.l1Reader.IsParentChainArbitrum() {
 		headerInfo := types.DeserializeHeaderExtraInformation(parentLatestHeader)
 		l1BlockNumber = headerInfo.L1BlockNumber
@@ -170,6 +174,8 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 
 	lastBadBlockNumber := arbmath.SaturatingUSub(f.config.BlockThresholdTolerance+l1BlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
 	lastBadBlockTime := arbmath.SaturatingUSub(f.config.SecondThresholdTolerance+l1TimeStamp, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+
+	log.Debug("Last bad block number", "lastBadBlockNumber", lastBadBlockNumber, "lastBadBlockTime", lastBadBlockTime)
 
 	if f.l1Reader.IsParentChainArbitrum() {
 		n, err := node_interfacegen.NewNodeInterface(types.NodeInterfaceAddress, f.l1Reader.Client())
@@ -179,6 +185,7 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 		rng, err := n.L2BlockRangeForL1(&bind.CallOpts{Context: ctx}, lastBadBlockNumber)
 		if err == nil {
 			lastBadBlockNumber = rng.LastBlock
+			log.Debug("Last bad block number from L2 block range for L1", "lastBadBlockNumber", lastBadBlockNumber)
 		} else {
 			// If the L2 block range for L1 call fails, we will use binary search
 			// The start block number should be the genesis block
@@ -205,28 +212,37 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 				}
 			})
 			if err != nil {
+				log.Error("error in binary search", "err", err)
 				return 0, err
 			}
+			log.Debug("Last bad block number from binary search", "lastBadBlockNumber", lastBadBlockNumber)
 		}
 	}
 
-	lastBadBlock := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
+	lastBadBlock, err := f.findFirstParentChainBlockBelow(ctx, lastBadBlockNumber, lastBadBlockTime)
+	if err != nil {
+		log.Error("error finding first parent chain block below", "err", err)
+		return 0, err
+	}
 	return lastBadBlock, nil
 }
 
-func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Context, lastBadBlockNumber uint64, lastBadBlockTime uint64) uint64 {
+func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Context, lastBadBlockNumber uint64, lastBadBlockTime uint64) (uint64, error) {
 	client := f.l1Reader.Client()
 	blockNumber := lastBadBlockNumber
 
 	for blockNumber > 0 {
 		block, err := client.BlockByNumber(ctx, arbmath.UintToBig(blockNumber))
 		if err != nil {
-			return 0
+			log.Error("Error getting block", "blockNumber", blockNumber, "err", err)
+			return 0, err
 		}
 		if block.NumberU64() <= lastBadBlockNumber || block.Time() <= lastBadBlockTime {
-			return block.NumberU64()
+			log.Debug("Block number is less than or equal to last bad block number or time", "blockNumber", block.NumberU64(), "lastBadBlockNumber", lastBadBlockNumber, "lastBadBlockTime", lastBadBlockTime)
+			return block.NumberU64(), nil
 		}
+		log.Debug("Block number Decreasing", "blockNumber", blockNumber)
 		blockNumber--
 	}
-	return 0
+	return 0, fmt.Errorf("no parent block found")
 }
