@@ -159,7 +159,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	// wait for the builder
 	err = waitForEspressoNode(ctx)
 	Require(t, err)
-	time.Sleep(1 * time.Minute)
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
 	Require(t, err)
