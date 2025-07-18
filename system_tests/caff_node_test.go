@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
+
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode"
 )
@@ -46,13 +47,13 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, da
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
 
-	nodeConfig.EspressoCaffNode.StateCheckerConfig = arbnode.StateCheckerConfig{
+	nodeConfig.EspressoCaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 1,
 		ErrorToleranceDuration: time.Hour * 1, // Set it to a larger value. That makes the state checker not shut down
 		TrustedNodeUrl:         fmt.Sprintf("http://localhost:%d", 8945),
 	}
 
-	nodeConfig.EspressoCaffNode.ForceInclusionCheckerConfig = arbnode.ForceInclusionCheckerConfig{
+	nodeConfig.EspressoCaffNode.ForceInclusionChecker = arbnode.ForceInclusionCheckerConfig{
 		RetryTime:                time.Second * 2,
 		PollingInterval:          time.Second * 1,
 		BlockThresholdTolerance:  20,

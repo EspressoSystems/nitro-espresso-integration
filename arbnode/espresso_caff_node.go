@@ -42,8 +42,8 @@ type EspressoCaffNodeConfig struct {
 	Dangerous               DangerousCaffNodeConfig `koanf:"dangerous"`
 
 	// Force Inclusion Checker
-	ForceInclusionCheckerConfig ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
-	StateCheckerConfig          StateCheckerConfig          `koanf:"state-checker"`
+	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
+	StateChecker          StateCheckerConfig          `koanf:"state-checker"`
 }
 
 type DangerousCaffNodeConfig struct {
@@ -190,14 +190,14 @@ func NewEspressoCaffNode(
 
 	forceInclusionChecker := NewForceInclusionChecker(
 		&SeqInbox{seqInbox: seqInbox},
-		configFetcher().ForceInclusionCheckerConfig,
+		configFetcher().ForceInclusionChecker,
 		l1Reader,
 		delayedMessageFetcher,
 		fatalErrChan,
 	)
 
 	stateChecker := NewStateChecker(
-		configFetcher().StateCheckerConfig,
+		configFetcher().StateChecker,
 		httpPort,
 		fatalErrChan,
 	)
