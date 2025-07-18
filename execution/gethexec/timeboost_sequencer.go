@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
@@ -25,7 +26,6 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
 	"github.com/offchainlabs/nitro/execution"
-	gethexec "github.com/offchainlabs/nitro/execution/gethexec/protos"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -488,7 +488,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *gethexec.InclusionList, options *arbitrum_types.ConditionalOptions) error {
+func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns))
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction

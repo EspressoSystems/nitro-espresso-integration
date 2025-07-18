@@ -194,9 +194,6 @@ else
 	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
 endif
 
-PROTO_REL_PATH = execution/gethexec/protos
-PROTO_FILES = $(shell find $(PROTO_REL_PATH) -name '*.proto')
-
 # user targets
 .PHONY: build-espresso-crypto-lib
 build-espresso-crypto-lib:
@@ -212,13 +209,8 @@ all: build build-replay-env test-gen-proofs
 	@touch .make/all
 
 .PHONY: build
-build: proto $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
+build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous-auctioneer bidder-client datool mockexternalsigner seq-coordinator-invalidate nitro-val seq-coordinator-manager dbconv)
 	@printf $(done)
-
-.PHONY: proto
-proto: $(PROTO_FILES)
-	protoc --proto_path=$(CURDIR) --go_out=$(CURDIR) --go_opt=paths=source_relative $(PROTO_FILES) \
-	--go-grpc_out=$(CURDIR) --go-grpc_opt=paths=source_relative
 
 .PHONY: build-node-deps
 build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
