@@ -651,14 +651,13 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
-	( export HARDHAT_MAX_MEMORY=4096; \
-	  yarn --cwd safe-smart-account build; \
-	  yarn --cwd contracts build; \
-	  yarn --cwd contracts build:forge:yul; \
-	  yarn --cwd contracts-legacy build; \
-	  yarn --cwd contracts-legacy build:forge:yul; \
-	  make -C contracts-local build; \
-	)
+	export HARDHAT_MAX_MEMORY=4096
+	yarn --cwd safe-smart-account build
+	yarn --cwd contracts build
+	yarn --cwd contracts build:forge:yul
+	yarn --cwd contracts-legacy build
+	yarn --cwd contracts-legacy build:forge:yul
+	make -C contracts-local build
 	@touch $@
 
 .make/yarndeps: $(DEP_PREDICATE) */package.json */yarn.lock $(ORDER_ONLY_PREDICATE) .make
