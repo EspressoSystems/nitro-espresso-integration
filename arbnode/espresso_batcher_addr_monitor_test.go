@@ -32,11 +32,11 @@ func TestBatcherAddrMonitor(t *testing.T) {
 	// Test AddEvent
 	t.Run("AddEvent", func(t *testing.T) {
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
-		err := b.AddEvent(50, initAddr1, false)
+		err := b.AddBatchPosterSetEvent(50, initAddr1, false)
 		Require(t, err)
-		err = b.AddEvent(60, initAddr2, false)
+		err = b.AddBatchPosterSetEvent(60, initAddr2, false)
 		Require(t, err)
-		err = b.AddEvent(70, addr3, true)
+		err = b.AddBatchPosterSetEvent(70, addr3, true)
 		Require(t, err)
 
 		result1 := b.GetValidAddresses(40)

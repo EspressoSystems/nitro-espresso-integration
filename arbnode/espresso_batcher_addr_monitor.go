@@ -13,6 +13,7 @@ const (
 	eventKey = "espresso-batcher-addr"
 )
 
+// `BatchPosterSet` event
 type BatcherAddrEvent struct {
 	l1Height  uint64         `koanf:"l1-height"`
 	addr      common.Address `koanf:"addr"`
@@ -20,13 +21,24 @@ type BatcherAddrEvent struct {
 }
 
 type BatcherAddrMonitorInterface interface {
-	AddEvent(l1 uint64, addr common.Address, isBatcher bool) error
+	AddBatchPosterSetEvent(l1 uint64, addr common.Address, isBatcher bool) error
+	// Returns the valid batcher addresses up to the given L1 height
 	GetValidAddresses(l1 uint64) []common.Address
+	// The latest L1 height that has been seen by the monitor. This implies
+	// that all events up to this height have been processed.
 	SetL1Height(l1 uint64)
 }
 
+var _ BatcherAddrMonitorInterface = (*BatcherAddrMonitor)(nil)
+
 type BatcherAddrMonitor struct {
-	l1Height uint64
+	l1Height          uint64
+	lastEventL1Height uint64
+	cached            bool
+	// Cache for the latest valid addresses.
+	// Since batcher address changes are infrequent and callers typically
+	// process HotShot blocks sequentially, caching improves performance.
+	cachedAddresses []common.Address
 
 	events        []BatcherAddrEvent
 	db            ethdb.Database
@@ -43,7 +55,7 @@ func NewBatcherAddrMonitor(
 	}
 }
 
-func (b *BatcherAddrMonitor) AddEvent(l1 uint64, addr common.Address, isBatcher bool) error {
+func (b *BatcherAddrMonitor) AddBatchPosterSetEvent(l1 uint64, addr common.Address, isBatcher bool) error {
 	event := BatcherAddrEvent{
 		l1Height:  l1,
 		addr:      addr,
@@ -55,17 +67,27 @@ func (b *BatcherAddrMonitor) AddEvent(l1 uint64, addr common.Address, isBatcher 
 	sort.Slice(b.events, func(i, j int) bool {
 		return b.events[i].l1Height < b.events[j].l1Height
 	})
+	b.lastEventL1Height = l1
+	b.cached = false
 	return b.Store()
 }
 
 func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 	if l1 > b.l1Height {
-		// target l1 height is greater than seen one, return empty
+		// If the target L1 height is greater than the latest known L1 height,
+		// return an empty slice. The caller should wait until the monitor has
+		// observed at least this L1 height before calling this function.
 		return []common.Address{}
 	}
 
 	if len(b.events) == 0 || b.events[0].l1Height > l1 {
 		return b.initAddresses
+	}
+
+	latestCachedWindow := l1 >= b.lastEventL1Height && l1 <= b.l1Height
+
+	if b.cached && latestCachedWindow {
+		return b.cachedAddresses
 	}
 
 	result := map[common.Address]bool{}
@@ -86,6 +108,11 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 		if isBatcher {
 			validAddrs = append(validAddrs, addr)
 		}
+	}
+
+	if latestCachedWindow {
+		b.cached = true
+		b.cachedAddresses = validAddrs
 	}
 
 	return validAddrs
