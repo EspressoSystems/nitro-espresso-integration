@@ -152,7 +152,7 @@ func NewEspressoCaffNode(
 
 	fromBlock := configFetcher().FromBlock
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = readCurrentL1BlockFromDb(db)
+		fromBlock, err = readCurrentFromBlockFromDb(db)
 		if err != nil {
 			log.Crit("failed to read l1 block from db", "err", err)
 		}
@@ -194,10 +194,15 @@ func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.M
 		return nil, nil
 	}
 
-	messageWithMetadataAndPos, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
-	if err != nil {
-		log.Error("unable to get the next delayed message", "err", err)
-		return nil, err
+	// Check if its a delayed message, if so fetch from the database
+	delayedMessageToProcessIndex := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
+	if delayedMessageToProcessIndex == messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead-1 {
+		messageWithMetadataAndPosDelayed, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
+		if err != nil {
+			log.Error("unable to get the next delayed message", "err", err)
+			return nil, err
+		}
+		return messageWithMetadataAndPosDelayed, nil
 	}
 
 	return messageWithMetadataAndPos, nil
@@ -298,7 +303,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
 		nextHotshotBlock = n.configFetcher().NextHotshotBlock
 		if nextHotshotBlock == 0 {
-			return errors.New("No next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
+			return errors.New("no next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
 		}
 	}
 	// The reason we do the reset here is because database is only initialized after Caff node is initialized
@@ -310,7 +315,19 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	// Nonce of the previous block is the number of delayed messages read
 	// Check `NextDelayedMessageNumber` in execution node to confirm this
 	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
-	n.delayedMessageFetcher.reset(delayedMessagesRead)
+	// we store delayedmessagecount-1 because that is the index of the delayed message
+	// that needs to be read
+	err = n.delayedMessageFetcher.storeDelayedMessageCount(n.db, delayedMessagesRead-1)
+	if err != nil {
+		log.Error("failed to store delayed message count", "err", err)
+		return err
+	}
+
+	// Start the delayed message fetcher
+	started := n.delayedMessageFetcher.Start(ctx)
+	if !started {
+		return fmt.Errorf("failed to start delayed message fetcher")
+	}
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock(ctx)
