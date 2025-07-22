@@ -587,15 +587,18 @@ func createNodeImpl(
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
+				deployInfo.SequencerInbox,
+				fatalErrChan,
+				stack.Config().HTTPPort,
 			)
 
 			return &Node{
 				ArbDB:                   arbDb,
 				Stack:                   stack,
 				Execution:               exec,
-				L1Reader:                nil,
+				L1Reader:                l1Reader,
 				TxStreamer:              txStreamer,
-				DeployInfo:              nil,
+				DeployInfo:              deployInfo,
 				BlobReader:              blobReader,
 				InboxReader:             nil,
 				InboxTracker:            nil,
