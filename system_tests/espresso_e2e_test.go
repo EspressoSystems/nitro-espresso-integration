@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -54,11 +53,11 @@ func runEspresso() func() {
 		"espresso-dev-node",
 	}
 	invocation = append(invocation, nodes...)
-	procees := exec.Command("docker", invocation...)
-	procees.Dir = workingDir
+	proceeds := exec.Command("docker", invocation...)
+	proceeds.Dir = workingDir
 
 	go func() {
-		if err := procees.Run(); err != nil {
+		if err := proceeds.Run(); err != nil {
 			panic(err)
 		}
 	}()
@@ -304,20 +303,6 @@ func TestEspressoE2E(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		// Disconnect the container from the network to ensure requests to the dev node
-		// don't just hang but actually fail.
-		p = exec.Command(
-			"docker",
-			"network",
-			"disconnect",
-			"espresso-e2e_default",
-			"espresso-e2e-espresso-dev-node-1",
-		)
-		err = p.Run()
-		if err != nil {
-			panic(err)
-		}
-
 	}
 	pauseEspresso()
 
@@ -326,22 +311,10 @@ func TestEspressoE2E(t *testing.T) {
 
 	log.Info("Resuming espresso node")
 	unpauseEspresso := func() {
-		// reconnect the network first
-		p := exec.Command(
-			"docker",
-			"network",
-			"connect",
-			"espresso-e2e_default",
-			"espresso-e2e-espresso-dev-node-1",
-		)
-		err := p.Run()
-		if err != nil {
-			panic(err)
-		}
 		// resume the dev node
-		p = exec.Command("docker", "compose", "unpause")
+		p := exec.Command("docker", "compose", "unpause")
 		p.Dir = workingDir
-		err = p.Run()
+		err := p.Run()
 		if err != nil {
 			panic(err)
 		}
