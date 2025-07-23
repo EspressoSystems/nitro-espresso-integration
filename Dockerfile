@@ -38,8 +38,10 @@ COPY contracts-local contracts-local/
 COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
 RUN cd safe-smart-account && yarn install
+RUN cd contracts && yarn install
 COPY Makefile .
-RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
+ENV NODE_OPTIONS=--max_old_space_size=10240
+RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 && make build-solidity
 
 FROM debian:bookworm-20231218 AS wasm-base
 WORKDIR /workspace
