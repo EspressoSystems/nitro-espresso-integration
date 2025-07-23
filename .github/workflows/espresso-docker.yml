@@ -12,6 +12,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  PR_TAG:  ${{ github.event_name == 'pull_request' && format('ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:pr-{0}', github.event.pull_request.number) || '' }}
+  BR_TAG:  ${{ github.ref_type == 'branch' && format('ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:{0}', github.ref_name) || '' }}
+  GIT_TAG: ${{ github.ref_type == 'tag'    && format('ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:{0}', github.ref_name) || '' }}
+
 jobs:
   free-disk-space:
     runs-on: ubuntu-latest
@@ -86,10 +91,13 @@ jobs:
         with:
           context: .
           file: Dockerfile
-          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: linux/amd64
           push: true
+          images: |
+            ${{ env.PR_TAG }}
+            ${{ env.BR_TAG }}
+            ${{ env.GIT_TAG }}
 
       - name: Check available space after CI run
         if: "!cancelled()"
