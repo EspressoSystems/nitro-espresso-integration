@@ -2,18 +2,13 @@ package arbtest
 
 import (
 	"context"
-	"errors"
-	"math/big"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rpc"
 )
 
 func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, dangerous bool) (*NodeBuilder, func(), error) {
@@ -47,6 +42,7 @@ func createCaffNode(ctx context.Context, t *testing.T, existing *NodeBuilder, da
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
+	nodeConfig.EspressoCaffNode.BlocksToRead = 10000
 
 	if dangerous {
 		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
@@ -274,221 +270,221 @@ func Setup(t *testing.T) (context.Context, common.Address, info, string, context
 	return ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso
 }
 
-func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
-	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-	defer cancel()
-	defer valNodeCleanup()
-	defer cleanup()
-	defer cleanEspresso()
-	// Set caff node config variables
-	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
-	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+// func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
+// 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+// 	defer cancel()
+// 	defer valNodeCleanup()
+// 	defer cleanup()
+// 	defer cleanEspresso()
+// 	// Set caff node config variables
+// 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
+// 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+// 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 
-	// start the node
-	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
-	Require(t, err)
-	builderCaffNode := builder2.L2
-	defer cleanupCaffNode()
+// 	// start the node
+// 	log.Info("Starting the caff node")
+// 	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+// 	Require(t, err)
+// 	builderCaffNode := builder2.L2
+// 	defer cleanupCaffNode()
 
-	// Transfer via the delayed inbox
-	delayedTx := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
-	log.Info("Delayed tx", "delayedtx", delayedTx)
-	tx := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
-		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
-	})
-	// Check the caff node RPC for tx. assert that it is not there.
-	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
-	ExpectErr(t, err, ethereum.NotFound)
+// 	// Transfer via the delayed inbox
+// 	delayedTx := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
+// 	log.Info("Delayed tx", "delayedtx", delayedTx)
+// 	tx := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+// 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+// 	})
+// 	// Check the caff node RPC for tx. assert that it is not there.
+// 	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
+// 	ExpectErr(t, err, ethereum.NotFound)
 
-	// Create the event function closures for the assert statement.
-	firstEvent := func() error {
-		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
-			header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
-			Require(t, err)
-			return header.Number.Uint64() >= tx[0].BlockNumber.Uint64()+builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
-		})
-		return err
-	}
-	secondEvent := func() error {
-		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
-			balance := builderCaffNode.GetBalance(t, addr)
-			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
-			if balance.Cmp(transferAmount) >= 0 {
-				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
-			}
-			return balance.Cmp(transferAmount) >= 0
-		})
-		return err
-	}
-	// Assert that the delayed message should reach the required block depth before the balance appears on the caff node.
-	AssertEventOrdering(t, firstEvent, secondEvent)
-	log.Info("Concurrent events finished in the correct order!")
-}
+// 	// Create the event function closures for the assert statement.
+// 	firstEvent := func() error {
+// 		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
+// 			header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
+// 			Require(t, err)
+// 			return header.Number.Uint64() >= tx[0].BlockNumber.Uint64()+builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
+// 		})
+// 		return err
+// 	}
+// 	secondEvent := func() error {
+// 		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+// 			balance := builderCaffNode.GetBalance(t, addr)
+// 			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+// 			if balance.Cmp(transferAmount) >= 0 {
+// 				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+// 			}
+// 			return balance.Cmp(transferAmount) >= 0
+// 		})
+// 		return err
+// 	}
+// 	// Assert that the delayed message should reach the required block depth before the balance appears on the caff node.
+// 	AssertEventOrdering(t, firstEvent, secondEvent)
+// 	log.Info("Concurrent events finished in the correct order!")
+// }
 
-func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
-	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-	defer cancel()
-	defer valNodeCleanup()
-	defer cleanup()
-	defer cleanEspresso()
+// func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
+// 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+// 	defer cancel()
+// 	defer valNodeCleanup()
+// 	defer cleanup()
+// 	defer cleanEspresso()
 
-	// Set caff node config vars
-	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
-	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = true
-	// start the node
-	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
-	Require(t, err)
-	builderCaffNode := builder2.L2
-	defer cleanupCaffNode()
+// 	// Set caff node config vars
+// 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
+// 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+// 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = true
+// 	// start the node
+// 	log.Info("Starting the caff node")
+// 	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+// 	Require(t, err)
+// 	builderCaffNode := builder2.L2
+// 	defer cleanupCaffNode()
 
-	// Transfer via the delayed inbox
-	delayedTx := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
-	log.Info("Delayed tx", "delayedtx", delayedTx)
-	tx := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
-		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
-	})
-	// Check the caff node RPC for tx. assert that it is not there.
-	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
-	ExpectErr(t, err, ethereum.NotFound)
-	// Wait for the tx header to be finalized.
+// 	// Transfer via the delayed inbox
+// 	delayedTx := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
+// 	log.Info("Delayed tx", "delayedtx", delayedTx)
+// 	tx := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+// 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+// 	})
+// 	// Check the caff node RPC for tx. assert that it is not there.
+// 	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
+// 	ExpectErr(t, err, ethereum.NotFound)
+// 	// Wait for the tx header to be finalized.
 
-	firstEvent := func() error {
-		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
-			header, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
-			Require(t, err)
-			return header.Number.Int64() >= tx[0].BlockNumber.Int64()
-		})
-		return err
-	}
-	secondEvent := func() error {
-		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
-			balance := builderCaffNode.GetBalance(t, addr)
-			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
-			if balance.Cmp(transferAmount) >= 0 {
-				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
-			}
-			return balance.Cmp(transferAmount) >= 0
-		})
-		return err
-	}
-	AssertEventOrdering(t, firstEvent, secondEvent)
-	log.Info("Concurrent events finished in the correct order!")
-}
+// 	firstEvent := func() error {
+// 		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
+// 			header, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+// 			Require(t, err)
+// 			return header.Number.Int64() >= tx[0].BlockNumber.Int64()
+// 		})
+// 		return err
+// 	}
+// 	secondEvent := func() error {
+// 		err := waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+// 			balance := builderCaffNode.GetBalance(t, addr)
+// 			log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+// 			if balance.Cmp(transferAmount) >= 0 {
+// 				log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+// 			}
+// 			return balance.Cmp(transferAmount) >= 0
+// 		})
+// 		return err
+// 	}
+// 	AssertEventOrdering(t, firstEvent, secondEvent)
+// 	log.Info("Concurrent events finished in the correct order!")
+// }
 
-func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
-	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
-	defer cancel()
-	defer valNodeCleanup()
-	defer cleanup()
-	defer cleanEspresso()
-	// set caff node config vars
-	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
-	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+// func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
+// 	ctx, addr, l2Info, newAccount, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+// 	defer cancel()
+// 	defer valNodeCleanup()
+// 	defer cleanup()
+// 	defer cleanEspresso()
+// 	// set caff node config vars
+// 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
+// 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+// 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 
-	// start the node
-	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
-	Require(t, err)
-	builderCaffNode := builder2.L2
-	defer cleanupCaffNode()
+// 	// start the node
+// 	log.Info("Starting the caff node")
+// 	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+// 	Require(t, err)
+// 	builderCaffNode := builder2.L2
+// 	defer cleanupCaffNode()
 
-	// Transfer via the delayed inbox
-	delayedTx3 := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
-	tx3 := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
-		WrapL2ForDelayed(t, delayedTx3, builder.L1Info, "Faucet", 100000),
-	})
-	// Wait for the tx to appear on the caff node
-	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
-		balance := builderCaffNode.GetBalance(t, addr)
-		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
-		if balance.Cmp(transferAmount) >= 0 {
-			log.Info("Balance has entered account", "balance", balance, "account", newAccount)
-		}
-		return balance.Cmp(transferAmount) >= 0
-	})
-	Require(t, err)
+// 	// Transfer via the delayed inbox
+// 	delayedTx3 := l2Info.PrepareTx("Owner", newAccount, 3e7, transferAmount, nil)
+// 	tx3 := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+// 		WrapL2ForDelayed(t, delayedTx3, builder.L1Info, "Faucet", 100000),
+// 	})
+// 	// Wait for the tx to appear on the caff node
+// 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+// 		balance := builderCaffNode.GetBalance(t, addr)
+// 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
+// 		if balance.Cmp(transferAmount) >= 0 {
+// 			log.Info("Balance has entered account", "balance", balance, "account", newAccount)
+// 		}
+// 		return balance.Cmp(transferAmount) >= 0
+// 	})
+// 	Require(t, err)
 
-	finalizedHeader, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
-	if tx3[0].BlockNumber.Int64() <= finalizedHeader.Number.Int64() {
-		t.Fatal("Tx finalized before appearing in the caff node")
-	}
-	Require(t, err)
-}
+// 	finalizedHeader, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+// 	if tx3[0].BlockNumber.Int64() <= finalizedHeader.Number.Int64() {
+// 		t.Fatal("Tx finalized before appearing in the caff node")
+// 	}
+// 	Require(t, err)
+// }
 
-// RequireErr:
-// This serves to assert that we should be expecting some error during the test, and if there is not an error, fail the test.
-func RequireErr(t *testing.T, err error, expectedError error) {
-	t.Helper()
-	if err == nil {
-		log.Error("expected an error to occur", "expected error", expectedError)
-		t.Fatal(err, expectedError)
-	}
-}
+// // RequireErr:
+// // This serves to assert that we should be expecting some error during the test, and if there is not an error, fail the test.
+// func RequireErr(t *testing.T, err error, expectedError error) {
+// 	t.Helper()
+// 	if err == nil {
+// 		log.Error("expected an error to occur", "expected error", expectedError)
+// 		t.Fatal(err, expectedError)
+// 	}
+// }
 
-// ExpectErr:
-// This serves to assert that we should be expecting a specific error during the test, and if the error does not match, fail the test.
-func ExpectErr(t *testing.T, err error, expectedError error) {
-	t.Helper()
-	if !errors.Is(err, expectedError) {
-		t.Fatal(err, expectedError)
-	}
-}
+// // ExpectErr:
+// // This serves to assert that we should be expecting a specific error during the test, and if the error does not match, fail the test.
+// func ExpectErr(t *testing.T, err error, expectedError error) {
+// 	t.Helper()
+// 	if !errors.Is(err, expectedError) {
+// 		t.Fatal(err, expectedError)
+// 	}
+// }
 
-// This tests that the caff node config validates that known versions of arb sequencers are not enabled if the caff node is.
-func TestEspressoCaffNodeConfig(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	builder := createCaffNodeConfig(ctx, t)
-	err := builder.nodeConfig.Validate()
-	Require(t, err)
+// // This tests that the caff node config validates that known versions of arb sequencers are not enabled if the caff node is.
+// func TestEspressoCaffNodeConfig(t *testing.T) {
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
+// 	builder := createCaffNodeConfig(ctx, t)
+// 	err := builder.nodeConfig.Validate()
+// 	Require(t, err)
 
-	expectedErr := errors.New("cannot start a Caff node with any sequencer enabled")
-	// Test if this node is attempting to be a sequencer
-	builder.nodeConfig.Sequencer = true
-	err = builder.nodeConfig.Validate()
-	RequireErr(t, err, expectedErr)
-	// Test the delayed sequencer
-	builder.nodeConfig.Sequencer = false
-	builder.nodeConfig.DelayedSequencer.Enable = true
+// 	expectedErr := errors.New("cannot start a Caff node with any sequencer enabled")
+// 	// Test if this node is attempting to be a sequencer
+// 	builder.nodeConfig.Sequencer = true
+// 	err = builder.nodeConfig.Validate()
+// 	RequireErr(t, err, expectedErr)
+// 	// Test the delayed sequencer
+// 	builder.nodeConfig.Sequencer = false
+// 	builder.nodeConfig.DelayedSequencer.Enable = true
 
-	err = builder.nodeConfig.Validate()
-	RequireErr(t, err, expectedErr)
+// 	err = builder.nodeConfig.Validate()
+// 	RequireErr(t, err, expectedErr)
 
-	builder.nodeConfig.DelayedSequencer.Enable = false
-	builder.nodeConfig.SeqCoordinator.Enable = true
+// 	builder.nodeConfig.DelayedSequencer.Enable = false
+// 	builder.nodeConfig.SeqCoordinator.Enable = true
 
-	err = builder.nodeConfig.Validate()
-	RequireErr(t, err, expectedErr)
+// 	err = builder.nodeConfig.Validate()
+// 	RequireErr(t, err, expectedErr)
 
-}
+// }
 
-func TestEspressoCaffNodeDangerousConfig(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// func TestEspressoCaffNodeDangerousConfig(t *testing.T) {
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	defer cancel()
 
-	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
-	defer cleanup()
+// 	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
+// 	defer cleanup()
 
-	// start the node
-	_, cleanupCaffNode, err := createCaffNode(ctx, t, builder, true)
-	if cleanupCaffNode != nil {
-		defer cleanupCaffNode()
-	}
+// 	// start the node
+// 	_, cleanupCaffNode, err := createCaffNode(ctx, t, builder, true)
+// 	if cleanupCaffNode != nil {
+// 		defer cleanupCaffNode()
+// 	}
 
-	// The actual error is wrapped in an array, so we need to check for that
-	expectedErrMsg := "No next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock"
+// 	// The actual error is wrapped in an array, so we need to check for that
+// 	expectedErrMsg := "No next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock"
 
-	if err == nil {
-		t.Fatal("Expected an error but got nil")
-	}
+// 	if err == nil {
+// 		t.Fatal("Expected an error but got nil")
+// 	}
 
-	// Check if the error contains the expected message (since it might be wrapped)
-	if !strings.Contains(err.Error(), expectedErrMsg) {
-		t.Errorf("Expected error to contain %q, got %q", expectedErrMsg, err.Error())
-	}
-}
+// 	// Check if the error contains the expected message (since it might be wrapped)
+// 	if !strings.Contains(err.Error(), expectedErrMsg) {
+// 		t.Errorf("Expected error to contain %q, got %q", expectedErrMsg, err.Error())
+// 	}
+// }

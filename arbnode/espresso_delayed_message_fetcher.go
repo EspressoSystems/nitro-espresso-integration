@@ -45,24 +45,27 @@ backFill fetches all the delayed messages till a `matureL1Block` which is within
 and stores them in the database
 */
 func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
+	log.Info("backfilling delayed messages")
 	// Get the l1 block number based on the read mode
 	matureL1Block, err := d.getL1BlockNumber(ctx)
 	if err != nil {
 		log.Error("Error getting l1 block number", "err", err)
 		return err
 	}
+	log.Info("got l1 block number", "matureL1Block", matureL1Block)
 
 	// Get the from block number from the delayed message fetcher
 	// config. Note: Its important in the first read we read from the config
 	// and not the database because the user might want to start reading from a `fromBlock`
 	// which is before the delayed message number stored in the database
 	fromBlock := d.fromBlock
-
+	log.Info("getting delayed messages", "fromBlock", fromBlock, "matureL1Block", matureL1Block)
 	batch := d.db.NewBatch()
 
 	// Loop through the blocks until we reach the matureL1Block
-	for fromBlock <= matureL1Block {
+	for fromBlock < matureL1Block {
 		if (matureL1Block - fromBlock) > d.maxBlocksToRead {
+			log.Info("getting delayed messages in range with max blocks to read", "fromBlock", fromBlock, "endBlock", fromBlock+d.maxBlocksToRead)
 			// If the difference is greater than the maxBlocksToRead,
 			// then set the endBlock to fromBlock + maxBlocksToRead
 			err := d.getDelayedMessagesInRange(ctx, batch, fromBlock, fromBlock+d.maxBlocksToRead)
@@ -76,13 +79,15 @@ func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
 			// then set the endBlock to matureL1Block
 			err := d.getDelayedMessagesInRange(ctx, batch, fromBlock, matureL1Block)
 			if err != nil {
-				log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", matureL1Block)
+				log.Error("failed to get delayed messages in range without maxblocks to read", "err", err, "fromBlock", fromBlock, "endBlock", matureL1Block)
 				return err
 			}
 			fromBlock = matureL1Block
 		}
+
 	}
 
+	log.Info("Backfilled delayed messages")
 	err = batch.Write()
 	if err != nil {
 		return err
@@ -251,12 +256,19 @@ and stores them in the database
 func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, endBlock uint64) error {
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
-	log.Debug("Looking for batches in range", "from", startBlock, "to", endBlock)
-	sequencerBatches, err := d.sequencerInbox.LookupBatchesInRange(ctx, big.NewInt(0).SetUint64(startBlock), big.NewInt(0).SetUint64(endBlock))
+	log.Info("Looking for batches in range", "from", startBlock, "to", endBlock)
+
+	// startBlock to bigInt
+
+	startBlockBigInt := big.NewInt(0).SetUint64(startBlock)
+	endBlockBigInt := big.NewInt(0).SetUint64(endBlock)
+	log.Info("Looking for delayed batches from range", "from", startBlock, "to", endBlock)
+	sequencerBatches, err := d.sequencerInbox.LookupBatchesInRange(ctx, startBlockBigInt, endBlockBigInt)
 	if err != nil {
 		return err
 	}
-	log.Debug("Looking for delayed messages from range", "from", startBlock, "to", endBlock)
+	log.Info("Sequencer batches", "sequencerBatches", sequencerBatches)
+	log.Info("Looking for delayed messages from range", "from", startBlock, "to", endBlock)
 
 	msgs, err := d.delayedBridge.LookupMessagesInRange(ctx, big.NewInt(0).SetUint64(startBlock), big.NewInt(0).SetUint64(endBlock), func(batchNum uint64) ([]byte, error) {
 		if len(sequencerBatches) > 0 && batchNum >= sequencerBatches[0].SequenceNumber {
@@ -274,12 +286,16 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		return err
 	}
 
+	log.Info("Sequencer delayed messages", "delayedMessages", msgs)
+
 	// Get the delayed message count store in the database
 	delayedCount, err := getDelayedMessageCount(d.db)
 	if err != nil {
 		log.Error("Failed to get delayed message count from db", "err", err)
 		return err
 	}
+
+	log.Info("Delayed message count", "delayedCount", delayedCount)
 
 	for _, msg := range msgs {
 		seqNum, err := msg.Message.Header.SeqNum()
@@ -290,18 +306,20 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 			// We need to panic the node here because something has gone seriously wrong
 			log.Crit("Caff node is skipping delayed messages", "seqNum", seqNum, "delayedCount", delayedCount)
 		}
-		err = d.storeDelayedMessage(batch, seqNum, *msg)
+		delayedCount++
+		err = d.storeDelayedMessage(batch, delayedCount, *msg)
 		if err != nil {
 			return err
 		}
 	}
-
+	log.Info("Delayed messages stored", "delayedMessages", msgs)
 	// Store the from block in the database
 	err = storeCurrentFromBlock(batch, endBlock)
 	if err != nil {
 		log.Error("failed to store current from block", "err", err, "fromBlock", endBlock)
 		return err
 	}
+	log.Info("Current from block stored", "fromBlock", endBlock)
 	return nil
 }
 
@@ -417,6 +435,7 @@ func NewDelayedMessageFetcher(
 	waitForConfirmations bool,
 	requiredBlockDepth uint64,
 	fromBlock uint64,
+	sequencerInbox *SequencerInbox,
 ) *DelayedMessageFetcher {
 
 	return &DelayedMessageFetcher{
@@ -428,13 +447,14 @@ func NewDelayedMessageFetcher(
 		waitForConfirmations: waitForConfirmations,
 		requiredBlockDepth:   requiredBlockDepth,
 		maxBlocksToRead:      blocksToRead,
+		sequencerInbox:       sequencerInbox,
 	}
 }
 
 /***** Start Function *****/
 
 func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
-
+	log.Info("starting delayed message fetcher")
 	// Delayed message fetcher doesnt start until it has backfilled all the messages
 	// till a `matureBlock` which is within the saferty tolerance of the rollup
 	err := d.backFill(ctx)
@@ -442,8 +462,7 @@ func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 		log.Error("delayed message fetcher backfill failed", "err", err)
 		return false
 	}
-
-	// Start watching for delayed messages
-	d.startWatchDelayedMessages(ctx)
+	// Start watching for delayed messages in a go routine: TODO: should we handle this correctly?
+	go d.startWatchDelayedMessages(ctx)
 	return true
 }

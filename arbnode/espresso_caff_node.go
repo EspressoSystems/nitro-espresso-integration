@@ -117,6 +117,7 @@ func NewEspressoCaffNode(
 	db ethdb.Database,
 	recordPerformance bool,
 	blocksToRead uint64,
+	sequencerInbox *SequencerInbox,
 ) *EspressoCaffNode {
 	if !configFetcher().Enable {
 		return nil
@@ -166,7 +167,7 @@ func NewEspressoCaffNode(
 	}
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
-		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock)
+		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -328,6 +329,8 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	if !started {
 		return fmt.Errorf("failed to start delayed message fetcher")
 	}
+
+	log.Info("started delayed message fetcher")
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock(ctx)
