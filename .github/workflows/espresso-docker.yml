@@ -89,7 +89,7 @@ jobs:
           images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
           target: nitro-node
           platforms: linux/amd64
-        push: true
+          push: true
 
       - name: Check available space after CI run
         if: "!cancelled()"
