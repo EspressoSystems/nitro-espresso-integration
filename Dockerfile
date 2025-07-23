@@ -39,7 +39,7 @@ COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
 RUN cd safe-smart-account && yarn install
 COPY Makefile .
-RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 && make build-solidity
+RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 FROM debian:bookworm-20231218 AS wasm-base
 WORKDIR /workspace
