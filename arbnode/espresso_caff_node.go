@@ -158,7 +158,7 @@ func NewEspressoCaffNode(
 		log.Crit("Failed to create hotshot client", "err", err)
 	}
 
-	batcherAddrMonitor := NewBatcherAddrMonitor([]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)}, db)
+	batcherAddrMonitor := NewBatcherAddrMonitor([]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)}, db, l1Reader, seqInboxAddr)
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
 		sgxVerifier,
@@ -319,9 +319,10 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
 	}
-	// Listen to the parent chain and get the L1 height and the event
-	// n.batcherAddrMonitor.SetL1Height()
-	// n.batcherAddrMonitor.AddBatchePosterSetEvent()
+	err = n.batcherAddrMonitor.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start batcher address monitor: %w", err)
+	}
 
 	// This is +1 because the current block is the block after the last processed block
 	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
