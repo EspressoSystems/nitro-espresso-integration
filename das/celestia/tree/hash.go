@@ -1,10 +1,11 @@
 package tree
 
 import (
-	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 
 	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/offchainlabs/nitro/arbutil"
 )
 
 // TODO: make these have a large predefined capacity

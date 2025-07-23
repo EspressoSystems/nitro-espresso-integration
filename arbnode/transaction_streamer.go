@@ -24,11 +24,10 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
-	flag "github.com/spf13/pflag"
-
 	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
+	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -2077,7 +2076,7 @@ func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error)
 
 	sess, err := nsm.OpenDefaultSession()
 	if err != nil {
-		return nil, fmt.Errorf("failed to open nsm session: %v", err)
+		return nil, fmt.Errorf("failed to open nsm session: %w", err)
 	}
 	defer sess.Close()
 
@@ -2086,7 +2085,7 @@ func (t *TransactionStreamer) getNitroAttestation(pubKey []byte) ([]byte, error)
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to send attestation request: %v", err)
+		return nil, fmt.Errorf("failed to send attestation request: %w", err)
 	}
 
 	if res.Error != "" {

@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
+
 	celestiaTypes "github.com/offchainlabs/nitro/das/celestia/types"
 	"github.com/offchainlabs/nitro/util/pretty"
 )

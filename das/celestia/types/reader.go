@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+
 	daprovider "github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/das/celestia/tree"
 )
