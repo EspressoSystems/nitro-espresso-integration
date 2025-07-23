@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/broadcaster"
+	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/execution"
 	chain "github.com/offchainlabs/nitro/system_tests/espresso/chain"
 	execution_engine "github.com/offchainlabs/nitro/system_tests/espresso/execution_engine"
@@ -167,7 +168,7 @@ func WithEspressoTransactionStreamerOptions(options ...arbnode.TransactionStream
 // to the TransactionStreamer, or start producing blocks in the mock Espresso
 // Chain. Those actions are left to the caller of this function, so they are
 // able to control the timing, and configuration of those actions.
-func NewMockTransactionStreamerEnvironment(ctx context.Context, options ...MockTransactionStreamerEnvironmentOption) (*chain.MockEspressoChain, espresso_client.EspressoClient, *arbnode.TransactionStreamer, error) {
+func NewMockTransactionStreamerEnvironment(ctx context.Context, options ...MockTransactionStreamerEnvironmentOption) (*chain.MockEspressoChain, espresso_client.EspressoClient, submitter.EspressoSubmitter, *arbnode.TransactionStreamer, error) {
 	// Setup the Default Configuration for the Mock Transaction Streamer Environment
 	config := &MockTransactionStreamerEnvironmentConfig{
 		Database:     rawdb.NewMemoryDatabase(),
@@ -206,11 +207,11 @@ func NewMockTransactionStreamerEnvironment(ctx context.Context, options ...MockT
 	)
 
 	if err != nil {
-		return nil, nil, nil, ErrorFailedToCreateTransactionStreamer{Cause: err}
+		return nil, nil, nil, nil, ErrorFailedToCreateTransactionStreamer{Cause: err}
 	}
 
 	// Configure the Transaction Streamer with the Espresso Fields and options
-	arbnode.ConfigureEspressoFields(
+	submitter, err := arbnode.ConfigureEspressoFields(
 		streamer,
 		// We setup the initial values before the other options are applied,
 		// so that the other options can modify them as needed.
@@ -224,5 +225,5 @@ func NewMockTransactionStreamerEnvironment(ctx context.Context, options ...MockT
 		),
 	)
 
-	return espressoChain, espressoClient, streamer, nil
+	return espressoChain, espressoClient, submitter, streamer, err
 }
