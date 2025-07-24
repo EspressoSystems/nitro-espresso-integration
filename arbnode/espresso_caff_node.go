@@ -119,7 +119,7 @@ type EspressoCaffNode struct {
 	forceInclusionChecker *ForceInclusionChecker
 	stateChecker          *StateChecker
 
-	batcherAddrMonitor BatcherAddrMonitor
+	batcherAddrMonitor *BatcherAddrMonitor
 }
 
 func NewEspressoCaffNode(
@@ -158,7 +158,7 @@ func NewEspressoCaffNode(
 		log.Crit("Failed to create hotshot client", "err", err)
 	}
 
-	batcherAddrMonitor := NewBatcherAddrMonitor([]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)}, db, l1Reader, seqInboxAddr)
+	batcherAddrMonitor := NewBatcherAddrMonitor([]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)}, db, l1Reader, seqInboxAddr, delayedBridge.fromBlock)
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
 		sgxVerifier,
@@ -215,7 +215,7 @@ func NewEspressoCaffNode(
 		l1Reader:              l1Reader,
 		forceInclusionChecker: forceInclusionChecker,
 		stateChecker:          stateChecker,
-		batcherAddrMonitor:    *batcherAddrMonitor,
+		batcherAddrMonitor:    batcherAddrMonitor,
 	}
 }
 

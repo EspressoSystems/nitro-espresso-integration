@@ -20,7 +20,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test initial state
 	t.Run("initial state", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{})
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
 		b.SetL1Height(100)
 		result1 := b.GetValidAddresses(100)
 		assert.Equal(t, initAddresses, result1)
@@ -31,7 +31,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test AddEvent
 	t.Run("add events and get valid addresses", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{})
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
 		b.SetL1Height(100)
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
 		err := b.AddBatchPosterSetEvents([]BatcherAddrEvent{
@@ -64,7 +64,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 	})
 
 	t.Run("store and restore", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{})
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
 		// only contain the init addresses
 		err := b.Store()
 		Require(t, err)

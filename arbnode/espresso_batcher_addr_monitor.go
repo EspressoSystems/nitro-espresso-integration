@@ -7,14 +7,18 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
+	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 const (
@@ -22,14 +26,16 @@ const (
 	initAddressesKey = "espresso-batcher-addr-init-addresses"
 )
 
-var batchPosterSetID common.Hash
+var ownerFunctionCalledID common.Hash
+var seqInboxABI abi.ABI
 
 func init() {
 	parsedSeqInboxABI, err := bridgegen.SequencerInboxMetaData.GetAbi()
 	if err != nil {
 		panic(err)
 	}
-	batchPosterSetID = parsedSeqInboxABI.Events["BatchPosterSet"].ID
+	seqInboxABI = *parsedSeqInboxABI
+	ownerFunctionCalledID = parsedSeqInboxABI.Events["OwnerFunctionCalled"].ID
 }
 
 // `BatchPosterSet` event
@@ -42,6 +48,7 @@ type BatcherAddrEvent struct {
 }
 
 type BatcherAddrMonitor struct {
+	stopwaiter.StopWaiter
 	// This is corresponding L1 height to the parent height.
 	// If the parent chain is Ethereum, this is equal to the parent height.
 	l1Height          uint64
@@ -54,27 +61,37 @@ type BatcherAddrMonitor struct {
 	cached          bool
 	cachedAddresses []common.Address
 
-	events        []BatcherAddrEvent
-	db            ethdb.Database
+	events []BatcherAddrEvent
+	db     ethdb.Database
+
+	// Init addresses are the addresses that were set as batcher when the rollup was deployed.
 	initAddresses []common.Address
 
 	l1Reader *headerreader.HeaderReader
 
 	seqInboxAddr      common.Address
 	seqInboxInterface *bridgegen.SequencerInbox
+	deployAt          uint64
 }
 
 func NewBatcherAddrMonitor(
-	addr []common.Address,
+	initAddresses []common.Address,
 	db ethdb.Database,
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
+	deployAt uint64,
 ) *BatcherAddrMonitor {
+	seqInboxInterface, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
+	if err != nil {
+		panic(err)
+	}
 	return &BatcherAddrMonitor{
-		initAddresses: addr,
-		db:            db,
-		l1Reader:      l1Reader,
-		seqInboxAddr:  seqInboxAddr,
+		initAddresses:     initAddresses,
+		db:                db,
+		l1Reader:          l1Reader,
+		seqInboxAddr:      seqInboxAddr,
+		seqInboxInterface: seqInboxInterface,
+		deployAt:          deployAt,
 	}
 }
 
@@ -105,8 +122,11 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 		return b.initAddresses
 	}
 
+	// If the target L1 height is within the latest cached window, return the cached result.
+	// In a practical scenario, this is the most common case. Here means that during the time
+	// from `lastEventL1Height` to `l1Height`, the `events` are not changed. It is not needed to
+	// calculate valid batcher addresses.
 	latestCachedWindow := l1 >= b.lastEventL1Height && l1 <= b.l1Height
-
 	if b.cached && latestCachedWindow {
 		return b.cachedAddresses
 	}
@@ -166,7 +186,10 @@ func (b *BatcherAddrMonitor) LookupEvents(ctx context.Context, fromBlock, toBloc
 		FromBlock: from,
 		ToBlock:   to,
 		Addresses: []common.Address{b.seqInboxAddr},
-		Topics:    [][]common.Hash{{batchPosterSetID}},
+		Topics: [][]common.Hash{
+			{ownerFunctionCalledID},
+			{common.BigToHash(big.NewInt(1))},
+		},
 	}
 	logs, err := b.l1Reader.Client().FilterLogs(ctx, query)
 	if err != nil {
@@ -179,12 +202,8 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 	if len(logs) == 0 {
 		return nil, nil
 	}
-	events := make([]BatcherAddrEvent, 0, len(logs))
+	events := []BatcherAddrEvent{}
 	for _, ethLog := range logs {
-		e, err := b.seqInboxInterface.ParseBatchPosterSet(ethLog)
-		if err != nil {
-			return nil, err
-		}
 		l1Height := ethLog.BlockNumber
 		if b.l1Reader.IsParentChainArbitrum() {
 			header, err := b.l1Reader.Client().HeaderByNumber(ctx, big.NewInt(0).SetUint64(ethLog.BlockNumber))
@@ -193,13 +212,33 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 			}
 			l1Height = types.DeserializeHeaderExtraInformation(header).L1BlockNumber
 		}
+		txHash := ethLog.TxHash
+		tx, _, err := b.l1Reader.Client().TransactionByHash(ctx, txHash)
+		if err != nil {
+			return nil, err
+		}
+		// Parse data to get arguments from tx
+		data := tx.Data()
+		args, err := seqInboxABI.Methods["setIsBatchPoster"].Inputs.Unpack(data[4:])
+		if err != nil {
+			return nil, err
+		}
+		batchPoster, ok := args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("failed to parse a log: invalid batch poster address")
+		}
+		isBatcher, ok := args[1].(bool)
+		if !ok {
+			return nil, fmt.Errorf("failed to parse a log: invalid isBatchPoster")
+		}
 
 		event := BatcherAddrEvent{
-			Addr:         e.BatchPoster,
-			IsBatcher:    e.IsBatchPoster,
+			Addr:         batchPoster,
+			IsBatcher:    isBatcher,
 			L1Height:     l1Height,
 			ParentHeight: ethLog.BlockNumber,
 		}
+		log.Info("adding event for batch poster updates", "event", event)
 		events = append(events, event)
 	}
 	return events, nil
@@ -273,36 +312,62 @@ func (b *BatcherAddrMonitor) Restore() error {
 }
 
 func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
-	curentParentHeight := b.GetConfirmedParentHeight()
-	latestParentHeight, err := b.l1Reader.Client().HeaderByNumber(ctx, nil)
+	latestParentHeader, err := b.l1Reader.Client().HeaderByNumber(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to get latest parent height: %w", err)
 	}
+	currentParentHeight := b.GetConfirmedParentHeight()
 
-	blocksToRead := 100
-	for {
-		if curentParentHeight >= latestParentHeight.Number.Uint64()-uint64(blocksToRead) {
+	if currentParentHeight <= b.deployAt {
+		for _, addr := range b.initAddresses {
+			isBatcher, err := b.seqInboxInterface.IsBatchPoster(&bind.CallOpts{}, addr)
+			if err != nil {
+				return fmt.Errorf("failed to get batcher status: %w", err)
+			}
+			if !isBatcher {
+				return fmt.Errorf("init address %s is not a batcher", addr)
+			}
+		}
+
+		currentParentHeight = b.deployAt + 1
+		b.parentHeight = currentParentHeight
+	}
+
+	blocksToRead := uint64(100)
+	allowedRetry := 10
+	retry := 0
+	latestParentHeight := latestParentHeader.Number.Uint64()
+	for retry < allowedRetry {
+		if latestParentHeight <= blocksToRead || currentParentHeight >= latestParentHeight-blocksToRead {
 			break
 		}
 
-		events, err := b.LookupEvents(ctx, curentParentHeight, curentParentHeight+uint64(blocksToRead))
+		events, err := b.LookupEvents(ctx, currentParentHeight, currentParentHeight+blocksToRead)
 		if err != nil {
-			return fmt.Errorf("failed to lookup events: %w", err)
+			retry++
+			log.Error("failed to lookup events", "err", err)
+			continue
 		}
 		err = b.AddBatchPosterSetEvents(events)
 		if err != nil {
-			return fmt.Errorf("failed to add events: %w", err)
+			retry++
+			log.Error("failed to add events", "err", err)
+			continue
 		}
-		curentParentHeight += uint64(blocksToRead)
-		latestParentHeight, err = b.l1Reader.Client().HeaderByNumber(ctx, nil)
+		currentParentHeight += uint64(blocksToRead)
+		latestParentHeader, err = b.l1Reader.Client().HeaderByNumber(ctx, nil)
 		if err != nil {
-			return fmt.Errorf("failed to get latest parent height: %w", err)
+			retry++
+			log.Error("failed to get latest parent height", "err", err)
+			continue
 		}
+		latestParentHeight = latestParentHeader.Number.Uint64()
 	}
 	return nil
 }
 
 func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
+	b.StopWaiter.Start(ctx, b)
 	err := b.Restore()
 	if err != nil && !dbutil.IsErrNotFound(err) {
 		return fmt.Errorf("failed to restore batcher address monitor: %w", err)
@@ -315,24 +380,28 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 
 	headerchan, unsubscribe := b.l1Reader.Subscribe(false)
 
-	go func() {
+	b.LaunchThread(func(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
 				unsubscribe()
 				return
 			case header := <-headerchan:
+				if header == nil {
+					continue
+				}
 				parentHeight := b.GetConfirmedParentHeight()
 				newHeight := header.Number.Uint64()
 				// search for events
-				events, err := b.LookupEvents(ctx, parentHeight, newHeight)
+				events, err := b.LookupEvents(ctx, parentHeight+1, newHeight)
+				log.Info("looking up events", "from", parentHeight+1, "to", newHeight)
 				if err != nil {
-					log.Error("Failed to search for events", "err", err)
+					log.Error("failed to search for events", "err", err)
 					continue
 				}
 				err = b.AddBatchPosterSetEvents(events)
 				if err != nil {
-					log.Error("Failed to add events", "err", err)
+					log.Error("failed to add events", "err", err)
 					continue
 				}
 				l1Height := newHeight
@@ -343,7 +412,7 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 				b.SetParentHeight(newHeight)
 			}
 		}
-	}()
+	})
 
 	return nil
 }
