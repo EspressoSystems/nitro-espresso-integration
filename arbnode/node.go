@@ -973,6 +973,7 @@ func getEspressoCaffNode(
 	maintenanceRunner *MaintenanceRunner,
 	stack *node.Node,
 	sequencerInbox *SequencerInbox,
+	fatalErrChan chan error,
 ) (*Node, error) {
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
@@ -985,6 +986,8 @@ func getEspressoCaffNode(
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
+				fatalErrChan,
+				stack.Config().HTTPPort,
 			)
 
 			return &Node{
@@ -1164,7 +1167,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan)
 	if err != nil {
 		return nil, err
 	}

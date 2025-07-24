@@ -38,6 +38,7 @@ type DelayedMessageFetcherInterface interface {
 	Start(ctx context.Context) bool
 	storeDelayedMessageCount(db ethdb.Database, count uint64) error
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
+	getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error)
 }
 
 /*
@@ -247,6 +248,16 @@ func (d *DelayedMessageFetcher) getL1BlockNumber(ctx context.Context) (uint64, e
 
 	// If no value is set, just use the latest block number
 	return d.l1Reader.Client().BlockNumber(ctx)
+}
+
+// getDelayedMessageCountAtBlock is a wrapper function for the delayedBridge.GetMessageCount function. This allows users of the DelayedMessageFetcher
+// to query for the message count at a block.
+func (f *DelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64) (uint64, error) {
+	count, err := f.delayedBridge.GetMessageCount(context.Background(), new(big.Int).SetUint64(blockNumber))
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
 }
 
 /*
