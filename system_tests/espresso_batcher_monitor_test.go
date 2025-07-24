@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode"
@@ -22,9 +23,6 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 
 	err := waitForL1Node(ctx)
 	Require(t, err)
-
-	shutdown := runEspresso()
-	defer shutdown()
 
 	seqInboxAddr := builder.addresses.SequencerInbox
 
@@ -48,19 +46,16 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	Require(t, err)
 	receipt, err := EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx, time.Second*10)
 	Require(t, err)
-	l1Height := receipt.BlockNumber.Uint64() + 1
+	log.Info("tx receipt", "receipt", receipt.BlockNumber)
 
-	err = waitFor(ctx, func() bool {
-		return monitor.GetConfirmedParentHeight() >= l1Height
-	})
-	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
 
-	validAddresses := monitor.GetValidAddresses(l1Height)
-	if len(validAddresses) != 1 {
-		t.Fatal("expected 1 valid address, got", validAddresses)
+	events := monitor.GetEvents()
+	if len(events) != 1 {
+		t.Fatal("expected 1 valid address, got", events)
 	}
-	if validAddresses[0] != batchPosterAddr {
-		t.Fatal("expected valid address to be", batchPosterAddr, "got", validAddresses[0])
+	if events[0].Addr != batchPosterAddr {
+		t.Fatal("expected valid address to be", batchPosterAddr, "got", events[0].Addr)
 	}
 
 	newAddr := common.Address{}
@@ -69,22 +64,16 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	tx2 := builder.L1Info.PrepareTxTo("RollupOwner", &seqInboxAddr, 100000, big.NewInt(0), data2)
 	err = builder.L1.Client.SendTransaction(ctx, tx2)
 	Require(t, err)
-	receipt2, err := EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx2, time.Second*10)
+	_, err = EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx2, time.Second*10)
 	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
 
-	l1Height2 := receipt2.BlockNumber.Uint64()
-
-	err = waitFor(ctx, func() bool {
-		return monitor.GetConfirmedParentHeight() > l1Height2
-	})
-	Require(t, err)
-
-	validAddresses2 := monitor.GetValidAddresses(l1Height2)
-	if len(validAddresses2) != 2 {
-		t.Fatal("expected 2 valid addresses, got", validAddresses2)
+	events2 := monitor.GetEvents()
+	if len(events2) != 2 {
+		t.Fatal("expected 2 valid addresses, got", events2)
 	}
-	if validAddresses2[1] != newAddr {
-		t.Fatal("expected valid address to be", newAddr, "got", validAddresses2[1])
+	if events2[1].Addr != newAddr {
+		t.Fatal("expected valid address to be", newAddr, "got", events2[1].Addr)
 	}
 
 }

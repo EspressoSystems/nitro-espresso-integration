@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/dbutil"
@@ -92,6 +93,7 @@ func NewBatcherAddrMonitor(
 		seqInboxAddr:      seqInboxAddr,
 		seqInboxInterface: seqInboxInterface,
 		deployAt:          deployAt,
+		parentHeight:      deployAt,
 	}
 }
 
@@ -168,14 +170,7 @@ func (b *BatcherAddrMonitor) SetL1Height(height uint64) {
 }
 
 func (b *BatcherAddrMonitor) GetConfirmedParentHeight() uint64 {
-	if b.parentHeight > 0 {
-		return b.parentHeight
-	}
-
-	if len(b.events) > 0 {
-		return b.events[len(b.events)-1].ParentHeight
-	}
-	return 0
+	return b.parentHeight
 }
 
 func (b *BatcherAddrMonitor) LookupEvents(ctx context.Context, fromBlock, toBlock uint64) ([]BatcherAddrEvent, error) {
@@ -281,8 +276,6 @@ func (b *BatcherAddrMonitor) Restore() error {
 		if err != nil {
 			return fmt.Errorf("failed to decode init addresses: %w", err)
 		}
-	} else {
-		b.initAddresses = []common.Address{}
 	}
 
 	eventsBytes, err := b.db.Get([]byte(eventKey))
@@ -312,13 +305,13 @@ func (b *BatcherAddrMonitor) Restore() error {
 }
 
 func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
-	latestParentHeader, err := b.l1Reader.Client().HeaderByNumber(ctx, nil)
+	latestParentHeader, err := b.l1Reader.Client().HeaderByNumber(ctx, new(big.Int).SetInt64(int64(rpc.FinalizedBlockNumber)))
 	if err != nil {
 		return fmt.Errorf("failed to get latest parent height: %w", err)
 	}
 	currentParentHeight := b.GetConfirmedParentHeight()
 
-	if currentParentHeight <= b.deployAt {
+	if currentParentHeight == b.deployAt {
 		for _, addr := range b.initAddresses {
 			isBatcher, err := b.seqInboxInterface.IsBatchPoster(&bind.CallOpts{}, addr)
 			if err != nil {
@@ -337,12 +330,13 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	allowedRetry := 10
 	retry := 0
 	latestParentHeight := latestParentHeader.Number.Uint64()
+	log.Info("batcher addr monitor backfilling")
 	for retry < allowedRetry {
-		if latestParentHeight <= blocksToRead || currentParentHeight >= latestParentHeight-blocksToRead {
+		if currentParentHeight >= latestParentHeight {
 			break
 		}
 
-		events, err := b.LookupEvents(ctx, currentParentHeight, currentParentHeight+blocksToRead)
+		events, err := b.LookupEvents(ctx, currentParentHeight+1, currentParentHeight+blocksToRead)
 		if err != nil {
 			retry++
 			log.Error("failed to lookup events", "err", err)
@@ -354,8 +348,8 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			log.Error("failed to add events", "err", err)
 			continue
 		}
-		currentParentHeight += uint64(blocksToRead)
-		latestParentHeader, err = b.l1Reader.Client().HeaderByNumber(ctx, nil)
+		currentParentHeight += blocksToRead
+		latestParentHeader, err = b.l1Reader.Client().HeaderByNumber(ctx, new(big.Int).SetInt64(int64(rpc.FinalizedBlockNumber)))
 		if err != nil {
 			retry++
 			log.Error("failed to get latest parent height", "err", err)
@@ -363,10 +357,54 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 		}
 		latestParentHeight = latestParentHeader.Number.Uint64()
 	}
+	b.parentHeight = latestParentHeight
+	b.l1Height = latestParentHeight
+	if b.l1Reader.IsParentChainArbitrum() {
+		b.l1Height = types.DeserializeHeaderExtraInformation(latestParentHeader).L1BlockNumber
+	}
+	log.Info("batcher addr monitor backfilled", "parentHeight", b.parentHeight, "l1Height", b.l1Height)
+
 	return nil
 }
 
+func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
+	finalizedHeader, err := b.l1Reader.LatestFinalizedBlockHeader(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get latest finalized block number: %w", err)
+	}
+	finalizedBlockNr := finalizedHeader.Number.Uint64()
+	parentHeight := b.GetConfirmedParentHeight()
+	// The latest finalized block doesn't change
+	if parentHeight >= finalizedBlockNr {
+		log.Info("processing", "parentHeight", parentHeight, "finalizedBlockNr", finalizedBlockNr)
+		return nil
+	}
+
+	newHeight := finalizedBlockNr
+	events, err := b.LookupEvents(ctx, parentHeight+1, newHeight)
+	log.Info("looking up events", "from", parentHeight+1, "to", newHeight)
+	if err != nil {
+		return err
+	}
+	err = b.AddBatchPosterSetEvents(events)
+	if err != nil {
+		return err
+	}
+	l1Height := newHeight
+	if b.l1Reader.IsParentChainArbitrum() {
+		l1Height = types.DeserializeHeaderExtraInformation(finalizedHeader).L1BlockNumber
+	}
+	b.SetL1Height(l1Height)
+	b.SetParentHeight(newHeight)
+	return nil
+}
+
+func (b *BatcherAddrMonitor) GetEvents() []BatcherAddrEvent {
+	return b.events
+}
+
 func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
+	log.Info("starting the batch poster address monitor")
 	b.StopWaiter.Start(ctx, b)
 	err := b.Restore()
 	if err != nil && !dbutil.IsErrNotFound(err) {
@@ -386,30 +424,12 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				unsubscribe()
 				return
-			case header := <-headerchan:
-				if header == nil {
-					continue
-				}
-				parentHeight := b.GetConfirmedParentHeight()
-				newHeight := header.Number.Uint64()
-				// search for events
-				events, err := b.LookupEvents(ctx, parentHeight+1, newHeight)
-				log.Info("looking up events", "from", parentHeight+1, "to", newHeight)
+			case _ = <-headerchan:
+				err := b.Process(ctx)
 				if err != nil {
-					log.Error("failed to search for events", "err", err)
+					log.Error("failed to process", "err", err)
 					continue
 				}
-				err = b.AddBatchPosterSetEvents(events)
-				if err != nil {
-					log.Error("failed to add events", "err", err)
-					continue
-				}
-				l1Height := newHeight
-				if b.l1Reader.IsParentChainArbitrum() {
-					l1Height = types.DeserializeHeaderExtraInformation(header).L1BlockNumber
-				}
-				b.SetL1Height(l1Height)
-				b.SetParentHeight(newHeight)
 			}
 		}
 	})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ const NextHotshotBlockKey = "nextHotshotBlock"
 
 var FailedToFetchTransactionsErr = errors.New("failed to fetch transactions")
 var PayloadHadNoMessagesErr = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
+var FailedToParseButNeedRetryErr = errors.New("failed to parse hotshot payload, but need retry")
 
 type EspressoStreamerInterface interface {
 	Start(ctx context.Context) error
@@ -190,6 +192,10 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	addr := crypto.PubkeyToAddress(*publicKey)
 	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
+	if len(validAddresses) == 0 {
+		// No valid addresses right now. Need to catch up
+		return FailedToParseButNeedRetryErr
+	}
 	for _, allowed := range validAddresses {
 		if allowed == addr {
 			found = true
@@ -243,6 +249,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	err = s.verifyBatchPosterSignature(signature, userDataHashArr, l1Height)
 	if err == nil {
 		success = true
+	} else if strings.Contains(err.Error(), FailedToParseButNeedRetryErr.Error()) {
+		return nil, err
 	} else {
 		log.Warn("failed to verify batch poster signature", "err", err)
 	}
@@ -354,14 +362,17 @@ func fetchNextHotshotBlock(
 		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", FailedToFetchTransactionsErr, err)
 	}
 
-	l1Height := header.Header.GetL1Head()
+	l1Height := header.Header.GetL1Finalized().Number
 	result := []*MessageWithMetadataAndPos{}
 
 	for _, tx := range arbTxns.Transactions {
 		messages, err := parseHotShotPayloadFn(tx, l1Height)
-		if err != nil {
+		if err != nil && !strings.Contains(err.Error(), FailedToParseButNeedRetryErr.Error()) {
 			log.Warn("failed to verify espresso transaction", "err", err)
 			continue
+		}
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, messages...)
 	}
