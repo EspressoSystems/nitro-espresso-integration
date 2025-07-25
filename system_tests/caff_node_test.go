@@ -352,7 +352,9 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
-
+	log.Info("Waiting for L1 to advance")
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
+	time.Sleep(time.Second * 20)
 	// start the node
 	log.Info("Starting the caff node")
 	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
@@ -366,6 +368,7 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	tx := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
+
 	// Check the caff node RPC for tx. assert that it is not there.
 	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
 	ExpectErr(t, err, ethereum.NotFound)

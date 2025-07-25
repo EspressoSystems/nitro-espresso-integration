@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -13,6 +14,7 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
+	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 var (
@@ -23,6 +25,7 @@ var (
 )
 
 type DelayedMessageFetcher struct {
+	stopwaiter.StopWaiter
 	fromBlock            uint64
 	delayedBridge        *DelayedBridge
 	sequencerInbox       *SequencerInbox
@@ -89,10 +92,6 @@ func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
 	}
 
 	log.Info("Backfilled delayed messages")
-	err = batch.Write()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -101,32 +100,44 @@ startWatchDelayedMessages starts watching for new headers and processes them to 
 within the safety tolerance of the rollup
 */
 func (d *DelayedMessageFetcher) startWatchDelayedMessages(ctx context.Context) {
+	log.Info("Starting watch for new headers in delayed message fetcher")
 	// Subscibe to new headers
-	newHeaders, unsubscribe := d.l1Reader.Subscribe(false)
-	defer unsubscribe()
+	newHeaders, unsubscribe := d.l1Reader.Subscribe(true)
+	d.LaunchThread(func(ctx context.Context) {
 
-	select {
-	case header, ok := <-newHeaders:
-		// If we get a new header, we need to backfill
-		if !ok {
-			log.Error("headerChan closed unexpectedly")
-		} else {
-			err := d.processNewHeader(ctx, header)
-			if err != nil {
-				log.Warn("could not process new header", "err", err, "header", header.Number.Uint64())
+		for {
+			log.Info("Waiting for new headers in delayed message fetcher")
+			select {
+			case header, ok := <-newHeaders:
+				// If we get a new header, we need to backfill
+				if !ok {
+					log.Error("headerChan closed unexpectedly")
+				} else {
+					err := d.processNewHeader(ctx, header)
+					if err != nil {
+						log.Warn("could not process new header", "err", err, "header", header.Number.Uint64())
+					}
+				}
+
+			case <-ctx.Done():
+				log.Error("context done in delayed message fetcher", "err", ctx.Err())
+				unsubscribe()
+				return
+			default:
+				log.Info("No new headers in delayed message fetcher")
+				time.Sleep(time.Second)
 			}
+			// Default case
 		}
+	})
 
-	case <-ctx.Done():
-		log.Error("context done in delayed message fetcher", "err", ctx.Err())
-		return
-	}
 }
 
 /*
 processNewHeader processes the new header to get any delayed messages
 */
 func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *types.Header) error {
+	log.Info("Processing new header in delayed message fetcher", "header", header.Number.Uint64())
 	var endBlock uint64
 	var err error
 	if endBlock, err = d.getL1BlockWithinSafetyTolerance(ctx, header); err != nil {
@@ -134,21 +145,20 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 		return err
 	}
 	batch := d.db.NewBatch()
+
 	// Get the from block from the database
 	fromBlock, err := readCurrentFromBlockFromDb(d.db)
 	if err != nil {
 		log.Error("failed to read from block from db", "err", err)
 		return err
 	}
+	log.Info("Getting delayed messages in range inside processNewHeader", "fromBlock", fromBlock, "endBlock", endBlock)
 	err = d.getDelayedMessagesInRange(ctx, batch, fromBlock, endBlock)
 	if err != nil {
 		log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", endBlock)
 		return err
 	}
-	err = batch.Write()
-	if err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -331,6 +341,10 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		return err
 	}
 	log.Info("Current from block stored", "fromBlock", endBlock)
+	err = batch.Write()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -466,6 +480,7 @@ func NewDelayedMessageFetcher(
 
 func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 	log.Info("starting delayed message fetcher")
+	d.StopWaiter.Start(ctx, d)
 	// Delayed message fetcher doesnt start until it has backfilled all the messages
 	// till a `matureBlock` which is within the saferty tolerance of the rollup
 	err := d.backFill(ctx)
@@ -473,7 +488,6 @@ func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 		log.Error("delayed message fetcher backfill failed", "err", err)
 		return false
 	}
-	// Start watching for delayed messages in a go routine: TODO: should we handle this correctly?
-	go d.startWatchDelayedMessages(ctx)
+	d.startWatchDelayedMessages(ctx)
 	return true
 }
