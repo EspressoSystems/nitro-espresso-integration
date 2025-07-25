@@ -50,6 +50,7 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	log.Info("tx receipt", "receipt", receipt.BlockNumber)
 
 	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
+	time.Sleep(time.Second * 5)
 
 	events := monitor.GetEvents()
 	if len(events) != 1 {
@@ -68,6 +69,7 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	_, err = EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx2, time.Second*10)
 	Require(t, err)
 	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
+	time.Sleep(time.Second * 5)
 
 	events2 := monitor.GetEvents()
 	if len(events2) != 2 {
