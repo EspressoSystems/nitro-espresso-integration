@@ -158,7 +158,14 @@ func NewEspressoCaffNode(
 		log.Crit("Failed to create hotshot client", "err", err)
 	}
 
-	batcherAddrMonitor := NewBatcherAddrMonitor([]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)}, db, l1Reader, seqInboxAddr, delayedBridge.fromBlock)
+	batcherAddrMonitor := NewBatcherAddrMonitor(
+		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
+		db,
+		l1Reader,
+		seqInboxAddr,
+		delayedBridge.fromBlock,
+		configFetcher().FromBlock,
+	)
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		configFetcher().NextHotshotBlock,
 		sgxVerifier,

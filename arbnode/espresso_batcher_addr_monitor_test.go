@@ -1,13 +1,17 @@
 package arbnode
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rlp"
+
+	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
 func TestBatcherAddrMonitor(t *testing.T) {
@@ -20,7 +24,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test initial state
 	t.Run("initial state", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0)
 		b.SetL1Height(100)
 		result1 := b.GetValidAddresses(100)
 		assert.Equal(t, initAddresses, result1)
@@ -31,7 +35,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test AddEvent
 	t.Run("add events and get valid addresses", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0)
 		b.SetL1Height(100)
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
 		err := b.AddBatchPosterSetEvents([]BatcherAddrEvent{
@@ -64,9 +68,13 @@ func TestBatcherAddrMonitor(t *testing.T) {
 	})
 
 	t.Run("store and restore", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0)
+		dummyClient := &ethclient.Client{}
+		l1Reader, err := headerreader.New(context.Background(), dummyClient, nil, nil)
+		Require(t, err)
+		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), l1Reader, common.Address{}, 0, 0)
+		b.lastProcessedParentHeight = 100
 		// only contain the init addresses
-		err := b.Store()
+		err = b.Store()
 		Require(t, err)
 
 		// empty the init addresses
@@ -75,6 +83,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		Require(t, err)
 
 		assert.Equal(t, initAddresses, b.initAddresses)
+		assert.Equal(t, uint64(100), b.lastProcessedParentHeight)
 		assert.Equal(t, []BatcherAddrEvent{}, b.events)
 
 		events := []BatcherAddrEvent{
@@ -90,6 +99,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		b.cachedAddresses = initAddresses
 		b.initAddresses = []common.Address{}
 		b.events = []BatcherAddrEvent{}
+		b.lastProcessedParentHeight = 0
 
 		err = b.Restore()
 		Require(t, err)
@@ -98,6 +108,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		assert.Equal(t, events, b.events)
 		assert.Equal(t, false, b.cached)
 		assert.Equal(t, []common.Address{}, b.cachedAddresses)
+		assert.Equal(t, uint64(100), b.lastProcessedParentHeight)
 	})
 	t.Run("event rlp decode/encode", func(t *testing.T) {
 		events := []BatcherAddrEvent{

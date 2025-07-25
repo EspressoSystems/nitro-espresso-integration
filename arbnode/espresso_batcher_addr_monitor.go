@@ -1,7 +1,9 @@
 package arbnode
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"sort"
@@ -23,8 +25,9 @@ import (
 )
 
 const (
-	eventKey         = "espresso-batcher-addr-event"
-	initAddressesKey = "espresso-batcher-addr-init-addresses"
+	eventKey               = "espresso-batcher-addr-event"
+	initAddressesKey       = "espresso-batcher-addr-init-addresses"
+	lastProcessedHeightKey = "espresso-last-processed-height"
 )
 
 var ownerFunctionCalledID common.Hash
@@ -52,9 +55,9 @@ type BatcherAddrMonitor struct {
 	stopwaiter.StopWaiter
 	// This is corresponding L1 height to the parent height.
 	// If the parent chain is Ethereum, this is equal to the parent height.
-	l1Height          uint64
-	lastEventL1Height uint64
-	parentHeight      uint64
+	lastProcessedL1Height     uint64
+	lastEventL1Height         uint64
+	lastProcessedParentHeight uint64
 
 	// Cache for the latest valid addresses.
 	// Since batcher address changes are infrequent and callers typically
@@ -81,19 +84,23 @@ func NewBatcherAddrMonitor(
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
 	deployAt uint64,
+	fromBlock uint64,
 ) *BatcherAddrMonitor {
 	seqInboxInterface, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
 	if err != nil {
 		panic(err)
 	}
+	if fromBlock < deployAt+1 {
+		fromBlock = deployAt + 1
+	}
 	return &BatcherAddrMonitor{
-		initAddresses:     initAddresses,
-		db:                db,
-		l1Reader:          l1Reader,
-		seqInboxAddr:      seqInboxAddr,
-		seqInboxInterface: seqInboxInterface,
-		deployAt:          deployAt,
-		parentHeight:      deployAt,
+		initAddresses:             initAddresses,
+		db:                        db,
+		l1Reader:                  l1Reader,
+		seqInboxAddr:              seqInboxAddr,
+		seqInboxInterface:         seqInboxInterface,
+		deployAt:                  deployAt,
+		lastProcessedParentHeight: fromBlock - 1,
 	}
 }
 
@@ -113,7 +120,7 @@ func (b *BatcherAddrMonitor) AddBatchPosterSetEvents(events []BatcherAddrEvent) 
 }
 
 func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
-	if l1 > b.l1Height {
+	if l1 > b.lastProcessedL1Height {
 		// If the target L1 height is greater than the latest known L1 height,
 		// return an empty slice. The caller should wait until the monitor has
 		// observed at least this L1 height before calling this function.
@@ -128,7 +135,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 	// In a practical scenario, this is the most common case. Here means that during the time
 	// from `lastEventL1Height` to `l1Height`, the `events` are not changed. It is not needed to
 	// calculate valid batcher addresses.
-	latestCachedWindow := l1 >= b.lastEventL1Height && l1 <= b.l1Height
+	latestCachedWindow := l1 >= b.lastEventL1Height && l1 <= b.lastProcessedL1Height
 	if b.cached && latestCachedWindow {
 		return b.cachedAddresses
 	}
@@ -162,15 +169,15 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 }
 
 func (b *BatcherAddrMonitor) SetParentHeight(height uint64) {
-	b.parentHeight = height
+	b.lastProcessedParentHeight = height
 }
 
 func (b *BatcherAddrMonitor) SetL1Height(height uint64) {
-	b.l1Height = height
+	b.lastProcessedL1Height = height
 }
 
-func (b *BatcherAddrMonitor) GetConfirmedParentHeight() uint64 {
-	return b.parentHeight
+func (b *BatcherAddrMonitor) GetLastProcessedParentHeight() uint64 {
+	return b.lastProcessedParentHeight
 }
 
 func (b *BatcherAddrMonitor) LookupEvents(ctx context.Context, fromBlock, toBlock uint64) ([]BatcherAddrEvent, error) {
@@ -214,6 +221,13 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 		}
 		// Parse data to get arguments from tx
 		data := tx.Data()
+		if len(data) < 4 {
+			return nil, fmt.Errorf("failed to parse a log: invalid data")
+		}
+		if !bytes.Equal(data[:4], seqInboxABI.Methods["setIsBatchPoster"].ID) {
+			// Encountering an unknown method, caff node needs to update
+			return nil, fmt.Errorf("failed to parse a log: invalid method: %x", data[:4])
+		}
 		args, err := seqInboxABI.Methods["setIsBatchPoster"].Inputs.Unpack(data[4:])
 		if err != nil {
 			return nil, err
@@ -239,6 +253,12 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 	return events, nil
 }
 
+func (b *BatcherAddrMonitor) StoreLastProcessedHeight(batch ethdb.Batch, height uint64) error {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, height)
+	return batch.Put([]byte(lastProcessedHeightKey), buf)
+}
+
 func (b *BatcherAddrMonitor) Store() error {
 	eventsBytes, err := rlp.EncodeToBytes(b.events)
 	if err != nil {
@@ -262,6 +282,11 @@ func (b *BatcherAddrMonitor) Store() error {
 		return fmt.Errorf("failed to put init addresses: %w", err)
 	}
 
+	err = b.StoreLastProcessedHeight(newBatch, b.lastProcessedParentHeight)
+	if err != nil {
+		return fmt.Errorf("failed to put last processed height: %w", err)
+	}
+
 	return newBatch.Write()
 }
 
@@ -276,6 +301,14 @@ func (b *BatcherAddrMonitor) Restore() error {
 		if err != nil {
 			return fmt.Errorf("failed to decode init addresses: %w", err)
 		}
+	}
+
+	lastProcessedHeightBytes, err := b.db.Get([]byte(lastProcessedHeightKey))
+	if err != nil && !dbutil.IsErrNotFound(err) {
+		return fmt.Errorf("failed to get last processed height: %w", err)
+	}
+	if lastProcessedHeightBytes != nil {
+		b.lastProcessedParentHeight = binary.BigEndian.Uint64(lastProcessedHeightBytes)
 	}
 
 	eventsBytes, err := b.db.Get([]byte(eventKey))
@@ -309,9 +342,10 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get latest parent height: %w", err)
 	}
-	currentParentHeight := b.GetConfirmedParentHeight()
+	lastProcessedHeight := b.GetLastProcessedParentHeight()
 
-	if currentParentHeight == b.deployAt {
+	if lastProcessedHeight <= b.deployAt {
+		// Verify init addresses are batchers
 		for _, addr := range b.initAddresses {
 			isBatcher, err := b.seqInboxInterface.IsBatchPoster(&bind.CallOpts{}, addr)
 			if err != nil {
@@ -322,8 +356,8 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			}
 		}
 
-		currentParentHeight = b.deployAt + 1
-		b.parentHeight = currentParentHeight
+		lastProcessedHeight = b.deployAt
+		b.lastProcessedParentHeight = lastProcessedHeight
 	}
 
 	blocksToRead := uint64(100)
@@ -332,11 +366,11 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	latestParentHeight := latestParentHeader.Number.Uint64()
 	log.Info("batcher addr monitor backfilling")
 	for retry < allowedRetry {
-		if currentParentHeight >= latestParentHeight {
+		if lastProcessedHeight >= latestParentHeight {
 			break
 		}
 
-		events, err := b.LookupEvents(ctx, currentParentHeight+1, currentParentHeight+blocksToRead)
+		events, err := b.LookupEvents(ctx, lastProcessedHeight+1, lastProcessedHeight+blocksToRead)
 		if err != nil {
 			retry++
 			log.Error("failed to lookup events", "err", err)
@@ -348,7 +382,7 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			log.Error("failed to add events", "err", err)
 			continue
 		}
-		currentParentHeight += blocksToRead
+		lastProcessedHeight += blocksToRead
 		latestParentHeader, err = b.l1Reader.Client().HeaderByNumber(ctx, new(big.Int).SetInt64(int64(rpc.FinalizedBlockNumber)))
 		if err != nil {
 			retry++
@@ -357,12 +391,12 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 		}
 		latestParentHeight = latestParentHeader.Number.Uint64()
 	}
-	b.parentHeight = latestParentHeight
-	b.l1Height = latestParentHeight
+	b.lastProcessedParentHeight = latestParentHeight
+	b.lastProcessedL1Height = latestParentHeight
 	if b.l1Reader.IsParentChainArbitrum() {
-		b.l1Height = types.DeserializeHeaderExtraInformation(latestParentHeader).L1BlockNumber
+		b.lastProcessedL1Height = types.DeserializeHeaderExtraInformation(latestParentHeader).L1BlockNumber
 	}
-	log.Info("batcher addr monitor backfilled", "parentHeight", b.parentHeight, "l1Height", b.l1Height)
+	log.Info("batcher addr monitor backfilled", "parentHeight", b.lastProcessedParentHeight, "l1Height", b.lastProcessedL1Height)
 
 	return nil
 }
@@ -373,16 +407,16 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 		return fmt.Errorf("failed to get latest finalized block number: %w", err)
 	}
 	finalizedBlockNr := finalizedHeader.Number.Uint64()
-	parentHeight := b.GetConfirmedParentHeight()
+	parentHeight := b.GetLastProcessedParentHeight()
 	// The latest finalized block doesn't change
 	if parentHeight >= finalizedBlockNr {
-		log.Info("processing", "parentHeight", parentHeight, "finalizedBlockNr", finalizedBlockNr)
+		log.Debug("processing", "parentHeight", parentHeight, "finalizedBlockNr", finalizedBlockNr)
 		return nil
 	}
 
 	newHeight := finalizedBlockNr
 	events, err := b.LookupEvents(ctx, parentHeight+1, newHeight)
-	log.Info("looking up events", "from", parentHeight+1, "to", newHeight)
+	log.Debug("looking up events", "from", parentHeight+1, "to", newHeight)
 	if err != nil {
 		return err
 	}
@@ -396,6 +430,15 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	}
 	b.SetL1Height(l1Height)
 	b.SetParentHeight(newHeight)
+	if len(events) == 0 {
+		// If no events are found, we still need to update the last processed height
+		batch := b.db.NewBatch()
+		err = b.StoreLastProcessedHeight(batch, newHeight)
+		if err != nil {
+			return fmt.Errorf("failed to store last processed height: %w", err)
+		}
+		return batch.Write()
+	}
 	return nil
 }
 
@@ -406,6 +449,7 @@ func (b *BatcherAddrMonitor) GetEvents() []BatcherAddrEvent {
 func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 	log.Info("starting the batch poster address monitor")
 	b.StopWaiter.Start(ctx, b)
+
 	err := b.Restore()
 	if err != nil && !dbutil.IsErrNotFound(err) {
 		return fmt.Errorf("failed to restore batcher address monitor: %w", err)
@@ -424,7 +468,7 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 			case <-ctx.Done():
 				unsubscribe()
 				return
-			case _ = <-headerchan:
+			case <-headerchan:
 				err := b.Process(ctx)
 				if err != nil {
 					log.Error("failed to process", "err", err)
