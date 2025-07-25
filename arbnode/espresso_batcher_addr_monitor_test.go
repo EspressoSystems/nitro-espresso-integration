@@ -38,7 +38,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0)
 		b.SetL1Height(100)
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
-		err := b.AddBatchPosterSetEvents([]BatcherAddrEvent{
+		err := b.AddBatchPosterSetEvents([]BatcherAddrUpdate{
 			{50, 50, initAddr1, false},
 			{60, 60, initAddr2, false},
 			{70, 70, addr3, true},
@@ -84,9 +84,9 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 		assert.Equal(t, initAddresses, b.initAddresses)
 		assert.Equal(t, uint64(100), b.lastProcessedParentHeight)
-		assert.Equal(t, []BatcherAddrEvent{}, b.events)
+		assert.Equal(t, []BatcherAddrUpdate{}, b.updates)
 
-		events := []BatcherAddrEvent{
+		events := []BatcherAddrUpdate{
 			{50, 50, initAddr1, false},
 			{60, 60, initAddr2, false},
 		}
@@ -98,26 +98,26 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		b.cached = true
 		b.cachedAddresses = initAddresses
 		b.initAddresses = []common.Address{}
-		b.events = []BatcherAddrEvent{}
+		b.updates = []BatcherAddrUpdate{}
 		b.lastProcessedParentHeight = 0
 
 		err = b.Restore()
 		Require(t, err)
 
 		assert.Equal(t, initAddresses, b.initAddresses)
-		assert.Equal(t, events, b.events)
+		assert.Equal(t, events, b.updates)
 		assert.Equal(t, false, b.cached)
 		assert.Equal(t, []common.Address{}, b.cachedAddresses)
 		assert.Equal(t, uint64(100), b.lastProcessedParentHeight)
 	})
 	t.Run("event rlp decode/encode", func(t *testing.T) {
-		events := []BatcherAddrEvent{
+		events := []BatcherAddrUpdate{
 			{50, 50, initAddr1, false},
 			{60, 60, initAddr2, false},
 		}
 		encoded, err := rlp.EncodeToBytes(events)
 		Require(t, err)
-		var decoded []BatcherAddrEvent
+		var decoded []BatcherAddrUpdate
 		err = rlp.DecodeBytes(encoded, &decoded)
 		Require(t, err)
 		assert.Equal(t, events, decoded)

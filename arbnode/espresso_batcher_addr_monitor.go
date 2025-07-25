@@ -42,8 +42,10 @@ func init() {
 	ownerFunctionCalledID = parsedSeqInboxABI.Events["OwnerFunctionCalled"].ID
 }
 
-// `BatchPosterSet` event
-type BatcherAddrEvent struct {
+// BatcherAddrUpdate represents a batch poster address status change, equivalent in effect to the `BatchPosterSet` event.
+// For compatibility, we do not directly search for `BatchPosterSet` events.
+// Instead, we search for `OwnerFunctionCalled(1)` events and parse the transaction input data to reconstruct the updates.
+type BatcherAddrUpdate struct {
 	// From this L1 height, the batcher address becomes functional or non-functional
 	L1Height     uint64         `koanf:"l1-height"`
 	ParentHeight uint64         `koanf:"parent-height"`
@@ -65,8 +67,8 @@ type BatcherAddrMonitor struct {
 	cached          bool
 	cachedAddresses []common.Address
 
-	events []BatcherAddrEvent
-	db     ethdb.Database
+	updates []BatcherAddrUpdate
+	db      ethdb.Database
 
 	// Init addresses are the addresses that were set as batcher when the rollup was deployed.
 	initAddresses []common.Address
@@ -104,17 +106,17 @@ func NewBatcherAddrMonitor(
 	}
 }
 
-func (b *BatcherAddrMonitor) AddBatchPosterSetEvents(events []BatcherAddrEvent) error {
+func (b *BatcherAddrMonitor) AddBatchPosterSetEvents(events []BatcherAddrUpdate) error {
 	if len(events) == 0 {
 		return nil
 	}
-	b.events = append(b.events, events...)
+	b.updates = append(b.updates, events...)
 	// Sort events by l1Height to ensure correct processing order.
 	// Since BatcherAddr events are infrequent, the performance impact of sorting is negligible.
-	sort.Slice(b.events, func(i, j int) bool {
-		return b.events[i].L1Height < b.events[j].L1Height
+	sort.Slice(b.updates, func(i, j int) bool {
+		return b.updates[i].L1Height < b.updates[j].L1Height
 	})
-	b.lastEventL1Height = b.events[len(b.events)-1].L1Height
+	b.lastEventL1Height = b.updates[len(b.updates)-1].L1Height
 	b.cached = false
 	return b.Store()
 }
@@ -127,7 +129,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 		return []common.Address{}
 	}
 
-	if len(b.events) == 0 || b.events[0].L1Height > l1 {
+	if len(b.updates) == 0 || b.updates[0].L1Height > l1 {
 		return b.initAddresses
 	}
 
@@ -145,7 +147,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 		result[addr] = true
 	}
 
-	for _, event := range b.events {
+	for _, event := range b.updates {
 		if event.L1Height > l1 {
 			break
 		}
@@ -180,7 +182,7 @@ func (b *BatcherAddrMonitor) GetLastProcessedParentHeight() uint64 {
 	return b.lastProcessedParentHeight
 }
 
-func (b *BatcherAddrMonitor) LookupEvents(ctx context.Context, fromBlock, toBlock uint64) ([]BatcherAddrEvent, error) {
+func (b *BatcherAddrMonitor) LookupAddressUpdates(ctx context.Context, fromBlock, toBlock uint64) ([]BatcherAddrUpdate, error) {
 	from := big.NewInt(0).SetUint64(fromBlock)
 	to := big.NewInt(0).SetUint64(toBlock)
 	query := ethereum.FilterQuery{
@@ -200,11 +202,11 @@ func (b *BatcherAddrMonitor) LookupEvents(ctx context.Context, fromBlock, toBloc
 	return b.logsToBatcherAddrEvents(ctx, logs)
 }
 
-func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs []types.Log) ([]BatcherAddrEvent, error) {
+func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs []types.Log) ([]BatcherAddrUpdate, error) {
 	if len(logs) == 0 {
 		return nil, nil
 	}
-	events := []BatcherAddrEvent{}
+	events := []BatcherAddrUpdate{}
 	for _, ethLog := range logs {
 		l1Height := ethLog.BlockNumber
 		if b.l1Reader.IsParentChainArbitrum() {
@@ -241,7 +243,7 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 			return nil, fmt.Errorf("failed to parse a log: invalid isBatchPoster")
 		}
 
-		event := BatcherAddrEvent{
+		event := BatcherAddrUpdate{
 			Addr:         batchPoster,
 			IsBatcher:    isBatcher,
 			L1Height:     l1Height,
@@ -260,7 +262,7 @@ func (b *BatcherAddrMonitor) StoreLastProcessedHeight(batch ethdb.Batch, height 
 }
 
 func (b *BatcherAddrMonitor) Store() error {
-	eventsBytes, err := rlp.EncodeToBytes(b.events)
+	eventsBytes, err := rlp.EncodeToBytes(b.updates)
 	if err != nil {
 		return fmt.Errorf("failed to encode events: %w", err)
 	}
@@ -317,19 +319,19 @@ func (b *BatcherAddrMonitor) Restore() error {
 	}
 
 	if eventsBytes != nil {
-		var events []BatcherAddrEvent
+		var events []BatcherAddrUpdate
 		err = rlp.DecodeBytes(eventsBytes, &events)
 		if err != nil {
 			return fmt.Errorf("failed to decode events: %w", err)
 		}
-		b.events = events
+		b.updates = events
 		b.cached = false
 		b.cachedAddresses = []common.Address{}
 		if len(events) > 0 {
 			b.lastEventL1Height = events[len(events)-1].L1Height
 		}
 	} else {
-		b.events = []BatcherAddrEvent{}
+		b.updates = []BatcherAddrUpdate{}
 		b.cached = false
 		b.cachedAddresses = []common.Address{}
 		b.lastEventL1Height = 0
@@ -370,7 +372,7 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			break
 		}
 
-		events, err := b.LookupEvents(ctx, lastProcessedHeight+1, lastProcessedHeight+blocksToRead)
+		events, err := b.LookupAddressUpdates(ctx, lastProcessedHeight+1, lastProcessedHeight+blocksToRead)
 		if err != nil {
 			retry++
 			log.Error("failed to lookup events", "err", err)
@@ -415,7 +417,7 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	}
 
 	newHeight := finalizedBlockNr
-	events, err := b.LookupEvents(ctx, parentHeight+1, newHeight)
+	events, err := b.LookupAddressUpdates(ctx, parentHeight+1, newHeight)
 	log.Debug("looking up events", "from", parentHeight+1, "to", newHeight)
 	if err != nil {
 		return err
@@ -442,8 +444,8 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	return nil
 }
 
-func (b *BatcherAddrMonitor) GetEvents() []BatcherAddrEvent {
-	return b.events
+func (b *BatcherAddrMonitor) GetEvents() []BatcherAddrUpdate {
+	return b.updates
 }
 
 func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
