@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -26,6 +25,7 @@ var (
 
 type DelayedMessageFetcher struct {
 	stopwaiter.StopWaiter
+
 	fromBlock            uint64
 	delayedBridge        *DelayedBridge
 	sequencerInbox       *SequencerInbox
@@ -49,27 +49,24 @@ backFill fetches all the delayed messages till a `matureL1Block` which is within
 and stores them in the database
 */
 func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
-	log.Info("backfilling delayed messages")
 	// Get the l1 block number based on the read mode
 	matureL1Block, err := d.getL1BlockNumber(ctx)
 	if err != nil {
 		log.Error("Error getting l1 block number", "err", err)
 		return err
 	}
-	log.Info("got l1 block number", "matureL1Block", matureL1Block)
 
 	// Get the from block number from the delayed message fetcher
 	// config. Note: Its important in the first read we read from the config
 	// and not the database because the user might want to start reading from a `fromBlock`
 	// which is before the delayed message number stored in the database
 	fromBlock := d.fromBlock
-	log.Info("getting delayed messages", "fromBlock", fromBlock, "matureL1Block", matureL1Block)
+	log.Info("backfilling delayed messages", "fromBlock", fromBlock, "matureL1Block", matureL1Block)
 	batch := d.db.NewBatch()
 
 	// Loop through the blocks until we reach the matureL1Block
 	for fromBlock < matureL1Block {
 		if (matureL1Block - fromBlock) > d.maxBlocksToRead {
-			log.Info("getting delayed messages in range with max blocks to read", "fromBlock", fromBlock, "endBlock", fromBlock+d.maxBlocksToRead)
 			// If the difference is greater than the maxBlocksToRead,
 			// then set the endBlock to fromBlock + maxBlocksToRead
 			err := d.getDelayedMessagesInRange(ctx, batch, fromBlock, fromBlock+d.maxBlocksToRead)
@@ -102,14 +99,23 @@ within the safety tolerance of the rollup
 func (d *DelayedMessageFetcher) startWatchDelayedMessages(ctx context.Context) {
 	log.Info("Starting watch for new headers in delayed message fetcher")
 	// Subscibe to new headers
-	newHeaders, unsubscribe := d.l1Reader.Subscribe(true)
-	d.LaunchThread(func(ctx context.Context) {
 
+	if !d.l1Reader.Started() {
+		// Start the l1 reader
+		d.l1Reader.Start(ctx)
+	}
+
+	newHeaders, unsubscribe := d.l1Reader.Subscribe(false)
+
+	d.LaunchThread(func(ctx context.Context) {
 		for {
-			log.Info("Waiting for new headers in delayed message fetcher")
 			select {
+			case <-ctx.Done():
+				log.Error("context done in delayed message fetcher", "err", ctx.Err())
+				unsubscribe()
+				return
+
 			case header, ok := <-newHeaders:
-				// If we get a new header, we need to backfill
 				if !ok {
 					log.Error("headerChan closed unexpectedly")
 				} else {
@@ -118,30 +124,20 @@ func (d *DelayedMessageFetcher) startWatchDelayedMessages(ctx context.Context) {
 						log.Warn("could not process new header", "err", err, "header", header.Number.Uint64())
 					}
 				}
-
-			case <-ctx.Done():
-				log.Error("context done in delayed message fetcher", "err", ctx.Err())
-				unsubscribe()
-				return
-			default:
-				log.Info("No new headers in delayed message fetcher")
-				time.Sleep(time.Second)
 			}
-			// Default case
 		}
 	})
-
 }
 
 /*
 processNewHeader processes the new header to get any delayed messages
 */
 func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *types.Header) error {
-	log.Info("Processing new header in delayed message fetcher", "header", header.Number.Uint64())
+	log.Debug("Processing new header in delayed message fetcher", "header", header.Number.Uint64())
 	var endBlock uint64
 	var err error
 	if endBlock, err = d.getL1BlockWithinSafetyTolerance(ctx, header); err != nil {
-		log.Error("delayed message fetcher backfill failed", "err", err)
+		log.Warn("delayed message fetcher backfill failed", "err", err)
 		return err
 	}
 	batch := d.db.NewBatch()
@@ -152,7 +148,7 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 		log.Error("failed to read from block from db", "err", err)
 		return err
 	}
-	log.Info("Getting delayed messages in range inside processNewHeader", "fromBlock", fromBlock, "endBlock", endBlock)
+	log.Debug("getting delayed messages in range", "fromBlock", fromBlock, "endBlock", endBlock)
 	err = d.getDelayedMessagesInRange(ctx, batch, fromBlock, endBlock)
 	if err != nil {
 		log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", endBlock)
@@ -175,7 +171,7 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 	delayedMessageToProcess := delayedMessagesRead - 1
 
 	if delayedMessageToProcess > delayedCount {
-		log.Warn(("delayed message fetcher is lagging behind. delayedMessagesRead: %v, delayedCount: %v"), delayedMessagesRead, delayedCount)
+		log.Warn("delayed message fetcher is lagging behind. delayedMessagesRead: %v, delayedCount: %v", delayedMessagesRead, delayedCount)
 		return nil, fmt.Errorf("delayed message fetcher is lagging behind")
 	}
 	log.Debug("Getting delayed message", "delayedCount", delayedMessageToProcess)
@@ -277,20 +273,17 @@ and stores them in the database
 func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, endBlock uint64) error {
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
-	log.Info("Looking for batches in range", "from", startBlock, "to", endBlock)
-
-	// startBlock to bigInt
-
+	log.Debug("Looking for batches in range", "from", startBlock, "to", endBlock)
 	startBlockBigInt := big.NewInt(0).SetUint64(startBlock)
 	endBlockBigInt := big.NewInt(0).SetUint64(endBlock)
-	log.Info("Looking for delayed batches from range", "from", startBlock, "to", endBlock)
+
 	sequencerBatches, err := d.sequencerInbox.LookupBatchesInRange(ctx, startBlockBigInt, endBlockBigInt)
 	if err != nil {
 		return err
 	}
-	log.Info("Sequencer batches", "sequencerBatches", sequencerBatches)
-	log.Info("Looking for delayed messages from range", "from", startBlock, "to", endBlock)
+	log.Debug("Sequencer batches found", "sequencerBatches", sequencerBatches)
 
+	log.Debug("Looking for delayed messages from range", "from", startBlock, "to", endBlock)
 	msgs, err := d.delayedBridge.LookupMessagesInRange(ctx, big.NewInt(0).SetUint64(startBlock), big.NewInt(0).SetUint64(endBlock), func(batchNum uint64) ([]byte, error) {
 		if len(sequencerBatches) > 0 && batchNum >= sequencerBatches[0].SequenceNumber {
 			idx := batchNum - sequencerBatches[0].SequenceNumber
@@ -307,7 +300,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		return err
 	}
 
-	log.Info("Sequencer delayed messages", "delayedMessages", msgs)
+	log.Debug("sequencer delayed messages found", "delayedMessages", msgs)
 
 	// Get the delayed message count store in the database
 	delayedCount, err := getDelayedMessageCount(d.db)
@@ -315,8 +308,6 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		log.Error("Failed to get delayed message count from db", "err", err)
 		return err
 	}
-
-	log.Info("Delayed message count", "delayedCount", delayedCount)
 
 	for _, msg := range msgs {
 		seqNum, err := msg.Message.Header.SeqNum()
@@ -333,14 +324,18 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 			return err
 		}
 	}
-	log.Info("Delayed messages stored", "delayedMessages", msgs)
+
+	// If they are the same, in next increment we would like to have the next block
+	if startBlock == endBlock {
+		endBlock++
+	}
 	// Store the from block in the database
 	err = storeCurrentFromBlock(batch, endBlock)
 	if err != nil {
 		log.Error("failed to store current from block", "err", err, "fromBlock", endBlock)
 		return err
 	}
-	log.Info("Current from block stored", "fromBlock", endBlock)
+
 	err = batch.Write()
 	if err != nil {
 		return err
@@ -371,8 +366,7 @@ getL1BlockWithinSafetyTolerance checks if the L1 block is within the safety tole
 func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Context, header *types.Header) (uint64, error) {
 	fromBlock, err := readCurrentFromBlockFromDb(d.db)
 	if err != nil {
-		log.Error("failed to read from block from db", "err", err)
-		return 0, err
+		return 0, fmt.Errorf("failed to read from block from db: %w", err)
 	}
 	// If we have already processed this header, we can skip it
 	if header.Number.Uint64() < fromBlock {
@@ -383,21 +377,18 @@ func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Cont
 		// if we have configured to wait for finalizations, fetch the latest finalized block number.
 		blockNumber, err := d.l1Reader.LatestFinalizedBlockNr(ctx)
 		if err != nil {
-			log.Warn("Error getting finalized block header to check safety tolerance of delayed message", "err", err)
-			return 0, err
+			return 0, fmt.Errorf("error getting finalized block header to check safety tolerance of delayed message: %w", err)
 		}
 
 		if blockNumber < fromBlock {
-			log.Warn("L1 block number is less than from block", "l1Block", blockNumber, "fromBlock", fromBlock)
-			return 0, errors.New("finalized block has already been processed")
+			return 0, fmt.Errorf("finalized block has already been processed current finalized block number: %v, fromBlock: %v", blockNumber, fromBlock)
 		}
 		return blockNumber, nil
 	}
 	if d.waitForConfirmations {
 		// Get the block number which is latest header - requiredBlockDepth
 		if header.Number.Uint64()-d.requiredBlockDepth < fromBlock {
-			log.Warn("block already processed", "l1Block", header.Number.Uint64()-d.requiredBlockDepth, "fromBlock", fromBlock)
-			return 0, errors.New("block already processed")
+			return 0, fmt.Errorf("block already processed current block number: %v, fromBlock: %v", header.Number.Uint64()-d.requiredBlockDepth, fromBlock)
 		}
 		return header.Number.Uint64() - d.requiredBlockDepth, nil
 	}
@@ -479,7 +470,7 @@ func NewDelayedMessageFetcher(
 /***** Start Function *****/
 
 func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
-	log.Info("starting delayed message fetcher")
+	log.Info("Starting delayed message fetcher")
 	d.StopWaiter.Start(ctx, d)
 	// Delayed message fetcher doesnt start until it has backfilled all the messages
 	// till a `matureBlock` which is within the saferty tolerance of the rollup

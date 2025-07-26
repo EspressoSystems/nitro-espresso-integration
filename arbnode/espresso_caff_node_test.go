@@ -93,8 +93,6 @@ func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAnd
 	return messageWithMetadataAndPos, nil
 }
 
-func (m *MockDelayedMessageFetcher) reset(seqNum uint64) {}
-
 func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 	return true
 }

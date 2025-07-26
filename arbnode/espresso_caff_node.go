@@ -314,6 +314,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 }
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
+	log.Info("Starting espresso caff node")
 	n.StopWaiter.Start(ctx, n)
 	err := n.espressoStreamer.Start(ctx)
 	if err != nil {
