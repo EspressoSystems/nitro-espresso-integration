@@ -48,6 +48,12 @@ Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on
 - Docker daemon running
 
 ### Build Steps
+
+0. Clone repository
+```bash
+git clone --recurse-submodules git@github.com:EspressoSystems/nitro-espresso-integration.git 
+```
+
 1. For MacOS Users Only:
 ```bash
 bash ./scripts/build-wasm-on-macos-with-nix

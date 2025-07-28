@@ -173,6 +173,9 @@
                 # provides abigen
                 go-ethereum
 
+                # Needed to avoid some error on Linux related to glibc
+                git
+
                 pre-commit
               ] ++ lib.optionals stdenv.isDarwin [
                 apple-sdk_11
