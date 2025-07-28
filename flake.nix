@@ -176,7 +176,6 @@
                 # Needed to avoid some error on Linux related to glibc
                 git
 
-
                 # just
                 just
 
