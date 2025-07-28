@@ -203,7 +203,7 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 		}
 	}
 	if !found {
-		log.Warn("batch poster address", "addr", addr, "expected", validAddresses)
+		log.Warn("batch poster address", "addr", addr, "expected one of", validAddresses)
 		return fmt.Errorf("batch poster address does not match")
 	}
 	return nil

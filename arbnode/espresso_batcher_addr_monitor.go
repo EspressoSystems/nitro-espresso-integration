@@ -121,15 +121,15 @@ func (b *BatcherAddrMonitor) AddBatchPosterSetEvents(events []BatcherAddrUpdate)
 	return b.Store()
 }
 
-func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
-	if l1 > b.lastProcessedL1Height {
+func (b *BatcherAddrMonitor) GetValidAddresses(targetL1Height uint64) []common.Address {
+	if targetL1Height > b.lastProcessedL1Height {
 		// If the target L1 height is greater than the latest known L1 height,
 		// return an empty slice. The caller should wait until the monitor has
 		// observed at least this L1 height before calling this function.
 		return []common.Address{}
 	}
 
-	if len(b.updates) == 0 || b.updates[0].L1Height > l1 {
+	if len(b.updates) == 0 || b.updates[0].L1Height > targetL1Height {
 		return b.initAddresses
 	}
 
@@ -137,7 +137,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 	// In a practical scenario, this is the most common case. Here means that during the time
 	// from `lastEventL1Height` to `l1Height`, the `events` are not changed. It is not needed to
 	// calculate valid batcher addresses.
-	latestCachedWindow := l1 >= b.lastEventL1Height && l1 <= b.lastProcessedL1Height
+	latestCachedWindow := targetL1Height >= b.lastEventL1Height && targetL1Height <= b.lastProcessedL1Height
 	if b.cached && latestCachedWindow {
 		return b.cachedAddresses
 	}
@@ -148,7 +148,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(l1 uint64) []common.Address {
 	}
 
 	for _, event := range b.updates {
-		if event.L1Height > l1 {
+		if event.L1Height > targetL1Height {
 			break
 		}
 

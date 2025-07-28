@@ -59,9 +59,12 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	if events[0].Addr != batchPosterAddr {
 		t.Fatal("expected valid address to be", batchPosterAddr, "got", events[0].Addr)
 	}
+	if events[0].IsBatcher != true {
+		t.Fatal("expected valid address to be batcher, got", events[0].IsBatcher)
+	}
 
 	newAddr := common.Address{}
-	data2, err := abi.Pack("setIsBatchPoster", newAddr, true)
+	data2, err := abi.Pack("setIsBatchPoster", newAddr, false)
 	Require(t, err)
 	tx2 := builder.L1Info.PrepareTxTo("RollupOwner", &seqInboxAddr, 100000, big.NewInt(0), data2)
 	err = builder.L1.Client.SendTransaction(ctx, tx2)
@@ -77,6 +80,9 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	}
 	if events2[1].Addr != newAddr {
 		t.Fatal("expected valid address to be", newAddr, "got", events2[1].Addr)
+	}
+	if events2[1].IsBatcher != false {
+		t.Fatal("expected valid address to not be batcher, got", events2[1].IsBatcher)
 	}
 
 }
