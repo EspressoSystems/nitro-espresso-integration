@@ -162,7 +162,7 @@ func NewEspressoCaffNode(
 		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
 		db,
 		l1Reader,
-		seqInboxAddr,
+		sequencerInbox.address,
 		delayedBridge.fromBlock,
 		configFetcher().FromBlock,
 	)
