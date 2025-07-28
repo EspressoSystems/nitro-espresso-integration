@@ -73,6 +73,11 @@ make build-replay-env
 gotestsum --format standard-verbose --packages="$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoE2E'
 ```
 
+Alternatively to steps 3 and 4 you can run:
+```bash
+just espresso-tests
+```
+
 Note: The E2E tests typically take around 10-15 minutes to complete.
 
 ## License

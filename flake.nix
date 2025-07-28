@@ -176,6 +176,10 @@
                 # Needed to avoid some error on Linux related to glibc
                 git
 
+
+                # just
+                just
+
                 pre-commit
               ] ++ lib.optionals stdenv.isDarwin [
                 apple-sdk_11
