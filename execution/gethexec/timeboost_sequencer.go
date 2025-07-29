@@ -50,6 +50,12 @@ func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactio
 	q.queue = append(q.queue, item)
 }
 
+func (q *synchronizedTimeboostTransactionQueue) enqueue_items(items []timeboostTransactionQueueItem) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.queue = append(q.queue, items...)
+}
+
 func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQueueItem {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -491,6 +497,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 
 func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns))
+	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
 		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
@@ -504,13 +511,13 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
 		}
-		s.txQueue.enqueue(txQueueItem)
+		items = append(items, txQueueItem)
 	}
+	s.txQueue.enqueue_items(items)
 	return nil
 }
 
 func (s *TimeboostSequencer) Start(ctx context.Context) error {
-	log.Info("here2")
 	s.StopWaiter.Start(ctx, s)
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
