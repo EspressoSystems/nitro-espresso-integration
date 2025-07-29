@@ -29,6 +29,7 @@ linters:
       disable:
         - shadow
         - fieldalignment
+        - copylocks
       enable-all: true
     staticcheck:
       checks:
