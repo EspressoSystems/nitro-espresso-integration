@@ -76,7 +76,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
 
-	builder.l2StackConfig.HTTPPort = 8946
+	builder.l2StackConfig.HTTPPort = getRandomPort(t)
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 
 	if dangerous {
