@@ -19,17 +19,12 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
-
-// mockRpcErrorWithData simulates a contract revert error from an RPC node
-type mockRpcErrorWithData struct{}
-
-func (e *mockRpcErrorWithData) Error() string          { return "mock rpc error with data" }
-func (e *mockRpcErrorWithData) ErrorData() interface{} { return "0x12345" }
 
 func TestEspressoStreamer(t *testing.T) {
 	t.Run("Peek should not change the current position", func(t *testing.T) {
@@ -232,7 +227,7 @@ func TestEspressoStreamer(t *testing.T) {
 		require.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
 	})
 
-	t.Run("Persistent errors are not retried and are skipped", func(t *testing.T) {
+	t.Run("rpc error should retry", func(t *testing.T) {
 		ctx := context.Background()
 		mockEspressoClient := new(mockEspressoClient)
 		namespace := uint64(1)
@@ -247,7 +242,7 @@ func TestEspressoStreamer(t *testing.T) {
 		parseFn := func(tx types.Bytes, _ uint64) ([]*MessageWithMetadataAndPos, error) {
 			if assert.ObjectsAreEqual(tx, tx2) {
 				parseAttemptCount++
-				return nil, &mockRpcErrorWithData{}
+				return nil, rpc.ErrNoResult
 			}
 			return []*MessageWithMetadataAndPos{{
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
@@ -336,7 +331,8 @@ func (m *mockEspressoClient) FetchTransactionsInBlock(ctx context.Context, block
 }
 
 func (m *mockEspressoClient) FetchHeaderByHeight(ctx context.Context, blockHeight uint64) (espressoTypes.HeaderImpl, error) {
-	panic("not implemented")
+	header := espressoTypes.Header0_3{Height: blockHeight, L1Finalized: &espressoTypes.L1BlockInfo{Number: 1}}
+	return espressoTypes.HeaderImpl{Header: &header}, nil
 }
 
 func (m *mockEspressoClient) FetchHeadersByRange(ctx context.Context, from uint64, until uint64) ([]types.HeaderImpl, error) {

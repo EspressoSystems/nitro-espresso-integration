@@ -17,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -74,8 +73,7 @@ type EspressoStreamer struct {
 	messageLock sync.Mutex
 	retryTime   time.Duration
 
-	PerfRecorder               *PerfRecorder
-	parseTxPayloadRetryBackoff time.Duration
+	PerfRecorder *PerfRecorder
 
 	batcherAddressesFetcher func(l1Height uint64) []common.Address
 }
@@ -236,8 +234,9 @@ func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) 
 	if err == nil {
 		return nil
 	}
-	var rpcErr *rpc.Error
-	if errors.As(err, rpcErr) {
+
+	if !strings.Contains(err.Error(), "execution reverted") {
+		log.Warn("failed to verify sgx attestation quote", "err", err)
 		return FailedToParseButNeedRetryErr
 	}
 	return err
@@ -264,6 +263,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	if err == nil {
 		success = true
 	} else if strings.Contains(err.Error(), FailedToParseButNeedRetryErr.Error()) {
+		log.Warn("retrying to verify batch poster signature", "err", err)
 		return nil, err
 	} else {
 		log.Warn("failed to verify batch poster signature", "err", err)
@@ -353,6 +353,11 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 			s.PerfRecorder.SetEndTime(blockProductionTime, fmt.Sprintf("Time duration between hotshot block %d and current block", nextHotshotBlock))
 		}
 	}
+}
+
+// Export this function only for testing purpose
+func (s *EspressoStreamer) SetSGXVerifier(sgxVerifier espressotee.EspressoSGXVerifierInterface) {
+	s.espressoSGXVerifier = sgxVerifier
 }
 
 func (s *EspressoStreamer) SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address) {
