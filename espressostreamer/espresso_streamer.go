@@ -29,10 +29,10 @@ import (
 const NextHotshotBlockKey = "nextHotshotBlock"
 
 var (
-	ErrFailedToFetchTransactions = errors.New("failed to fetch transactions")
-	ErrPayloadHadNoMessages      = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
-	ErrUserDataHashNot32Bytes    = errors.New("user data hash is not 32 bytes")
-	FailedToParseButNeedRetryErr = errors.New("failed to parse hotshot payload, but need retry")
+	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
+	ErrPayloadHadNoMessages       = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
+	ErrUserDataHashNot32Bytes     = errors.New("user data hash is not 32 bytes")
+	ErrRetryParsingHotShotPayload = errors.New("failed to parse hotshot payload, but need retry")
 )
 
 type EspressoStreamerInterface interface {
@@ -204,7 +204,7 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
 		// No valid addresses right now. Need to catch up
-		return FailedToParseButNeedRetryErr
+		return ErrRetryParsingHotShotPayload
 	}
 	for _, allowed := range validAddresses {
 		if allowed == addr {
@@ -237,7 +237,7 @@ func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) 
 
 	if !strings.Contains(err.Error(), "execution reverted") {
 		log.Warn("failed to verify sgx attestation quote", "err", err)
-		return FailedToParseButNeedRetryErr
+		return ErrRetryParsingHotShotPayload
 	}
 	return err
 }
@@ -262,7 +262,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	err = s.verifyBatchPosterSignature(signature, userDataHashArr, l1Height)
 	if err == nil {
 		success = true
-	} else if strings.Contains(err.Error(), FailedToParseButNeedRetryErr.Error()) {
+	} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
 		log.Warn("retrying to verify batch poster signature", "err", err)
 		return nil, err
 	} else {
@@ -386,7 +386,7 @@ func fetchNextHotshotBlock(
 
 	for _, tx := range arbTxns.Transactions {
 		messages, err := parseHotShotPayloadFn(tx, l1Height)
-		if err != nil && !strings.Contains(err.Error(), FailedToParseButNeedRetryErr.Error()) {
+		if err != nil && !strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
 			log.Warn("failed to verify espresso transaction", "err", err)
 			continue
 		}
