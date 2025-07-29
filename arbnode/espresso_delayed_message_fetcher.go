@@ -81,7 +81,7 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 			log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", toBlock)
 			return err
 		}
-
+		fromBlock = toBlock
 	}
 
 	log.Info("Backfilled delayed messages")
