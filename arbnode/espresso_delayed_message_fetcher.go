@@ -48,10 +48,10 @@ type DelayedMessageFetcherInterface interface {
 var _ DelayedMessageFetcherInterface = new(DelayedMessageFetcher)
 
 /*
-backFill fetches all delayed messages until `matureL1Block` which is within the safety tolerance of the rollup
+backfill fetches all delayed messages until `matureL1Block` which is within the safety tolerance of the rollup
 and stores them in the database
 */
-func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
+func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 	// Get the l1 block number based on the read mode
 	matureL1Block, err := d.getL1BlockNumber(ctx)
 	if err != nil {
@@ -69,16 +69,16 @@ func (d *DelayedMessageFetcher) backFill(ctx context.Context) error {
 
 	// Loop through the blocks until we reach the matureL1Block
 	for fromBlock < matureL1Block {
-		endBlock := matureL1Block
+		toBlock := matureL1Block
 		// If the difference is greater than the maxBlocksToRead,
 		// then set the endBlock to fromBlock + maxBlocksToRead
 		if (matureL1Block - fromBlock) > d.maxBlocksToRead {
-			endBlock = fromBlock + d.maxBlocksToRead
+			toBlock = fromBlock + d.maxBlocksToRead
 		}
 
-		err := d.getDelayedMessagesInRange(ctx, batch, fromBlock, endBlock)
+		err := d.getDelayedMessagesInRange(ctx, batch, fromBlock, toBlock)
 		if err != nil {
-			log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", endBlock)
+			log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", toBlock)
 			return err
 		}
 
@@ -239,11 +239,9 @@ func (d *DelayedMessageFetcher) getL1BlockNumber(ctx context.Context) (uint64, e
 	// If in setting we need to wait for finalized block, then get the latest finalized block number
 	if d.waitForFinalization {
 		return d.l1Reader.LatestFinalizedBlockNr(ctx)
-	}
-
-	// If we need to wait for confirmations,
-	// then get the latest block number - requiredBlockDepth
-	if d.waitForConfirmations {
+	} else if d.waitForConfirmations {
+		// If we need to wait for confirmations,
+		// then get the latest block number - requiredBlockDepth
 		latestBlockNumber, err := d.l1Reader.Client().BlockNumber(ctx)
 		if err != nil {
 			return 0, err
@@ -270,21 +268,21 @@ func (f *DelayedMessageFetcher) getDelayedMessageCountAtBlock(blockNumber uint64
 getDelayedMessagedInRange fetches all the delayed messages in the range [startBlock, endBlock]
 and stores them in the database
 */
-func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, endBlock uint64) error {
+func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, toBlock uint64) error {
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
-	log.Debug("Looking for batches in range", "from", startBlock, "to", endBlock)
+	log.Debug("Looking for batches in range", "from", startBlock, "to", toBlock)
 	startBlockBigInt := big.NewInt(0).SetUint64(startBlock)
-	endBlockBigInt := big.NewInt(0).SetUint64(endBlock)
+	toBlockBigInt := big.NewInt(0).SetUint64(toBlock)
 
-	sequencerBatches, err := d.sequencerInbox.LookupBatchesInRange(ctx, startBlockBigInt, endBlockBigInt)
+	sequencerBatches, err := d.sequencerInbox.LookupBatchesInRange(ctx, startBlockBigInt, toBlockBigInt)
 	if err != nil {
 		return err
 	}
 	log.Debug("Sequencer batches found", "sequencerBatches", sequencerBatches)
 
-	log.Debug("Looking for delayed messages from range", "from", startBlock, "to", endBlock)
-	msgs, err := d.delayedBridge.LookupMessagesInRange(ctx, big.NewInt(0).SetUint64(startBlock), big.NewInt(0).SetUint64(endBlock), func(batchNum uint64) ([]byte, error) {
+	log.Debug("Looking for delayed messages from range", "from", startBlock, "to", toBlock)
+	msgs, err := d.delayedBridge.LookupMessagesInRange(ctx, big.NewInt(0).SetUint64(startBlock), big.NewInt(0).SetUint64(toBlock), func(batchNum uint64) ([]byte, error) {
 		if len(sequencerBatches) > 0 && batchNum >= sequencerBatches[0].SequenceNumber {
 			idx := batchNum - sequencerBatches[0].SequenceNumber
 			if idx < uint64(len(sequencerBatches)) {
@@ -326,13 +324,13 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 	}
 
 	// If they are the same, in next increment we would like to have the next block
-	if startBlock == endBlock {
-		endBlock++
+	if startBlock == toBlock {
+		toBlock++
 	}
 	// Store the from block in the database
-	err = storeCurrentFromBlock(batch, endBlock)
+	err = storeCurrentFromBlock(batch, toBlock)
 	if err != nil {
-		log.Error("failed to store current from block", "err", err, "fromBlock", endBlock)
+		log.Error("failed to store current from block", "err", err, "fromBlock", toBlock)
 		return err
 	}
 
@@ -384,8 +382,7 @@ func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Cont
 			return 0, fmt.Errorf("finalized block has already been processed current finalized block number: %v, fromBlock: %v", blockNumber, fromBlock)
 		}
 		return blockNumber, nil
-	}
-	if d.waitForConfirmations {
+	} else if d.waitForConfirmations {
 		// Get the block number which is latest header - requiredBlockDepth
 		if header.Number.Uint64()-d.requiredBlockDepth < fromBlock {
 			return 0, fmt.Errorf("block already processed current block number: %v, fromBlock: %v", header.Number.Uint64()-d.requiredBlockDepth, fromBlock)
@@ -441,7 +438,6 @@ func (f *DelayedMessageFetcher) storeDelayedMessageCount(db ethdb.Database, coun
 	return db.Put([]byte(DelayedMessageCountKey), countBytes)
 }
 
-/***** Initialization Function *****/
 func NewDelayedMessageFetcher(
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
@@ -467,14 +463,12 @@ func NewDelayedMessageFetcher(
 	}
 }
 
-/***** Start Function *****/
-
 func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 	log.Info("Starting delayed message fetcher")
 	d.StopWaiter.Start(ctx, d)
 	// Delayed message fetcher doesnt start until it has backfilled all the messages
 	// till a `matureBlock` which is within the saferty tolerance of the rollup
-	err := d.backFill(ctx)
+	err := d.backfill(ctx)
 	if err != nil {
 		log.Error("delayed message fetcher backfill failed", "err", err)
 		return false
