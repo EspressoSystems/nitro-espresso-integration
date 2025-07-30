@@ -519,6 +519,9 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 		}
 		items = append(items, txQueueItem)
 	}
+	// we need to append all the items at once, otherwise the timers can be off
+	// between the different nodes sequencers, where they may start to make the block
+	// with only a few of the transactions
 	s.txQueue.enqueue_items(items)
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead + 1
 	return nil
