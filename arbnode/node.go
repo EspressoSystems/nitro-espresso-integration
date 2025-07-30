@@ -577,6 +577,12 @@ func createNodeImpl(
 		return nil, err
 	}
 
+	// #nosec G115
+	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
+	if err != nil {
+		return nil, err
+	}
+
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode := NewEspressoCaffNode(
@@ -587,7 +593,7 @@ func createNodeImpl(
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
-				deployInfo.SequencerInbox,
+				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
 			)
@@ -622,11 +628,6 @@ func createNodeImpl(
 		} else {
 			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
 		}
-	}
-	// #nosec G115
-	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
-	if err != nil {
-		return nil, err
 	}
 
 	var daWriter das.DataAvailabilityServiceWriter
