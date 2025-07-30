@@ -126,6 +126,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(targetL1Height uint64) []common.A
 		// If the target L1 height is greater than the latest known L1 height,
 		// return an empty slice. The caller should wait until the monitor has
 		// observed at least this L1 height before calling this function.
+		// This should be a rare case but for now, if this happens we directly call the contract and get the valid addresses.
 		return []common.Address{}
 	}
 
@@ -404,19 +405,19 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 }
 
 func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
-	finalizedHeader, err := b.l1Reader.LatestFinalizedBlockHeader(ctx)
+	latestHeader, err := b.l1Reader.LastHeader(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get latest finalized block number: %w", err)
+		return fmt.Errorf("failed to get latest block header: %w", err)
 	}
-	finalizedBlockNr := finalizedHeader.Number.Uint64()
+	latestBlockNumber := latestHeader.Number.Uint64()
 	parentHeight := b.GetLastProcessedParentHeight()
 	// The latest finalized block doesn't change
-	if parentHeight >= finalizedBlockNr {
-		log.Debug("processing", "parentHeight", parentHeight, "finalizedBlockNr", finalizedBlockNr)
+	if parentHeight >= latestBlockNumber {
+		log.Debug("processing", "parentHeight", parentHeight, "latestBlockNumber", latestBlockNumber)
 		return nil
 	}
 
-	newHeight := finalizedBlockNr
+	newHeight := latestBlockNumber
 	events, err := b.LookupAddressUpdates(ctx, parentHeight+1, newHeight)
 	log.Debug("looking up events", "from", parentHeight+1, "to", newHeight)
 	if err != nil {
@@ -428,7 +429,7 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	}
 	l1Height := newHeight
 	if b.l1Reader.IsParentChainArbitrum() {
-		l1Height = types.DeserializeHeaderExtraInformation(finalizedHeader).L1BlockNumber
+		l1Height = types.DeserializeHeaderExtraInformation(latestHeader).L1BlockNumber
 	}
 	b.SetL1Height(l1Height)
 	b.SetParentHeight(newHeight)
