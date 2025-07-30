@@ -88,6 +88,7 @@ type TimeboostSequencer struct {
 	txRetryQueue         synchronizedTimeboostTransactionQueue
 	nonceCache           *nonceCache
 	timeboostTxnListener *TimeboostBridge
+	delayedMessagesRead  uint64
 }
 
 type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
@@ -142,7 +143,12 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 			config:     configFetcher().TimeboostBridgeConfig,
 			grpcClient: nil,
 		},
+		delayedMessagesRead: 0,
 	}, nil
+}
+
+func (s *TimeboostSequencer) GetDelayedMessagesRead() uint64 {
+	return s.delayedMessagesRead
 }
 
 func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
@@ -496,7 +502,7 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 }
 
 func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns))
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages index", inclusionList.DelayedMessagesRead)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -514,6 +520,7 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 		items = append(items, txQueueItem)
 	}
 	s.txQueue.enqueue_items(items)
+	s.delayedMessagesRead = inclusionList.DelayedMessagesRead + 1
 	return nil
 }
 

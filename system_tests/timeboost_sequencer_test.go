@@ -45,7 +45,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
 	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
 	builder.nodeConfig.DelayedSequencer.Enable = delayedSequencer
-	builder.nodeConfig.DelayedSequencer.FinalizeDistance = 1
+	builder.nodeConfig.DelayedSequencer.FinalizeDistance = 0
 
 	// sequencer config
 	builder.nodeConfig.Sequencer = false
@@ -62,7 +62,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.TimeboostSequencer.MaxTxDataSize = 8000
 	builder.nodeConfig.TimeboostSequencer.NonceCacheSize = 1024
 	builder.nodeConfig.TimeboostSequencer.MaxRevertGasReject = 0
-	builder.nodeConfig.TimeboostSequencer.ParentChainFinalizationTime = 20 * time.Minute
+	builder.nodeConfig.TimeboostSequencer.ParentChainFinalizationTime = 2 * time.Second
 	builder.nodeConfig.TimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.TimeboostSequencer.EnableProfiling = false
 	builder.nodeConfig.TimeboostSequencer.TimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:5000"

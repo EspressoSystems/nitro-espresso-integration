@@ -35,6 +35,7 @@ type DelayedSequencer struct {
 	waitingForFinalizedBlock *uint64
 	mutex                    sync.Mutex
 	config                   DelayedSequencerConfigFetcher
+	timeboostSequencer       *gethexec.TimeboostSequencer
 }
 
 type DelayedSequencerConfig struct {
@@ -71,15 +72,16 @@ var TestDelayedSequencerConfig = DelayedSequencerConfig{
 	RescanInterval:      time.Millisecond * 100,
 }
 
-func NewDelayedSequencer(l1Reader *headerreader.HeaderReader, reader *InboxReader, exec execution.ExecutionSequencer, coordinator *SeqCoordinator, config DelayedSequencerConfigFetcher) (*DelayedSequencer, error) {
+func NewDelayedSequencer(l1Reader *headerreader.HeaderReader, reader *InboxReader, exec execution.ExecutionSequencer, coordinator *SeqCoordinator, config DelayedSequencerConfigFetcher, sequencer *gethexec.TimeboostSequencer) (*DelayedSequencer, error) {
 	d := &DelayedSequencer{
-		l1Reader:    l1Reader,
-		bridge:      reader.DelayedBridge(),
-		inbox:       reader.Tracker(),
-		reader:      reader,
-		coordinator: coordinator,
-		exec:        exec,
-		config:      config,
+		l1Reader:           l1Reader,
+		bridge:             reader.DelayedBridge(),
+		inbox:              reader.Tracker(),
+		reader:             reader,
+		coordinator:        coordinator,
+		exec:               exec,
+		config:             config,
+		timeboostSequencer: sequencer,
 	}
 	if coordinator != nil {
 		coordinator.SetDelayedSequencer(d)
@@ -139,9 +141,15 @@ func (d *DelayedSequencer) sequenceWithoutLockout(ctx context.Context, lastBlock
 	// Reset what block we're waiting for if we've caught up
 	d.waitingForFinalizedBlock = nil
 
-	dbDelayedCount, err := d.inbox.GetDelayedCount()
-	if err != nil {
-		return err
+	var delayedCount uint64
+	var err error
+	if d.timeboostSequencer != nil {
+		delayedCount = d.timeboostSequencer.GetDelayedMessagesRead()
+	} else {
+		delayedCount, err = d.inbox.GetDelayedCount()
+		if err != nil {
+			return err
+		}
 	}
 	startPos, err := d.getDelayedMessagesRead()
 	if err != nil {
@@ -152,7 +160,7 @@ func (d *DelayedSequencer) sequenceWithoutLockout(ctx context.Context, lastBlock
 	pos := startPos
 	var lastDelayedAcc common.Hash
 	var messages []*arbostypes.L1IncomingMessage
-	for pos < dbDelayedCount {
+	for pos < delayedCount {
 		msg, acc, parentChainBlockNumber, err := d.inbox.GetDelayedMessageAccumulatorAndParentChainBlockNumber(ctx, pos)
 		if err != nil {
 			return err

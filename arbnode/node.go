@@ -1037,13 +1037,14 @@ func getDelayedSequencer(
 	exec execution.ExecutionSequencer,
 	configFetcher ConfigFetcher,
 	coordinator *SeqCoordinator,
+	timeboostSequencer *gethexec.TimeboostSequencer,
 ) (*DelayedSequencer, error) {
 	if exec == nil {
 		return nil, nil
 	}
 
 	// always create DelayedSequencer if exec is non nil, it won't do anything if it is disabled
-	delayedSequencer, err := NewDelayedSequencer(l1Reader, inboxReader, exec, coordinator, func() *DelayedSequencerConfig { return &configFetcher.Get().DelayedSequencer })
+	delayedSequencer, err := NewDelayedSequencer(l1Reader, inboxReader, exec, coordinator, func() *DelayedSequencerConfig { return &configFetcher.Get().DelayedSequencer }, timeboostSequencer)
 	if err != nil {
 		return nil, err
 	}
@@ -1236,12 +1237,12 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	delayedSequencer, err := getDelayedSequencer(l1Reader, inboxReader, executionSequencer, configFetcher, coordinator)
+	timeboostSequencer, err := getTimeboostSequencer(l1Reader, executionClient, configFetcher)
 	if err != nil {
 		return nil, err
 	}
 
-	timeboostSequencer, err := getTimeboostSequencer(l1Reader, executionClient, configFetcher)
+	delayedSequencer, err := getDelayedSequencer(l1Reader, inboxReader, executionSequencer, configFetcher, coordinator, timeboostSequencer)
 	if err != nil {
 		return nil, err
 	}
