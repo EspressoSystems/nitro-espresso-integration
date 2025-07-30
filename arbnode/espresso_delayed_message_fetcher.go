@@ -81,7 +81,7 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 			log.Error("failed to get delayed messages in range", "err", err, "fromBlock", fromBlock, "endBlock", toBlock)
 			return err
 		}
-		fromBlock = toBlock
+		fromBlock = toBlock + 1
 	}
 
 	err = batch.Write()
@@ -322,9 +322,10 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		if err != nil {
 			return err
 		}
-		if seqNum > delayedCount+1 {
-			// We need to panic the node here because something has gone seriously wrong
-			log.Crit("Caff node is skipping delayed messages", "seqNum", seqNum, "delayedCount", delayedCount)
+		if seqNum == 0 {
+			// init message
+			log.Debug("caff node: skip storing init message")
+			continue
 		}
 		delayedCount++
 		err = d.storeDelayedMessage(batch, delayedCount, *msg)
@@ -333,12 +334,8 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		}
 	}
 
-	// If they are the same, in next increment we would like to have the next block
-	if startBlock == toBlock {
-		toBlock++
-	}
 	// Store the from block in the database
-	err = storeCurrentFromBlock(batch, toBlock)
+	err = storeCurrentFromBlock(batch, toBlock+1)
 	if err != nil {
 		log.Error("failed to store current from block", "err", err, "fromBlock", toBlock)
 		return err
@@ -431,6 +428,7 @@ func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum ui
 	if err != nil {
 		return err
 	}
+	log.Debug("stored delayed message", "seqNum", seqNum)
 
 	return batch.Put(key, encodedMsg)
 }
