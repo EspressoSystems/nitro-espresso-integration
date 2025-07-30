@@ -1589,12 +1589,7 @@ func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
 
 	if s.lightClientReader != nil && s.espressoClient != nil {
-		err := s.RegisterSigner()
-		if err != nil {
-			log.Error("failed to register espresso key manager", "err", err)
-			return err
-		}
-		err = stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
+		err := stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.pollSubmittedTransactionForFinality, s.newSovereignTxNotifier)
 		if err != nil {
 			return err
 		}

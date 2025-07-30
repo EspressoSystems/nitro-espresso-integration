@@ -1881,7 +1881,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.streamer.EspressoKeyManager != nil {
 		registered := b.streamer.EspressoKeyManager.HasRegistered()
 		if !registered {
-			return false, fmt.Errorf("ephemeral keys are not yet registered in Espresso TEE Contract")
+			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
+			err := b.streamer.RegisterSigner()
+			if err != nil {
+				return false, fmt.Errorf("unable to register signer: %w", err)
+			}
 		}
 	}
 

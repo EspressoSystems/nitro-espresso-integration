@@ -93,7 +93,10 @@ func (e *EspressoTEEVerifier) RegisterSigner(
 			time.Sleep(60 * time.Second)
 			continue
 		}
-		dataPosterNonce, _, _ := dataPoster.GetNextNonceAndMeta(context.Background())
+		dataPosterNonce, _, err := dataPoster.GetNextNonceAndMeta(context.Background())
+		if err != nil {
+			log.Warn("error getting dataposter nonce", "err", err)
+		}
 		if dataPosterNonce < nonce {
 			log.Warn("dataposter is behind on-chain nonce", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
 			time.Sleep(60 * time.Second)
