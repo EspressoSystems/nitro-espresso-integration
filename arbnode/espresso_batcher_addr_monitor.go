@@ -126,7 +126,6 @@ func (b *BatcherAddrMonitor) GetValidAddresses(targetL1Height uint64) []common.A
 		// If the target L1 height is greater than the latest known L1 height,
 		// return an empty slice. The caller should wait until the monitor has
 		// observed at least this L1 height before calling this function.
-		// This should be a rare case but for now, if this happens we directly call the contract and get the valid addresses.
 		return []common.Address{}
 	}
 
