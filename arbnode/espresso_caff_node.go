@@ -386,7 +386,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
 	// we store delayedmessagecount-1 because that is the index of the delayed message
 	// that needs to be read
-	err = n.delayedMessageFetcher.storeDelayedMessageCount(n.db, delayedMessagesRead-1)
+	err = n.delayedMessageFetcher.storeDelayedMessageLatestIndex(n.db, delayedMessagesRead-1)
 	if err != nil {
 		log.Error("failed to store delayed message count", "err", err)
 		return err
