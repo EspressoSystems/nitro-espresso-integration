@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -86,24 +85,9 @@ func (e *EspressoTEEVerifier) RegisterSigner(
 		return err
 	}
 
-	for {
-		nonce, err := e.l1Client.NonceAt(context.Background(), dataPoster.Sender(), nil)
-		if err != nil {
-			log.Warn("could not retrieve on-chain nonce", "err", err)
-			time.Sleep(60 * time.Second)
-			continue
-		}
-		dataPosterNonce, _, err := dataPoster.GetNextNonceAndMeta(context.Background())
-		if err != nil {
-			log.Warn("error getting dataposter nonce", "err", err)
-		}
-		if dataPosterNonce < nonce {
-			log.Warn("dataposter is behind on-chain nonce", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
-			time.Sleep(60 * time.Second)
-			continue
-		}
-		break
-
+	err = NonceValidation(context.Background(), e.l1Client, dataPoster)
+	if err != nil {
+		return err
 	}
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
