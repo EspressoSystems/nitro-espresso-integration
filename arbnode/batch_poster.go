@@ -1916,7 +1916,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		registered := b.streamer.espressoSubmitter.GetKeyManager().HasRegistered()
+		registered := espressoSubmitter.GetKeyManager().HasRegistered()
 		if !registered {
 			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
 			err := espressoSubmitter.RegisterSigner()
