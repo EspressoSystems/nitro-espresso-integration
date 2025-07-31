@@ -1684,6 +1684,8 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 		resp, err := s.espressoClient.FetchTransactionsInBlock(ctx, height, s.chainConfig.ChainID.Uint64())
 		if err != nil {
 			log.Warn("Failed to fetch transactions in block referenced in fetch transaction by hash", "height", height, "error", err)
+			// Keep our submitted transaction in the list so we keep checking it
+			newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			continue
 		}
 
@@ -1693,13 +1695,11 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 			// the query nodes, and got a result for what block it should be in. However, we were unable to validate that the payload was in the block.
 			log.Warn("Transaction payload not found in block,The txn should be re-submitted", "height", height, "tx", submittedTx.Hash)
 			resubmittedTxn, err := s.resubmitTransaction(ctx, submittedTx)
-			if err != nil {
+			if err != nil || resubmittedTxn == nil {
+				// resubmittedTxn should never be nil, but we check it just in case
 				log.Error("failed to resubmit transaction", "err", err)
-				continue
-			}
-			if resubmittedTxn == nil {
-				// This should never happen
-				log.Error("failed to resubmit transaction", "err", err)
+				// Let's not lose track of our submitted transaction
+				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 				continue
 			}
 			newSubmittedTxns = append(newSubmittedTxns, *resubmittedTxn)
