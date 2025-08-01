@@ -55,7 +55,7 @@ func NewStateChecker(
 ) *StateChecker {
 	if config.TrustedNodeUrl == "" {
 		log.Warn("trusted node url is empty, state checker will not start")
-
+		return nil
 	}
 
 	client, err := ethclient.DialContext(context.Background(), config.TrustedNodeUrl)
