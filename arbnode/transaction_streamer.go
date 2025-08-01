@@ -1271,21 +1271,6 @@ func (s *TransactionStreamer) BlockMetadataAtMessageIndex(msgIdx arbutil.Message
 	return blockMetadata, nil
 }
 
-<<<<<<< HEAD
-func (s *TransactionStreamer) enqueuePendingTransaction(pos []arbutil.MessageIndex) error {
-	// Store the pos in the database to be used later to submit the message
-	// to hotshot for finalization.
-	err := s.SubmitEspressoTransactionPos(pos)
-	if err != nil {
-		log.Error("failed to submit espresso transaction pos", "pos", pos, "err", err)
-		return err
-	}
-
-	return nil
-}
-
-=======
->>>>>>> 280d41a9d (Split Espresso code from transaction_streamer)
 func (s *TransactionStreamer) ResultAtMessageIndex(msgIdx arbutil.MessageIndex) (*execution.MessageResult, error) {
 	key := dbKey(messageResultPrefix, uint64(msgIdx))
 	data, err := s.db.Get(key)
