@@ -197,6 +197,12 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx2, builder.L1Info, "Faucet", 100000),
 	})
+	// User has no funds so TX should fail
+	builder.L2Info.GenerateAccount("luke")
+	invalidTx := builder.L2Info.PrepareTx("luke", users[2], 3e7, big.NewInt(1), nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, invalidTx, builder.L1Info, "Faucet", 100000),
+	})
 	// Wait for timeboost to update its delayed inbox (TODO: reduce this, timeboost is currently hard coded for 1 minute polling interval)
 	time.Sleep(time.Second * 65)
 	// Send another transaction
