@@ -103,6 +103,11 @@ func BaseFeeCheck(
 	return nil
 }
 
+/**
+ * This functions checks the dataposter nonce and the parent chains nonce
+ * If these two differ, dont send a transaction as registering the signer is costly and we dont want to send multiple transactions.
+ * This will constantly be called when we try and post a batch which will allow time for the two to eventually sync up.
+ */
 func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPoster *dataposter.DataPoster) error {
 	nonce, err := l1Client.NonceAt(context, dataPoster.Sender(), nil)
 	if err != nil {
@@ -115,8 +120,8 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 		return err
 	}
 	log.Info("successfully got datapaster next nonce and on-chain nonce", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
-	if dataPosterNonce > nonce {
-		log.Warn("dataposter is ahead of on-chain nonce, not sending txn", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
+	if dataPosterNonce != nonce {
+		log.Warn("dataposter and on-chain nonce have mismatch, not sending txn", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
 		return err
 	}
 	return nil
