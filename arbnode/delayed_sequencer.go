@@ -139,7 +139,7 @@ func (d *DelayedSequencer) sequenceWithoutLockout(ctx context.Context, lastBlock
 	// Reset what block we're waiting for if we've caught up
 	d.waitingForFinalizedBlock = nil
 
-	delayedCount, err := d.inbox.GetDelayedCount()
+	dbDelayedCount, err := d.inbox.GetDelayedCount()
 	if err != nil {
 		return err
 	}
@@ -152,7 +152,7 @@ func (d *DelayedSequencer) sequenceWithoutLockout(ctx context.Context, lastBlock
 	pos := startPos
 	var lastDelayedAcc common.Hash
 	var messages []*arbostypes.L1IncomingMessage
-	for pos < delayedCount {
+	for pos < dbDelayedCount {
 		msg, acc, parentChainBlockNumber, err := d.inbox.GetDelayedMessageAccumulatorAndParentChainBlockNumber(ctx, pos)
 		if err != nil {
 			return err
