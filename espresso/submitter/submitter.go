@@ -9,6 +9,7 @@ import (
 	espresso_light_client "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -289,15 +290,18 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 	}
 
 	if config.EspressoMaxTransactionSize <= 0 {
-		return fmt.Errorf("espresso max transaction size must be greater than 0")
+		log.Warn("espressoMaxTransactionSize is not set, using default value", "default", DefaultEspressoSubmitterConfig.EspressoMaxTransactionSize)
+		config.EspressoMaxTransactionSize = DefaultEspressoSubmitterConfig.EspressoMaxTransactionSize
 	}
 
 	if config.EspressoTxnsPollingInterval <= 0 {
-		return fmt.Errorf("espresso transactions polling interval must be greater than 0")
+		log.Warn("espressoTxnsPollingInterval is not set, using default value", "default", DefaultEspressoSubmitterConfig.EspressoTxnsPollingInterval)
+		config.EspressoTxnsPollingInterval = DefaultEspressoSubmitterConfig.EspressoTxnsPollingInterval
 	}
 
 	if config.EspressoTxnSendingInterval <= 0 {
-		return fmt.Errorf("espresso transactions submission interval must be greater than 0")
+		log.Warn("espressoTxnSendingInterval is not set, using default value", "default", DefaultEspressoSubmitterConfig.EspressoTxnSendingInterval)
+		config.EspressoTxnSendingInterval = DefaultEspressoSubmitterConfig.EspressoTxnSendingInterval
 	}
 
 	return nil
