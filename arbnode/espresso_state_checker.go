@@ -54,6 +54,7 @@ func NewStateChecker(
 	fatalErrChan chan error,
 ) *StateChecker {
 	if config.TrustedNodeUrl == "" {
+		log.Warn("trusted node url is empty, state checker will not start")
 		return nil
 	}
 
@@ -64,7 +65,8 @@ func NewStateChecker(
 	myUrl := fmt.Sprintf("http://localhost:%d", httpPort)
 	myClient, err := ethclient.DialContext(context.Background(), myUrl)
 	if err != nil {
-		panic(err)
+		log.Warn("failed to dial my node for state checker, state checker will not start", "err", err)
+		return nil
 	}
 
 	return &StateChecker{
