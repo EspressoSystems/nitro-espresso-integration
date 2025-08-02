@@ -31,13 +31,21 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
+type TransactionType uint8
+
+const (
+	Normal TransactionType = iota
+	Delayed
+)
+
 type timeboostTransactionQueueItem struct {
 	tx                 *types.Transaction
 	txSize             int
 	options            *arbitrum_types.ConditionalOptions
 	roundId            uint64
 	consensusTimestamp uint64
-	delayedMessageRead *uint64
+	delayedMessageRead uint64
+	txType             TransactionType
 }
 
 type synchronizedTimeboostTransactionQueue struct {
@@ -162,7 +170,7 @@ func (s *TimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool 
 		log.Info("next delayed msg num", "num", delayedMsgNum)
 		if err != nil {
 			log.Error("failed to get next delayed message", "error", err)
-			time.Sleep(1 * time.Second) // Add delay before retry
+			time.Sleep(5 * time.Millisecond)
 			continue
 		}
 		if delayedMsgNum == delayedMsgsRead {
@@ -198,6 +206,7 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 	lastBlock := s.execEngine.bc.CurrentBlock()
 	config := s.config()
 
+outer:
 	for {
 		var queueItem timeboostTransactionQueueItem
 		//  Transaction retry queue should only
@@ -210,20 +219,30 @@ func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool)
 			break
 		} else {
 			// Only add transactions from the same round id or if the queue is empty
-			peek := s.txQueue.Peek()
-			if peek == nil {
-				return madeBlock
-			}
-			isDelayedMsg := peek.delayedMessageRead != nil
-			empty := len(queueItems) == 0
-			if empty && !isDelayedMsg {
-				queueItem = s.txQueue.dequeue()
-			} else if !empty && queueItems[len(queueItems)-1].roundId == peek.roundId && !isDelayedMsg {
-				queueItem = s.txQueue.dequeue()
-			} else if isDelayedMsg && empty {
-				return s.handleDelayedMessages(*peek.delayedMessageRead)
-			} else {
+			tx := s.txQueue.Peek()
+			if tx == nil {
 				break
+			}
+			empty := len(queueItems) == 0
+			switch tx.txType {
+			case Normal:
+				if empty {
+					queueItem = s.txQueue.dequeue()
+				} else if queueItems[len(queueItems)-1].roundId == tx.roundId {
+					queueItem = s.txQueue.dequeue()
+				} else {
+					break outer
+				}
+			case Delayed:
+				// create block with non delayed transactions from same round first
+				if !empty {
+					break outer
+				}
+				return s.handleDelayedMessages(tx.delayedMessageRead)
+			default:
+				log.Info("unexpected tx type, discarding", "type", tx.txType)
+				s.txQueue.dequeue()
+				continue
 			}
 		}
 
@@ -548,7 +567,8 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
-			delayedMessageRead: nil,
+			delayedMessageRead: 0,
+			txType:             Normal,
 		}
 		items = append(items, txQueueItem)
 	}
@@ -561,7 +581,8 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
-			delayedMessageRead: &read,
+			delayedMessageRead: read,
+			txType:             Delayed,
 		}
 		items = append(items, txQueueItem)
 	}
