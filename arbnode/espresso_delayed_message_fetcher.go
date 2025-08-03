@@ -331,6 +331,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 
 		if seqNum <= lastDelayedMessageIndex {
 			log.Warn("Caff node already has processed delayed message", "seqNum", seqNum, "lastDelayedMessageIndex", lastDelayedMessageIndex)
+			continue
 		}
 
 		lastDelayedMessageIndex++
