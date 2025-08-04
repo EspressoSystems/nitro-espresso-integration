@@ -159,7 +159,6 @@ func ProduceMessages(ctx context.Context, hasher execution_engine.MessageHasher,
 			return
 		}
 
-		// perform the next behavior with the given index
 		i = behavior(ctx, hasher, ch, i)
 	}
 }
@@ -198,7 +197,7 @@ func SendMessageToWriter(ctx context.Context, w MessageFromSequencerWriter, ch <
 			}
 
 			if err := sendMessageToWriter(w, m); err != nil {
-				return err // Return any error encountered while sending the message
+				return err
 			}
 		}
 	}
