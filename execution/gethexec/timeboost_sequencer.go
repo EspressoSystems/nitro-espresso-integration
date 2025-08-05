@@ -63,7 +63,7 @@ func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactio
 	q.queue = append(q.queue, item)
 }
 
-func (q *synchronizedTimeboostTransactionQueue) enqueue_items(items []timeboostTransactionQueueItem) {
+func (q *synchronizedTimeboostTransactionQueue) enqueueItems(items []timeboostTransactionQueueItem) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.queue = append(q.queue, items...)
@@ -575,6 +575,7 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 	// add delayed messages to the end
 	if s.delayedMessagesRead < inclusionList.DelayedMessagesRead {
 		read := inclusionList.DelayedMessagesRead + 1
+		// We will fetch the transaction when we go to make a block, so just set to nil
 		txQueueItem := timeboostTransactionQueueItem{
 			tx:                 nil,
 			txSize:             0,
@@ -589,7 +590,7 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 	// we need to append all the items at once, otherwise the timers can be off
 	// between the different nodes sequencers, where they may start to make the block
 	// with only a few of the transactions
-	s.txQueue.enqueue_items(items)
+	s.txQueue.enqueueItems(items)
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
 	return nil
 }

@@ -1056,7 +1056,6 @@ func getDelayedSequencer(
 }
 
 func getTimeboostDelayedSequencer(
-	l1Reader *headerreader.HeaderReader,
 	inboxReader *InboxReader,
 	exec execution.ExecutionSequencer,
 	configFetcher ConfigFetcher,
@@ -1067,7 +1066,7 @@ func getTimeboostDelayedSequencer(
 	if exec == nil {
 		return nil, nil, errors.New("Timeboost sequencer is enabled but execution client is nil")
 	}
-	timeboostDelayedSequencer, delayedChannel, err := NewTimeboostDelayedSequencer(l1Reader, inboxReader, exec, func() *TimeboostDelayedSequencerConfig { return &configFetcher.Get().TimeboostDelayedSequencer })
+	timeboostDelayedSequencer, delayedChannel, err := NewTimeboostDelayedSequencer(inboxReader, exec, func() *TimeboostDelayedSequencerConfig { return &configFetcher.Get().TimeboostDelayedSequencer })
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1269,7 +1268,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	timeboostDelayedSequencer, channel, err := getTimeboostDelayedSequencer(l1Reader, inboxReader, executionSequencer, configFetcher)
+	timeboostDelayedSequencer, channel, err := getTimeboostDelayedSequencer(inboxReader, executionSequencer, configFetcher)
 	if err != nil {
 		return nil, err
 	}

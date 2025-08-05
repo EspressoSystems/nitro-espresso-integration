@@ -14,13 +14,11 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 type TimeboostDelayedSequencer struct {
 	stopwaiter.StopWaiter
-	l1Reader           *headerreader.HeaderReader
 	inbox              *InboxTracker
 	reader             *InboxReader
 	exec               execution.ExecutionSequencer
@@ -46,10 +44,9 @@ var TestTimeboostDelayedSequencerConfig = TimeboostDelayedSequencerConfig{
 	Enable: false,
 }
 
-func NewTimeboostDelayedSequencer(l1Reader *headerreader.HeaderReader, reader *InboxReader, exec execution.ExecutionSequencer, config TimeboostDelayedSequencerConfigFetcher) (*TimeboostDelayedSequencer, chan gethexec.DelayedMessageCommand, error) {
+func NewTimeboostDelayedSequencer(reader *InboxReader, exec execution.ExecutionSequencer, config TimeboostDelayedSequencerConfigFetcher) (*TimeboostDelayedSequencer, chan gethexec.DelayedMessageCommand, error) {
 	delayedChannel := make(chan gethexec.DelayedMessageCommand, 1)
 	d := &TimeboostDelayedSequencer{
-		l1Reader:           l1Reader,
 		inbox:              reader.Tracker(),
 		reader:             reader,
 		exec:               exec,
