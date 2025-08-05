@@ -103,6 +103,7 @@ func NewEspressoStreamer(
 		PerfRecorder:            PerfRecorder,
 		batcherAddressesFetcher: batcherAddressesFetcher,
 		retryTime:               retryTime,
+		currentMessagePos:       1,
 	}
 }
 
@@ -377,11 +378,15 @@ func fetchNextHotshotBlock(
 	}
 
 	header, err := espressoClient.FetchHeaderByHeight(ctx, nextHotshotBlockNum)
+	l1Height := uint64(0)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
-	l1Height := header.Header.GetL1Finalized().Number
+	finalized := header.Header.GetL1Finalized()
+	if finalized != nil {
+		l1Height = finalized.Number
+	}
 	result := []*MessageWithMetadataAndPos{}
 
 	for _, tx := range arbTxns.Transactions {
