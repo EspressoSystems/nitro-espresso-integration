@@ -223,8 +223,8 @@ type BatchPosterConfig struct {
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	MonitorAddressesFromL1   uint64 `koanf:"monitor-batcher-addresses-from-l1"`
-	// Please make sure that these addresses are already valid at the `MonitorAddressesFromL1`
+	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
+	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
 	InitBatcherAddresses []common.Address `koanf:"init-batcher-addresses"`
 }
 
@@ -620,7 +620,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
-				blockNumber,
+				opts.Config().AddressMonitorStartL1,
 			)
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
