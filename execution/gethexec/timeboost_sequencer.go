@@ -164,21 +164,21 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 
 func (s *TimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool {
 	log.Info("sending delayed messages", "read", delayedMsgsRead)
-	s.channel <- DelayedMessageCommand{delayedMsgsRead}
 	for {
+		s.channel <- DelayedMessageCommand{delayedMsgsRead}
 		delayedMsgNum, err := s.execEngine.NextDelayedMessageNumber()
 		log.Info("next delayed msg num", "num", delayedMsgNum)
 		if err != nil {
 			log.Error("failed to get next delayed message", "error", err)
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 			continue
 		}
 		if delayedMsgNum == delayedMsgsRead {
 			s.txQueue.dequeue()
 			return true
 		} else {
-			log.Info("waiting for delayed messages to be sequenced")
-			time.Sleep(5 * time.Millisecond)
+			log.Info("waiting for delayed messages to be sequenced", "read", delayedMsgsRead, "next", delayedMsgNum)
+			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
