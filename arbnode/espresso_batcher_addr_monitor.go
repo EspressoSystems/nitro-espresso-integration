@@ -361,6 +361,10 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 		lastProcessedHeight = b.deployAt
 		b.lastProcessedParentHeight = lastProcessedHeight
 	}
+	if latestParentHeader.Number.Uint64() < b.deployAt {
+		// No need to backfill
+		return nil
+	}
 
 	blocksToRead := uint64(100)
 	allowedRetry := 10

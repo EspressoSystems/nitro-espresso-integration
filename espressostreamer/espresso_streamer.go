@@ -203,7 +203,7 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
-		// No valid addresses right now. Need to catch up
+		log.Warn("no valid address right now, need to catch up")
 		return ErrRetryParsingHotShotPayload
 	}
 	for _, allowed := range validAddresses {
