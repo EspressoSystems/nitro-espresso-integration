@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Use `id -u` to check if the script is being run as root.
-# If not, prepend `sudo` to commands.
-SUDO=$(if [ "$(id -u)" -ne 0 ]; then echo sudo; fi)
-
 arch=$(uname -m)
 os=$(uname -s)
 
@@ -26,9 +22,30 @@ else
 fi
 
 go get github.com/EspressoSystems/espresso-network/sdks/go
-go get github.com/EspressoSystems/espresso-network/sdks/go/download
+# This script assumes that you have the `espresso-network-lib-utility` command
+# installed, and available in your PATH.
+command -v espresso-network-lib-utility >/dev/null 2>&1 || {
+    echo <<"EOF"
+ERROR: The command 'espresso-network-lib-utility' is not found in your PATH.
+Please ensure you have the Espresso Go SDK installed, which includes this command.
 
-$SUDO go run github.com/EspressoSystems/espresso-network/sdks/go/download clean
+You can install it by running:
+    go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility
+
+If go install results in an error, you may need to ensure that the library
+exists in your cache before running the command again.  The command was first
+made available in commit `878357c41f7d531a49b190017043d46d190165c1`.  So you
+should be able to ensure it works by running the following:
+    go run github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@878357c41f7d531a49b190017043d46d190165c1
+    go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@878357c41f7d531a49b190017043d46d190165c1
+
+This command will be installed to your go bin directory (defaults to ~/go/bin),
+however, this command simply needs to be in your PATH for the script to work.
+If you feel uncomfortable adding the go bin directory to your PATH, you can
+create a symlink to the command in a directory that is already in your PATH.
+EOF
+exit 1
+}
 
 fileName="libespresso_crypto_helper-$triple"
 
@@ -38,7 +55,8 @@ if [ -z "$latest_tag" ]; then
     echo "ERROR: Could not fetch latest Espresso Go SDK release tag."
     latest_tag=sdks/go/v0.2.2
 fi
-echo "using Espresso Go SDK release tag: $latest_tag"
+version=${latest_tag#sdks/go/}
+echo "using Espresso Go SDK release tag: $latest_tag, version: $version"
 checksum=$(curl -L "https://github.com/EspressoSystems/espresso-network/releases/download/${latest_tag//\//%2F}/$fileName.sha256")
 
 echo "Checksum: $checksum"
@@ -50,4 +68,5 @@ echo "downloading from $url"
 mkdir -p ./target/lib
 curl -L "$url" -o ./target/lib/$fileName
 
-$SUDO go run github.com/EspressoSystems/espresso-network/sdks/go/download link -c $checksum -f ./target/lib/$fileName
+espresso-network-lib-utility clean -v $version
+espresso-network-lib-utility link -c $checksum -f ./target/lib/$fileName -v $version
