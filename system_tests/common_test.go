@@ -684,7 +684,6 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
 	execConfigFetcher := func() *gethexec.Config { return execConfig }
-<<<<<<< HEAD
 	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher)
 	if err != nil {
 		return nil, err
@@ -697,18 +696,6 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	if err != nil {
 		return nil, err
 	}
-=======
-	execNode, err := gethexec.CreateExecutionNode(b.ctx, b.L2.Stack, chainDb, blockchain, nil, execConfigFetcher, 0)
-	Require(t, err)
-
-	fatalErrChan := make(chan error, 10)
-	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
-	Require(t, err)
-	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
-	Require(t, err)
->>>>>>> 9f31043b4 (Add state checker and force inclusion checker (#672))
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
 	if err != nil {
