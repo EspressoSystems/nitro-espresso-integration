@@ -97,14 +97,14 @@ type scenario struct {
 	sizeThroughput    expected[float64]
 }
 
-// TestTransactionStreamerEspressoThroughput is a test that setups and times
-// a simplified interaction setup between the TransactionStreamer and the
-// Espresso chain.
+// TestEspressoTransactionStreamerToEspressoThroughput is a test that setups
+// and times a simplified interaction setup between the TransactionStreamer
+// and the Espresso chain.
 //
 // The purpose of this test is to setup the mock environment, and measure the
 // performance throughput of the Environment based on the actual implementation
 // of the Espresso communication present within the TransactionStreamer.
-func TestTransactionStreamerEspressoThroughput(t *testing.T) {
+func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
