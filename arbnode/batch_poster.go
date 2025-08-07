@@ -2095,12 +2095,10 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	var addMessageLoop func() bool
 	var getNextMessage func() (*arbostypes.MessageWithMetadata, error)
 	var breakLoopWhenErrorOccurs bool
 
 	if b.espressoStreamer == nil {
-		addMessageLoop = func() bool { return b.building.msgCount < msgCount }
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			msg, err := b.streamer.GetMessage(b.building.msgCount)
 			if err != nil {
@@ -2110,12 +2108,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		breakLoopWhenErrorOccurs = false
 	} else {
-		estimatedCount := b.espressoStreamer.GetMessageCount()
-		i := uint64(0)
-		addMessageLoop = func() bool {
-			defer func() { i++ }()
-			return i+uint64(b.building.msgCount) < estimatedCount
-		}
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)
 			if espressoMsg == nil {
@@ -2126,7 +2118,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		breakLoopWhenErrorOccurs = true
 	}
 
-	for addMessageLoop() {
+	for b.building.msgCount < msgCount {
 		msg, err := getNextMessage()
 		if err != nil {
 			if breakLoopWhenErrorOccurs {
