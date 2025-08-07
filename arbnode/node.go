@@ -602,7 +602,7 @@ func createNodeImpl(
 				ArbDB:                   arbDb,
 				Stack:                   stack,
 				Execution:               exec,
-				L1Reader:                l1Reader,
+				L1Reader:                nil,
 				TxStreamer:              txStreamer,
 				DeployInfo:              deployInfo,
 				BlobReader:              blobReader,
@@ -616,7 +616,7 @@ func createNodeImpl(
 				Staker:                  nil,
 				BroadcastServer:         broadcastServer,
 				BroadcastClients:        broadcastClients,
-				SeqCoordinator:          coordinator,
+				SeqCoordinator:          nil,
 				MaintenanceRunner:       maintenanceRunner,
 				DASLifecycleManager:     nil,
 				SyncMonitor:             syncMonitor,
@@ -1211,10 +1211,18 @@ func (n *Node) SyncTargetMessageCount() arbutil.MessageIndex {
 
 // TODO: switch from pulling to pushing safe/finalized
 func (n *Node) GetSafeMsgCount(ctx context.Context) (arbutil.MessageIndex, error) {
+	if n.EspressoCaffNode != nil {
+		currentBlock := n.EspressoCaffNode.executionEngine.Bc().CurrentBlock()
+		return arbutil.MessageIndex(currentBlock.Number.Uint64()), nil
+	}
 	return n.InboxReader.GetSafeMsgCount(ctx)
 }
 
 func (n *Node) GetFinalizedMsgCount(ctx context.Context) (arbutil.MessageIndex, error) {
+	if n.EspressoCaffNode != nil {
+		currentBlock := n.EspressoCaffNode.executionEngine.Bc().CurrentBlock()
+		return arbutil.MessageIndex(currentBlock.Number.Uint64()), nil
+	}
 	return n.InboxReader.GetFinalizedMsgCount(ctx)
 }
 

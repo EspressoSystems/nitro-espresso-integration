@@ -65,7 +65,7 @@ func createCaffNode(
 
 	nodeConfig.EspressoCaffNode.ForceInclusionChecker = arbnode.ForceInclusionCheckerConfig{
 		RetryTime:                time.Second * 2,
-		PollingInterval:          time.Second * 1,
+		PollingInterval:          time.Second * 100,
 		BlockThresholdTolerance:  20,
 		SecondThresholdTolerance: 200,
 		ErrorToleranceDuration:   time.Minute * 10,
@@ -217,6 +217,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	log.Info("Starting the caff node")
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
 	// start the node
 	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
 	Require(t, err)
