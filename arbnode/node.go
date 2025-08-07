@@ -577,6 +577,12 @@ func createNodeImpl(
 		return nil, err
 	}
 
+	// #nosec G115
+	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
+	if err != nil {
+		return nil, err
+	}
+
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode := NewEspressoCaffNode(
@@ -587,6 +593,9 @@ func createNodeImpl(
 				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
+				sequencerInbox,
+				fatalErrChan,
+				stack.Config().HTTPPort,
 			)
 
 			return &Node{
@@ -595,7 +604,7 @@ func createNodeImpl(
 				Execution:               exec,
 				L1Reader:                nil,
 				TxStreamer:              txStreamer,
-				DeployInfo:              nil,
+				DeployInfo:              deployInfo,
 				BlobReader:              blobReader,
 				InboxReader:             nil,
 				InboxTracker:            nil,
@@ -607,7 +616,7 @@ func createNodeImpl(
 				Staker:                  nil,
 				BroadcastServer:         broadcastServer,
 				BroadcastClients:        broadcastClients,
-				SeqCoordinator:          coordinator,
+				SeqCoordinator:          nil,
 				MaintenanceRunner:       maintenanceRunner,
 				DASLifecycleManager:     nil,
 				SyncMonitor:             syncMonitor,
@@ -619,11 +628,6 @@ func createNodeImpl(
 		} else {
 			return nil, errors.New("execution engine is not a gethexec.ExecutionNode while espresso caff node is enabled")
 		}
-	}
-	// #nosec G115
-	sequencerInbox, err := NewSequencerInbox(l1client, deployInfo.SequencerInbox, int64(deployInfo.DeployedAt))
-	if err != nil {
-		return nil, err
 	}
 
 	var daWriter das.DataAvailabilityServiceWriter
@@ -1207,10 +1211,18 @@ func (n *Node) SyncTargetMessageCount() arbutil.MessageIndex {
 
 // TODO: switch from pulling to pushing safe/finalized
 func (n *Node) GetSafeMsgCount(ctx context.Context) (arbutil.MessageIndex, error) {
+	if n.EspressoCaffNode != nil {
+		currentBlock := n.EspressoCaffNode.executionEngine.Bc().CurrentBlock()
+		return arbutil.MessageIndex(currentBlock.Number.Uint64()), nil
+	}
 	return n.InboxReader.GetSafeMsgCount(ctx)
 }
 
 func (n *Node) GetFinalizedMsgCount(ctx context.Context) (arbutil.MessageIndex, error) {
+	if n.EspressoCaffNode != nil {
+		currentBlock := n.EspressoCaffNode.executionEngine.Bc().CurrentBlock()
+		return arbutil.MessageIndex(currentBlock.Number.Uint64()), nil
+	}
 	return n.InboxReader.GetFinalizedMsgCount(ctx)
 }
 
