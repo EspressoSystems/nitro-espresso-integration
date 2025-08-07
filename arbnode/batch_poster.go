@@ -2009,10 +2009,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 		}
 	}
-	msgCount, err := b.streamer.GetMessageCount()
-	if err != nil {
-		log.Error("Error getting message count", "err", err)
-		return false, err
+	var msgCount arbutil.MessageIndex
+	if b.espressoStreamer == nil {
+		msgCount, err = b.streamer.GetMessageCount()
+		if err != nil {
+			log.Error("Error getting message count", "err", err)
+			return false, err
+		}
+	} else {
+		msgCount = arbutil.MessageIndex(b.espressoStreamer.GetMessageCount())
 	}
 	if msgCount <= batchPosition.MessageCount {
 		// There's nothing after the newest batch, therefore batch posting was not required
@@ -2105,11 +2110,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		breakLoopWhenErrorOccurs = false
 	} else {
-		bufferCount := b.espressoStreamer.GetMessageCount()
+		estimatedCount := b.espressoStreamer.GetMessageCount()
 		i := uint64(0)
 		addMessageLoop = func() bool {
 			defer func() { i++ }()
-			return i < bufferCount
+			return i+uint64(b.building.msgCount) < estimatedCount
 		}
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)

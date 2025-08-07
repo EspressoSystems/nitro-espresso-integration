@@ -115,9 +115,9 @@ func NewEspressoStreamer(
 //
 // Return value:
 //
-//	a uint64 representing the count of unique messages in the EspressoStreamer's internal buffer.
+//	a uint64 representing the estimated message count.
 func (s *EspressoStreamer) GetMessageCount() uint64 {
-	return CountUniqueEntries(&s.messageWithMetadataAndPos)
+	return s.currentMessagePos + CountUniqueEntries(&s.messageWithMetadataAndPos)
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
