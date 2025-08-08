@@ -26,9 +26,6 @@ type EspressoSubmitter interface {
 	NotifyNewPendingMessages(pos arbutil.MessageIndex, messages []arbostypes.MessageWithMetadataAndBlockInfo) error
 	GetKeyManager() espresso_key_manager.EspressoKeyManagerInterface
 	RegisterSigner() error
-
-	IsEscapeHatchEnabled() bool
-	GetLastConfirmedPosition() (*arbutil.MessageIndex, error)
 }
 
 // EspressoSubmitterConfig holds the configuration options for implementations
@@ -41,12 +38,9 @@ type EspressoSubmitterConfig struct {
 	EspressoTxnsPollingInterval           time.Duration
 	EspressoTxnSendingInterval            time.Duration
 	EspressoTxnsResubmissionInterval      time.Duration
-	MaxBlockLagBeforeEscapeHatch          uint64
 	EspressoMaxTransactionSize            int64
 	ResubmitEspressoTxDeadline            time.Duration
 	InitialFinalizedSequencerMessageCount *big.Int
-	UseEscapeHatch                        bool
-	EscapeHatchEnabled                    bool
 
 	// These are attestation values that will signify information to load
 	// for attestation initialization
@@ -82,7 +76,6 @@ type EspressoSubmitterConfig struct {
 var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
 	EspressoTxnsPollingInterval:           time.Second,
 	EspressoTxnSendingInterval:            time.Second,
-	MaxBlockLagBeforeEscapeHatch:          350,
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
 	InitialFinalizedSequencerMessageCount: big.NewInt(0),
@@ -212,14 +205,6 @@ func WithTxnsResubmissionInterval(interval time.Duration) EspressoSubmitterConfi
 
 // WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
 // to use the escape hatch in the [EspressoSubmitterConfig].
-func WithMaxBlockLagBeforeEscapeHatch(lag uint64) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.MaxBlockLagBeforeEscapeHatch = lag
-	}
-}
-
-// WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
-// to use the escape hatch in the [EspressoSubmitterConfig].
 func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.InitialFinalizedSequencerMessageCount = count
@@ -232,22 +217,6 @@ func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitter
 func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.ResubmitEspressoTxDeadline = deadline
-	}
-}
-
-// WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
-// to use the escape hatch in the [EspressoSubmitterConfig].
-func WithUseEscapeHatch(enable bool) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.UseEscapeHatch = enable
-	}
-}
-
-// WithEscapeHatchEnabled is an [EspressoSubmitterConfigOption] that sets
-// whether the escape hatch is enabled in the [EspressoSubmitterConfig].
-func WithEscapeHatchEnabled(enable bool) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.EscapeHatchEnabled = enable
 	}
 }
 
