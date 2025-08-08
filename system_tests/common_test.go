@@ -259,7 +259,6 @@ type NodeBuilder struct {
 	l3InitMessage               *arbostypes.ParsedInitMessage
 	withProdConfirmPeriodBlocks bool
 	wasmCacheTag                uint32
-	useL1StackConfig            bool // don't overwrite the L1 stack config when building
 	delayBufferThreshold        uint64
 
 	// Created nodes

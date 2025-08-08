@@ -856,6 +856,7 @@ func createNodeImpl(
 			}
 		}
 		batchPoster, err = NewBatchPoster(ctx, &BatchPosterOpts{
+			ChainID:       l2ChainId,
 			DataPosterDB:  rawdb.NewTable(arbDb, storage.BatchPosterPrefix),
 			L1Reader:      l1Reader,
 			Inbox:         inboxTracker,
