@@ -3,68 +3,29 @@ package submitter
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	"github.com/hf/nitrite"
+	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-// MultiWorkerQueueEspressoSubmitter is an implementation of `EspressoSubmitter`
-// that utilities multiple worker queues to perform Transaction Submission to
-// Espresso, and ensure its inclusion.
-//
-// It approaches the problem by dividing up the task into two separate phases,
-// each of which can be scaled independently as needed.  The two phases are
-// 1. Submit Transaction Phase: This phase is responsible ensuring that a
-// transaction is submitted to Espresso successfully.
-// 2. Transaction Inclusion Phase: This phase is responsible for checking if
-// a transaction is included in Espresso.
-//
-// The approach focuses on two main ideas, split up work into two separate
-// discrete working units, and allow each unit to scale independently, and
-// operate in parallel.
-//
-// By splitting the work into distinct phases, despite them being related,
-// we can ensure that each worker only needs to focus on a single task without
-// distracting itself with the other phase, and complicating the logic.
-//
-// If a Transaction has been successfully submitted to Espresso, but has not
-// been included in Espresso within a specified deadline, it will be demoted
-// and moved back into the Submission phase, where it will be submitted again
-// as if it never was submitted before.
-type MultiWorkerQueueEspressoSubmitter struct {
-	keyManager    key_manager.EspressoKeyManagerInterface
-	client        espresso_client.EspressoClient
-	messageGetter MessageGetter
-
-	chainID                       uint64
-	resubmissionDeadline          time.Duration
-	espressoMaxTransactionSize    int64
-	numSubmitTransactionWorkers   uint64
-	numTransactionIncludedWorkers uint64
-	sendingInterval               time.Duration
-
-	AvailableTransaction chan arbutil.MessageIndex
-
-	submitTxnsQueue    chan SubmitTransactionJob
-	submitTxnsJobQueue chan chan SubmitTransactionJob
-	submitTxnsResponse chan SubmitTransactionResponse
-
-	transactionIncludedQueue    chan TransactionIncludedJob
-	transactionIncludedJobQueue chan chan TransactionIncludedJob
-	transactionIncludedResponse chan TransactionIncludedResponse
-}
 
 // signedInteger represents any type that is a signed integer, or whose
 // underlying type is a signed integer.
@@ -113,44 +74,348 @@ func getNumCPUs() uint64 {
 	return convertToUint64WithFallback[int, uint64](2, 1)
 }
 
-// Compile time check to ensure WorkerQueues implements EspressoSubmitter
-var _ EspressoSubmitter = &MultiWorkerQueueEspressoSubmitter{}
+// MultiWorkerQueueEspressoSubmitter is an implementation of `EspressoSubmitter`
+// that utilities multiple worker queues to perform Transaction Submission to
+// Espresso, and ensure its inclusion.
+//
+// It approaches the problem by dividing up the task into two separate phases,
+// each of which can be scaled independently as needed.  The two phases are
+// 1. Submit Transaction Phase: This phase is responsible ensuring that a
+// transaction is submitted to Espresso successfully.
+// 2. Transaction Inclusion Phase: This phase is responsible for checking if
+// a transaction is included in Espresso.
+//
+// The approach focuses on two main ideas, split up work into two separate
+// discrete working units, and allow each unit to scale independently, and
+// operate in parallel.
+//
+// By splitting the work into distinct phases, despite them being related,
+// we can ensure that each worker only needs to focus on a single task without
+// distracting itself with the other phase, and complicating the logic.
+//
+// If a Transaction has been successfully submitted to Espresso, but has not
+// been included in Espresso within a specified deadline, it will be demoted
+// and moved back into the Submission phase, where it will be submitted again
+// as if it never was submitted before.
+type MultiWorkerQueueEspressoSubmitter struct {
+	client espresso_client.EspressoClient
+
+	chainID                       uint64
+	resubmissionDeadline          time.Duration
+	numSubmitTransactionWorkers   uint64
+	numTransactionIncludedWorkers uint64
+
+	submitTxnsQueue    chan SubmitTransactionJob
+	submitTxnsJobQueue chan chan SubmitTransactionJob
+	submitTxnsResponse chan SubmitTransactionResponse
+
+	transactionIncludedQueue    chan TransactionIncludedJob
+	transactionIncludedJobQueue chan chan TransactionIncludedJob
+	transactionIncludedResponse chan TransactionIncludedResponse
+}
+
+// ErrorFailedToCreateMultiWorkerQueueEspressoSubmitter is an error that is
+// returned when the multi-worker queue espresso submitter fails to be created.
+type ErrorFailedToCreateMultiWorkerQueueEspressoSubmitter struct {
+	Cause error
+}
+
+// Error implements error
+func (e ErrorFailedToCreateMultiWorkerQueueEspressoSubmitter) Error() string {
+	return fmt.Sprintf("failed to create multi-worker queue espresso submitter: %v", e.Cause)
+}
+
+// Unwrap provides the underlying error for builtin errors checking
+func (e ErrorFailedToCreateMultiWorkerQueueEspressoSubmitter) Unwrap() error {
+	return e.Cause
+}
 
 // NewMultiWorkerQueueEspressoSubmitter creates a new WorkerQueues instance
 // with the provided options.
 func NewMultiWorkerQueueEspressoSubmitter(options ...EspressoSubmitterConfigOption) (EspressoSubmitter, error) {
 	config := DefaultEspressoSubmitterConfig
 	applyEspressoSubmitterConfigOptions(&config, options...)
+	if err := ValidateEspressoSubmitterConfig(config); err != nil {
+		return nil, ErrorFailedToCreateMultiWorkerQueueEspressoSubmitter{Cause: err}
+	}
 
-	return &MultiWorkerQueueEspressoSubmitter{
-		chainID:                       config.ChainID,
-		resubmissionDeadline:          config.ResubmitEspressoTxDeadline,
-		espressoMaxTransactionSize:    config.EspressoMaxTransactionSize,
-		numSubmitTransactionWorkers:   getNumCPUs() * 2,
-		numTransactionIncludedWorkers: getNumCPUs() * 2,
-		sendingInterval:               config.EspressoTxnSendingInterval,
-		keyManager:                    config.KeyManager,
-		client:                        config.EspressoClient,
-		messageGetter:                 config.MessageGetter,
-		AvailableTransaction:          make(chan arbutil.MessageIndex, 1024),
-		submitTxnsQueue:               make(chan SubmitTransactionJob, 1024),
-		transactionIncludedQueue:      make(chan TransactionIncludedJob, 1024),
+	return &NitroMessageToEspressoTransactionAdapter{
+		db:                         config.Db,
+		chainID:                    config.ChainID,
+		availableTransaction:       make(chan arbutil.MessageIndex, 1024),
+		messageGetter:              config.MessageGetter,
+		sendingInterval:            config.EspressoTxnSendingInterval,
+		keyManager:                 config.KeyManager,
+		userDataAttestationFile:    config.UserDataAttestationFile,
+		quoteFile:                  config.QuoteFile,
+		espressoMaxTransactionSize: config.EspressoMaxTransactionSize,
+		submitter: &MultiWorkerQueueEspressoSubmitter{
+			chainID:                       config.ChainID,
+			resubmissionDeadline:          config.ResubmitEspressoTxDeadline,
+			numSubmitTransactionWorkers:   getNumCPUs() * 2,
+			numTransactionIncludedWorkers: getNumCPUs() * 2,
+			client:                        config.EspressoClient,
+			submitTxnsQueue:               make(chan SubmitTransactionJob, 1024),
+			transactionIncludedQueue:      make(chan TransactionIncludedJob, 1024),
+		},
 	}, nil
 }
 
-// GetKeyManager implements EspressoSubmitter.
-func (w *MultiWorkerQueueEspressoSubmitter) GetKeyManager() key_manager.EspressoKeyManagerInterface {
-	return w.keyManager
+// NitroMessageToEspressoTransactionAdapter is an implementation of
+// EspressoSubmitter that adapts Nitro messages to Espresso transactions.
+type NitroMessageToEspressoTransactionAdapter struct {
+	db                         ethdb.Database
+	chainID                    uint64
+	submitter                  *MultiWorkerQueueEspressoSubmitter
+	availableTransaction       chan arbutil.MessageIndex
+	messageGetter              MessageGetter
+	espressoMaxTransactionSize int64
+	sendingInterval            time.Duration
+	keyManager                 espresso_key_manager.EspressoKeyManagerInterface
+	userDataAttestationFile    string
+	quoteFile                  string
 }
 
-// GetLastConfirmedPosition implements EspressoSubmitter.
-func (w *MultiWorkerQueueEspressoSubmitter) GetLastConfirmedPosition() (*arbutil.MessageIndex, error) {
-	return nil, nil
+// Compile time check to ensure WorkerQueues implements EspressoSubmitter
+var _ EspressoSubmitter = &NitroMessageToEspressoTransactionAdapter{}
+
+// fetchMessageForPos fetches the message at the given position from the
+// message getter.
+func (n *NitroMessageToEspressoTransactionAdapter) fetchMessageForPos(pos arbutil.MessageIndex) ([]byte, error) {
+	msg, err := n.messageGetter.GetMessage(pos)
+	if err != nil {
+		return nil, err
+	}
+	if pos > 1 {
+		prevMsg, err := n.messageGetter.GetMessage(pos - 1)
+		if err != nil {
+			return nil, err
+		}
+		if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
+			// This message is a delayed message, and it should not be included
+			// in the hotshot payload. The caff node is supposed to fetch the delayed message
+			// from L1.
+			// setting `msg.Message` to `nil` will cause a rlp decode/encode error
+			// so we set `L2msg` to an empty byte slice instead
+			msg.Message.L2msg = []byte{}
+		}
+	}
+	b, err := rlp.EncodeToBytes(msg)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
-// IsEscapeHatchEnabled implements EspressoSubmitter.
-func (w *MultiWorkerQueueEspressoSubmitter) IsEscapeHatchEnabled() bool {
-	return false
+type RangeInclusive[T integer] struct {
+	Start, End T
+}
+
+// bundleTransactions builds an Espresso Transaction attempting to bundle as
+// many messages as possible into a single transaction.
+func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactions(startPos, endPos arbutil.MessageIndex) (arbutil.MessageIndex, error) {
+	i := startPos
+	pendingTxnsPos := createSliceOfIntegerForRangeInclusive(startPos, endPos)
+	for i < endPos {
+		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, n.fetchMessageForPos, n.espressoMaxTransactionSize)
+		i += convertToUint64WithFallback[int, arbutil.MessageIndex](msgCnt, 1)
+		pendingTxnsPos = pendingTxnsPos[msgCnt:]
+
+		if msgCnt == 0 {
+			return startPos, ErrorBundledHotShotTransactionContainsNoMessages{}
+		}
+
+		payload, err := arbutil.SignHotShotPayload(payload, n.keyManager.SignHotShotPayload)
+		if err != nil {
+			return startPos, ErrorFailedToSignDataForHotShotPayload{Cause: err}
+		}
+
+		txn := espresso_types.Transaction{
+			Namespace: n.chainID,
+			Payload:   payload,
+		}
+
+		n.submitter.SubmitTransaction(txn)
+	}
+
+	return endPos, nil
+}
+
+// bundleTransactionsProcess is a method that is meant to be run in a
+// goroutine.
+//
+// It keeps track of the available positions of the transactions, as updated
+// and reported by the NotifyNewPendingMessages method.
+//
+// Once per sending interval, it will attempt to bundle all of the available
+// messages into multiple Espresso transactions, and submit them to the
+// submit transaction job queue.
+func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactionsProcess(ctx context.Context) {
+	var availablePos, submittedPos arbutil.MessageIndex
+	ticker := time.NewTicker(n.sendingInterval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case pos, ok := <-n.availableTransaction:
+			if !ok {
+				// The channel is closed, so we can exit
+				return
+			}
+
+			if availablePos < pos {
+				// We have a new available position, let's update it
+				availablePos = pos
+			}
+
+		case <-ticker.C:
+			// We have a ticker event, let's check if we have any pending transactions
+			if availablePos == submittedPos {
+				// No pending transactions, so we can skip this iteration
+				continue
+			}
+
+			// Let's bundle our transactions
+			nextPos, err := n.bundleTransactions(submittedPos, availablePos)
+			if err != nil {
+				log.Error("Failed to bundle transactions", "startPos", submittedPos, "endPos", availablePos, "error", err)
+				// We can continue to the next iteration, as we will try again later
+				continue
+			}
+
+			submittedPos = nextPos
+		}
+	}
+}
+
+// startBundleTransactionsProcess launches the bundle transactions process
+// in a new goroutine using the provided stop waiter.
+func (n *NitroMessageToEspressoTransactionAdapter) startBundleTransactionsProcess(sw *stopwaiter.StopWaiter) error {
+	if err := sw.LaunchThreadSafe(n.bundleTransactionsProcess); err != nil {
+		return ErrorFailedToLaunchBundleTransactionsProcess{Cause: err}
+	}
+	return nil
+}
+
+// Start implements EspressoSubmitter.
+//
+// This schedules the bundle transactions process to run in a new goroutine,
+func (n *NitroMessageToEspressoTransactionAdapter) Start(sw *stopwaiter.StopWaiter) error {
+	// start the bundle transactions process in a new goroutine
+	if err := n.startBundleTransactionsProcess(sw); err != nil {
+		return ErrorFailedToStart{Cause: err}
+	}
+
+	if err := n.submitter.Start(sw); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// NotifyNewPendingMessages is a method that is called when new pending messages
+// are available to be processed.
+func (n *NitroMessageToEspressoTransactionAdapter) NotifyNewPendingMessages(pos arbutil.MessageIndex, messages []arbostypes.MessageWithMetadataAndBlockInfo) error {
+	select {
+	default:
+		return ErrorWorkerQueuesAreFull{Pos: pos}
+
+	case n.availableTransaction <- pos:
+		return nil
+	}
+}
+
+// GetKeyManager returns the key manager used by this Espresso submitter.
+func (n *NitroMessageToEspressoTransactionAdapter) GetKeyManager() espresso_key_manager.EspressoKeyManagerInterface {
+	return n.keyManager
+}
+
+// getAttestationQuote is a method that retrieves the attestation quote for the user data.
+// This function generates the attestation quote for the user data.
+// The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
+// The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
+// The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
+func (t *NitroMessageToEspressoTransactionAdapter) getAttestationQuote(userData []byte) ([]byte, error) {
+	if (t.userDataAttestationFile == "") || (t.quoteFile == "") {
+		return []byte{}, nil
+	}
+	// keccak256 hash of userData
+	userDataHash := crypto.Keccak256(userData)
+
+	// Add 32 bytes of padding to the user data hash
+	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
+	for i := 0; i < 32; i += 1 {
+		userDataHash = append(userDataHash, 0)
+	}
+
+	// Write the message to "/dev/attestation/user_report_data" in SGX
+	err := os.WriteFile(t.userDataAttestationFile, userDataHash, 0600)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
+	}
+
+	// Read the quote from "/dev/attestation/quote" in SGX
+	attestationQuote, err := os.ReadFile(t.quoteFile)
+	if err != nil {
+		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
+	}
+
+	return attestationQuote, nil
+}
+
+// getNitroAttestation is a method that retrieves the attestation document for
+// AWS Nitro Enclaves.
+// This function gets the attestation document for AWS Nitro Enclaves
+// We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
+// After we retrieve, we verify the attestation, where we retrieve the result
+// Which will contain the complete attestation which we serialize for further processing
+func (t *NitroMessageToEspressoTransactionAdapter) getNitroAttestation(pubKey []byte) ([]byte, error) {
+	sess, err := nsm.OpenDefaultSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open nsm session: %w", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Send(&request.Attestation{
+		PublicKey: pubKey,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send attestation request: %w", err)
+	}
+
+	if res.Error != "" {
+		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
+	}
+
+	if res.Attestation == nil || res.Attestation.Document == nil {
+		return nil, fmt.Errorf("no attestation document returned")
+	}
+
+	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify attestation")
+	}
+
+	attestationBytes, err := json.Marshal(attestation)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal attestation")
+	}
+	return attestationBytes, nil
+}
+
+func (n *NitroMessageToEspressoTransactionAdapter) RegisterSigner() error {
+	teeType := n.keyManager.TeeType()
+	switch teeType {
+	case espresso_key_manager.SGX:
+		return n.keyManager.Register(n.getAttestationQuote)
+	case espresso_key_manager.NITRO:
+		return n.keyManager.Register(n.getNitroAttestation)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
 }
 
 // integer represents any type that is an integer.  It specifies all types
@@ -193,95 +458,6 @@ func (e ErrorWorkerQueuesAreFull) Error() string {
 	return fmt.Sprintf("worker queues are full, cannot accept new pending messages at position %d", e.Pos)
 }
 
-// NotifyNewPendingMessages implements EspressoSubmitter.
-func (w *MultiWorkerQueueEspressoSubmitter) NotifyNewPendingMessages(pos arbutil.MessageIndex, messages []arbostypes.MessageWithMetadataAndBlockInfo) error {
-	// Update the available transactions position
-	select {
-	default:
-		return ErrorWorkerQueuesAreFull{Pos: pos}
-
-	case w.AvailableTransaction <- pos:
-		return nil
-	}
-}
-
-// bundleTransactionsProcess is a method that is meant to be run in a
-// goroutine.
-//
-// It keeps track of the available positions of the transactions, as updated
-// and reported by the NotifyNewPendingMessages method.
-//
-// Once per sending interval, it will attempt to bundle all of the available
-// messages into multiple Espresso transactions, and submit them to the
-// submit transaction job queue.
-func (w *MultiWorkerQueueEspressoSubmitter) bundleTransactionsProcess(ctx context.Context) {
-	var availablePos, submittedPos arbutil.MessageIndex
-	ticker := time.NewTicker(w.sendingInterval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-
-		case pos, ok := <-w.AvailableTransaction:
-			if !ok {
-				// The channel is closed, so we can exit
-				return
-			}
-
-			if availablePos < pos {
-				// We have a new available position, let's update it
-				availablePos = pos
-			}
-
-		case <-ticker.C:
-			// We have a ticker event, let's check if we have any pending transactions
-			if availablePos == submittedPos {
-				// No pending transactions, so we can skip this iteration
-				continue
-			}
-
-			// Let's bundle our transactions
-			nextPos, err := w.bundleTransactions(submittedPos, availablePos)
-			if err != nil {
-				log.Error("Failed to bundle transactions", "startPos", submittedPos, "endPos", availablePos, "error", err)
-				// We can continue to the next iteration, as we will try again later
-				continue
-			}
-
-			submittedPos = nextPos
-		}
-	}
-}
-
-// fetchMessageForPos fetches the message at the given position from the
-// message getter.
-func (w *MultiWorkerQueueEspressoSubmitter) fetchMessageForPos(pos arbutil.MessageIndex) ([]byte, error) {
-	msg, err := w.messageGetter.GetMessage(pos)
-	if err != nil {
-		return nil, err
-	}
-	if pos > 1 {
-		prevMsg, err := w.messageGetter.GetMessage(pos - 1)
-		if err != nil {
-			return nil, err
-		}
-		if prevMsg.DelayedMessagesRead+1 == msg.DelayedMessagesRead {
-			// This message is a delayed message, and it should not be included
-			// in the hotshot payload. The caff node is supposed to fetch the delayed message
-			// from L1.
-			// setting `msg.Message` to `nil` will cause a rlp decode/encode error
-			// so we set `L2msg` to an empty byte slice instead
-			msg.Message.L2msg = []byte{}
-		}
-	}
-	b, err := rlp.EncodeToBytes(msg)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
 // ErrorBundledHotShotTransactionContainsNoMessages is an error that is returned
 // when a bundled hotshot transaction contains no messages. This can happen if
 // a large message has exceeded the size limit or failed to get a message from
@@ -310,39 +486,6 @@ func (e ErrorFailedToSignDataForHotShotPayload) Unwrap() error {
 	return e.Cause
 }
 
-// bundleTransactions builds an Espresso Transaction attempting to bundle as
-// many messages as possible into a single transaction.
-func (w *MultiWorkerQueueEspressoSubmitter) bundleTransactions(startPos, endPos arbutil.MessageIndex) (arbutil.MessageIndex, error) {
-	i := startPos
-	pendingTxnsPos := createSliceOfIntegerForRangeInclusive(startPos, endPos)
-	for i < endPos {
-		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, w.fetchMessageForPos, w.espressoMaxTransactionSize)
-		i += convertToUint64WithFallback[int, arbutil.MessageIndex](msgCnt, 1)
-		pendingTxnsPos = pendingTxnsPos[msgCnt:]
-
-		if msgCnt == 0 {
-			return startPos, ErrorBundledHotShotTransactionContainsNoMessages{}
-		}
-
-		payload, err := arbutil.SignHotShotPayload(payload, w.keyManager.SignHotShotPayload)
-		if err != nil {
-			return startPos, ErrorFailedToSignDataForHotShotPayload{Cause: err}
-		}
-
-		txn := espresso_types.Transaction{
-			Namespace: w.chainID,
-			Payload:   payload,
-		}
-
-		// Let's submit this transaction to the job queue
-		w.submitTxnsQueue <- SubmitTransactionJob{
-			txn: txn,
-		}
-	}
-
-	return endPos, nil
-}
-
 // ErrorFailedToLaunchBundleTransactionsProcess is an error that is returned
 // when the bundle transactions process fails to launch.
 type ErrorFailedToLaunchBundleTransactionsProcess struct {
@@ -359,13 +502,11 @@ func (e ErrorFailedToLaunchBundleTransactionsProcess) Unwrap() error {
 	return e.Cause
 }
 
-// startBundleTransactionsProcess launches the bundle transactions process
-// in a new goroutine using the provided stop waiter.
-func (w *MultiWorkerQueueEspressoSubmitter) startBundleTransactionsProcess(sw *stopwaiter.StopWaiter) error {
-	if err := sw.LaunchThreadSafe(w.bundleTransactionsProcess); err != nil {
-		return ErrorFailedToLaunchBundleTransactionsProcess{Cause: err}
+func (w *MultiWorkerQueueEspressoSubmitter) SubmitTransaction(txn espresso_types.Transaction) {
+	// Let's submit this transaction to the job queue
+	w.submitTxnsQueue <- SubmitTransactionJob{
+		txn: txn,
 	}
-	return nil
 }
 
 // ErrorFailedToLaunchSubmitTransactionQueueWorker is an error that is returned
@@ -530,11 +671,6 @@ func (w *MultiWorkerQueueEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) err
 	w.transactionIncludedJobQueue = make(chan chan TransactionIncludedJob, w.numTransactionIncludedWorkers)
 	w.transactionIncludedResponse = make(chan TransactionIncludedResponse, 1024)
 
-	// start the bundle transactions process in a new goroutine
-	if err := w.startBundleTransactionsProcess(sw); err != nil {
-		return ErrorFailedToStart{Cause: err}
-	}
-
 	// Start the submit transaction scheduler, response handlers, and workers
 	if err := w.startSubmitTransactionProcess(sw); err != nil {
 		return ErrorFailedToStart{Cause: err}
@@ -677,9 +813,11 @@ type TransactionIncludedJob struct {
 // TransactionIncludedResponse represents a response / result of a performed
 // TransactionIncludedJob task
 type TransactionIncludedResponse struct {
-	job      TransactionIncludedJob
-	included bool
-	err      error
+	job                  TransactionIncludedJob
+	transactionQueryData espresso_types.TransactionQueryData
+	transactionsInBlock  espresso_client.TransactionsInBlock
+	index                int
+	err                  error
 }
 
 // transactionIncludedQueueWorker is a worker that processes
@@ -775,7 +913,6 @@ func (w *transactionIncludedQueueWorker) startWorker(_ context.Context) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ch := make(chan TransactionIncludedJob)
-INCLUSION_LOOP_START:
 	for {
 		// Submit our worker channel to the job queue
 		w.transactionIncludedJobQueue <- ch
@@ -802,35 +939,56 @@ INCLUSION_LOOP_START:
 		}
 
 		// We need to verify the transaction in the block
-		txns, err := w.client.FetchTransactionsInBlock(ctx, details.BlockHeight, w.chainID)
+		txns, err := w.client.FetchTransactionsInBlock(ctx, details.BlockHeight, job.txn.Namespace)
 		if err != nil {
 			w.transactionIncludedResponse <- TransactionIncludedResponse{
-				job: job,
-				err: ErrorFetchTransactionsForBlockAndNamespaceFailed{Cause: err, WorkerID: w.id, TxnHash: job.txnHash, BlockHeight: details.BlockHeight, Namespace: w.chainID},
+				job:                  job,
+				transactionQueryData: details,
+				err:                  ErrorFetchTransactionsForBlockAndNamespaceFailed{Cause: err, WorkerID: w.id, TxnHash: job.txnHash, BlockHeight: details.BlockHeight, Namespace: job.txn.Namespace},
 			}
 			continue
 		}
 
 		// One of the transactions in the block should match the txn payload
 		// we submitted
-		for _, txn := range txns.Transactions {
-			if bytes.Equal(txn, job.txn.Payload) {
-				// We found the transaction in the block, so we can mark it as included
-				w.transactionIncludedResponse <- TransactionIncludedResponse{
-					job:      job,
-					included: true,
-				}
-				continue INCLUSION_LOOP_START
+		if index, isIncluded := w.doesTransactionExistInBlock(job, txns); isIncluded {
+			// We found the transaction in the block, so we can mark it as included
+			w.transactionIncludedResponse <- TransactionIncludedResponse{
+				job:                  job,
+				transactionQueryData: details,
+				transactionsInBlock:  txns,
+				index:                index,
 			}
+			continue
 		}
 
 		// If we reach here, it means the transaction was not found in
 		// the block
 		w.transactionIncludedResponse <- TransactionIncludedResponse{
-			job: job,
-			err: ErrorTransactionNotFoundInBlock{WorkerID: w.id, BlockHeight: details.BlockHeight, TxnHash: job.txnHash},
+			job:                  job,
+			transactionQueryData: details,
+			transactionsInBlock:  txns,
+			index:                -1,
+			err:                  ErrorTransactionNotFoundInBlock{WorkerID: w.id, BlockHeight: details.BlockHeight, TxnHash: job.txnHash},
 		}
 	}
+}
+
+// doesTransactionExistInBlock checks if the transaction exists in the block
+// represented by the TransactionsInBlock object.
+//
+// This check is done by comparing the transaction payload with the
+// transactions in the block.  If a transaction with the same payload is found,
+// it is considered to be included in the block.
+func (w *transactionIncludedQueueWorker) doesTransactionExistInBlock(
+	job TransactionIncludedJob, txns espresso_client.TransactionsInBlock,
+) (int, bool) {
+	for i, txn := range txns.Transactions {
+		if bytes.Equal(txn, job.txn.Payload) {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 // drainSubmitTransactionWorkers closes all the worker channels in the
@@ -979,11 +1137,16 @@ func (w *MultiWorkerQueueEspressoSubmitter) transactionIncludedResponseHandler(c
 			log.Info("Transaction inclusion response handler exiting")
 			return
 
-		case response := <-w.transactionIncludedResponse:
-			if response.err != nil || !response.included {
+		case response, ok := <-w.transactionIncludedResponse:
+			if !ok {
+				log.Warn("Transaction inclusion response handler channel closed, exiting")
+				return
+			}
+
+			if response.err != nil {
 				if elapsed := time.Since(response.job.submitSuccess); elapsed > w.resubmissionDeadline {
 					log.Warn("Transaction not included in Espresso within the deadline", "hash", response.job.txnHash.String(), "commit", common.Hash(response.job.txn.Commit()), "elapsed", elapsed, "attempts", response.job.attempt)
-					// WE have exceeded the resubmission deadline, so we, need
+					// We have exceeded the resubmission deadline, so we, need
 					// to try and resubmit the transaction.
 					w.submitTxnsQueue <- SubmitTransactionJob{
 						txn:     response.job.txn,
@@ -995,7 +1158,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) transactionIncludedResponseHandler(c
 				log.Info("Transaction not included in Espresso", "hash", response.job.txnHash.String(), "commit", common.Hash(response.job.txn.Commit()), "attempts", response.job.attempt, "error", response.err)
 
 				// Handle error case
-				// Requeue the transaction for another inclusion attempt
+				// Requeue the transaction for another inclusion check attempt
 				job := response.job
 				job.attempt++
 				job.lastAttempt = time.Now()
