@@ -142,7 +142,7 @@ func NewMultiWorkerQueueEspressoSubmitter(options ...EspressoSubmitterConfigOpti
 	return &NitroMessageToEspressoTransactionAdapter{
 		db:                         config.Db,
 		chainID:                    config.ChainID,
-		availableTransaction:       make(chan arbutil.MessageIndex, 1024),
+		availableTransaction:       make(chan arbutil.MessageIndex, config.MessageIndexQueueSize),
 		messageGetter:              config.MessageGetter,
 		sendingInterval:            config.EspressoTxnSendingInterval,
 		keyManager:                 config.KeyManager,
@@ -152,11 +152,11 @@ func NewMultiWorkerQueueEspressoSubmitter(options ...EspressoSubmitterConfigOpti
 		submitter: &MultiWorkerQueueEspressoSubmitter{
 			chainID:                       config.ChainID,
 			resubmissionDeadline:          config.ResubmitEspressoTxDeadline,
-			numSubmitTransactionWorkers:   getNumCPUs() * 2,
-			numTransactionIncludedWorkers: getNumCPUs() * 2,
+			numSubmitTransactionWorkers:   config.NumberOfSubmitTransactionWorkers,
+			numTransactionIncludedWorkers: config.NumberOfTransactionIncludedWorkers,
 			client:                        config.EspressoClient,
-			submitTxnsQueue:               make(chan SubmitTransactionJob, 1024),
-			transactionIncludedQueue:      make(chan TransactionIncludedJob, 1024),
+			submitTxnsQueue:               make(chan SubmitTransactionJob, config.SubmitTransactionsQueueSize),
+			transactionIncludedQueue:      make(chan TransactionIncludedJob, config.TransactionIncludedQueueSize),
 		},
 	}, nil
 }

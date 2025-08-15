@@ -56,6 +56,16 @@ type EspressoSubmitterConfig struct {
 	KeyManager        espresso_key_manager.EspressoKeyManagerInterface
 	MessageGetter     MessageGetter
 	Db                ethdb.Database
+
+	// These are specific to the Multi Worker Queue Espresso Submitter
+	// and governs how many workers / buffering is used for the
+	// Espresso Submitter.
+
+	NumberOfSubmitTransactionWorkers   uint64
+	NumberOfTransactionIncludedWorkers uint64
+	MessageIndexQueueSize              uint64
+	SubmitTransactionsQueueSize        uint64
+	TransactionIncludedQueueSize       uint64
 }
 
 // DefaultEspressoSubmitterConfig provides a default configuration for the
@@ -79,6 +89,11 @@ var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
 	InitialFinalizedSequencerMessageCount: big.NewInt(0),
+	NumberOfSubmitTransactionWorkers:      getNumCPUs() * 2,
+	NumberOfTransactionIncludedWorkers:    getNumCPUs() * 2,
+	MessageIndexQueueSize:                 1024,
+	SubmitTransactionsQueueSize:           1024,
+	TransactionIncludedQueueSize:          1024,
 }
 
 // EspressoSubmitterConfigOption is a function type that takes a pointer to
@@ -217,6 +232,60 @@ func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitter
 func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.ResubmitEspressoTxDeadline = deadline
+	}
+}
+
+// WithNumberOfSubmitTransactionWorkers is an [EspressoSubmitterConfigOption]
+// that sets the number of workers for submitting transactions in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithNumberOfSubmitTransactionWorkers(numWorkers uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.NumberOfSubmitTransactionWorkers = numWorkers
+	}
+}
+
+// WithNumberOfTransactionIncludedWorkers is an [EspressoSubmitterConfigOption]
+// that sets the number of workers for transaction inclusion in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithNumberOfTransactionIncludedWorkers(numWorkers uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.NumberOfTransactionIncludedWorkers = numWorkers
+	}
+}
+
+// WithMessageIndexQueueSize is an [EspressoSubmitterConfigOption] that sets the
+// size of the message index queue in the [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithMessageIndexQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.MessageIndexQueueSize = size
+	}
+}
+
+// WithSubmitTransactionsQueueSize is an [EspressoSubmitterConfigOption] that
+// sets the size of the submit transactions queue in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithSubmitTransactionsQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.SubmitTransactionsQueueSize = size
+	}
+}
+
+// WithTransactionIncludedQueueSize is an [EspressoSubmitterConfigOption] that
+// sets the size of the transaction included queue in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithTransactionIncludedQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.TransactionIncludedQueueSize = size
 	}
 }
 
