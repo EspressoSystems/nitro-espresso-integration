@@ -76,6 +76,9 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          cache: false
+        
 
       - name: Install rust nightly
         uses: dtolnay/rust-toolchain@nightly
