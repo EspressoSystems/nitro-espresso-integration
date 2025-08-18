@@ -2178,7 +2178,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		// #nosec G115
 		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
-		if timeSinceMsg >= config.MaxEmptyBatchDelay {
+		if (msg.Message.Header.Kind != arbostypes.L1MessageType_BatchPostingReport) || (timeSinceMsg >= config.MaxEmptyBatchDelay) {
 			b.building.haveUsefulMessage = true
 			if b.building.firstUsefulMsg == nil {
 				b.building.firstUsefulMsg = msg
