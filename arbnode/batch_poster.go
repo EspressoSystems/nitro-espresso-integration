@@ -2110,7 +2110,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	for b.building.msgCount <= msgCount {
+	for b.building.msgCount < msgCount {
 		msg, err := getNextMessage()
 		if err != nil {
 			if breakLoopWhenErrorOccurs {
