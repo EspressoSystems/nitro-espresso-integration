@@ -1491,6 +1491,9 @@ func (s *TransactionStreamer) checkSubmittedTransactionForFinality(ctx context.C
 	batch := s.db.NewBatch()
 	newSubmittedTxns := []arbutil.SubmittedEspressoTx{}
 	lastConfirmedPos := arbutil.MessageIndex(0)
+	if lastConfirmedPosInDb, _ := s.getLastConfirmedPos(); lastConfirmedPosInDb != nil {
+		lastConfirmedPos = *lastConfirmedPosInDb
+	}
 	for _, submittedTx := range submittedTxns {
 		hash := submittedTx.Hash
 		submittedTxHash, err := tagged_base64.Parse(hash)
@@ -1869,13 +1872,13 @@ func getLogLevel(err error) func(string, ...interface{}) {
 * Checks if the submitted transaction has been finalized by Espresso  and verifies it.
  */
 func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 50
+	retryRate := s.espressoTxnsPollingInterval * 2
 	var err error
 	if s.UseEscapeHatch {
 		err = s.checkEspressoLiveness()
 		if err != nil {
 			if ctx.Err() != nil {
-				return 0
+				return s.espressoTxnsPollingInterval
 			}
 			logLevel := getLogLevel(err)
 			logLevel("error checking escape hatch, will retry", "err", err)
@@ -1886,14 +1889,14 @@ func (s *TransactionStreamer) pollSubmittedTransactionForFinality(ctx context.Co
 	err = s.checkSubmittedTransactionForFinality(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return 0
+			return s.espressoTxnsPollingInterval
 		}
 		logLevel := getLogLevel(err)
 		logLevel("error polling finality, will retry", "err", err)
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return 0
+	return s.espressoTxnsPollingInterval
 }
 
 /**
