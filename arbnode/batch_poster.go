@@ -1874,6 +1874,14 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
+	if b.building.firstDelayedMsg != nil {
+		// #nosec G115
+		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
+		if timeSinceMsg >= config.MaxEmptyBatchDelay {
+			forcePostBatch = true
+		}
+	}
+
 	for b.building.msgCount < msgCount {
 		msg, err := getNextMessage()
 		if err != nil {
