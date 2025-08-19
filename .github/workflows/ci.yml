@@ -233,22 +233,12 @@ jobs:
         shell: bash
         run: |
           echo "Running redis tests" >> full.log
-<<<<<<< HEAD
           TEST_REDIS=redis://localhost:6379/0 ${{ github.workspace }}/scripts/espresso-run-test-ci -p 1 -run TestRedis ./arbnode/... ./system_tests/...
-=======
-          skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
-          gotestsum --format short-verbose -- -p 1 -run TestRedis -skip "$skip_tests" ./arbnode/... ./system_tests/... -coverprofile=coverage-redis.txt -covermode=atomic -coverpkg=./... -- --test_redis=redis://localhost:6379/0
->>>>>>> 30bb15167 (Fix empty batch fix (#723))
 
       - name: create block input json file
         if: matrix.test-mode == 'defaults'
         run: |
-<<<<<<< HEAD
           gotestsum --format short-verbose -- -run TestProgramStorage$ ./system_tests/... --count 1 --recordBlockInputs.WithBaseDir="${{ github.workspace }}/target" --recordBlockInputs.WithTimestampDirEnabled=false --recordBlockInputs.WithBlockIdInFileNameEnabled=false
-=======
-          gotestsum --format short-verbose -- -run TestProgramStorage$ ./system_tests/... --count 1 -- --recordBlockInputs.enable=true --recordBlockInputs.WithBaseDir="${{ github.workspace }}/target" --recordBlockInputs.WithTimestampDirEnabled=false --recordBlockInputs.WithBlockIdInFileNameEnabled=false
-
->>>>>>> 30bb15167 (Fix empty batch fix (#723))
       - name: run arbitrator prover on block input json
         if: matrix.test-mode == 'defaults'
         run: |
