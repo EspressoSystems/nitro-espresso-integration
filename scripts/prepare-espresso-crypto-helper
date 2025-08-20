@@ -25,7 +25,7 @@ go get github.com/EspressoSystems/espresso-network/sdks/go
 # This script assumes that you have the `espresso-network-lib-utility` command
 # installed, and available in your PATH.
 command -v espresso-network-lib-utility >/dev/null 2>&1 || {
-    echo <<"EOF"
+    cat <<'EOF' >&2
 ERROR: The command 'espresso-network-lib-utility' is not found in your PATH.
 Please ensure you have the Espresso Go SDK installed, which includes this command.
 
@@ -34,7 +34,7 @@ You can install it by running:
 
 If go install results in an error, you may need to ensure that the library
 exists in your cache before running the command again.  The command was first
-made available in release `v0.2.7`.  So you should be able to ensure it works by running the following:
+made available in release `v0.2.7`.  So you should be able to ensure it works by running:
     go run github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.7
     go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.7
 
@@ -43,7 +43,7 @@ however, this command simply needs to be in your PATH for the script to work.
 If you feel uncomfortable adding the go bin directory to your PATH, you can
 create a symlink to the command in a directory that is already in your PATH.
 EOF
-exit 1
+    exit 1
 }
 
 fileName="libespresso_crypto_helper-$triple"
