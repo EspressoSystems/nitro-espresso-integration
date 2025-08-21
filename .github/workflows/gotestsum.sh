@@ -56,14 +56,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 ###### Espresso
-# 1. First ensure the library path is set
-export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$(pwd)/target/lib"
-
-# 2. Verify the library exists
-if [[ ! -f "$(pwd)/target/lib/libespresso_crypto_helper-x86_64-unknown-linux-gnu.so" ]]; then
-    echo "Error: libespresso_crypto_helper-x86_64-unknown-linux-gnu.so not found in $(pwd)/target/lib"
-    exit 1
-fi
 
 skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
 ######
