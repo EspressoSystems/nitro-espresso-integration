@@ -89,6 +89,11 @@ jobs:
             type=ref,event=tag
             type=sha
 
+      - name: Install espresso-network-lib-utility
+        run: |
+          go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.8
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: Build & push
         uses: docker/build-push-action@v6
         with:

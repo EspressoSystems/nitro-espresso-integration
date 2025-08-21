@@ -133,12 +133,17 @@ jobs:
 
       - name: Install solidty dependencies
         run: cd contracts && yarn install && forge install
-      
+
       - name: Check tool versions
         run: |
           go version
           rustc --version
           cargo --version
+
+      - name: Install espresso-network-lib-utility
+        run: |
+          go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.8
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Build
         run: make build build-replay-env -j

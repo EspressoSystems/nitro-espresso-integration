@@ -34,9 +34,9 @@ You can install it by running:
 
 If go install results in an error, you may need to ensure that the library
 exists in your cache before running the command again.  The command was first
-made available in release `v0.2.7`.  So you should be able to ensure it works by running:
-    go run github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.7
-    go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.7
+made available in release `v0.2.8`.  So you should be able to ensure it works by running:
+    go run github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.8
+    go install github.com/EspressoSystems/espresso-network/sdks/go/cmd/espresso-network-lib-utility@v0.2.8
 
 This command will be installed to your go bin directory (defaults to ~/go/bin),
 however, this command simply needs to be in your PATH for the script to work.
