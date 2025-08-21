@@ -185,21 +185,6 @@ else
     $(error Architecture $(DETECTED_ARCH) is not supported)
 endif
 
-# Set library extension based on OS
-ifeq ($(UNAME_S),Darwin)
-    LIB_EXT := dylib
-	espresso_crypto_filename = libespresso_crypto_helper.dylib
-else
-    LIB_EXT := so
-	export LD_LIBRARY_PATH := $(shell pwd)/target/lib:$LD_LIBRARY_PATH
-endif
-
-CBROTLI_WASM_BUILD_ARGS ?=-d
-
-# user targets
-.PHONY: build-espresso-crypto-lib
-build-espresso-crypto-lib:
-	./scripts/prepare-espresso-crypto-helper
 
 .PHONY: push
 push: lint test-go .make/fmt
@@ -215,7 +200,7 @@ build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daprovider daserver
 	@printf $(done)
 
 .PHONY: build-node-deps
-build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
+build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib
 
 .PHONY: test-go-deps
 test-go-deps: \
@@ -341,9 +326,6 @@ clean:
 	@rm -rf contracts-local/out contracts-local/forge-cache
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
-	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
-	rm -f $(ESPRESSO_TAR)
-	rm -rf $(ESPRESSO_DIR)
 # Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib
 	ln -s lib $(output_root)/lib64
