@@ -762,38 +762,6 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 	return l
 }
 
-// Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
-// hashes to some light client state root.
-func (b *BatchPoster) checkEspressoValidation() bool {
-	b.building.segments.SetWaitingForValidation()
-	espressoSubmitter := b.streamer.espressoSubmitter
-
-	if espressoSubmitter == nil {
-		// We are not using espresso mode since these haven't been set, return true to advance batch posting
-		return true
-	}
-
-	if espressoSubmitter.IsEscapeHatchEnabled() {
-		log.Warn("skipped espresso verification due to hotshot failure", "pos", b.building.msgCount)
-		return true // return true to skip verification of batch
-	}
-
-	lastConfirmed, err := espressoSubmitter.GetLastConfirmedPosition()
-	if err != nil {
-		log.Error("failed call to get last confirmed pos", "err", err)
-		return false // if we get an error we can't validate
-	}
-
-	if lastConfirmed == nil {
-		return false
-	}
-
-	log.Info("last confirmed pos in check espresso validation", "lastConfirmedPos", *lastConfirmed)
-
-	// This message has passed the espresso verification
-	return b.building.msgCount-1 <= *lastConfirmed
-}
-
 type txInfo struct {
 	Hash      common.Hash       `json:"hash"`
 	Nonce     hexutil.Uint64    `json:"nonce"`
@@ -1978,12 +1946,8 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		// don't post anything for now
 		return false, nil
 	}
+
 	// If we are checking the validation, set isWaitingForEspressoValidation in the batch segments and re-poll the function until we are ready to post.
-	hasBatchBeenValidated := b.checkEspressoValidation()
-	log.Info("Batch validation status:", "hasBatchBeenValidated", hasBatchBeenValidated, "b.building.msgCount", b.building.msgCount, "b.building.startMsgCount", b.building.startMsgCount)
-	if !hasBatchBeenValidated {
-		return false, nil // We want to return false nil because we if we propegate an error we clear the batch cache when we don't want to
-	}
 	sequencerMsg, err := b.building.segments.CloseAndGetBytes()
 	if err != nil {
 		return false, err
