@@ -765,7 +765,6 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
 func (b *BatchPoster) checkEspressoValidation() bool {
-	b.building.segments.SetWaitingForValidation()
 	espressoSubmitter := b.streamer.espressoSubmitter
 
 	if espressoSubmitter == nil {
