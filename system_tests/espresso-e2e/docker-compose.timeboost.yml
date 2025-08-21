@@ -1,6 +1,6 @@
 services:
   node0:
-    image: timeboost:latest
+    image: ghcr.io/espressosystems/timeboost:cbor
     command:
       [
         "/app/timeboost",
@@ -33,7 +33,7 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: timeboost:latest
+    image: ghcr.io/espressosystems/timeboost:cbor
     command:
       [
         "/app/timeboost",
