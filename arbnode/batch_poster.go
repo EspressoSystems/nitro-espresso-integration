@@ -765,7 +765,6 @@ func AccessList(opts *AccessListOpts) types.AccessList {
 // Adds a block merkle proof to an Espresso justification, providing a proof that a set of transactions
 // hashes to some light client state root.
 func (b *BatchPoster) checkEspressoValidation() bool {
-	b.building.segments.SetWaitingForValidation()
 	espressoSubmitter := b.streamer.espressoSubmitter
 
 	if espressoSubmitter == nil {
@@ -1853,6 +1852,14 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
 			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
 			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+		}
+	}
+
+	if b.building.firstDelayedMsg != nil {
+		// #nosec G115
+		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
+		if timeSinceMsg >= config.MaxEmptyBatchDelay {
+			forcePostBatch = true
 		}
 	}
 
