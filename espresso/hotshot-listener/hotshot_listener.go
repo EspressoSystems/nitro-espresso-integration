@@ -2,13 +2,18 @@ package hotshot_listener
 
 import (
 	"fmt"
+	"math/big"
 	"os"
 	"os/signal"
 	"syscall"
 
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 
 	"github.com/gorilla/websocket"
 )
@@ -19,6 +24,7 @@ const (
 
 type HotshotListener struct {
 	hotshotUrl                        string
+	rollupSequencerManager            *espressogen.IEspressoRollupSequencerManager
 	quorumViewNumberBuilderCommitment map[string]bool
 	daViewNumberBuilderCommitment     map[string]bool
 }
@@ -32,9 +38,18 @@ func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string
 		return nil, fmt.Errorf("rollup sequencer manager contract address is empty, please provide a valid address")
 	}
 
+	// Convert rollupSequencerManagerContract to an address
+	rollupSequencerManagerContractAddress := common.HexToAddress(rollupSequencerManagerContract)
+	rollupSequencerManager, err := espressogen.NewIEspressoRollupSequencerManager(rollupSequencerManagerContractAddress, nil)
+	if err != nil {
+		log.Error("Failed to create rollup sequencer manager contract instance", "err", err)
+		return nil, err
+	}
+
 	// Create a new rollup sequencer manager contract instance
 	return &HotshotListener{
-		hotshotUrl: hotshotUrl,
+		hotshotUrl:             hotshotUrl,
+		rollupSequencerManager: rollupSequencerManager,
 	}, nil
 }
 
@@ -60,7 +75,7 @@ func (listener *HotshotListener) processMessage(message []byte) error {
 	return nil
 }
 
-func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrapper *espresso_types.QuorumProposalWrapper) {
+func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrapper *espresso_types.QuorumProposalWrapper) error {
 	log.Debug("Received quorum proposal event", "event", quorumProposalWrapper)
 
 	viewNumber := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.ViewNumber
@@ -78,16 +93,26 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 		// If it does, then we can assume that this is a DA proposal
 
 		log.Debug("Waiting for Da proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
-		return
+		return nil
 	}
 	// Process the DA proposal and quorum proposal
 	log.Debug("Processing DA proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
+
+	sequencerAddress, err := listener.rollupSequencerManager.GetCurrentSequencer(&bind.CallOpts{}, big.NewInt(int64(viewNumber)))
+	if err != nil {
+		log.Error("Failed to get current sequencer", "err", err)
+		return err
+	}
+
+	log.Info("Current sequencer", "sequencer", sequencerAddress)
+
 	// TODO: Processing will be implemented in the next PR
 
 	// Delate the quorum and da proposal keys from the map
 	// so that map doesnt take a lot of space in memory
 	delete(listener.quorumViewNumberBuilderCommitment, key)
 	delete(listener.daViewNumberBuilderCommitment, key)
+	return nil
 }
 
 func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espresso_types.DaProposalWrapper) error {
@@ -129,6 +154,14 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 
 	// Process the DA proposal and quorum proposal
 	log.Debug("Processing DA proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
+
+	sequencerAddress, err := listener.rollupSequencerManager.GetCurrentSequencer(&bind.CallOpts{}, big.NewInt(int64(viewNumber)))
+	if err != nil {
+		log.Error("Failed to get current sequencer", "err", err)
+		return err
+	}
+
+	log.Info("Current sequencer", "sequencer", sequencerAddress)
 
 	// TODO: Processing will be implemented in the next PR
 
