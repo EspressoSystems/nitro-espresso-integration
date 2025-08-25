@@ -24,6 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.17.38
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.27
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.64.1
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/ccoveille/go-safecast v1.1.0
 	github.com/cockroachdb/pebble v1.1.2
@@ -60,6 +61,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/wealdtech/go-merkletree v1.0.0
+	github.com/zeebo/blake3 v0.2.4
 	go.uber.org/automaxprocs v1.5.2
 	golang.org/x/crypto v0.39.0
 	golang.org/x/oauth2 v0.30.0
@@ -73,7 +75,7 @@ require (
 
 require (
 	github.com/ferranbt/fastssz v0.1.2 // indirect
-	github.com/klauspost/cpuid/v2 v2.0.9 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
 	github.com/minio/highwayhash v1.0.3 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/protolambda/zssz v0.1.5 // indirect
@@ -90,7 +92,7 @@ require (
 	cloud.google.com/go/iam v1.1.8 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/btcsuite/btcd v0.24.0 // indirect
-	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
+	github.com/btcsuite/btcd/btcec/v2 v2.2.0
 	github.com/btcsuite/btcd/btcutil v1.1.5 // indirect
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect

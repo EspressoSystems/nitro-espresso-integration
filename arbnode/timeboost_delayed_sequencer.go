@@ -5,25 +5,22 @@ package arbnode
 
 import (
 	"context"
-	"errors"
 
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	decentralizedtimeboost "github.com/offchainlabs/nitro/espresso/timeboost"
 	"github.com/offchainlabs/nitro/execution"
-	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 type TimeboostDelayedSequencer struct {
 	stopwaiter.StopWaiter
-	inbox              *InboxTracker
-	reader             *InboxReader
-	exec               execution.ExecutionSequencer
-	config             TimeboostDelayedSequencerConfigFetcher
-	delayedMessageChan chan gethexec.DelayedMessageCommand
+	inbox  *InboxTracker
+	reader *InboxReader
+	exec   execution.ExecutionSequencer
+	config TimeboostDelayedSequencerConfigFetcher
 }
 
 type TimeboostDelayedSequencerConfig struct {
@@ -44,49 +41,51 @@ var TestTimeboostDelayedSequencerConfig = TimeboostDelayedSequencerConfig{
 	Enable: false,
 }
 
-func NewTimeboostDelayedSequencer(reader *InboxReader, exec execution.ExecutionSequencer, config TimeboostDelayedSequencerConfigFetcher) (*TimeboostDelayedSequencer, chan gethexec.DelayedMessageCommand, error) {
-	delayedChannel := make(chan gethexec.DelayedMessageCommand, 1)
+func NewTimeboostDelayedSequencer(reader *InboxReader, exec execution.ExecutionSequencer, config TimeboostDelayedSequencerConfigFetcher) (*TimeboostDelayedSequencer, error) {
 	d := &TimeboostDelayedSequencer{
-		inbox:              reader.Tracker(),
-		reader:             reader,
-		exec:               exec,
-		config:             config,
-		delayedMessageChan: delayedChannel,
+		inbox:  reader.Tracker(),
+		reader: reader,
+		exec:   exec,
+		config: config,
 	}
-	return d, delayedChannel, nil
+	return d, nil
 }
 
 func (d *TimeboostDelayedSequencer) getDelayedMessagesRead() (uint64, error) {
 	return d.exec.NextDelayedMessageNumber()
 }
 
-func (d *TimeboostDelayedSequencer) sequence(ctx context.Context, delayedCount uint64) error {
+func (d *TimeboostDelayedSequencer) SequenceDelayedMessages(ctx context.Context, delayedCount uint64) ([]*decentralizedtimeboost.TimeboostDelayedMessage, error) {
 	config := d.config()
 	if !config.Enable {
-		return nil
+		return nil, nil
 	}
 
 	startPos, err := d.getDelayedMessagesRead()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Retrieve all finalized delayed messages
 	pos := startPos
-	var messages []*arbostypes.L1IncomingMessage
+	var messages []*decentralizedtimeboost.TimeboostDelayedMessage
 	for pos < delayedCount {
 		msg, _, _, err := d.inbox.GetDelayedMessageAccumulatorAndParentChainBlockNumber(ctx, pos)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		err = msg.FillInBatchGasCost(func(batchNum uint64) ([]byte, error) {
 			data, _, err := d.reader.GetSequencerMessageBytes(ctx, batchNum)
 			return data, err
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
-		messages = append(messages, msg)
+		delayedMsg := &decentralizedtimeboost.TimeboostDelayedMessage{
+			Message: msg,
+			Pos:     pos + 1,
+		}
+		messages = append(messages, delayedMsg)
 		pos++
 	}
 
@@ -94,36 +93,13 @@ func (d *TimeboostDelayedSequencer) sequence(ctx context.Context, delayedCount u
 	if len(messages) > 0 {
 		for i, msg := range messages {
 			// #nosec G115
-			err = d.exec.SequenceDelayedMessage(msg, startPos+uint64(i))
+			err = d.exec.SequenceDelayedMessage(msg.Message, startPos+uint64(i))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 		log.Info("DelayedSequencer: Sequenced", "msgnum", len(messages), "startpos", startPos)
 	}
 
-	return nil
-}
-
-func (d *TimeboostDelayedSequencer) run(ctx context.Context) {
-	for {
-		select {
-		case command := <-d.delayedMessageChan:
-			if err := d.sequence(ctx, command.DelayedMessagesRead); err != nil {
-				if errors.Is(err, gethexec.ExecutionEngineBlockCreationStopped) {
-					log.Info("stopping block creation in delayed sequencer because execution engine has stopped")
-					return
-				}
-				log.Error("Delayed sequencer error", "err", err)
-			}
-		case <-ctx.Done():
-			log.Debug("delayed sequencer: context done", "err", ctx.Err())
-			return
-		}
-	}
-}
-
-func (d *TimeboostDelayedSequencer) Start(ctxIn context.Context) {
-	d.StopWaiter.Start(ctxIn, d)
-	d.LaunchThread(d.run)
+	return messages, nil
 }

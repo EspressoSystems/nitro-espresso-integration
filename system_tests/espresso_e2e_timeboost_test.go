@@ -215,7 +215,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	expectedTxs = append(expectedTxs, delayedTx2)
 
 	// Wait for blocks
-	time.Sleep(time.Second * 60)
+	time.Sleep(time.Second * 90)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)

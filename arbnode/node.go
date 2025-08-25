@@ -1061,35 +1061,34 @@ func getTimeboostDelayedSequencer(
 	inboxReader *InboxReader,
 	exec execution.ExecutionSequencer,
 	configFetcher ConfigFetcher,
-) (*TimeboostDelayedSequencer, chan gethexec.DelayedMessageCommand, error) {
+) (*TimeboostDelayedSequencer, error) {
 	if !configFetcher.Get().TimeboostDelayedSequencer.Enable {
-		return nil, nil, nil
+		return nil, nil
 	}
 	if exec == nil {
-		return nil, nil, errors.New("Timeboost sequencer is enabled but execution client is nil")
+		return nil, errors.New("timeboost sequencer is enabled but execution client is nil")
 	}
-	timeboostDelayedSequencer, delayedChannel, err := NewTimeboostDelayedSequencer(inboxReader, exec, func() *TimeboostDelayedSequencerConfig { return &configFetcher.Get().TimeboostDelayedSequencer })
+	timeboostDelayedSequencer, err := NewTimeboostDelayedSequencer(inboxReader, exec, func() *TimeboostDelayedSequencerConfig { return &configFetcher.Get().TimeboostDelayedSequencer })
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return timeboostDelayedSequencer, delayedChannel, nil
+	return timeboostDelayedSequencer, nil
 }
 
 func getTimeboostSequencer(
 	l1Reader *headerreader.HeaderReader,
 	exec execution.ExecutionClient,
 	configFetcher ConfigFetcher,
-	channel chan gethexec.DelayedMessageCommand,
+	timeboostDelayedSequencer *TimeboostDelayedSequencer,
 ) (*gethexec.TimeboostSequencer, error) {
-	log.Info("timeboost sequencer: ", "enable", configFetcher.Get().TimeboostSequencer.Enable)
 	if !configFetcher.Get().TimeboostSequencer.Enable {
 		return nil, nil
 	}
 	if exec == nil {
-		return nil, errors.New("Timeboost sequencer is enabled but execution client is nil")
+		return nil, errors.New("timeboost sequencer is enabled but execution client is nil")
 	}
-	if channel == nil {
-		return nil, errors.New("Timeboost sequencer is enabled but channel is nil")
+	if timeboostDelayedSequencer == nil {
+		return nil, errors.New("timeboost sequencer is enabled but is nil")
 	}
 
 	if exec, ok := exec.(*gethexec.ExecutionNode); ok {
@@ -1097,13 +1096,13 @@ func getTimeboostSequencer(
 		if err != nil {
 			return nil, err
 		}
-		timeboostSequencer, err := gethexec.NewTimeboostSequencer(exec.ExecEngine, l1Reader, channel, func() *gethexec.TimeboostSequencerConfig { return &configFetcher.Get().TimeboostSequencer }, bridge)
+		timeboostSequencer, err := gethexec.NewTimeboostSequencer(exec.ExecEngine, l1Reader, timeboostDelayedSequencer, func() *gethexec.TimeboostSequencerConfig { return &configFetcher.Get().TimeboostSequencer }, bridge)
 		if err != nil {
 			return nil, err
 		}
 		return timeboostSequencer, nil
 	} else {
-		return nil, errors.New("Timeboost sequencer is enabled but execution client is not a gethexec.ExecutionNode")
+		return nil, errors.New("timeboost sequencer is enabled but execution client is not a gethexec.ExecutionNode")
 	}
 }
 
@@ -1274,12 +1273,12 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	timeboostDelayedSequencer, channel, err := getTimeboostDelayedSequencer(inboxReader, executionSequencer, configFetcher)
+	timeboostDelayedSequencer, err := getTimeboostDelayedSequencer(inboxReader, executionSequencer, configFetcher)
 	if err != nil {
 		return nil, err
 	}
 
-	timeboostSequencer, err := getTimeboostSequencer(l1Reader, executionClient, configFetcher, channel)
+	timeboostSequencer, err := getTimeboostSequencer(l1Reader, executionClient, configFetcher, timeboostDelayedSequencer)
 	if err != nil {
 		return nil, err
 	}
@@ -1611,9 +1610,6 @@ func (n *Node) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("error starting timeboost sequencer: %w", err)
 		}
-	}
-	if n.TimeboostDelayedSequencer != nil {
-		n.TimeboostDelayedSequencer.Start(ctx)
 	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.

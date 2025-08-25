@@ -1,6 +1,7 @@
 package espressostreamer
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -82,41 +83,6 @@ type EspressoStreamer struct {
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
-
-type BlockNumber uint64
-type RoundNumber uint64
-type BlockHash []byte
-type KeyId uint8
-type Signature []byte
-type Bytes []byte
-type Commitment []byte
-
-type Round struct {
-	Value uint64 `cbor:"0,keyasint"`
-}
-
-type Block struct {
-	Number  BlockNumber `cbor:"0,keyasint"`
-	Round   RoundNumber `cbor:"1,keyasint"`
-	Payload Bytes       `cbor:"2,keyasint"`
-}
-
-type BlockInfo struct {
-	Num   BlockNumber `cbor:"0,keyasint"`
-	Round Round       `cbor:"1,keyasint"`
-	Hash  BlockHash   `cbor:"2,keyasint"`
-}
-
-type Certificate struct {
-	Data       BlockInfo           `cbor:"0,keyasint"`
-	Commitment Commitment          `cbor:"1,keyasint"`
-	Signatures map[KeyId]Signature `cbor:"2,keyasint"`
-}
-
-type CertifiedBlock struct {
-	Data Block       `cbor:"0,keyasint"`
-	Cert Certificate `cbor:"1,keyasint"`
-}
 
 func NewEspressoStreamer(
 	namespace uint64,
@@ -343,38 +309,60 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 }
 
 func (s *EspressoStreamer) parseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	var block CertifiedBlock
-	err := cbor.Unmarshal(tx, &block)
-	if err != nil {
-		log.Error("error decoding certified block", "err", err)
-		return nil, err
-	}
-	log.Info("block", "num", block.Data.Number)
-	var message gethexec.MessagePayload
-	err = cbor.Unmarshal(block.Data.Payload, &message)
-	if err != nil {
-		log.Error("error decoding payload", "err", err)
-		return nil, err
-	}
-	var messageWithMetadata arbostypes.MessageWithMetadata
-	err = rlp.DecodeBytes(message.Message, &messageWithMetadata)
-	if err != nil {
-		log.Error("error decoding message", "err", err)
+	var block gethexec.CertifiedBlock
+	if err := cbor.Unmarshal(tx, &block); err != nil {
+		log.Warn("error decoding certified block", "err", err)
 		return nil, err
 	}
 
-	result := []*MessageWithMetadataAndPos{}
-	if message.Position < s.currentMessagePos {
-		log.Warn("message index is less than current pos, skipping", "current", s.currentMessagePos, "messagePos", message.Position)
-		return result, nil
+	// We need to recalculate the `block hash` to ensure the data is the same
+	blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
+	if err != nil {
+		return nil, err
 	}
-	log.Warn("updating", "current", s.currentMessagePos, "messagePos", message.Position)
-	result = append(result, &MessageWithMetadataAndPos{
+	if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
+		return nil, fmt.Errorf("mistmatch computed hash: %v, certified hash %v", blockHash, block.Cert.Data.Hash)
+	}
+
+	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
+	// see: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
+	commitment := NewRawCommitmentBuilder("BlockInfo").
+		FieldBlockNum(block.Data.Number).
+		FieldRound(block.Cert.Data.Round).
+		FieldHash(blockHash).
+		Finalize()
+	if !bytes.Equal(commitment, block.Cert.Commitment) {
+		return nil, fmt.Errorf("mistmatch computed commitment: %v, certified commitment: %v", commitment, block.Cert.Commitment)
+	}
+
+	// Validate the commitment against the committee signatures
+	if err = ValidateTimeboostCertificate(commitment, block.Cert.Signatures); err != nil {
+		return nil, err
+	}
+
+	// After validation has succeeded deserialize the payload
+	var msg gethexec.MessagePayload
+	if err = cbor.Unmarshal(block.Data.Payload, &msg); err != nil {
+		log.Warn("error decoding payload", "err", err)
+		return nil, err
+	}
+	var messageWithMetadata arbostypes.MessageWithMetadata
+	if err = rlp.DecodeBytes(msg.Message, &messageWithMetadata); err != nil {
+		log.Warn("error decoding message", "err", err)
+		return nil, err
+	}
+
+	if msg.Position < s.currentMessagePos {
+		log.Warn("timeboost message index is less than current pos, skipping", "messageIndex", s.currentMessagePos, "currentMessagePos", msg.Position)
+		return []*MessageWithMetadataAndPos{}, nil
+	}
+	log.Info("Added timeboost message to queue", "messagePos", msg.Position, "currentMessagePos", s.currentMessagePos)
+	result := &MessageWithMetadataAndPos{
 		MessageWithMeta: messageWithMetadata,
-		Pos:             message.Position,
+		Pos:             msg.Position,
 		HotshotHeight:   s.nextHotshotBlockNum,
-	})
-	return result, nil
+	}
+	return []*MessageWithMetadataAndPos{result}, nil
 }
 
 func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {

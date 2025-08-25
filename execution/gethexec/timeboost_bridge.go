@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"sync"
 	"time"
 
 	// Protobuf imports for grpc calls
@@ -20,6 +21,75 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
+type TimeboostBridge struct {
+	stopwaiter.StopWaiter
+	config     TimeboostBridgeConfig
+	grpcClient protos.InternalApiClient
+	blockQueue synchronizedTimeboostBlockQueue
+}
+
+type TimeboostBridgeConfig struct {
+	ListenPort               uint16        `koanf:"listen-port"`
+	ConnectionTimeout        time.Duration `koanf:"connection-timeout"`
+	MaxSendMsgSize           int           `koanf:"max-send-msg-size"`
+	MaxReceiveMsgSize        int           `koanf:"max-receive-msg-size"`
+	BlockSubmitTimeout       time.Duration `koanf:"block-submit-timeout"`
+	InternalTimeboostGrpcUrl string        `koanf:"internal-timeboost-grpc-url"`
+}
+
+var DefaultTimeboostBridgeConfig = TimeboostBridgeConfig{
+	ListenPort:               55000,            // Default listen port that timeboost will try and connect to
+	ConnectionTimeout:        5 * time.Second,  // Max time for grpc connection timeboost
+	MaxSendMsgSize:           5 * 1024 * 1024,  // Max msg receive size from timeboost
+	MaxReceiveMsgSize:        5 * 1024 * 1024,  // Max msg send size to timeboost
+	BlockSubmitTimeout:       5 * time.Second,  // Max timeout when sending block to timeboost
+	InternalTimeboostGrpcUrl: "localhost:5000", // Timeboost grpc server url
+}
+
+func TimeboostBridgeConfigAddOptions(prefix string, f *flag.FlagSet) {
+	f.Uint16(prefix+".listen-port", DefaultTimeboostBridgeConfig.ListenPort, "timeboost inclusion listener listen port")
+	f.Duration(prefix+".connection-timeout", DefaultTimeboostBridgeConfig.ConnectionTimeout, "timeboost inclusion list connection timeout")
+	f.Int(prefix+".max-send-msg-size", DefaultTimeboostBridgeConfig.MaxSendMsgSize, "timeboost inclusion list send message size")
+	f.Int(prefix+".max-receive-msg-size", DefaultTimeboostBridgeConfig.MaxReceiveMsgSize, "timeboost inclusion receive message size")
+	f.Duration(prefix+".block-submit-timeout", DefaultTimeboostBridgeConfig.BlockSubmitTimeout, "sending block to timeboost connection timeout")
+	f.String(prefix+".internal-timeboost-grpc-url", DefaultTimeboostBridgeConfig.InternalTimeboostGrpcUrl, "timeboost grpc server url")
+}
+
+func NewTimeboostBridge(config TimeboostBridgeConfig) (*TimeboostBridge, error) {
+	return &TimeboostBridge{
+		config:     config,
+		grpcClient: nil,
+	}, nil
+}
+
+type synchronizedTimeboostBlockQueue struct {
+	queue []*protos.Block
+	mutex sync.RWMutex
+}
+
+func (q *synchronizedTimeboostBlockQueue) enqueue(item *protos.Block) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.queue = append(q.queue, item)
+}
+
+func (q *synchronizedTimeboostBlockQueue) dequeue() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	if len(q.queue) > 0 {
+		q.queue = q.queue[1:]
+	}
+}
+
+func (q *synchronizedTimeboostBlockQueue) Peek() *protos.Block {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	if len(q.queue) == 0 {
+		return nil
+	}
+	return q.queue[0]
+}
+
 type ForwardService struct {
 	protos.UnimplementedForwardApiServer
 	processInclusionList func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error
@@ -34,98 +104,70 @@ func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *protos.In
 	return &emptypb.Empty{}, nil
 }
 
-type TimeboostBridge struct {
-	stopwaiter.StopWaiter
-	config     TimeboostBridgeConfig
-	grpcClient protos.InternalApiClient
-}
-
-type TimeboostBridgeConfig struct {
-	ListenPort               uint16        `koanf:"listen-port"`
-	ConnectionTimeout        time.Duration `koanf:"connection-timeout"`
-	MaxSendMsgSize           int           `koanf:"max-send-msg-size"`
-	MaxReceiveMsgSize        int           `koanf:"max-receive-msg-size"`
-	InternalTimeboostGrpcUrl string        `koanf:"internal-timeboost-grpc-url"`
-}
-
-var DefaultTimeboostBridgeConfig = TimeboostBridgeConfig{
-	ListenPort:               55000,            // Default listen port that timeboost will try and connect to
-	ConnectionTimeout:        5 * time.Second,  // Max time for grpc connection timeboost
-	MaxSendMsgSize:           5 * 1024 * 1024,  // Max msg receive size from timeboost
-	MaxReceiveMsgSize:        5 * 1024 * 1024,  // Max msg send size to timeboost
-	InternalTimeboostGrpcUrl: "localhost:5000", // Timeboost grpc server url
-}
-
-func TimeboostBridgeConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Uint16(prefix+".listen-port", DefaultTimeboostBridgeConfig.ListenPort, "timeboost inclusion listener listen port")
-	f.Duration(prefix+".connection-timeout", DefaultTimeboostBridgeConfig.ConnectionTimeout, "timeboost inclusion list connection timeout")
-	f.Int(prefix+".max-send-msg-size", DefaultTimeboostBridgeConfig.MaxSendMsgSize, "timeboost inclusion list send message size")
-	f.Int(prefix+".max-receive-msg-size", DefaultTimeboostBridgeConfig.MaxReceiveMsgSize, "timeboost inclusion receive message size")
-	f.String(prefix+".internal-timeboost-grpc-url", DefaultTimeboostBridgeConfig.InternalTimeboostGrpcUrl, "timeboost grpc server url")
-}
-
-func NewTimeboostBridge(config TimeboostBridgeConfig) (*TimeboostBridge, error) {
-	return &TimeboostBridge{
-		config:     config,
-		grpcClient: nil,
-	}, nil
-}
-
 // Send block to timeboost who will get certificate over the block hash and forward to hotshot
-func (l *TimeboostBridge) SendBlockToTimeboost(number uint64, payload []byte, round uint64, chainId uint32) error {
+func (b *TimeboostBridge) EnqueueBlockToTimeboost(pos uint64, round uint64, encoded []byte) {
 	protoBlock := &protos.Block{
-		Number:  number,
+		Number:  pos,
 		Round:   round,
-		Payload: payload,
+		Payload: encoded,
 	}
-	ctx := context.Background()
-	if _, err := l.grpcClient.SubmitBlock(ctx, protoBlock); err != nil {
-		log.Error("failed to submit block", "err", err)
-		return err
-	}
-	return nil
+	b.blockQueue.enqueue(protoBlock)
 }
 
-func (l *TimeboostBridge) Start(
+func (b *TimeboostBridge) blockSubmitter(timeout *time.Duration) time.Duration {
+	block := b.blockQueue.Peek()
+	if block != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+		defer cancel()
+		if _, err := b.grpcClient.SubmitBlock(ctx, block); err != nil {
+			log.Error("failed to submit block", "err", err)
+			return 0
+		}
+		b.blockQueue.dequeue()
+	}
+	return 0
+}
+
+func (b *TimeboostBridge) Start(
 	ctx context.Context,
 	processInclusionList func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error,
 ) error {
-	if _, err := url.ParseRequestURI(l.config.InternalTimeboostGrpcUrl); err != nil {
+	if _, err := url.ParseRequestURI(b.config.InternalTimeboostGrpcUrl); err != nil {
 		panic("timeboost grpc url must be a valid url")
 	}
 	oneMb := 1024 * 1024
-	if l.config.MaxSendMsgSize < 5*oneMb || l.config.MaxSendMsgSize > 10*oneMb {
+	if b.config.MaxSendMsgSize < 5*oneMb || b.config.MaxSendMsgSize > 10*oneMb {
 		panic("max send message size should be between 5 and 10 mb")
 	}
-	if l.config.MaxReceiveMsgSize < 5*oneMb || l.config.MaxReceiveMsgSize > 10*oneMb {
+	if b.config.MaxReceiveMsgSize < 5*oneMb || b.config.MaxReceiveMsgSize > 10*oneMb {
 		panic("max receive message size should be bettern 5 and 10 mb")
 	}
-	if l.config.ConnectionTimeout < 3*time.Second || l.config.ConnectionTimeout > 10*time.Second {
+	if b.config.ConnectionTimeout < 3*time.Second || b.config.ConnectionTimeout > 10*time.Second {
 		panic("connection timeout should be between 3 and 10 seconds")
 	}
 
-	l.StopWaiter.Start(ctx, l)
+	b.StopWaiter.Start(ctx, b)
 
 	// Grpc connection to timeboost for block submission
-	grpcConn, err := grpc.NewClient(l.config.InternalTimeboostGrpcUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	grpcConn, err := grpc.NewClient(b.config.InternalTimeboostGrpcUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Error("Failed to connect to gRPC server", "err", err)
 		return err
 	}
 	log.Info("starting grpc client")
-	l.grpcClient = protos.NewInternalApiClient(grpcConn)
+	b.grpcClient = protos.NewInternalApiClient(grpcConn)
 
 	// Grpc server for inclusion list
-	l.LaunchThread(func(ctx context.Context) {
-		addr := fmt.Sprintf(":%d", l.config.ListenPort)
+	b.LaunchThread(func(ctx context.Context) {
+		addr := fmt.Sprintf(":%d", b.config.ListenPort)
 		lis, err := net.Listen("tcp", addr)
 		if err != nil {
 			panic(err)
 		}
 		server := grpc.NewServer(
-			grpc.MaxRecvMsgSize(l.config.MaxSendMsgSize),
-			grpc.MaxSendMsgSize(l.config.MaxSendMsgSize),
-			grpc.ConnectionTimeout(l.config.ConnectionTimeout),
+			grpc.MaxRecvMsgSize(b.config.MaxSendMsgSize),
+			grpc.MaxSendMsgSize(b.config.MaxSendMsgSize),
+			grpc.ConnectionTimeout(b.config.ConnectionTimeout),
 		)
 		protos.RegisterForwardApiServer(server, &ForwardService{
 			processInclusionList: processInclusionList,
@@ -139,6 +181,14 @@ func (l *TimeboostBridge) Start(
 			panic(err)
 		}
 	})
+
+	timeout := &b.config.BlockSubmitTimeout
+	err = b.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		return b.blockSubmitter(timeout)
+	})
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
