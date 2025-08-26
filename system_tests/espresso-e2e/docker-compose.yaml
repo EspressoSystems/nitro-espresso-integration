@@ -18,6 +18,7 @@ services:
       - ESPRESSO_SEQUENCER_STORAGE_PATH=/data/espresso
       - RUST_LOG=WARN
       - RUST_LOG_FORMAT
+      - ESPRESSO_DEV_NODE_VERSION=0.4
     volumes:
       - espresso_storage:/data/espresso
     extra_hosts:

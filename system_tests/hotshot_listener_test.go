@@ -14,7 +14,7 @@ const (
 	SEQUENCER_API_WEBSOCKERT_URL = "ws://127.0.0.1:41000/v1"
 )
 
-func TestHotshotListener(t *testing.T) {
+func TestEspressoHotshotListener(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
