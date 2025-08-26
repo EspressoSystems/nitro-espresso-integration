@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
+
 	hotshot_listener "github.com/offchainlabs/nitro/espresso/hotshot-listener"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
