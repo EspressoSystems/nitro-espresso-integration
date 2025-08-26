@@ -3,9 +3,9 @@ package hotshot_listener
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 
-	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -15,6 +15,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 
+	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/gorilla/websocket"
 )
 
@@ -89,6 +90,9 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	viewNumber := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.ViewNumber
 	builderCommitment := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.BuilderCommitment
 
+	if viewNumber < 0 || viewNumber > math.MaxUint32 {
+		return fmt.Errorf("view number %d is too large or small for", viewNumber)
+	}
 	hexViewNumber := hexutil.Uint(viewNumber)
 
 	// Combine the hexViewNumber and builderCommitment to get the key
@@ -136,10 +140,14 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 }
 
 func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espresso_types.DaProposalWrapper) error {
-	log.Info("Recieved DA Proposal event", "event", daProposalWrapper)
+	log.Info("Received DA Proposal event", "event", daProposalWrapper)
 
 	// Now get the view number for the given builder commitment
 	viewNumber := daProposalWrapper.DaProposalDataWrapper.Data.ViewNumber
+
+	if viewNumber < 0 || viewNumber > math.MaxUint32 {
+		return fmt.Errorf("view number %d is too large or small for", viewNumber)
+	}
 	// Convert the viewNumber to a hex string
 	hexViewNumber := hexutil.Uint(viewNumber)
 
@@ -236,9 +244,14 @@ func (listener *HotshotListener) Start(ctx context.Context) error {
 			}
 			_, message, err := listener.conn.ReadMessage()
 			if err != nil {
-				return
+				log.Error("Error reading message", "err", err)
+				continue
 			}
-			listener.processMessage(message)
+			err = listener.processMessage(message)
+			if err != nil {
+				log.Error("Error processing message", "err", err)
+				continue
+			}
 		}
 	})
 
