@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	HotshotListenerEndpoint = "/v1/hotshot-events/events"
+	HotshotListenerEndpoint = "/hotshot-events/events"
 )
 
 type HotshotListener struct {
@@ -52,7 +52,7 @@ func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string
 	rollupSequencerManagerContractAddress := common.HexToAddress(rollupSequencerManagerContract)
 	rollupSequencerManager, err := espressogen.NewIEspressoRollupSequencerManager(rollupSequencerManagerContractAddress, l1Client)
 	if err != nil {
-		log.Error("Failed to create rollup sequencer manager contract instance", "err", err)
+		log.Error("failed to create rollup sequencer manager contract instance", "err", err)
 		return nil, err
 	}
 
@@ -70,7 +70,7 @@ func (listener *HotshotListener) processMessage(message []byte) error {
 	// Convert message to ConsensusMessage
 	consensusMessage, err := espresso_types.UnmarshalConsensusMessage(message)
 	if err != nil {
-		log.Error("Failed to unmarshal consensus message:", err)
+		log.Error("failed to unmarshal consensus message:", err)
 		return err
 	}
 	if consensusMessage.Event.QuorumProposalWrapper != nil {
@@ -91,7 +91,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	builderCommitment := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.BuilderCommitment
 
 	if viewNumber < 0 || viewNumber > math.MaxUint32 {
-		return fmt.Errorf("view number %d is too large or small for", viewNumber)
+		return fmt.Errorf("view number %d is too large or small for uint32", viewNumber)
 	}
 	hexViewNumber := hexutil.Uint(viewNumber)
 
@@ -106,8 +106,6 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	// Check if a da commitment exists for the key relative to
 	// this quorum proposal view number and builder commitment
 	if _, ok := listener.daViewNumberBuilderCommitment[key]; !ok {
-		// If it does, then we can assume that this is a DA proposal
-
 		log.Info("Waiting for Da proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
 		return nil
 	}
@@ -121,7 +119,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 		BlockNumber: l1FinalizedBlockNumberBigInt,
 	}, big.NewInt(int64(nextView)))
 	if err != nil {
-		log.Error("Failed to get current sequencer", "err", err)
+		log.Error("failed to get current sequencer", "err", err)
 		return err
 	}
 
@@ -132,7 +130,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 
 	// TODO: Processing will be implemented in the next PR
 
-	// Delate the quorum and da proposal keys from the map
+	// Delete the quorum and da proposal keys from the map
 	// so that map doesnt take a lot of space in memory
 	delete(listener.quorumViewNumberBuilderCommitment, key)
 	delete(listener.daViewNumberBuilderCommitment, key)
@@ -146,7 +144,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 	viewNumber := daProposalWrapper.DaProposalDataWrapper.Data.ViewNumber
 
 	if viewNumber < 0 || viewNumber > math.MaxUint32 {
-		return fmt.Errorf("view number %d is too large or small for", viewNumber)
+		return fmt.Errorf("view number %d is too large or small for uint32", viewNumber)
 	}
 	// Convert the viewNumber to a hex string
 	hexViewNumber := hexutil.Uint(viewNumber)
@@ -163,7 +161,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 
 	builderCommitmentString, err := builderCommitment.ToTaggedSting()
 	if err != nil {
-		log.Error("Failed to convert builder commitment to tagged string:", err)
+		log.Error("failed to convert builder commitment to tagged string:", err)
 		return err
 	}
 
@@ -191,7 +189,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 		BlockNumber: &l1FinalizedBlockNumberForView,
 	}, big.NewInt(int64(nextView)))
 	if err != nil {
-		log.Error("Failed to get current sequencer", "err", err)
+		log.Error("failed to get sequencer address for next view", "err", err)
 		return err
 	}
 
@@ -244,12 +242,12 @@ func (listener *HotshotListener) Start(ctx context.Context) error {
 			}
 			_, message, err := listener.conn.ReadMessage()
 			if err != nil {
-				log.Error("Error reading message", "err", err)
+				log.Error("error reading message", "err", err)
 				continue
 			}
 			err = listener.processMessage(message)
 			if err != nil {
-				log.Error("Error processing message", "err", err)
+				log.Error("error processing message", "err", err)
 				continue
 			}
 		}

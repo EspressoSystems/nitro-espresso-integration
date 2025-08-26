@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	SEQUENCER_API_WEBSOCKERT_URL = "ws://127.0.0.1:41000"
+	SEQUENCER_API_WEBSOCKERT_URL = "ws://127.0.0.1:41000/v1"
 )
 
 func TestHotshotListener(t *testing.T) {
@@ -53,9 +53,8 @@ func TestHotshotListener(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Note: This are rudimentary tests to check if the initial basic functionality
-	// of the listener, these tests will be modified in the future to include
-	// more processing checks
+	// Note: These are rudimentary tests to check if the initial basic functionality
+	// of the listener works. These tests will be modified in the future to include more processing checks
 
 	// Check that we were able to find the quorum proposal and DA proposal for a given view and
 	// are now processing it
@@ -78,7 +77,4 @@ func TestHotshotListener(t *testing.T) {
 
 	// Stop and wait for the listener to stop
 	listener.StopAndWait()
-
-	log.Info("Stopped the hotshot listener")
-
 }
