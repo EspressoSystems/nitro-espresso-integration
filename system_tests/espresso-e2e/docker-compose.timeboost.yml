@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:cbor
+    image: ghcr.io/espressosystems/timeboost:20250826
     command:
       [
         "/app/timeboost",
@@ -11,6 +11,7 @@ services:
         "--namespace", "412346",
         "--espresso-base-url", "http://espresso-dev-node:41000/v1/",
         "--espresso-websocket-url", "ws://espresso-dev-node:41000/v1/",
+        "--https-only", "false"
       ]
     environment:
       - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
@@ -33,7 +34,7 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:cbor
+    image: ghcr.io/espressosystems/timeboost:20250826
     command:
       [
         "/app/timeboost",

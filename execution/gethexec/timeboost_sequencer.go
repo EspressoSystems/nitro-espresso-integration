@@ -80,8 +80,9 @@ type Certificate struct {
 }
 
 type CertifiedBlock struct {
-	Data Block       `cbor:"0,keyasint"`
-	Cert Certificate `cbor:"1,keyasint"`
+	Version uint8       `cbor:"0,keyasint"`
+	Data    Block       `cbor:"1,keyasint"`
+	Cert    Certificate `cbor:"2,keyasint"`
 }
 
 type MessagePayload struct {
@@ -225,7 +226,7 @@ func (s *TimeboostSequencer) sequenceDelayedMessages(ctx context.Context, tx *ti
 		i += 1
 	}
 	s.txQueue.dequeue()
-	return err
+	return nil
 }
 
 func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {

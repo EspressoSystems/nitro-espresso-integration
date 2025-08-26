@@ -315,24 +315,29 @@ func (s *EspressoStreamer) parseTimeboostEspressoTransaction(tx espressoTypes.By
 		return nil, err
 	}
 
+	if block.Version != 1 {
+		return nil, fmt.Errorf("block version mismatch! should be version 1 got %d", block.Version)
+	}
+
 	// We need to recalculate the `block hash` to ensure the data is the same
+	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L150-L155
 	blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
 	if err != nil {
 		return nil, err
 	}
 	if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
-		return nil, fmt.Errorf("mistmatch computed hash: %v, certified hash %v", blockHash, block.Cert.Data.Hash)
+		return nil, fmt.Errorf("hash mistmatch! computed hash: 0x%x, certified hash 0x%x", blockHash, block.Cert.Data.Hash)
 	}
 
 	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
-	// see: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
+	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
 	commitment := NewRawCommitmentBuilder("BlockInfo").
-		FieldBlockNum(block.Data.Number).
+		FieldBlockNum(block.Cert.Data.Num).
 		FieldRound(block.Cert.Data.Round).
 		FieldHash(blockHash).
 		Finalize()
 	if !bytes.Equal(commitment, block.Cert.Commitment) {
-		return nil, fmt.Errorf("mistmatch computed commitment: %v, certified commitment: %v", commitment, block.Cert.Commitment)
+		return nil, fmt.Errorf("commitment mistmatch! computed commitment: 0x%x, certified commitment: 0x%x", commitment, block.Cert.Commitment)
 	}
 
 	// Validate the commitment against the committee signatures

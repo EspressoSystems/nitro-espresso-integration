@@ -15,18 +15,16 @@ type RawCommitmentBuilder struct {
 	hasher hash.Hash
 }
 
-// We need to follow how timeboost calculates the commit which is using this repository:
+// We need to follow how timeboost calculates the commitment which is using this repository:
 // https://github.com/EspressoSystems/commit
 func NewRawCommitmentBuilder(tag string) *RawCommitmentBuilder {
-	hasher := sha3.NewLegacyKeccak256()
-	builder := &RawCommitmentBuilder{hasher: hasher}
+	builder := &RawCommitmentBuilder{hasher: sha3.NewLegacyKeccak256()}
 	return builder.constantStr(tag)
 }
 
 func (b *RawCommitmentBuilder) constantStr(s string) *RawCommitmentBuilder {
 	b.hasher.Write([]byte(s))
-	b.fixedSizeBytes(INVALID_UTF8)
-	return b
+	return b.fixedSizeBytes(INVALID_UTF8)
 }
 
 func (b *RawCommitmentBuilder) fixedSizeBytes(data []byte) *RawCommitmentBuilder {
@@ -34,26 +32,21 @@ func (b *RawCommitmentBuilder) fixedSizeBytes(data []byte) *RawCommitmentBuilder
 	return b
 }
 
-func (b *RawCommitmentBuilder) U64(val uint64) *RawCommitmentBuilder {
+func (b *RawCommitmentBuilder) u64(val uint64) *RawCommitmentBuilder {
 	numBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(numBytes, val)
-	b.fixedSizeBytes(numBytes)
-	return b
+	return b.fixedSizeBytes(numBytes)
 }
 
 func (b *RawCommitmentBuilder) FieldBlockNum(num uint64) *RawCommitmentBuilder {
 	b.constantStr("num")
-	numBuilder := NewRawCommitmentBuilder("Block Number Commitment")
-	numCommitment := numBuilder.U64(num).Finalize()
-	b.hasher.Write(numCommitment)
+	b.hasher.Write(NewRawCommitmentBuilder("Block Number Commitment").u64(num).Finalize())
 	return b
 }
 
 func (b *RawCommitmentBuilder) Round(num uint64) *RawCommitmentBuilder {
 	b.constantStr("num")
-	roundNumBuilder := NewRawCommitmentBuilder("Round Number Commitment")
-	roundNumCommitment := roundNumBuilder.U64(num).Finalize()
-	b.hasher.Write(roundNumCommitment)
+	b.hasher.Write(NewRawCommitmentBuilder("Round Number Commitment").u64(num).Finalize())
 	return b
 }
 
@@ -65,29 +58,22 @@ func (b *RawCommitmentBuilder) Hash(hash []byte) *RawCommitmentBuilder {
 
 func (b *RawCommitmentBuilder) CommitteeId(committeeId uint64) *RawCommitmentBuilder {
 	b.constantStr("com")
-	committeeBuilder := NewRawCommitmentBuilder("CommitteeId")
-	committeeHash := committeeBuilder.U64(committeeId).Finalize()
-	b.hasher.Write(committeeHash)
+	b.hasher.Write(NewRawCommitmentBuilder("CommitteeId").u64(committeeId).Finalize())
 	return b
 }
 
 func (b *RawCommitmentBuilder) FieldRound(round gethexec.Round) *RawCommitmentBuilder {
 	b.constantStr("round")
-	roundBuilder := NewRawCommitmentBuilder("Round")
-	numCommitment := roundBuilder.Round(round.Number).CommitteeId(round.CommitteeId).Finalize()
-	b.hasher.Write(numCommitment)
+	b.hasher.Write(NewRawCommitmentBuilder("Round").Round(round.Number).CommitteeId(round.CommitteeId).Finalize())
 	return b
 }
 
 func (b *RawCommitmentBuilder) FieldHash(hash []byte) *RawCommitmentBuilder {
 	b.constantStr("hash")
-	hashBuilder := NewRawCommitmentBuilder("BlockHash")
-	hashCommitment := hashBuilder.Hash(hash).Finalize()
-	b.hasher.Write(hashCommitment)
+	b.hasher.Write(NewRawCommitmentBuilder("BlockHash").Hash(hash).Finalize())
 	return b
 }
 
 func (b *RawCommitmentBuilder) Finalize() []byte {
-	h := b.hasher.Sum(nil)
-	return h
+	return b.hasher.Sum(nil)
 }

@@ -114,7 +114,8 @@ func ValidateTimeboostCertificate(commitment []byte, sigs map[uint8][]byte) erro
 			return err
 		}
 		if !crypto.VerifySignature(compressedBytes, hasher.Sum(nil), sig) {
-			log.Error("signature verification failed for key ID", "id", keyID)
+			// Continue through rest of signatures we need f + 1
+			log.Warn("signature verification failed for key ID", "id", keyID)
 			continue
 		}
 		validSigs += 1
