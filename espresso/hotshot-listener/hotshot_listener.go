@@ -6,17 +6,17 @@ import (
 	"math"
 	"math/big"
 
+	"github.com/EspressoSystems/espresso-network/sdks/go/types"
+	"github.com/gorilla/websocket"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
-
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
-
-	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -68,7 +68,7 @@ func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string
 
 func (listener *HotshotListener) processMessage(message []byte) error {
 	// Convert message to ConsensusMessage
-	consensusMessage, err := espresso_types.UnmarshalConsensusMessage(message)
+	consensusMessage, err := types.UnmarshalConsensusMessage(message)
 	if err != nil {
 		log.Error("failed to unmarshal consensus message:", err)
 		return err
@@ -84,7 +84,7 @@ func (listener *HotshotListener) processMessage(message []byte) error {
 	return nil
 }
 
-func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrapper *espresso_types.QuorumProposalWrapper) error {
+func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrapper *types.QuorumProposalWrapper) error {
 	log.Info("Received quorum proposal event", "event", quorumProposalWrapper)
 
 	viewNumber := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.ViewNumber
@@ -137,7 +137,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	return nil
 }
 
-func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espresso_types.DaProposalWrapper) error {
+func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types.DaProposalWrapper) error {
 	log.Info("Received DA Proposal event", "event", daProposalWrapper)
 
 	// Now get the view number for the given builder commitment
@@ -149,7 +149,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 	// Convert the viewNumber to a hex string
 	hexViewNumber := hexutil.Uint(viewNumber)
 
-	blockPayload, err := espresso_types.NewBlockPayload(daProposalWrapper.DaProposalDataWrapper.Data.EncodedTransactions,
+	blockPayload, err := types.NewBlockPayload(daProposalWrapper.DaProposalDataWrapper.Data.EncodedTransactions,
 		daProposalWrapper.DaProposalDataWrapper.Data.Metadata)
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *espre
 
 }
 
-func (listener *HotshotListener) processDecideEvent(decide *espresso_types.Decide) error {
+func (listener *HotshotListener) processDecideEvent(decide *types.Decide) error {
 	log.Info("Received Decide event", "event", decide)
 	for _, leafChain := range decide.LeafChain {
 		// Check if any of the leafs match the view number + builder commitment that we have stored
