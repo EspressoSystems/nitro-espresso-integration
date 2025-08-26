@@ -1370,6 +1370,7 @@ func deployOnParentChain(
 	deployBold bool,
 	delayBufferThreshold uint64,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
+	log.Info("Came inside deployParentChain")
 	parentChainInfo.GenerateAccount("RollupOwner")
 	parentChainInfo.GenerateAccount("Sequencer")
 	parentChainInfo.GenerateAccount("Validator")
@@ -1396,9 +1397,17 @@ func deployOnParentChain(
 	//  Deploy a espressoTEEVerifierMock contract
 	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
+	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+	Require(t, err)
+
+	rollupSequencerManagerAddress, tx, _, err := espressogen.DeployEspressoRollupSequencerManager(&parentChainTransactionOpts, parentChainClient, []common.Address{
+		parentChainInfo.GetAddress("Sequencer"),
+	})
+	Require(t, err)
 
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
+
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := localgen.DeployTestWETH9(
@@ -1478,13 +1487,11 @@ func deployOnParentChain(
 			DeployedAt:             boldAddresses.DeployedAt,
 		}
 	} else {
-
 		//  Deploy a espressoTEEVerifierMock contract
 		espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 		Require(t, err)
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
-
 		addresses, err = deploy.DeployLegacyOnParentChain(
 			ctx,
 			parentChainReader,
@@ -1504,6 +1511,8 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
 	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
+	log.Info("RollupSequencerManager address", "address", rollupSequencerManagerAddress)
+	parentChainInfo.SetContract("RollupSequencerManager", rollupSequencerManagerAddress)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }
