@@ -78,6 +78,7 @@ type BatcherAddrMonitor struct {
 	seqInboxAddr      common.Address
 	seqInboxInterface *bridgegen.SequencerInbox
 	deployAt          uint64
+	unsubscribe       func()
 }
 
 func NewBatcherAddrMonitor(
@@ -463,6 +464,7 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 	}
 
 	headerchan, unsubscribe := b.l1Reader.Subscribe(false)
+	b.unsubscribe = unsubscribe
 
 	b.LaunchThread(func(ctx context.Context) {
 		for {
@@ -479,6 +481,10 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 			}
 		}
 	})
-
 	return nil
+}
+
+func (b *BatcherAddrMonitor) StopAndWait() {
+	b.unsubscribe()
+	b.StopWaiter.StopAndWait()
 }

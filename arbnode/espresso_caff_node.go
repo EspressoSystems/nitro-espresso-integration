@@ -419,3 +419,9 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 
 	return nil
 }
+
+func (n *EspressoCaffNode) StopAndWait() {
+	n.delayedMessageFetcher.StopAndWait()
+	n.batcherAddrMonitor.StopAndWait()
+	n.StopWaiter.StopAndWait()
+}

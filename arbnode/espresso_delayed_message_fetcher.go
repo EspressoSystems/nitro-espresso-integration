@@ -35,6 +35,7 @@ type DelayedMessageFetcher struct {
 	waitForFinalization  bool
 	waitForConfirmations bool
 	requiredBlockDepth   uint64
+	unsubscribe          func()
 }
 
 type DelayedMessageFetcherInterface interface {
@@ -42,6 +43,7 @@ type DelayedMessageFetcherInterface interface {
 	storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 	getDelayedMessageLatestIndexAtBlock(blockNumber uint64) (uint64, error)
+	StopAndWait()
 }
 
 var _ DelayedMessageFetcherInterface = new(DelayedMessageFetcher)
@@ -106,6 +108,7 @@ func (d *DelayedMessageFetcher) startWatchDelayedMessages(ctx context.Context) {
 	}
 
 	newHeaders, unsubscribe := d.l1Reader.Subscribe(false)
+	d.unsubscribe = unsubscribe
 
 	d.LaunchThread(func(ctx context.Context) {
 		for {
@@ -493,4 +496,9 @@ func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 	}
 	d.startWatchDelayedMessages(ctx)
 	return true
+}
+
+func (d *DelayedMessageFetcher) StopAndWait() {
+	d.unsubscribe()
+	d.StopWaiter.StopAndWait()
 }

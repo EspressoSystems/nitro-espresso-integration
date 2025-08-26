@@ -95,6 +95,8 @@ func (m *MockDelayedMessageFetcher) getDelayedMessageLatestIndexAtBlock(blockNum
 	return 1, nil
 }
 
+func (m *MockDelayedMessageFetcher) StopAndWait() {}
+
 func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
 	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == 2 {
 		return &espressostreamer.MessageWithMetadataAndPos{
