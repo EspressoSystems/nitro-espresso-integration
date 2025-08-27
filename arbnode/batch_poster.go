@@ -2105,7 +2105,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	var getNextMessage func() (*arbostypes.MessageWithMetadata, error)
-	var breakLoopWhenErrorOccurs bool
 
 	if b.espressoStreamer == nil {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
@@ -2115,7 +2114,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 			return msg, nil
 		}
-		breakLoopWhenErrorOccurs = false
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
 			espressoMsg := b.espressoStreamer.Next(ctx)
@@ -2124,7 +2122,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			}
 			return &espressoMsg.MessageWithMeta, nil
 		}
-		breakLoopWhenErrorOccurs = true
 	}
 
 	if b.building.firstDelayedMsg != nil && b.espressoStreamer != nil {
@@ -2139,11 +2136,8 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	for b.building.msgCount < msgCount {
 		msg, err := getNextMessage()
 		if err != nil {
-			if breakLoopWhenErrorOccurs {
-				log.Error("error getting next message", "err", err, "pos", b.building.msgCount)
-				break
-			}
-			return false, err
+			log.Error("error getting next message", "err", err, "pos", b.building.msgCount)
+			break
 		}
 
 		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
