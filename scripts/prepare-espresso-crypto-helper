@@ -25,20 +25,21 @@ else
     exit 1
 fi
 
-go get github.com/EspressoSystems/espresso-network/sdks/go
-go get github.com/EspressoSystems/espresso-network/sdks/go/download
+go get github.com/EspressoSystems/espresso-network/sdks/go@v0.2.5
+go get github.com/EspressoSystems/espresso-network/sdks/go/download@v0.2.5
 
 $SUDO go run github.com/EspressoSystems/espresso-network/sdks/go/download clean
 
 fileName="libespresso_crypto_helper-$triple"
 
 # Dynamically fetch the latest Go SDK release tag from GitHub
-latest_tag=$(curl -s https://api.github.com/repos/EspressoSystems/espresso-network/releases | grep -o 'sdks/go/v[0-9.]*' | head -n 1)
-if [ -z "$latest_tag" ]; then
-    echo "ERROR: Could not fetch latest Espresso Go SDK release tag."
-    exit 1
-fi
-echo "using Espresso Go SDK release tag: $latest_tag"
+# latest_tag=$(curl -s https://api.github.com/repos/EspressoSystems/espresso-network/releases | grep -o 'sdks/go/v[0-9.]*' | head -n 1)
+# if [ -z "$latest_tag" ]; then
+#     echo "ERROR: Could not fetch latest Espresso Go SDK release tag."
+#     exit 1
+# fi
+# echo "using Espresso Go SDK release tag: $latest_tag"
+latest_tag=sdks/go/v0.2.5
 checksum=$(curl -L "https://github.com/EspressoSystems/espresso-network/releases/download/${latest_tag//\//%2F}/$fileName.sha256")
 
 echo "Checksum: $checksum"

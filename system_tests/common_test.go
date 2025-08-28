@@ -259,13 +259,15 @@ type NodeBuilder struct {
 	l3InitMessage               *arbostypes.ParsedInitMessage
 	withProdConfirmPeriodBlocks bool
 	wasmCacheTag                uint32
-	useL1StackConfig            bool // don't overwrite the L1 stack config when building
 	delayBufferThreshold        uint64
 
 	// Created nodes
 	L1 *TestClient
 	L2 *TestClient
 	L3 *TestClient
+
+	useL1StackConfig bool // don't overwrite the L1 stack config when building
+	useL2StackConfig bool
 }
 
 type NitroConfig struct {
@@ -620,8 +622,13 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	var chainDb ethdb.Database
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
-	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
+	if b.useL2StackConfig {
+		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
+			t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+	} else {
+		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
+			t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
+	}
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -675,8 +682,8 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	var chainDb ethdb.Database
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
-	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
+	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
+		t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
