@@ -10,6 +10,7 @@ import (
 	"time"
 
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
+	"github.com/fxamacker/cbor/v2"
 	flag "github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/arbitrum"
@@ -20,11 +21,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
+	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -90,71 +93,71 @@ func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueu
 	return &q.queue[0]
 }
 
-type TimeboostSequencer struct {
+type DecentralizedTimeboostSequencer struct {
 	stopwaiter.StopWaiter
-	config TimeboostSequencerConfigFetcher
+	config DecentralizedTimeboostSequencerConfigFetcher
 	// TODO: we should read this from the storage
 	txQueue    synchronizedTimeboostTransactionQueue
 	execEngine *ExecutionEngine
 	l1Reader   *headerreader.HeaderReader
 	// TODO: We should probably also store the txRetryQueue in storage
-	txRetryQueue         synchronizedTimeboostTransactionQueue
-	nonceCache           *nonceCache
-	timeboostTxnListener *TimeboostBridge
-	delayedMessagesRead  uint64
-	channel              chan DelayedMessageCommand
+	txRetryQueue        synchronizedTimeboostTransactionQueue
+	nonceCache          *nonceCache
+	timeboostBridge     *DecentralizedTimeboostBridge
+	delayedMessagesRead uint64
+	channel             chan DelayedMessageCommand
 }
 
-type TimeboostSequencerConfigFetcher func() *TimeboostSequencerConfig
+type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
 
-type TimeboostSequencerConfig struct {
+type DecentralizedTimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
 	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize               int                   `koanf:"max-tx-data-size"`
-	NonceCacheSize              int                   `koanf:"nonce-cache-size"`
-	MaxRevertGasReject          uint64                `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime time.Duration         `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta time.Duration         `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling             bool                  `koanf:"enable-profiling"`
-	TimeboostBridgeConfig       TimeboostBridgeConfig `koanf:"timeboost-bridge-config"`
-	MetricTimeForBlockCreation  time.Duration         `koanf:"metric-time-for-block-creation"`
+	MaxTxDataSize                      int                                `koanf:"max-tx-data-size"`
+	NonceCacheSize                     int                                `koanf:"nonce-cache-size"`
+	MaxRevertGasReject                 uint64                             `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime        time.Duration                      `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta        time.Duration                      `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling                    bool                               `koanf:"enable-profiling"`
+	DecentralizedTimeboostBridgeConfig DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
+	MetricTimeForBlockCreation         time.Duration                      `koanf:"metric-time-for-block-creation"`
 }
 
-var DefaultTimeboostSequencerConfig = TimeboostSequencerConfig{
-	Enable:                      false,
-	BlockRetryDuration:          time.Second * 5,
-	MaxTxDataSize:               95000,
-	NonceCacheSize:              1024,
-	MaxRevertGasReject:          0,
-	ParentChainFinalizationTime: 20 * time.Minute,
-	MaxAcceptableTimestampDelta: time.Hour,
-	EnableProfiling:             false,
-	TimeboostBridgeConfig:       DefaultTimeboostBridgeConfig,
-	MetricTimeForBlockCreation:  time.Second * 5,
+var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
+	Enable:                             false,
+	BlockRetryDuration:                 time.Second * 5,
+	MaxTxDataSize:                      95000,
+	NonceCacheSize:                     1024,
+	MaxRevertGasReject:                 0,
+	ParentChainFinalizationTime:        20 * time.Minute,
+	MaxAcceptableTimestampDelta:        time.Hour,
+	EnableProfiling:                    false,
+	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
+	MetricTimeForBlockCreation:         time.Second * 5,
 }
 
-func TimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
-	f.Duration(prefix+".block-retry-duration", DefaultTimeboostSequencerConfig.BlockRetryDuration, "retry duration after failing to create a block")
-	f.Int(prefix+".max-tx-data-size", DefaultTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
-	f.Int(prefix+".nonce-cache-size", DefaultTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
-	f.Uint64(prefix+".max-revert-gas-reject", DefaultTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
-	f.Duration(prefix+".parent-chain-finalization-time", DefaultTimeboostSequencerConfig.ParentChainFinalizationTime, "parent chain finalization time")
-	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
-	f.Bool(prefix+".enable-profiling", DefaultTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
-	f.Duration(prefix+".metric-time-for-block-creation", DefaultTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
-	TimeboostBridgeConfigAddOptions(prefix+".timeboost-bridge-config", f)
+func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
+	f.Bool(prefix+".enable", DefaultDecentralizedTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
+	f.Duration(prefix+".block-retry-duration", DefaultDecentralizedTimeboostSequencerConfig.BlockRetryDuration, "retry duration after failing to create a block")
+	f.Int(prefix+".max-tx-data-size", DefaultDecentralizedTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
+	f.Int(prefix+".nonce-cache-size", DefaultDecentralizedTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
+	f.Uint64(prefix+".max-revert-gas-reject", DefaultDecentralizedTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
+	f.Duration(prefix+".parent-chain-finalization-time", DefaultDecentralizedTimeboostSequencerConfig.ParentChainFinalizationTime, "parent chain finalization time")
+	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultDecentralizedTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
+	f.Bool(prefix+".enable-profiling", DefaultDecentralizedTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
+	f.Duration(prefix+".metric-time-for-block-creation", DefaultDecentralizedTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
+	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
-func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, channel chan DelayedMessageCommand, configFetcher TimeboostSequencerConfigFetcher) (*TimeboostSequencer, error) {
-	return &TimeboostSequencer{
+func NewDecentralizedTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, channel chan DelayedMessageCommand, configFetcher DecentralizedTimeboostSequencerConfigFetcher) (*DecentralizedTimeboostSequencer, error) {
+	return &DecentralizedTimeboostSequencer{
 		config:     configFetcher,
 		execEngine: execEngine,
 		l1Reader:   l1Reader,
 		nonceCache: newNonceCache(configFetcher().NonceCacheSize),
-		timeboostTxnListener: &TimeboostBridge{
-			config:     configFetcher().TimeboostBridgeConfig,
+		timeboostBridge: &DecentralizedTimeboostBridge{
+			config:     configFetcher().DecentralizedTimeboostBridgeConfig,
 			grpcClient: nil,
 		},
 		delayedMessagesRead: 0,
@@ -162,7 +165,7 @@ func NewTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.H
 	}, nil
 }
 
-func (s *TimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool {
+func (s *DecentralizedTimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool {
 	log.Info("sending delayed messages", "read", delayedMsgsRead)
 	for {
 		s.channel <- DelayedMessageCommand{delayedMsgsRead}
@@ -183,7 +186,7 @@ func (s *TimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool 
 	}
 }
 
-func (s *TimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
+func (s *DecentralizedTimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
 	// First we need to create the current list of transactions that we will process
 	queueItems := make([]timeboostTransactionQueueItem, 0)
 	var totalBlockSize int
@@ -319,10 +322,12 @@ outer:
 		return madeBlock
 	}
 
+	firstQueueItem := queueItems[0]
+
 	// Get the consensus timestamp of the first transaction in the queue
 	// It should be the same for all transactions in the queue because
 	// each transaction is a part of the same round
-	timestamp := queueItems[0].consensusTimestamp
+	timestamp := firstQueueItem.consensusTimestamp
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
@@ -382,6 +387,18 @@ outer:
 	}
 
 	if block != nil {
+		// If any error fails, it will fail on all nodes as this block is deterministic
+		// But this should not happen at this point
+		protoBlock, err := s.createTimeboostProtoBlock(l1IncomingMessageHeader, block, txes, hooks.TxErrors, firstQueueItem.roundId)
+		if err != nil {
+			log.Error("block was failed to be converted to a proto block", "err", err)
+			return madeBlock
+		}
+
+		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
+		// The TimeboostBridge will handle retries if needed
+		log.Info("enqueueing block to timeboost", "block", block.NumberU64())
+		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
 		// Add a metric to indicate how long it took to create the block
@@ -421,7 +438,7 @@ outer:
 	return madeBlock
 }
 
-func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber int64, consensusTimestamp uint64) (*types.Block, error) {
+func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber int64, consensusTimestamp uint64) (*types.Block, error) {
 
 	block, err := s.l1Reader.Client().BlockByNumber(ctx, big.NewInt(blockNumber))
 	if err != nil {
@@ -436,7 +453,7 @@ func (s *TimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber i
 	return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 }
 
-func (s *TimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
+func (s *DecentralizedTimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
 	return &arbos.SequencingHooks{
 		PreTxFilter:             s.preTxFilter,
 		PostTxFilter:            s.postTxFilter,
@@ -446,7 +463,7 @@ func (s *TimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
 	}
 }
 
-func (s *TimeboostSequencer) preTxFilter(_ *params.ChainConfig, header *types.Header, statedb *state.StateDB, _ *arbosState.ArbosState, tx *types.Transaction, options *arbitrum_types.ConditionalOptions, sender common.Address, l1Info *arbos.L1Info) error {
+func (s *DecentralizedTimeboostSequencer) preTxFilter(_ *params.ChainConfig, header *types.Header, statedb *state.StateDB, _ *arbosState.ArbosState, tx *types.Transaction, options *arbitrum_types.ConditionalOptions, sender common.Address, l1Info *arbos.L1Info) error {
 	if s.nonceCache.Caching() {
 		stateNonce := s.nonceCache.Get(header, statedb, sender)
 		err := MakeNonceError(sender, tx.Nonce(), stateNonce)
@@ -467,7 +484,7 @@ func (s *TimeboostSequencer) preTxFilter(_ *params.ChainConfig, header *types.He
 	return nil
 }
 
-func (s *TimeboostSequencer) postTxFilter(header *types.Header, statedb *state.StateDB, _ *arbosState.ArbosState, tx *types.Transaction, sender common.Address, dataGas uint64, result *core.ExecutionResult) error {
+func (s *DecentralizedTimeboostSequencer) postTxFilter(header *types.Header, statedb *state.StateDB, _ *arbosState.ArbosState, tx *types.Transaction, sender common.Address, dataGas uint64, result *core.ExecutionResult) error {
 	if statedb.IsTxFiltered() {
 		return state.ErrArbTxFilter
 	}
@@ -479,7 +496,7 @@ func (s *TimeboostSequencer) postTxFilter(header *types.Header, statedb *state.S
 	return nil
 }
 
-func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQueueItem) []timeboostTransactionQueueItem {
+func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQueueItem) []timeboostTransactionQueueItem {
 	bc := s.execEngine.bc
 	latestHeader := bc.CurrentBlock()
 	latestState, err := bc.StateAt(latestHeader.Root)
@@ -552,7 +569,50 @@ func (s *TimeboostSequencer) precheckNonces(queueItems []timeboostTransactionQue
 	return outputQueueItems
 }
 
-func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
+// Try to create proto block, this is what timeboost will create certificate over
+func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
+	l1IncomingMessageHeader *arbostypes.L1IncomingMessageHeader,
+	block *types.Block,
+	txes types.Transactions,
+	txErrors []error,
+	roundId uint64,
+) (*protos.Block, error) {
+	msg, err := MessageFromTxes(l1IncomingMessageHeader, txes, txErrors)
+	if err != nil {
+		return nil, err
+	}
+
+	msgIdx, err := s.execEngine.BlockNumberToMessageIndex(block.NumberU64())
+	if err != nil {
+		return nil, err
+	}
+	messageWithMeta := arbostypes.MessageWithMetadata{
+		Message:             msg,
+		DelayedMessagesRead: block.Nonce(),
+	}
+
+	msgBytes, err := rlp.EncodeToBytes(messageWithMeta)
+	if err != nil {
+		return nil, err
+	}
+	pos := uint64(msgIdx)
+	payload := decentralized_timeboost_types.MessagePayload{
+		Position: pos,
+		Message:  msgBytes,
+	}
+	encoded, err := cbor.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	return &protos.Block{
+		Number:  pos,
+		Round:   roundId,
+		Payload: encoded,
+	}, nil
+}
+
+func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages index", inclusionList.DelayedMessagesRead)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
@@ -595,13 +655,13 @@ func (s *TimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusion
 	return nil
 }
 
-func (s *TimeboostSequencer) Start(ctx context.Context) error {
+func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
 	}
 
-	if err := s.timeboostTxnListener.Start(ctx, s.ProcessInclusionList); err != nil {
+	if err := s.timeboostBridge.Start(ctx, s.ProcessInclusionList); err != nil {
 		return err
 	}
 
@@ -614,7 +674,7 @@ func (s *TimeboostSequencer) Start(ctx context.Context) error {
 	return err
 }
 
-func (s *TimeboostSequencer) StopAndWait() {
+func (s *DecentralizedTimeboostSequencer) StopAndWait() {
 	s.StopWaiter.StopAndWait()
 
 	if s.txRetryQueue.Len() == 0 &&

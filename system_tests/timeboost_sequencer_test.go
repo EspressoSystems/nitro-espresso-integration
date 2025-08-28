@@ -53,15 +53,15 @@ func createL1AndL2NodeForTimeboost(
 	builder.execConfig.Caching.Archive = true
 
 	// Enable timeboost sequencer
-	builder.nodeConfig.TimeboostSequencer.Enable = true
-	builder.nodeConfig.TimeboostSequencer.BlockRetryDuration = time.Second
-	builder.nodeConfig.TimeboostSequencer.MaxTxDataSize = 3000
-	builder.nodeConfig.TimeboostSequencer.NonceCacheSize = 1024
-	builder.nodeConfig.TimeboostSequencer.MaxRevertGasReject = 0
-	builder.nodeConfig.TimeboostSequencer.ParentChainFinalizationTime = 2 * time.Second
-	builder.nodeConfig.TimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
-	builder.nodeConfig.TimeboostSequencer.EnableProfiling = false
-	builder.nodeConfig.TimeboostSequencer.TimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:5000"
+	builder.nodeConfig.DecentralizedTimeboostSequencer.Enable = true
+	builder.nodeConfig.DecentralizedTimeboostSequencer.BlockRetryDuration = time.Second
+	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxTxDataSize = 3000
+	builder.nodeConfig.DecentralizedTimeboostSequencer.NonceCacheSize = 1024
+	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxRevertGasReject = 0
+	builder.nodeConfig.DecentralizedTimeboostSequencer.ParentChainFinalizationTime = 2 * time.Second
+	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
+	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
+	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:5000"
 
 	cleanup := builder.Build(t)
 
