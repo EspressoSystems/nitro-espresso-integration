@@ -87,11 +87,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "espresso-tee-contracts", "out", "*.sol", "*.json"))
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	filePaths = append(filePaths, filePathsInternal...)
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
@@ -133,31 +128,9 @@ func main() {
 		modInfo.addArtifact(artifact)
 	}
 
-	espressoTEEContractsInfo := modules["espressogen"]
-	if espressoTEEContractsInfo == nil {
-		espressoTEEContractsInfo = &moduleInfo{}
-		modules["espressogen"] = espressoTEEContractsInfo
-	}
-
-	for _, path := range filePathsEspressoTeeContracts {
-
-		// Foundry
-		_, file := filepath.Split(path)
-		name := file[:len(file)-5]
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			log.Fatal("could not read", path, "for contract", name, err)
-		}
-		artifact := FoundryArtifact{}
-		if err := json.Unmarshal(data, &artifact); err != nil {
-			log.Fatal("failed to parse contract", name, err)
-		}
-		espressoTEEContractsInfo.addArtifact(HardHatArtifact{
-			ContractName: name,
-			Abi:          artifact.Abi,
-			Bytecode:     artifact.Bytecode.Object,
-		})
+	err = GenerateEspressoTEEContracts(modules)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	yulFilePaths, err := filepath.Glob(filepath.Join(parent, "contracts", "out", "*", "*.yul", "*.json"))

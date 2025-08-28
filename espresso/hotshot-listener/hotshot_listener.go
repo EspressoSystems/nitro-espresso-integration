@@ -3,7 +3,6 @@ package hotshot_listener
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 
 	"github.com/EspressoSystems/espresso-network/sdks/go/types"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -73,11 +71,22 @@ func (listener *HotshotListener) processMessage(message []byte) error {
 		log.Error("failed to unmarshal consensus message:", err)
 		return err
 	}
+	// Quorum proposal represents a proposal that needs to be supported by a quorum of nodes
+	// this quorum proposal needs to be for a given view and builder commitment
 	if consensusMessage.Event.QuorumProposalWrapper != nil {
 		return listener.processQuorumProposalEvent(consensusMessage.Event.QuorumProposalWrapper)
-	} else if consensusMessage.Event.DaProposalWrapper != nil {
+	}
+	// DA proposal event indicates thats data availability information
+	// is available for a given block with the given view number and builder commitment
+	if consensusMessage.Event.DaProposalWrapper != nil {
 		return listener.processDaProposalEvent(consensusMessage.Event.DaProposalWrapper)
-	} else if consensusMessage.Event.Decide != nil {
+	}
+
+	// Only when hotshot builder has both quorum proposal and DA proposal for a given view
+	// it begins constructing another block
+	// Decide event in hotshot is the event when
+	// a view has been finalized by hotshot and cannot change now
+	if consensusMessage.Event.Decide != nil {
 		return listener.processDecideEvent(consensusMessage.Event.Decide)
 	}
 
@@ -85,18 +94,15 @@ func (listener *HotshotListener) processMessage(message []byte) error {
 }
 
 func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrapper *types.QuorumProposalWrapper) error {
-	log.Info("Received quorum proposal event", "event", quorumProposalWrapper)
+	log.Info("received quorum proposal event", "event", quorumProposalWrapper)
 
 	viewNumber := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.ViewNumber
 	builderCommitment := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.BuilderCommitment
 
-	if viewNumber < 0 || viewNumber > math.MaxUint32 {
-		return fmt.Errorf("view number %d is too large or small for uint32", viewNumber)
-	}
-	hexViewNumber := hexutil.Uint(viewNumber)
+	viewNumberString := string(viewNumber)
 
 	// Combine the hexViewNumber and builderCommitment to get the key
-	key := hexViewNumber.String() + builderCommitment
+	key := viewNumberString + builderCommitment
 
 	l1FinalizedBlockNumberForView := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.L1Finalized.Number
 	l1FinalizedBlockNumberBigInt := big.NewInt(int64(l1FinalizedBlockNumberForView))
@@ -109,7 +115,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 		log.Info("Waiting for Da proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
 		return nil
 	}
-	log.Info("Processing builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
+	log.Info("processing builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
 
 	// Get the sequencer address for the next view
 	nextView := viewNumber + 1
@@ -124,7 +130,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	}
 
 	if sequencerAddressForNextView.Hex() == listener.sequencerAddress {
-		log.Info("Next view is this node's view", "nextView", nextView, "sequencerAddress", listener.sequencerAddress)
+		log.Info("next view is this node's view", "nextView", nextView, "sequencerAddress", listener.sequencerAddress)
 		// TODO: Processing will be implemented in the next PR
 	}
 
@@ -138,16 +144,12 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 }
 
 func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types.DaProposalWrapper) error {
-	log.Info("Received DA Proposal event", "event", daProposalWrapper)
+	log.Info("received DA Proposal event", "event", daProposalWrapper)
 
 	// Now get the view number for the given builder commitment
 	viewNumber := daProposalWrapper.DaProposalDataWrapper.Data.ViewNumber
 
-	if viewNumber < 0 || viewNumber > math.MaxUint32 {
-		return fmt.Errorf("view number %d is too large or small for uint32", viewNumber)
-	}
-	// Convert the viewNumber to a hex string
-	hexViewNumber := hexutil.Uint(viewNumber)
+	viewNumberString := string(viewNumber)
 
 	blockPayload, err := types.NewBlockPayload(daProposalWrapper.DaProposalDataWrapper.Data.EncodedTransactions,
 		daProposalWrapper.DaProposalDataWrapper.Data.Metadata)
@@ -165,7 +167,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 		return err
 	}
 
-	key := hexViewNumber.String() + builderCommitmentString
+	key := viewNumberString + builderCommitmentString
 
 	// Now store the key and check if a quorum proposal exists for the given builder commitment
 	listener.daViewNumberBuilderCommitment[key] = true
@@ -173,12 +175,12 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 	// relative to this DA proposal view number and builder commitment
 	if _, ok := listener.quorumViewNumberBuilderCommitment[key]; !ok {
 		// If it does, then we can assume that this is a DA proposal
-		log.Info("Waiting for Quorum proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitmentString)
+		log.Info("waiting for Quorum proposal for the given builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitmentString)
 		return nil
 	}
 
 	// Process the DA proposal and quorum proposal
-	log.Info("Processing builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitmentString)
+	log.Info("processing builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitmentString)
 
 	// Get L1 block number from the quorum proposal map
 	l1FinalizedBlockNumberForView := listener.quorumViewNumberBuilderCommitment[key]
@@ -195,7 +197,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 
 	// Check if the sequencer address is the same address of this node
 	if sequencerAddressForNextView.Hex() != listener.sequencerAddress {
-		log.Info("Next view is not this node's view")
+		log.Info("next view is not this node's view")
 		// TODO: Processing will be implemented in the next PR
 	}
 
@@ -215,7 +217,7 @@ func (listener *HotshotListener) processDecideEvent(decide *types.Decide) error 
 		// Check if any of the leafs match the view number + builder commitment that we have stored
 		viewNumber := leafChain.Leaf.ViewNumber
 		builderCommitment := leafChain.Leaf.BlockHeader.Fields.BuilderCommitment
-		log.Info("Processing leaf chain", "leafChain", leafChain, "builderCommitment", builderCommitment, "viewNumber", viewNumber)
+		log.Info("processing leaf chain", "leafChain", leafChain, "builderCommitment", builderCommitment, "viewNumber", viewNumber)
 		// TODO: Processing will be implemented in the next PR
 
 	}
