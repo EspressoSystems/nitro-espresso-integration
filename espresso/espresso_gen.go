@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 )
 
-func GenerateEspressoTEEContracts(modules map[string]*moduleInfo, parent string) (map[string]*moduleInfo, error) {
-	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "espresso-tee-contracts", "out", "*.sol", "*.json"))
+func GenerateEspressoTEEContracts(modules map[string]*moduleInfo) error {
+	filePathsEspressoTeeContracts, err := filepath.Glob("espresso-tee-contracts/out/EspressoTEE.sol/*.json")
 	if err != nil {
-		return nil, fmt.Errorf("failed to find espresso-tee-contracts artifacts: %w", err)
+		return fmt.Errorf("failed to find espresso-tee-contracts artifacts: %w", err)
 	}
 
 	espressoTEEContractsInfo := modules["espressogen"]
@@ -30,7 +30,7 @@ func GenerateEspressoTEEContracts(modules map[string]*moduleInfo, parent string)
 		}
 		artifact := FoundryArtifact{}
 		if err := json.Unmarshal(data, &artifact); err != nil {
-			return nil, fmt.Errorf("failed to parse espresso contract %s: %w", name, err)
+			return fmt.Errorf("failed to parse espresso contract %s: %w", name, err)
 		}
 		espressoTEEContractsInfo.addArtifact(HardHatArtifact{
 			ContractName: name,
@@ -38,5 +38,5 @@ func GenerateEspressoTEEContracts(modules map[string]*moduleInfo, parent string)
 			Bytecode:     artifact.Bytecode.Object,
 		})
 	}
-	return modules, nil
+	return nil
 }

@@ -101,6 +101,7 @@ COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
 COPY ./solgen/gen.go ./solgen/
+COPY ./solgen/espresso_gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
 COPY scripts/remove_reference_types.sh scripts/

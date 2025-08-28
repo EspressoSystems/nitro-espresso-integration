@@ -128,7 +128,7 @@ func main() {
 		modInfo.addArtifact(artifact)
 	}
 
-	err = GenerateEspressoTEEContracts(modules)
+	modules, err = GenerateEspressoTEEContracts(modules, parent)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -60,19 +60,19 @@ func TestEspressoHotshotListener(t *testing.T) {
 	// Check that we were able to find the quorum proposal and DA proposal for a given view and
 	// are now processing it
 	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
-		return logHandler.WasLogged("Processing builder commitment and view number")
+		return logHandler.WasLogged("processing builder commitment and view number")
 	})
 	Require(t, err)
 
 	// Check that node detected that it needs to process the next view
 	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
-		return logHandler.WasLogged("Next view is this node's view")
+		return logHandler.WasLogged("next view is this node's view")
 	})
 	Require(t, err)
 
 	// Check that decide event log was also processed
 	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
-		return logHandler.WasLogged("Processing leaf chain")
+		return logHandler.WasLogged("processing leaf chain")
 	})
 	Require(t, err)
 
