@@ -4,7 +4,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// TODO: should we store this in the database?
 type View struct {
 	viewNumber        uint64
 	builderCommitment string
