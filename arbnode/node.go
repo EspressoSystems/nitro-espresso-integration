@@ -298,7 +298,7 @@ type Node struct {
 
 	EspressoCaffNode                       *EspressoCaffNode
 	DecentralizedTimeboostSequencer        *gethexec.DecentralizedTimeboostSequencer
-	DecetranlizedTimeboostDelayedSequencer *TimeboostDelayedSequencer
+	DecentralizedTimeboostDelayedSequencer *TimeboostDelayedSequencer
 }
 
 type SnapSyncConfig struct {
@@ -1315,7 +1315,7 @@ func createNodeImpl(
 		ctx:                                    ctx,
 		ConsensusExecutionSyncer:               consensusExecutionSyncer,
 		DecentralizedTimeboostSequencer:        decentralizedTimeboostSequencer,
-		DecetranlizedTimeboostDelayedSequencer: decentralizedTimeboostDelayedSequencer,
+		DecentralizedTimeboostDelayedSequencer: decentralizedTimeboostDelayedSequencer,
 	}, nil
 }
 
@@ -1609,11 +1609,8 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error starting decentralized timeboost sequencer: %w", err)
 		}
 	}
-	if n.DecentralizedTimeboostSequencer != nil {
-		err = n.DecentralizedTimeboostSequencer.Start(ctx)
-		if err != nil {
-			return fmt.Errorf("error starting decentralized timeboost delayed sequencer: %w", err)
-		}
+	if n.DecentralizedTimeboostDelayedSequencer != nil {
+		n.DecentralizedTimeboostDelayedSequencer.Start(ctx)
 	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
