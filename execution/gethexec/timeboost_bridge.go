@@ -73,6 +73,11 @@ func (b *DecentralizedTimeboostBridge) EnqueueBlockToTimeboost(block *protos.Blo
 	b.blockSubmissionQueue.Enqueue(block)
 }
 
+// Add blocks to submission queue, block submitter thread will pick it up
+func (b *DecentralizedTimeboostBridge) EnqueueBlocksToTimeboost(blocks []*protos.Block) {
+	b.blockSubmissionQueue.EnqueueBlocks(blocks)
+}
+
 // Send block to timeboost who will get certificate over the block hash and send transaction to hotshot
 func (b *DecentralizedTimeboostBridge) blockSubmitter(timeout *time.Duration) time.Duration {
 	if block := b.blockSubmissionQueue.Peek(); block != nil {

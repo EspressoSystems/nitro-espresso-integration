@@ -41,7 +41,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BlockValidator.ValidationPoll = 2 * time.Second
 	builder.nodeConfig.BlockValidator.ValidationServer.URL = fmt.Sprintf("ws://127.0.0.1:%d", arbValidationPort)
 	builder.nodeConfig.DelayedSequencer.Enable = false
-	builder.nodeConfig.TimeboostDelayedSequencer.Enable = delayedSequencer
+	builder.nodeConfig.DecentralizedTimeboostDelayedSequencer.Enable = delayedSequencer
 
 	// sequencer config
 	builder.nodeConfig.Sequencer = false

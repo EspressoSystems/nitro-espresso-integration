@@ -11,7 +11,7 @@
         "parent_chain_id": 1337,
         "parent_chain_rpc_url": "http://host.docker.internal:8545",
         "parent_ibox_contr_addr": "0x1E40d26e4107a7f68903a30CE950e58200615014",
-        "parent_block_tag": "latest"
+        "parent_block_tag": "finalized"
       },
       "enc_key": "8shQ2jx13sU9x2BHchmjGDtMq9x7VBE1okyRYuAifa8YdaP8rtZaf3xeARSWadr9ABU",
       "private": {
@@ -33,7 +33,7 @@
         "parent_chain_id": 1337,
         "parent_chain_rpc_url": "http://host.docker.internal:8545",
         "parent_ibox_contr_addr": "0x1E40d26e4107a7f68903a30CE950e58200615014",
-        "parent_block_tag": "latest"
+        "parent_block_tag": "finalized"
       },
       "enc_key": "8snAicyAEjCvD3MnEZaSsgxXPGQBGDp8yKroaeCAFA1Kz8RGUcGNfJjqemuKC42Nf9U",
       "private": {

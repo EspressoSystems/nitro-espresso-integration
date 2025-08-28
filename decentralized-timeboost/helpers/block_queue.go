@@ -12,10 +12,16 @@ type SynchronizedTimeboostBlockQueue struct {
 	mutex sync.RWMutex
 }
 
-func (q *SynchronizedTimeboostBlockQueue) Enqueue(item *protos.Block) {
+func (q *SynchronizedTimeboostBlockQueue) Enqueue(block *protos.Block) {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	q.queue = append(q.queue, item)
+	q.queue = append(q.queue, block)
+}
+
+func (q *SynchronizedTimeboostBlockQueue) EnqueueBlocks(blocks []*protos.Block) {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+	q.queue = append(q.queue, blocks...)
 }
 
 func (q *SynchronizedTimeboostBlockQueue) Dequeue() {
