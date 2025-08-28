@@ -21,6 +21,12 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
+const oneMb = 1024 * 1024
+const minMsgSize = oneMb * 5
+const maxMsgSize = oneMb * 10
+const minTimeout = 3 * time.Second
+const maxTimeout = 10 * time.Second
+
 type DecentralizedTimeboostBridge struct {
 	stopwaiter.StopWaiter
 	config               DecentralizedTimeboostBridgeConfig
@@ -88,17 +94,16 @@ func (b *DecentralizedTimeboostBridge) Start(
 	if _, err := url.ParseRequestURI(b.config.InternalTimeboostGrpcUrl); err != nil {
 		panic("timeboost grpc url must be a valid url")
 	}
-	oneMb := 1024 * 1024
-	if b.config.MaxSendMsgSize < 5*oneMb || b.config.MaxSendMsgSize > 10*oneMb {
+	if b.config.MaxSendMsgSize < minMsgSize || b.config.MaxSendMsgSize > maxMsgSize {
 		panic("max send message size should be between 5 and 10 mb")
 	}
-	if b.config.MaxReceiveMsgSize < 5*oneMb || b.config.MaxReceiveMsgSize > 10*oneMb {
+	if b.config.MaxReceiveMsgSize < minMsgSize || b.config.MaxReceiveMsgSize > maxMsgSize {
 		panic("max receive message size should be bettern 5 and 10 mb")
 	}
-	if b.config.ConnectionTimeout < 3*time.Second || b.config.ConnectionTimeout > 10*time.Second {
+	if b.config.ConnectionTimeout < minTimeout || b.config.ConnectionTimeout > maxTimeout {
 		panic("connection timeout should be between 3 and 10 seconds")
 	}
-	if b.config.BlockSubmissionTimeout < 3*time.Second || b.config.BlockSubmissionTimeout > 10*time.Second {
+	if b.config.BlockSubmissionTimeout < minTimeout || b.config.BlockSubmissionTimeout > maxTimeout {
 		panic("block submission timeout should be between 3 and 10 seconds")
 	}
 
@@ -120,7 +125,7 @@ func (b *DecentralizedTimeboostBridge) Start(
 			panic(err)
 		}
 		server := grpc.NewServer(
-			grpc.MaxRecvMsgSize(b.config.MaxSendMsgSize),
+			grpc.MaxRecvMsgSize(b.config.MaxReceiveMsgSize),
 			grpc.MaxSendMsgSize(b.config.MaxSendMsgSize),
 			grpc.ConnectionTimeout(b.config.ConnectionTimeout),
 		)
