@@ -121,6 +121,9 @@ func (s *EspressoStreamer) GetMessageCount() uint64 {
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
+	s.messageLock.Lock()
+	defer s.messageLock.Unlock()
+
 	s.currentMessagePos = currentMessagePos
 	s.nextHotshotBlockNum = currentHostshotBlock
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
