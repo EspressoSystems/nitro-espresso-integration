@@ -84,7 +84,7 @@ func (b *DecentralizedTimeboostBridge) blockSubmitter(timeout *time.Duration) ti
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
 		if _, err := b.grpcClient.SubmitBlock(ctx, block); err != nil {
-			log.Error("failed to submit block to timeboost through grpc endpoint", "err", err, "resubmit time", *timeout)
+			log.Error("failed to submit block to timeboost through grpc endpoint", "err", err, "resubmit time", *timeout, "backlog", b.blockSubmissionQueue.Len())
 			return *timeout
 		}
 		b.blockSubmissionQueue.Dequeue()

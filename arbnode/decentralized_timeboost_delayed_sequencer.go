@@ -63,7 +63,7 @@ func (d *DecentralizedTimeboostDelayedSequencer) getDelayedMessagesRead() (uint6
 	return d.exec.NextDelayedMessageNumber()
 }
 
-func (d *DecentralizedTimeboostDelayedSequencer) createDelayedMessagesProtoBlock(
+func (d *DecentralizedTimeboostDelayedSequencer) createProtoBlocksFromMessages(
 	messages []*arbostypes.L1IncomingMessage,
 	startPos uint64,
 	currentHeight uint64,
@@ -102,7 +102,7 @@ func (d *DecentralizedTimeboostDelayedSequencer) createDelayedMessagesProtoBlock
 	return blocks, nil
 }
 
-func (d *DecentralizedTimeboostDelayedSequencer) SequenceDecentralizedTimeboostDelayedMessages(
+func (d *DecentralizedTimeboostDelayedSequencer) SequenceDelayedMessages(
 	ctx context.Context,
 	currentHeight uint64,
 	delayedCount uint64,
@@ -148,5 +148,5 @@ func (d *DecentralizedTimeboostDelayedSequencer) SequenceDecentralizedTimeboostD
 		}
 		log.Info("DecentralizedTimeboostDelayedSequencer: Sequenced", "msgnum", len(messages), "startpos", startPos, "current block num", currentHeight)
 	}
-	return d.createDelayedMessagesProtoBlock(messages, startPos, currentHeight, round)
+	return d.createProtoBlocksFromMessages(messages, startPos, currentHeight, round)
 }

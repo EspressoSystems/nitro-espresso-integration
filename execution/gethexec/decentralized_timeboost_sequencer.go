@@ -87,6 +87,9 @@ func (q *synchronizedTimeboostTransactionQueue) Len() int {
 func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueueItem {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	if len(q.queue) == 0 {
+		return nil
+	}
 	return &q.queue[0]
 }
 
@@ -196,10 +199,6 @@ outer:
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
 			queueItem = s.txRetryQueue.dequeue()
-		} else if s.txQueue.Len() == 0 {
-			// This means we have no transactions in the txRetryQueue and
-			// we also dont have any sailfish rounds to process
-			break
 		} else {
 			// Only add transactions from the same round id or if the queue is empty
 			tx := s.txQueue.Peek()
@@ -222,20 +221,20 @@ outer:
 					break outer
 				}
 
-				protoBlocks, err := s.delayedSequencer.SequenceDecentralizedTimeboostDelayedMessages(ctx, s.execEngine.bc.CurrentBlock().Number.Uint64(), tx.delayedMessageRead, tx.roundId)
+				protoBlocks, err := s.delayedSequencer.SequenceDelayedMessages(ctx, lastBlock.Number.Uint64(), tx.delayedMessageRead, tx.roundId)
 				if err != nil {
 					return madeBlock
 				}
 				s.txQueue.dequeue()
 				if protoBlocks == nil {
-					// can be possible if delayed messages were invalid such as not enough funds
 					log.Warn("no blocks were created from processed delayed messages")
 					return madeBlock
 				}
+				log.Info("enqueueing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
 				s.timeboostBridge.EnqueueBlocksToTimeboost(protoBlocks)
 				return true
 			default:
-				log.Info("unexpected tx type, discarding", "type", tx.txType)
+				log.Warn("unexpected tx type, discarding", "type", tx.txType)
 				s.txQueue.dequeue()
 				continue
 			}

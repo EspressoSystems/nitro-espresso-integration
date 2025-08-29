@@ -40,3 +40,9 @@ func (q *SynchronizedTimeboostBlockQueue) Peek() *protos.Block {
 	}
 	return q.queue[0]
 }
+
+func (q *SynchronizedTimeboostBlockQueue) Len() int {
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
+	return len(q.queue)
+}

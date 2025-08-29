@@ -7,7 +7,7 @@ import (
 )
 
 type DecentralizedTimeboostDelayedSequencerInterface interface {
-	SequenceDecentralizedTimeboostDelayedMessages(
+	SequenceDelayedMessages(
 		ctx context.Context,
 		currentHeight uint64,
 		delayedCount uint64,
