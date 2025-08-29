@@ -33,15 +33,15 @@ type DecentralizedTimeboostDelayedSequencerConfig struct {
 
 type DecentralizedTimeboostDelayedSequencerConfigFetcher func() *DecentralizedTimeboostDelayedSequencerConfig
 
-func TimeboostDelayedSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
-	f.Bool(prefix+".enable", DefaultTimeboostDelayedSequencerConfig.Enable, "enable delayed sequencer")
+func DecentralizedTimeboostDelayedSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
+	f.Bool(prefix+".enable", DefaultDecentralizedTimeboostDelayedSequencerConfig.Enable, "enable delayed sequencer")
 }
 
-var DefaultTimeboostDelayedSequencerConfig = DecentralizedTimeboostDelayedSequencerConfig{
+var DefaultDecentralizedTimeboostDelayedSequencerConfig = DecentralizedTimeboostDelayedSequencerConfig{
 	Enable: false,
 }
 
-var TestTimeboostDelayedSequencerConfig = DecentralizedTimeboostDelayedSequencerConfig{
+var TestDecentralizedTimeboostDelayedSequencerConfig = DecentralizedTimeboostDelayedSequencerConfig{
 	Enable: false,
 }
 
