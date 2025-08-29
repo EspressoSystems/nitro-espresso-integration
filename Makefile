@@ -601,9 +601,9 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go solgen/espresso_gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
-	go run ./solgen/*.go
+	go run ./solgen/gen.go
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
