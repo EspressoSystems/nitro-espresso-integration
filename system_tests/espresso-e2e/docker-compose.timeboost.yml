@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:20250826
+    image: ghcr.io/espressosystems/timeboost:delayed-msg
     command:
       [
         "/app/timeboost",
@@ -34,7 +34,7 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:20250826
+    image: ghcr.io/espressosystems/timeboost:delayed-msg
     command:
       [
         "/app/timeboost",

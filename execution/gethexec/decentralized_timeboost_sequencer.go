@@ -164,7 +164,7 @@ func NewDecentralizedTimeboostSequencer(
 			config:     configFetcher().DecentralizedTimeboostBridgeConfig,
 			grpcClient: nil,
 		},
-		delayedMessagesRead: 0,
+		delayedMessagesRead: 1,
 		delayedSequencer:    delayedSequencer,
 	}, nil
 }
@@ -604,7 +604,7 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages index", inclusionList.DelayedMessagesRead)
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -625,7 +625,6 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	}
 	// add delayed messages to the end
 	if s.delayedMessagesRead < inclusionList.DelayedMessagesRead {
-		read := inclusionList.DelayedMessagesRead + 1
 		// We will fetch the transaction when we go to make a block, so just set to nil
 		txQueueItem := timeboostTransactionQueueItem{
 			tx:                 nil,
@@ -633,7 +632,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
-			delayedMessageRead: read,
+			delayedMessageRead: inclusionList.DelayedMessagesRead,
 			txType:             Delayed,
 		}
 		items = append(items, txQueueItem)
