@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 
 	"github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/gorilla/websocket"
@@ -99,7 +100,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	viewNumber := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.ViewNumber
 	builderCommitment := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.BuilderCommitment
 
-	viewNumberString := string(viewNumber)
+	viewNumberString := strconv.Itoa(viewNumber)
 
 	// Combine the hexViewNumber and builderCommitment to get the key
 	key := viewNumberString + builderCommitment
@@ -149,7 +150,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 	// Now get the view number for the given builder commitment
 	viewNumber := daProposalWrapper.DaProposalDataWrapper.Data.ViewNumber
 
-	viewNumberString := string(viewNumber)
+	viewNumberString := strconv.Itoa(viewNumber)
 
 	blockPayload, err := types.NewBlockPayload(daProposalWrapper.DaProposalDataWrapper.Data.EncodedTransactions,
 		daProposalWrapper.DaProposalDataWrapper.Data.Metadata)
