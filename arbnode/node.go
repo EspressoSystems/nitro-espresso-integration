@@ -1066,7 +1066,7 @@ func getDecentralizedTimeboostDelayedSequencer(
 		return nil, nil
 	}
 	if exec == nil {
-		return nil, errors.New("Timeboost sequencer is enabled but execution client is nil")
+		return nil, errors.New("timeboost sequencer is enabled but execution client is nil")
 	}
 	timeboostDelayedSequencer, err := NewDecentralizedTimeboostDelayedSequencer(inboxReader, exec, func() *DecentralizedTimeboostDelayedSequencerConfig {
 		return &configFetcher.Get().DecentralizedTimeboostDelayedSequencer
@@ -1087,10 +1087,10 @@ func getDecentralizedTimeboostSequencer(
 		return nil, nil
 	}
 	if exec == nil {
-		return nil, errors.New("Decentralized Timeboost sequencer is enabled but execution client is nil")
+		return nil, errors.New("decentralized timeboost sequencer is enabled but execution client is nil")
 	}
 	if delayedSequencer == nil {
-		return nil, errors.New("Decentralized Timeboost sequencer is enabled but channel is nil")
+		return nil, errors.New("decentralized timeboost sequencer is enabled but delayed sequencer is nil")
 	}
 
 	if exec, ok := exec.(*gethexec.ExecutionNode); ok {
@@ -1102,7 +1102,7 @@ func getDecentralizedTimeboostSequencer(
 		}
 		return timeboostSequencer, nil
 	} else {
-		return nil, errors.New("Decentralized Timeboost sequencer is enabled but execution client is not a gethexec.ExecutionNode")
+		return nil, errors.New("decentralized timeboost sequencer is enabled but execution client is not a gethexec.ExecutionNode")
 	}
 }
 

@@ -156,9 +156,8 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
-	// In future, we also need to create a version of
-	// delayed sequencer for timeboost
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true)
+
+	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, true)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
@@ -212,8 +211,8 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	expectedTxs = append(expectedTxs, delayedTx)
 	expectedTxs = append(expectedTxs, delayedTx2)
 
-	// Wait for blocks
-	time.Sleep(time.Second * 20)
+	// Wait for blocks and batch
+	time.Sleep(time.Second * 60)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)

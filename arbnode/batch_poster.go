@@ -224,7 +224,8 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses []common.Address `koanf:"init-batcher-addresses"`
+	InitBatcherAddresses     []common.Address `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost bool             `koanf:"is-decentralized-timeboost"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -300,6 +301,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
+	f.Bool(prefix+".is-decentralized-timeboosted", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -356,6 +358,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []common.Address{},
 	EspressoEventPollingStep: 100,
+	IsDecentralizedTimeboost: false,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -630,6 +633,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				false,
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
+				opts.Config().IsDecentralizedTimeboost,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor
