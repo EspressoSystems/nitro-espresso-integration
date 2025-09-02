@@ -1,6 +1,3 @@
-// Copyright 2021-2022, Offchain Labs, Inc.
-// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
-
 package arbnode
 
 import (
@@ -41,10 +38,6 @@ var DefaultDecentralizedTimeboostDelayedSequencerConfig = DecentralizedTimeboost
 	Enable: false,
 }
 
-var TestDecentralizedTimeboostDelayedSequencerConfig = DecentralizedTimeboostDelayedSequencerConfig{
-	Enable: false,
-}
-
 func NewDecentralizedTimeboostDelayedSequencer(
 	reader *InboxReader,
 	exec execution.ExecutionSequencer,
@@ -65,7 +58,7 @@ func (d *DecentralizedTimeboostDelayedSequencer) getDelayedMessagesRead() (uint6
 
 func (d *DecentralizedTimeboostDelayedSequencer) createProtoBlocksFromMessages(
 	messages []*arbostypes.L1IncomingMessage,
-	startPos uint64,
+	prevDelayedRead uint64,
 	currentHeight uint64,
 	round uint64,
 ) ([]*protos.Block, error) {
@@ -76,7 +69,7 @@ func (d *DecentralizedTimeboostDelayedSequencer) createProtoBlocksFromMessages(
 		msg.L2msg = []byte{}
 		messageWithMeta := arbostypes.MessageWithMetadata{
 			Message:             msg,
-			DelayedMessagesRead: startPos + i,
+			DelayedMessagesRead: prevDelayedRead + i,
 		}
 
 		msgBytes, err := rlp.EncodeToBytes(messageWithMeta)
@@ -105,7 +98,7 @@ func (d *DecentralizedTimeboostDelayedSequencer) createProtoBlocksFromMessages(
 func (d *DecentralizedTimeboostDelayedSequencer) SequenceDelayedMessages(
 	ctx context.Context,
 	currentHeight uint64,
-	delayedCount uint64,
+	delayedRead uint64,
 	round uint64,
 ) ([]*protos.Block, error) {
 	config := d.config()
@@ -113,15 +106,15 @@ func (d *DecentralizedTimeboostDelayedSequencer) SequenceDelayedMessages(
 		return nil, nil
 	}
 
-	startPos, err := d.getDelayedMessagesRead()
+	prevDelayedRead, err := d.getDelayedMessagesRead()
 	if err != nil {
 		return nil, err
 	}
 
 	// Retrieve all finalized delayed messages
-	pos := startPos
+	pos := prevDelayedRead
 	var messages []*arbostypes.L1IncomingMessage
-	for pos < delayedCount {
+	for pos < delayedRead {
 		msg, _, _, err := d.inbox.GetDelayedMessageAccumulatorAndParentChainBlockNumber(ctx, pos)
 		if err != nil {
 			return nil, err
@@ -141,12 +134,12 @@ func (d *DecentralizedTimeboostDelayedSequencer) SequenceDelayedMessages(
 	if len(messages) > 0 {
 		for i, msg := range messages {
 			// #nosec G115
-			err = d.exec.SequenceDelayedMessage(msg, startPos+uint64(i))
+			err = d.exec.SequenceDelayedMessage(msg, prevDelayedRead+uint64(i))
 			if err != nil {
 				return nil, err
 			}
 		}
-		log.Info("DecentralizedTimeboostDelayedSequencer: Sequenced", "msgnum", len(messages), "startpos", startPos, "current block num", currentHeight)
+		log.Info("DecentralizedTimeboostDelayedSequencer: Sequenced", "msgnum", len(messages), "startpos", prevDelayedRead, "current block num", currentHeight)
 	}
-	return d.createProtoBlocksFromMessages(messages, startPos, currentHeight, round)
+	return d.createProtoBlocksFromMessages(messages, prevDelayedRead, currentHeight, round)
 }
