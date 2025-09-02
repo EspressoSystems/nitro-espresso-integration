@@ -165,7 +165,7 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feed
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
 	gethexec.DecentralizedTimeboostSequencerConfigAddOptions(prefix+".decentralized-timeboost-sequencer", f)
 	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
-	TimeboostDelayedSequencerConfigAddOptions(prefix+".timeboost-delayed-sequencer", f)
+	DecentralizedTimeboostDelayedSequencerConfigAddOptions(prefix+".decentralized-timeboost-delayed-sequencer", f)
 }
 
 var ConfigDefault = Config{
@@ -191,7 +191,7 @@ var ConfigDefault = Config{
 	ConsensusExecutionSyncer:               DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:                           DefaultSnapSyncConfig,
 	DecentralizedTimeboostSequencer:        gethexec.DefaultDecentralizedTimeboostSequencerConfig,
-	DecentralizedTimeboostDelayedSequencer: DefaultTimeboostDelayedSequencerConfig,
+	DecentralizedTimeboostDelayedSequencer: DefaultDecentralizedTimeboostDelayedSequencerConfig,
 }
 
 func ConfigDefaultL1Test() *Config {
