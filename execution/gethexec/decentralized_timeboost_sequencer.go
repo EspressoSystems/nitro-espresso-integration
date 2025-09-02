@@ -27,6 +27,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
+	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/interfaces"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/util/arbmath"
@@ -54,10 +55,6 @@ type timeboostTransactionQueueItem struct {
 type synchronizedTimeboostTransactionQueue struct {
 	queue []timeboostTransactionQueueItem
 	mutex sync.RWMutex
-}
-
-type DelayedMessageCommand struct {
-	DelayedMessagesRead uint64
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactionQueueItem) {
@@ -90,6 +87,9 @@ func (q *synchronizedTimeboostTransactionQueue) Len() int {
 func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueueItem {
 	q.mutex.RLock()
 	defer q.mutex.RUnlock()
+	if len(q.queue) == 0 {
+		return nil
+	}
 	return &q.queue[0]
 }
 
@@ -105,7 +105,7 @@ type DecentralizedTimeboostSequencer struct {
 	nonceCache          *nonceCache
 	timeboostBridge     *DecentralizedTimeboostBridge
 	delayedMessagesRead uint64
-	channel             chan DelayedMessageCommand
+	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -150,7 +150,11 @@ func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.Flag
 	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
-func NewDecentralizedTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *headerreader.HeaderReader, channel chan DelayedMessageCommand, configFetcher DecentralizedTimeboostSequencerConfigFetcher) (*DecentralizedTimeboostSequencer, error) {
+func NewDecentralizedTimeboostSequencer(
+	execEngine *ExecutionEngine,
+	l1Reader *headerreader.HeaderReader,
+	delayedSequencer decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface,
+	configFetcher DecentralizedTimeboostSequencerConfigFetcher) (*DecentralizedTimeboostSequencer, error) {
 	return &DecentralizedTimeboostSequencer{
 		config:     configFetcher,
 		execEngine: execEngine,
@@ -160,30 +164,9 @@ func NewDecentralizedTimeboostSequencer(execEngine *ExecutionEngine, l1Reader *h
 			config:     configFetcher().DecentralizedTimeboostBridgeConfig,
 			grpcClient: nil,
 		},
-		delayedMessagesRead: 0,
-		channel:             channel,
+		delayedMessagesRead: 1,
+		delayedSequencer:    delayedSequencer,
 	}, nil
-}
-
-func (s *DecentralizedTimeboostSequencer) handleDelayedMessages(delayedMsgsRead uint64) bool {
-	log.Info("sending delayed messages", "read", delayedMsgsRead)
-	for {
-		s.channel <- DelayedMessageCommand{delayedMsgsRead}
-		delayedMsgNum, err := s.execEngine.NextDelayedMessageNumber()
-		log.Info("next delayed msg num", "num", delayedMsgNum)
-		if err != nil {
-			log.Error("failed to get next delayed message", "error", err)
-			time.Sleep(50 * time.Millisecond)
-			continue
-		}
-		if delayedMsgNum == delayedMsgsRead {
-			s.txQueue.dequeue()
-			return true
-		} else {
-			log.Info("waiting for delayed messages to be sequenced", "read", delayedMsgsRead, "next", delayedMsgNum)
-			time.Sleep(50 * time.Millisecond)
-		}
-	}
 }
 
 func (s *DecentralizedTimeboostSequencer) createBlock(ctx context.Context) (returnValue bool) {
@@ -216,10 +199,6 @@ outer:
 		//  have transactions from a given round id
 		if s.txRetryQueue.Len() > 0 {
 			queueItem = s.txRetryQueue.dequeue()
-		} else if s.txQueue.Len() == 0 {
-			// This means we have no transactions in the txRetryQueue and
-			// we also dont have any sailfish rounds to process
-			break
 		} else {
 			// Only add transactions from the same round id or if the queue is empty
 			tx := s.txQueue.Peek()
@@ -241,9 +220,21 @@ outer:
 				if !empty {
 					break outer
 				}
-				return s.handleDelayedMessages(tx.delayedMessageRead)
+
+				protoBlocks, err := s.delayedSequencer.SequenceDelayedMessages(ctx, lastBlock.Number.Uint64(), tx.delayedMessageRead, tx.roundId)
+				if err != nil {
+					return madeBlock
+				}
+				s.txQueue.dequeue()
+				if protoBlocks == nil {
+					log.Debug("no blocks were created from processed delayed messages")
+					return madeBlock
+				}
+				log.Info("enqueueing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
+				s.timeboostBridge.EnqueueBlocksToTimeboost(protoBlocks)
+				return true
 			default:
-				log.Info("unexpected tx type, discarding", "type", tx.txType)
+				log.Warn("unexpected tx type, discarding", "type", tx.txType)
 				s.txQueue.dequeue()
 				continue
 			}
@@ -613,7 +604,7 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages index", inclusionList.DelayedMessagesRead)
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -634,7 +625,6 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	}
 	// add delayed messages to the end
 	if s.delayedMessagesRead < inclusionList.DelayedMessagesRead {
-		read := inclusionList.DelayedMessagesRead + 1
 		// We will fetch the transaction when we go to make a block, so just set to nil
 		txQueueItem := timeboostTransactionQueueItem{
 			tx:                 nil,
@@ -642,7 +632,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
-			delayedMessageRead: read,
+			delayedMessageRead: inclusionList.DelayedMessagesRead,
 			txType:             Delayed,
 		}
 		items = append(items, txQueueItem)

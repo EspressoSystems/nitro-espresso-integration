@@ -73,13 +73,18 @@ func (b *DecentralizedTimeboostBridge) EnqueueBlockToTimeboost(block *protos.Blo
 	b.blockSubmissionQueue.Enqueue(block)
 }
 
+// Add blocks to submission queue, block submitter thread will pick it up
+func (b *DecentralizedTimeboostBridge) EnqueueBlocksToTimeboost(blocks []*protos.Block) {
+	b.blockSubmissionQueue.EnqueueBlocks(blocks)
+}
+
 // Send block to timeboost who will get certificate over the block hash and send transaction to hotshot
 func (b *DecentralizedTimeboostBridge) blockSubmitter(timeout *time.Duration) time.Duration {
 	if block := b.blockSubmissionQueue.Peek(); block != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 		defer cancel()
 		if _, err := b.grpcClient.SubmitBlock(ctx, block); err != nil {
-			log.Error("failed to submit block to timeboost through grpc endpoint", "err", err, "resubmit time", *timeout)
+			log.Error("failed to submit block to timeboost through grpc endpoint", "err", err, "resubmit time", *timeout, "backlog", b.blockSubmissionQueue.Len())
 			return *timeout
 		}
 		b.blockSubmissionQueue.Dequeue()
