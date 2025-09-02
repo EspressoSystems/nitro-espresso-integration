@@ -227,7 +227,7 @@ outer:
 				}
 				s.txQueue.dequeue()
 				if protoBlocks == nil {
-					log.Warn("no blocks were created from processed delayed messages")
+					log.Debug("no blocks were created from processed delayed messages")
 					return madeBlock
 				}
 				log.Info("enqueueing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
