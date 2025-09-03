@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
+	"math"
 	"time"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
@@ -16,6 +18,8 @@ import (
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 const LEN_SIZE int = 8
 const INDEX_SIZE int = 8
+const HEADER_SIZE = 1
+const HEADER_LEN = 4
 
 type SubmittedEspressoTx struct {
 	Hash        string
@@ -23,6 +27,26 @@ type SubmittedEspressoTx struct {
 	Payload     []byte
 	SubmittedAt time.Time `rlp:"optional"`
 }
+
+type Header struct {
+	Version         TransactionVersion
+	TransactionType TransactionType
+	Reserved        uint16
+}
+
+type TransactionType uint8
+
+const (
+	Legacy       TransactionType = 0
+	EphemeralKey TransactionType = 1
+	Timeboost    TransactionType = 2
+)
+
+type TransactionVersion uint8
+
+const (
+	V0 TransactionVersion = 0
+)
 
 func BuildRawHotShotPayload(
 	msgPositions []MessageIndex,
@@ -67,10 +91,32 @@ func SignHotShotPayload(
 		return nil, err
 	}
 
+	header := Header{
+		Version:         V0,
+		TransactionType: EphemeralKey,
+		Reserved:        0,
+	}
+
+	encoded := []byte{
+		uint8(header.Version),
+		uint8(header.TransactionType),
+		byte(header.Reserved >> 8),
+		byte(header.Reserved),
+	}
+
+	headerBuf := make([]byte, HEADER_SIZE)
+	size := len(encoded)
+	if size > math.MaxUint8 {
+		return nil, fmt.Errorf("encoded data too large: %d bytes (max %d)", len(encoded), math.MaxUint8)
+	}
+	headerBuf[0] = uint8(size)
+	result := headerBuf
+	result = append(result, encoded...)
+
 	quoteSizeBuf := make([]byte, LEN_SIZE)
 	binary.BigEndian.PutUint64(quoteSizeBuf, uint64(len(quote)))
 	// Put the signature first. That would help easier parsing.
-	result := quoteSizeBuf
+	result = append(result, quoteSizeBuf...)
 	result = append(result, quote...)
 	result = append(result, unsigned...)
 
@@ -88,7 +134,42 @@ func ValidateIfPayloadIsInBlock(p []byte, payloads []espressoTypes.Bytes) bool {
 	return validated
 }
 
-func ParseHotShotPayload(payload []byte) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
+	if len(tx) < HEADER_SIZE+HEADER_LEN {
+		log.Warn("hotshot transaction is too small for a header")
+		return nil
+	}
+	// Try and see if there is a header
+	size := tx[0]
+	var transactionType TransactionType
+	if size == HEADER_LEN {
+		encoded := tx[HEADER_SIZE : HEADER_SIZE+HEADER_LEN]
+		header := Header{
+			Version:         TransactionVersion(encoded[0]),
+			TransactionType: TransactionType(encoded[1]),
+			Reserved:        binary.BigEndian.Uint16(encoded[2:4]),
+		}
+
+		if header.Version == V0 && header.Reserved == 0 {
+			switch header.TransactionType {
+			case Legacy:
+				transactionType = Legacy
+			case EphemeralKey:
+				transactionType = EphemeralKey
+			case Timeboost:
+				transactionType = Timeboost
+			default:
+				return nil
+			}
+		}
+	}
+	return &transactionType
+}
+
+func ParseHotShotPayload(payload []byte, txType *TransactionType) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+	if txType != nil {
+		payload = payload[HEADER_SIZE+HEADER_LEN:]
+	}
 	if len(payload) < LEN_SIZE {
 		return nil, nil, nil, nil, errors.New("payload too short to parse signature size")
 	}

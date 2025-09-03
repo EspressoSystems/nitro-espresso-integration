@@ -246,11 +246,73 @@ func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) 
 	return err
 }
 
+func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, transactionType *arbutil.TransactionType) error {
+	if transactionType != nil {
+		txType := *transactionType
+		switch txType {
+		case arbutil.Legacy:
+			if s.espressoSGXVerifier == nil {
+				return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil")
+			}
+			err := s.verifyLegacy(data, userDataHashArr)
+			if err != nil {
+				log.Warn("failed to verify attestation quote", "err", err)
+				return err
+			}
+		case arbutil.EphemeralKey:
+			err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
+			if err == nil {
+				return nil
+			} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
+				log.Warn("retrying to verify batch poster signature", "err", err)
+				return err
+			} else {
+				log.Warn("failed to verify batch poster signature", "err", err)
+				return err
+			}
+		default:
+			return fmt.Errorf("failed to verify transaction, received unexpected transaction type: %d", txType)
+		}
+	} else {
+		var success bool
+		err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
+		if err == nil {
+			success = true
+		} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
+			log.Warn("retrying to verify batch poster signature", "err", err)
+			return err
+		} else {
+			log.Warn("failed to verify batch poster signature", "err", err)
+		}
+
+		if !success && s.espressoSGXVerifier != nil {
+			err = s.verifyLegacy(data, userDataHashArr)
+			if err != nil {
+				log.Warn("failed to verify attestation quote", "err", err)
+				return err
+			}
+		} else if s.espressoSGXVerifier == nil {
+			log.Warn("failed to verify batch poster signature and sgx verifier not set for fallback", "err", err)
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx)
+	transactionType := arbutil.ParseHotshotPayloadForHeader(tx)
+	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx, transactionType)
 	if err != nil {
-		log.Warn("failed to parse hotshot payload", "err", err)
-		return nil, err
+		if transactionType != nil {
+			// in case somehow we parsed a header and there wasnt one, try again
+			transactionType = nil
+			signature, userDataHash, indices, messages, err = arbutil.ParseHotShotPayload(tx, transactionType)
+			if err != nil {
+				log.Warn("failed to parse hotshot payload", "err", err)
+				return nil, err
+			}
+		}
+
 	}
 	if len(messages) == 0 {
 		return nil, ErrPayloadHadNoMessages
@@ -260,25 +322,9 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		return nil, ErrUserDataHashNot32Bytes
 	}
 
-	userDataHashArr := [32]byte(userDataHash)
-
-	var success bool
-	err = s.verifyBatchPosterSignature(signature, userDataHashArr, l1Height)
-	if err == nil {
-		success = true
-	} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
-		log.Warn("retrying to verify batch poster signature", "err", err)
+	err = s.verify(signature, [32]byte(userDataHash), l1Height, transactionType)
+	if err != nil {
 		return nil, err
-	} else {
-		log.Warn("failed to verify batch poster signature", "err", err)
-	}
-
-	if !success && s.espressoSGXVerifier != nil {
-		err = s.verifyLegacy(signature, userDataHashArr)
-		if err != nil {
-			log.Warn("failed to verify attestation quote", "err", err)
-			return nil, err
-		}
 	}
 
 	result := []*MessageWithMetadataAndPos{}

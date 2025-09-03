@@ -36,7 +36,8 @@ func TestParsePayload(t *testing.T) {
 	}
 
 	// Parse the signed payload
-	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload)
+	txType := ParseHotshotPayloadForHeader(signedPayload)
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, txType)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}
@@ -123,7 +124,7 @@ func TestParsePayloadInvalidCases(t *testing.T) {
 
 	for _, tc := range invalidPayloads {
 		t.Run(tc.description, func(t *testing.T) {
-			_, _, _, _, err := ParseHotShotPayload(tc.payload)
+			_, _, _, _, err := ParseHotShotPayload(tc.payload, nil)
 			if err == nil {
 				t.Errorf("expected error for case '%s', but got none", tc.description)
 			}
