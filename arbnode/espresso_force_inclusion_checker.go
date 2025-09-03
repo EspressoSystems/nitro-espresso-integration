@@ -143,7 +143,7 @@ func (f *ForceInclusionChecker) Start(ctx context.Context) error {
 			return f.config.PollingInterval
 		}
 		if errors.Is(err, ForceInclusionErr) {
-			log.Error("rorce inclusion error", "err", err)
+			log.Error("force inclusion error", "err", err)
 			f.fatalErrChan <- err
 			return 0
 		}
