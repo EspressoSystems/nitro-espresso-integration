@@ -285,15 +285,15 @@ func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Heigh
 			log.Warn("failed to verify batch poster signature", "err", err)
 		}
 
-		if !success && s.espressoSGXVerifier != nil {
+		if !success {
+			if s.espressoSGXVerifier == nil {
+				return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil. %w", err)
+			}
 			err = s.verifyLegacy(data, userDataHashArr)
 			if err != nil {
 				log.Warn("failed to verify attestation quote", "err", err)
 				return err
 			}
-		} else if s.espressoSGXVerifier == nil {
-			log.Warn("failed to verify batch poster signature and sgx verifier not set for fallback", "err", err)
-			return err
 		}
 	}
 	return nil
