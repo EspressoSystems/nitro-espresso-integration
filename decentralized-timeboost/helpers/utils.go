@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/zeebo/blake3"
@@ -98,17 +99,21 @@ func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, 
 
 	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
 	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
-	commitment := NewRawCommitmentBuilder("BlockInfo").
-		FieldBlockNum(block.Cert.Data.Num).
-		FieldRound(block.Cert.Data.Round).
-		FieldHash(blockHash).
+	commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
+		Field("num", espressoCommon.NewRawCommitmentBuilder("Block Number Commitment").
+			Uint64(block.Cert.Data.Num).Finalize()).
+		Field("round", espressoCommon.NewRawCommitmentBuilder("Round").
+			Field("num", espressoCommon.NewRawCommitmentBuilder("Round Number Commitment").Uint64(block.Cert.Data.Round.Number).Finalize()).
+			Field("com", espressoCommon.NewRawCommitmentBuilder("CommitteeId").Uint64(block.Cert.Data.Round.CommitteeId).Finalize()).Finalize()).
+		Field("hash", espressoCommon.NewRawCommitmentBuilder("BlockHash").
+			FixedSizeField("block-hash", blockHash).Finalize()).
 		Finalize()
-	if !bytes.Equal(commitment, block.Cert.Commitment) {
+	if !bytes.Equal(commitment[:], block.Cert.Commitment) {
 		return nil, fmt.Errorf("block commitment mistmatch! computed commitment: 0x%x, certified commitment: 0x%x", commitment, block.Cert.Commitment)
 	}
 
 	// Validate the commitment against the committee signatures
-	if err = ValidateTimeboostCertificate(commitment, block.Cert.Signatures); err != nil {
+	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures); err != nil {
 		return nil, err
 	}
 
