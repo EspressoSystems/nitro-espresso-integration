@@ -1856,12 +1856,16 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	if b.building.firstDelayedMsg != nil {
+		log.Info("first delayed msg", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
 		// #nosec G115
 		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
 		if timeSinceMsg >= config.MaxEmptyBatchDelay {
+			log.Info("Batch posting report is older than max empty batch delay", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
 			forcePostBatch = true
 		}
 	}
+
+	log.Info("b.building.msgCount, msgCount, MaxEmptyBatchDelay and forcePostBatch", "b.building.msgCount", b.building.msgCount, "msgCount", msgCount, "MaxEmptyBatchDelay", config.MaxEmptyBatchDelay, "forcePostBatch", forcePostBatch)
 
 	for b.building.msgCount < msgCount {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
@@ -1919,6 +1923,10 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		// #nosec G115
 		timeSinceMsg := time.Since(time.Unix(int64(msg.Message.Header.Timestamp), 0))
+		if msg.Message.Header.Kind == arbostypes.L1MessageType_BatchPostingReport {
+			log.Info("Batch posting report", "msg", msg.Message.Header.BlockNumber, "timestamp", msg.Message.Header.Timestamp)
+		}
+
 		if (msg.Message.Header.Kind != arbostypes.L1MessageType_BatchPostingReport) || (timeSinceMsg >= config.MaxEmptyBatchDelay) {
 			b.building.haveUsefulMessage = true
 			if b.building.firstUsefulMsg == nil {
@@ -1928,6 +1936,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		if isDelayed {
 			if b.building.firstDelayedMsg == nil {
 				b.building.firstDelayedMsg = msg
+				log.Info("Setting the first delayed message", "msg", msg.Message.Header.BlockNumber, "timestamp", msg.Message.Header.Timestamp)
 			}
 		} else if b.building.firstNonDelayedMsg == nil {
 			b.building.firstNonDelayedMsg = msg
