@@ -352,6 +352,7 @@ func (s *PollingEspressoSubmitter) ResubmitEspressoTransactions(ctx context.Cont
 		Payload:   tx.Payload,
 		Namespace: s.chainID,
 	})
+
 	if err != nil {
 		return nil, err
 	}
@@ -424,6 +425,9 @@ func (s *PollingEspressoSubmitter) submitEspressoTransactions(ctx context.Contex
 		Payload:   payload,
 		Namespace: s.chainID,
 	})
+
+	log.Info("Submitted payload is", "payload", payload)
+	log.Info("Submitted namespace is", "namespace", s.chainID)
 
 	if err != nil {
 		return fmt.Errorf("failed to submit transaction to espresso: %w", err)

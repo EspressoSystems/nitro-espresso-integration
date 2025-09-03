@@ -43,7 +43,8 @@ func TestEspressoHotshotListener(t *testing.T) {
 	rollupSequencerManagerAddress := builder.L1Info.GetAddress("RollupSequencerManager")
 	// Get Sequencer Address
 	sequencerAddress := builder.L1Info.GetAddress("Sequencer")
-	listener, err := hotshot_listener.NewHotshotListener(SEQUENCER_API_WEBSOCKERT_URL, rollupSequencerManagerAddress.Hex(), builder.L1.Client, sequencerAddress.Hex())
+	// TODO: fix this
+	listener, err := hotshot_listener.NewHotshotListener(SEQUENCER_API_WEBSOCKERT_URL, rollupSequencerManagerAddress.Hex(), builder.L1.Client, sequencerAddress.Hex(), uint32(builder.L2Info.Signer.ChainID().Uint64()), builder.L2.ExecNode.ExecEngine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +54,13 @@ func TestEspressoHotshotListener(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User16", builder.L2Info)
+	Require(t, err)
 
 	// Note: These are rudimentary tests to check if the initial basic functionality
 	// of the listener works. These tests will be modified in the future to include more processing checks
