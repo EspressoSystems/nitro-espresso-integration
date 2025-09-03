@@ -246,55 +246,58 @@ func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) 
 	return err
 }
 
+func (s *EspressoStreamer) fallbackLegacyVerification(data []byte, userDataHashArr [32]byte, l1Height uint64) error {
+	if s.espressoSGXVerifier == nil {
+		return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil")
+	}
+	err := s.verifyLegacy(data, userDataHashArr)
+	if err != nil {
+		log.Warn("failed to verify attestation quote", "err", err)
+		return err
+	}
+	return nil
+}
+
+func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte, l1Height uint64, fallback bool) error {
+	err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
+	var success bool
+	if err == nil {
+		success = true
+	} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
+		log.Warn("retrying to verify batch poster signature", "err", err)
+		return err
+	} else {
+		log.Warn("failed to verify batch poster signature", "err", err)
+		if !fallback {
+			return err
+		}
+	}
+
+	if !success {
+		if err := s.fallbackLegacyVerification(data, userDataHashArr, l1Height); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, transactionType *arbutil.TransactionType) error {
 	if transactionType != nil {
 		txType := *transactionType
 		switch txType {
 		case arbutil.Legacy:
-			if s.espressoSGXVerifier == nil {
-				return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil")
-			}
-			err := s.verifyLegacy(data, userDataHashArr)
-			if err != nil {
-				log.Warn("failed to verify attestation quote", "err", err)
+			if err := s.fallbackLegacyVerification(data, userDataHashArr, l1Height); err != nil {
 				return err
 			}
 		case arbutil.EphemeralKey:
-			err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
-			if err == nil {
-				return nil
-			} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
-				log.Warn("retrying to verify batch poster signature", "err", err)
-				return err
-			} else {
-				log.Warn("failed to verify batch poster signature", "err", err)
+			if err := s.verifySignature(data, userDataHashArr, l1Height, true); err != nil {
 				return err
 			}
 		default:
 			return fmt.Errorf("failed to verify transaction, received unexpected transaction type: %d", txType)
 		}
-	} else {
-		var success bool
-		err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
-		if err == nil {
-			success = true
-		} else if strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
-			log.Warn("retrying to verify batch poster signature", "err", err)
-			return err
-		} else {
-			log.Warn("failed to verify batch poster signature", "err", err)
-		}
-
-		if !success {
-			if s.espressoSGXVerifier == nil {
-				return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil. %w", err)
-			}
-			err = s.verifyLegacy(data, userDataHashArr)
-			if err != nil {
-				log.Warn("failed to verify attestation quote", "err", err)
-				return err
-			}
-		}
+	} else if err := s.verifySignature(data, userDataHashArr, l1Height, true); err != nil {
+		return err
 	}
 	return nil
 }

@@ -71,6 +71,91 @@ func TestParsePayload(t *testing.T) {
 	}
 }
 
+func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
+	msgPositions := []MessageIndex{1, 2, 10, 24, 100}
+
+	rawPayload, cnt := BuildRawHotShotPayload(msgPositions, mockMsgFetcher, 200*1024)
+	if cnt != len(msgPositions) {
+		t.Fatal("exceed transactions")
+	}
+
+	mockSignature := []byte("fake_signature")
+	fakeSigner := func(payload []byte) ([]byte, error) {
+		return mockSignature, nil
+	}
+	signedPayload, err := SignHotShotPayload(rawPayload, fakeSigner)
+	if err != nil {
+		t.Fatalf("failed to sign payload: %v", err)
+	}
+
+	// Parse the signed payload
+	txType := ParseHotshotPayloadForHeader(signedPayload)
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, txType)
+	if err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+
+	if !slices.Equal(userDataHash, crypto.Keccak256(rawPayload)) {
+		t.Fatalf("User data hash is not for the correct payload")
+	}
+
+	// Validate parsed data
+	if !bytes.Equal(signature, mockSignature) {
+		t.Errorf("expected signature 'fake_signature', got %v", mockSignature)
+	}
+
+	for i, index := range indices {
+		if MessageIndex(index) != msgPositions[i] {
+			t.Errorf("expected index %d, got %d", msgPositions[i], index)
+		}
+	}
+
+	expectedMessages := [][]byte{
+		[]byte("message1"),
+		[]byte("message2"),
+		[]byte("message10"),
+		[]byte("message24"),
+		[]byte("message100"),
+	}
+	for i, message := range messages {
+		if !bytes.Equal(message, expectedMessages[i]) {
+			t.Errorf("expected message %s, got %s", expectedMessages[i], message)
+		}
+	}
+
+	// Remove header from payload
+	signedPayload = signedPayload[HEADER_LEN+HEADER_SIZE:]
+	txType = ParseHotshotPayloadForHeader(signedPayload)
+	if txType != nil {
+		t.Fatalf("no header should be parsed")
+	}
+	signature, userDataHash, indices, messages, err = ParseHotShotPayload(signedPayload, txType)
+	if err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+
+	if !slices.Equal(userDataHash, crypto.Keccak256(rawPayload)) {
+		t.Fatalf("User data hash is not for the correct payload")
+	}
+
+	// Validate parsed data
+	if !bytes.Equal(signature, mockSignature) {
+		t.Errorf("expected signature 'fake_signature', got %v", mockSignature)
+	}
+
+	for i, index := range indices {
+		if MessageIndex(index) != msgPositions[i] {
+			t.Errorf("expected index %d, got %d", msgPositions[i], index)
+		}
+	}
+
+	for i, message := range messages {
+		if !bytes.Equal(message, expectedMessages[i]) {
+			t.Errorf("expected message %s, got %s", expectedMessages[i], message)
+		}
+	}
+}
+
 func TestValidateIfPayloadIsInBlock(t *testing.T) {
 	msgPositions := []MessageIndex{1, 2}
 

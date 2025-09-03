@@ -29,9 +29,12 @@ type SubmittedEspressoTx struct {
 }
 
 type Header struct {
-	Version         TransactionVersion
+	// Version for header in case any of these fields change we can parse correctly based on version
+	Version TransactionVersion
+	// Transaction how the header is formatted
 	TransactionType TransactionType
-	Reserved        uint16
+	// Reserved unused bytes, also helps with header verification
+	Reserved uint16
 }
 
 type TransactionType uint8
@@ -141,7 +144,7 @@ func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
 	}
 	// Try and see if there is a header
 	size := tx[0]
-	var transactionType TransactionType
+
 	if size == HEADER_LEN {
 		encoded := tx[HEADER_SIZE : HEADER_SIZE+HEADER_LEN]
 		header := Header{
@@ -150,6 +153,7 @@ func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
 			Reserved:        binary.BigEndian.Uint16(encoded[2:4]),
 		}
 
+		var transactionType TransactionType
 		if header.Version == V0 && header.Reserved == 0 {
 			switch header.TransactionType {
 			case Legacy:
@@ -161,9 +165,10 @@ func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
 			default:
 				return nil
 			}
+			return &transactionType
 		}
 	}
-	return &transactionType
+	return nil
 }
 
 func ParseHotShotPayload(payload []byte, txType *TransactionType) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
