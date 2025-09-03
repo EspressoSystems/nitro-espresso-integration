@@ -100,13 +100,9 @@ func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, 
 	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
 	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
 	commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
-		Field("num", espressoCommon.NewRawCommitmentBuilder("Block Number Commitment").
-			Uint64(block.Cert.Data.Num).Finalize()).
-		Field("round", espressoCommon.NewRawCommitmentBuilder("Round").
-			Field("num", espressoCommon.NewRawCommitmentBuilder("Round Number Commitment").Uint64(block.Cert.Data.Round.Number).Finalize()).
-			Field("com", espressoCommon.NewRawCommitmentBuilder("CommitteeId").Uint64(block.Cert.Data.Round.CommitteeId).Finalize()).Finalize()).
-		Field("hash", espressoCommon.NewRawCommitmentBuilder("BlockHash").
-			FixedSizeField("block-hash", blockHash).Finalize()).
+		Field("num", block.Cert.Data.CommitNum()).
+		Field("round", block.Cert.Data.Round.Commit()).
+		Field("hash", block.Cert.Data.CommitHash()).
 		Finalize()
 	if !bytes.Equal(commitment[:], block.Cert.Commitment) {
 		return nil, fmt.Errorf("block commitment mistmatch! computed commitment: 0x%x, certified commitment: 0x%x", commitment, block.Cert.Commitment)

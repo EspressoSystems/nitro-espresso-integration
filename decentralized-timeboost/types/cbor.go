@@ -1,5 +1,7 @@
 package decentralized_timeboost_types
 
+import espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
+
 type Round struct {
 	Number      uint64 `cbor:"0,keyasint"`
 	CommitteeId uint64 `cbor:"1,keyasint"`
@@ -32,4 +34,23 @@ type CertifiedBlock struct {
 type MessagePayload struct {
 	Position uint64 `cbor:"pos"`
 	Message  []byte `cbor:"msg"`
+}
+
+func (r *Round) Commit() espressoCommon.Commitment {
+	return espressoCommon.NewRawCommitmentBuilder("Round").
+		Field("num", espressoCommon.NewRawCommitmentBuilder("Round Number Commitment").Uint64(r.Number).Finalize()).
+		Field("com", espressoCommon.NewRawCommitmentBuilder("CommitteeId").Uint64(r.CommitteeId).Finalize()).
+		Finalize()
+}
+
+func (b *BlockInfo) CommitNum() espressoCommon.Commitment {
+	return espressoCommon.NewRawCommitmentBuilder("Block Number Commitment").
+		Uint64(b.Num).
+		Finalize()
+}
+
+func (b *BlockInfo) CommitHash() espressoCommon.Commitment {
+	return espressoCommon.NewRawCommitmentBuilder("BlockHash").
+		FixedSizeField("block-hash", b.Hash).
+		Finalize()
 }
