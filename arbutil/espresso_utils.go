@@ -40,9 +40,8 @@ type Header struct {
 type TransactionType uint8
 
 const (
-	Legacy       TransactionType = 0
-	EphemeralKey TransactionType = 1
-	Timeboost    TransactionType = 2
+	Fallback               TransactionType = 0
+	DecentralizedTimeboost TransactionType = 1
 )
 
 type TransactionVersion uint8
@@ -96,7 +95,7 @@ func SignHotShotPayload(
 
 	header := Header{
 		Version:         V0,
-		TransactionType: EphemeralKey,
+		TransactionType: Fallback,
 		Reserved:        0,
 	}
 
@@ -144,7 +143,6 @@ func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
 	}
 	// Try and see if there is a header
 	size := tx[0]
-
 	if size == HEADER_LEN {
 		encoded := tx[HEADER_SIZE : HEADER_SIZE+HEADER_LEN]
 		header := Header{
@@ -156,12 +154,10 @@ func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
 		var transactionType TransactionType
 		if header.Version == V0 && header.Reserved == 0 {
 			switch header.TransactionType {
-			case Legacy:
-				transactionType = Legacy
-			case EphemeralKey:
-				transactionType = EphemeralKey
-			case Timeboost:
-				transactionType = Timeboost
+			case Fallback:
+				transactionType = Fallback
+			case DecentralizedTimeboost:
+				transactionType = DecentralizedTimeboost
 			default:
 				return nil
 			}

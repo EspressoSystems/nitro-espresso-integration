@@ -258,7 +258,7 @@ func (s *EspressoStreamer) fallbackLegacyVerification(data []byte, userDataHashA
 	return nil
 }
 
-func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte, l1Height uint64, fallback bool) error {
+func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte, l1Height uint64) error {
 	err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
 	var success bool
 	if err == nil {
@@ -268,9 +268,6 @@ func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte
 		return err
 	} else {
 		log.Warn("failed to verify batch poster signature", "err", err)
-		if !fallback {
-			return err
-		}
 	}
 
 	if !success {
@@ -285,18 +282,14 @@ func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Heigh
 	if transactionType != nil {
 		txType := *transactionType
 		switch txType {
-		case arbutil.Legacy:
-			if err := s.fallbackLegacyVerification(data, userDataHashArr, l1Height); err != nil {
-				return err
-			}
-		case arbutil.EphemeralKey:
-			if err := s.verifySignature(data, userDataHashArr, l1Height, true); err != nil {
+		case arbutil.Fallback:
+			if err := s.verifySignature(data, userDataHashArr, l1Height); err != nil {
 				return err
 			}
 		default:
 			return fmt.Errorf("failed to verify transaction, received unexpected transaction type: %d", txType)
 		}
-	} else if err := s.verifySignature(data, userDataHashArr, l1Height, true); err != nil {
+	} else if err := s.verifySignature(data, userDataHashArr, l1Height); err != nil {
 		return err
 	}
 	return nil
