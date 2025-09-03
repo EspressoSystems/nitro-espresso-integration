@@ -14,7 +14,7 @@ type View struct {
 // storing the state hashes of the nitro state
 // at a given view number and payload commitment
 type ViewStoreBinaryTree struct {
-	view  View
+	View  View
 	Left  *ViewStoreBinaryTree
 	Right *ViewStoreBinaryTree
 }
@@ -27,27 +27,27 @@ all the views with a view number and builder commitment greater than the root's 
 func Insert(root *ViewStoreBinaryTree, viewNumber uint64, builderCommitment string, stateHash common.Hash) *ViewStoreBinaryTree {
 	if root == nil {
 		return &ViewStoreBinaryTree{
-			view: View{
+			View: View{
 				viewNumber:        viewNumber,
 				builderCommitment: builderCommitment,
 				stateHash:         stateHash,
 			},
 		}
 	}
-	if viewNumber < root.view.viewNumber {
+	if viewNumber < root.View.viewNumber {
 		root.Left = Insert(root.Left, viewNumber, builderCommitment, stateHash)
 		return root
-	} else if viewNumber > root.view.viewNumber {
+	} else if viewNumber > root.View.viewNumber {
 		root.Right = Insert(root.Right, viewNumber, builderCommitment, stateHash)
 		return root
 	}
 
 	// This means that view numbers is equal to the root's view number
 	// Builder commitment might be different so we insert based on that now
-	if builderCommitment < root.view.builderCommitment {
+	if builderCommitment < root.View.builderCommitment {
 		root.Left = Insert(root.Left, viewNumber, builderCommitment, stateHash)
 		return root
-	} else if builderCommitment > root.view.builderCommitment {
+	} else if builderCommitment > root.View.builderCommitment {
 		root.Right = Insert(root.Right, viewNumber, builderCommitment, stateHash)
 		return root
 	}
@@ -63,16 +63,16 @@ func Search(root *ViewStoreBinaryTree, viewNumber uint64, builderCommitment stri
 	if root == nil {
 		return nil
 	}
-	if viewNumber < root.view.viewNumber {
+	if viewNumber < root.View.viewNumber {
 		return Search(root.Left, viewNumber, builderCommitment)
-	} else if viewNumber > root.view.viewNumber {
+	} else if viewNumber > root.View.viewNumber {
 		return Search(root.Right, viewNumber, builderCommitment)
 	}
-	if builderCommitment == root.view.builderCommitment {
+	if builderCommitment == root.View.builderCommitment {
 		return root
-	} else if builderCommitment < root.view.builderCommitment {
+	} else if builderCommitment < root.View.builderCommitment {
 		return Search(root.Left, viewNumber, builderCommitment)
-	} else if builderCommitment > root.view.builderCommitment {
+	} else if builderCommitment > root.View.builderCommitment {
 		return Search(root.Right, viewNumber, builderCommitment)
 	}
 	return root
@@ -84,7 +84,7 @@ func Delete(root *ViewStoreBinaryTree, cutoff uint64) *ViewStoreBinaryTree {
 		return nil
 	}
 
-	if root.view.viewNumber > cutoff {
+	if root.View.viewNumber > cutoff {
 		// Keep this node; only the left subtree can contain nodes to delete.
 		root.Left = Delete(root.Left, cutoff)
 		return root

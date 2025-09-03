@@ -27,15 +27,15 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 		viewStoreForViewNumvber0 := Search(root, 0, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_")
 
 		// Check that left child has view number 0
-		if viewStoreForViewNumvber2.Left.view.viewNumber != 0 {
-			t.Errorf("Expected left child's view number to be 0, got %d", viewStoreForViewNumvber2.Left.view.viewNumber)
+		if viewStoreForViewNumvber2.Left.View.viewNumber != 0 {
+			t.Errorf("Expected left child's view number to be 0, got %d", viewStoreForViewNumvber2.Left.View.viewNumber)
 		}
 
-		if viewStoreForViewNumvber0.view.viewNumber != 0 {
-			t.Errorf("Expected root's view number to be 0, got %d", viewStoreForViewNumvber0.view.viewNumber)
+		if viewStoreForViewNumvber0.View.viewNumber != 0 {
+			t.Errorf("Expected root's view number to be 0, got %d", viewStoreForViewNumvber0.View.viewNumber)
 		}
-		if viewStoreForViewNumvber0.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
-			t.Errorf("Expected root's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumvber0.view.builderCommitment)
+		if viewStoreForViewNumvber0.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
+			t.Errorf("Expected root's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumvber0.View.builderCommitment)
 		}
 
 	})
@@ -50,11 +50,11 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 		viewStoreForViewNumber7 := Search(root, 7, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgC_")
 
 		// Check that the right side of view store 7 is the inserted view
-		if viewStoreForViewNumber7.Right.view.viewNumber != 9 {
-			t.Errorf("Expected right side of view store 7 to be 9, got %d", viewStoreForViewNumber7.Right.view.viewNumber)
+		if viewStoreForViewNumber7.Right.View.viewNumber != 9 {
+			t.Errorf("Expected right side of view store 7 to be 9, got %d", viewStoreForViewNumber7.Right.View.viewNumber)
 		}
-		if viewStoreForViewNumber7.Right.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
-			t.Errorf("Expected right side of view store 7 to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber7.Right.view.builderCommitment)
+		if viewStoreForViewNumber7.Right.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
+			t.Errorf("Expected right side of view store 7 to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber7.Right.View.builderCommitment)
 		}
 
 	})
@@ -70,11 +70,11 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 		viewStoreFor7ViewNumber := Search(root, 7, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgC_")
 
 		// Check that the lower builder commitment view store 5 exists on the left side of view store 7
-		if viewStoreFor7ViewNumber.Left.view.viewNumber != 5 {
-			t.Errorf("Expected left side of view store for view number 7 to have view number 5, got %d", viewStoreFor7ViewNumber.Left.view.viewNumber)
+		if viewStoreFor7ViewNumber.Left.View.viewNumber != 5 {
+			t.Errorf("Expected left side of view store for view number 7 to have view number 5, got %d", viewStoreFor7ViewNumber.Left.View.viewNumber)
 		}
-		if viewStoreFor7ViewNumber.Left.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
-			t.Errorf("Expected left side of view store for view number 7 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber5HigherBuilderCommitment.Left.view.builderCommitment)
+		if viewStoreFor7ViewNumber.Left.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
+			t.Errorf("Expected left side of view store for view number 7 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber5HigherBuilderCommitment.Left.View.builderCommitment)
 		}
 	})
 
@@ -87,11 +87,11 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 		viewStoreFor2ViewNumber := Search(root, 2, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_")
 
 		// Check that the lower builder commitment view store 5 exists on the left side of view store 7
-		if viewStoreFor2ViewNumber.Right.view.viewNumber != 5 {
-			t.Errorf("Expected right side of view store for view number 2 to have view number 5, got %d", viewStoreFor2ViewNumber.Left.view.viewNumber)
+		if viewStoreFor2ViewNumber.Right.View.viewNumber != 5 {
+			t.Errorf("Expected right side of view store for view number 2 to have view number 5, got %d", viewStoreFor2ViewNumber.Left.View.viewNumber)
 		}
-		if viewStoreFor2ViewNumber.Right.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_" {
-			t.Errorf("Expected right side of view store for view number 2 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_, got %s", viewStoreFor2ViewNumber.Left.view.builderCommitment)
+		if viewStoreFor2ViewNumber.Right.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_" {
+			t.Errorf("Expected right side of view store for view number 2 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_, got %s", viewStoreFor2ViewNumber.Left.View.builderCommitment)
 		}
 	})
 
@@ -107,11 +107,11 @@ func TestEspressoViewStoreSearch(t *testing.T) {
 		// Search for view number 2
 		viewStoreForViewNumber0 := Search(root, 0, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_")
 
-		if viewStoreForViewNumber0.view.viewNumber != 0 {
-			t.Errorf("Expected root's view number to be 0, got %d", viewStoreForViewNumber0.view.viewNumber)
+		if viewStoreForViewNumber0.View.viewNumber != 0 {
+			t.Errorf("Expected root's view number to be 0, got %d", viewStoreForViewNumber0.View.viewNumber)
 		}
-		if viewStoreForViewNumber0.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
-			t.Errorf("Expected root's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber0.view.builderCommitment)
+		if viewStoreForViewNumber0.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
+			t.Errorf("Expected root's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber0.View.builderCommitment)
 		}
 	})
 
@@ -122,11 +122,11 @@ func TestEspressoViewStoreSearch(t *testing.T) {
 		// Search for view number 2
 		viewStoreForViewNumber2 := Search(root, 10, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_")
 
-		if viewStoreForViewNumber2.view.viewNumber != 10 {
-			t.Errorf("Expected right child's view number to be 10, got %d", viewStoreForViewNumber2.Right.view.viewNumber)
+		if viewStoreForViewNumber2.View.viewNumber != 10 {
+			t.Errorf("Expected right child's view number to be 10, got %d", viewStoreForViewNumber2.Right.View.viewNumber)
 		}
-		if viewStoreForViewNumber2.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_" {
-			t.Errorf("Expected right child's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_, got %s", viewStoreForViewNumber2.Right.view.builderCommitment)
+		if viewStoreForViewNumber2.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_" {
+			t.Errorf("Expected right child's builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_, got %s", viewStoreForViewNumber2.Right.View.builderCommitment)
 		}
 	})
 
@@ -140,11 +140,11 @@ func TestEspressoViewStoreSearch(t *testing.T) {
 		// Search for view number 2
 		viewStoreForViewNumber2 := Search(root, 2, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_")
 
-		if viewStoreForViewNumber2.view.viewNumber != 2 {
-			t.Errorf("Expected  view number to be 2, got %d", viewStoreForViewNumber2.Right.view.viewNumber)
+		if viewStoreForViewNumber2.View.viewNumber != 2 {
+			t.Errorf("Expected  view number to be 2, got %d", viewStoreForViewNumber2.Right.View.viewNumber)
 		}
-		if viewStoreForViewNumber2.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
-			t.Errorf("Expected  builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber2.Right.view.builderCommitment)
+		if viewStoreForViewNumber2.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_" {
+			t.Errorf("Expected  builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgF_, got %s", viewStoreForViewNumber2.Right.View.builderCommitment)
 		}
 	})
 
@@ -158,11 +158,11 @@ func TestEspressoViewStoreSearch(t *testing.T) {
 		// Search for view number 2
 		viewStoreForViewNumber2 := Search(root, 2, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_")
 
-		if viewStoreForViewNumber2.view.viewNumber != 2 {
-			t.Errorf("Expected  view number to be 2, got %d", viewStoreForViewNumber2.view.viewNumber)
+		if viewStoreForViewNumber2.View.viewNumber != 2 {
+			t.Errorf("Expected  view number to be 2, got %d", viewStoreForViewNumber2.View.viewNumber)
 		}
-		if viewStoreForViewNumber2.view.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_" {
-			t.Errorf("Expected  builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_, got %s", viewStoreForViewNumber2.view.builderCommitment)
+		if viewStoreForViewNumber2.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_" {
+			t.Errorf("Expected  builder commitment to be BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_, got %s", viewStoreForViewNumber2.View.builderCommitment)
 		}
 	})
 
@@ -223,8 +223,8 @@ func TestViewStoreDelete(t *testing.T) {
 		root = Delete(root, 7)
 
 		// root view number should be 10
-		if root.view.viewNumber != 10 {
-			t.Errorf("Expected root view number to be 10, got %d", root.view.viewNumber)
+		if root.View.viewNumber != 10 {
+			t.Errorf("Expected root view number to be 10, got %d", root.View.viewNumber)
 		}
 
 		// Search and there should be no view with view number 7
@@ -271,8 +271,8 @@ func TestViewStoreDelete(t *testing.T) {
 		root = Delete(root, 8)
 
 		// root view number should be 10
-		if root.view.viewNumber != 10 {
-			t.Errorf("Expected root view number to be 10, got %d", root.view.viewNumber)
+		if root.View.viewNumber != 10 {
+			t.Errorf("Expected root view number to be 10, got %d", root.View.viewNumber)
 		}
 	})
 

@@ -5,15 +5,24 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
+	"time"
 
 	"github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/gorilla/websocket"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/espresso/utils"
+	view_store "github.com/offchainlabs/nitro/espresso/view-store"
+	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -26,13 +35,16 @@ type HotshotListener struct {
 	stopwaiter.StopWaiter
 	hotshotUrl                        string
 	rollupSequencerManager            *espressogen.IEspressoRollupSequencerManager
-	quorumViewNumberBuilderCommitment map[string]big.Int
-	daViewNumberBuilderCommitment     map[string]bool
+	quorumViewNumberBuilderCommitment map[string]*big.Int
+	daViewNumberBuilderCommitment     map[string]*types.BlockPayload
 	sequencerAddress                  string
 	conn                              *websocket.Conn
+	chainId                           uint32
+	execution                         *gethexec.ExecutionEngine
+	root                              *view_store.ViewStoreBinaryTree
 }
 
-func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string, l1Client *ethclient.Client, sequencerAddress string) (*HotshotListener, error) {
+func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string, l1Client *ethclient.Client, sequencerAddress string, chainId uint32, execution *gethexec.ExecutionEngine) (*HotshotListener, error) {
 
 	if hotshotUrl == "" {
 		return nil, fmt.Errorf("hotshot url is empty, please provide a valid url")
@@ -55,13 +67,18 @@ func NewHotshotListener(hotshotUrl string, rollupSequencerManagerContract string
 		return nil, err
 	}
 
+	// Create a new view store binary tree
+
 	// Create a new rollup sequencer manager contract instance
 	return &HotshotListener{
 		hotshotUrl:                        hotshotUrl + HotshotListenerEndpoint,
 		rollupSequencerManager:            rollupSequencerManager,
-		quorumViewNumberBuilderCommitment: make(map[string]big.Int),
-		daViewNumberBuilderCommitment:     make(map[string]bool),
+		quorumViewNumberBuilderCommitment: make(map[string]*big.Int),
+		daViewNumberBuilderCommitment:     make(map[string]*types.BlockPayload),
 		sequencerAddress:                  sequencerAddress,
+		chainId:                           chainId,
+		execution:                         execution,
+		root:                              nil,
 	}, nil
 }
 
@@ -108,7 +125,7 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	l1FinalizedBlockNumberForView := quorumProposalWrapper.QuorumProposalDataWrapper.Data.Proposal.BlockHeader.Fields.L1Finalized.Number
 	l1FinalizedBlockNumberBigInt := big.NewInt(int64(l1FinalizedBlockNumberForView))
 	// Store the finalized L1 block number in the map
-	listener.quorumViewNumberBuilderCommitment[key] = *l1FinalizedBlockNumberBigInt
+	listener.quorumViewNumberBuilderCommitment[key] = l1FinalizedBlockNumberBigInt
 
 	// Check if a da commitment exists for the key relative to
 	// this quorum proposal view number and builder commitment
@@ -119,23 +136,19 @@ func (listener *HotshotListener) processQuorumProposalEvent(quorumProposalWrappe
 	log.Info("processing builder commitment and view number", "viewNumber", viewNumber, "builderCommitment", builderCommitment)
 
 	// Get the sequencer address for the next view
-	nextView := viewNumber + 1
-	// Note: Its important to use l1 finalized block number here because we want the GetCurrentSequencer to
-	// always return the same sequencer address for the same view number
-	sequencerAddressForNextView, err := listener.rollupSequencerManager.GetCurrentSequencer(&bind.CallOpts{
-		BlockNumber: l1FinalizedBlockNumberBigInt,
-	}, big.NewInt(int64(nextView)))
+	// #nosec G115
+	err := listener.processHotshotCurrentView(listener.daViewNumberBuilderCommitment[key], uint64(viewNumber), builderCommitment)
 	if err != nil {
-		log.Error("failed to get current sequencer", "err", err)
+		log.Error("failed to process current view", "err", err)
 		return err
 	}
 
-	if sequencerAddressForNextView.Hex() == listener.sequencerAddress {
-		log.Info("next view is this node's view", "nextView", nextView, "sequencerAddress", listener.sequencerAddress)
-		// TODO: Processing will be implemented in the next PR
+	// #nosec G115
+	err = listener.processHotshotNextView(l1FinalizedBlockNumberBigInt, uint64(viewNumber))
+	if err != nil {
+		log.Error("failed to process next view", "err", err)
+		return err
 	}
-
-	// TODO: Processing will be implemented in the next PR
 
 	// Delete the quorum and da proposal keys from the map
 	// so that map doesnt take a lot of space in memory
@@ -171,7 +184,7 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 	key := viewNumberString + builderCommitmentString
 
 	// Now store the key and check if a quorum proposal exists for the given builder commitment
-	listener.daViewNumberBuilderCommitment[key] = true
+	listener.daViewNumberBuilderCommitment[key] = blockPayload
 	// Check if a da commitment exists for this key
 	// relative to this DA proposal view number and builder commitment
 	if _, ok := listener.quorumViewNumberBuilderCommitment[key]; !ok {
@@ -185,24 +198,22 @@ func (listener *HotshotListener) processDaProposalEvent(daProposalWrapper *types
 
 	// Get L1 block number from the quorum proposal map
 	l1FinalizedBlockNumberForView := listener.quorumViewNumberBuilderCommitment[key]
-	nextView := viewNumber + 1
-	// Note: Its important to use l1 finalized block number here because we want the GetCurrentSequencer to
-	// always return the same sequencer address for the same view number
-	sequencerAddressForNextView, err := listener.rollupSequencerManager.GetCurrentSequencer(&bind.CallOpts{
-		BlockNumber: &l1FinalizedBlockNumberForView,
-	}, big.NewInt(int64(nextView)))
+	if l1FinalizedBlockNumberForView == nil {
+		log.Error("l1 finalized block number for view is nil")
+		return nil
+	}
+
+	// #nosec G115
+	err = listener.processHotshotCurrentView(listener.daViewNumberBuilderCommitment[key], uint64(viewNumber), builderCommitmentString)
 	if err != nil {
-		log.Error("failed to get sequencer address for next view", "err", err)
+		log.Error("failed to process current view", "err", err)
 		return err
 	}
-
-	// Check if the sequencer address is the same address of this node
-	if sequencerAddressForNextView.Hex() != listener.sequencerAddress {
-		log.Info("next view is not this node's view")
-		// TODO: Processing will be implemented in the next PR
+	err = listener.processHotshotNextView(l1FinalizedBlockNumberForView, uint64(viewNumber))
+	if err != nil {
+		log.Error("failed to process next view", "err", err)
+		return err
 	}
-
-	// TODO: Processing will be implemented in the next PR
 
 	// Delate the quorum and da proposal keys from the map
 	// so that map doesnt take a lot of space in memory
@@ -220,8 +231,135 @@ func (listener *HotshotListener) processDecideEvent(decide *types.Decide) error 
 		builderCommitment := leafChain.Leaf.BlockHeader.Fields.BuilderCommitment
 		log.Info("processing leaf chain", "leafChain", leafChain, "builderCommitment", builderCommitment, "viewNumber", viewNumber)
 		// TODO: Processing will be implemented in the next PR
-
 	}
+	return nil
+}
+
+func (listener *HotshotListener) processHotshotNextView(l1FinalizedBlockNumberBigInt *big.Int, viewNumber uint64) error {
+	nextView := viewNumber + 1
+
+	// Note: Its important to use l1 finalized block number here because we want the GetCurrentSequencer to
+	// always return the same sequencer address for the same view number
+	sequencerAddressForNextView, err := listener.rollupSequencerManager.GetCurrentSequencer(&bind.CallOpts{
+		BlockNumber: l1FinalizedBlockNumberBigInt,
+	}, big.NewInt(int64(nextView)))
+	if err != nil {
+		log.Error("failed to get current sequencer", "err", err)
+		return err
+	}
+
+	if sequencerAddressForNextView.Hex() != listener.sequencerAddress {
+		// TODO: Processing will be implemented in the next PR
+		return nil
+	}
+	log.Info("next view is this node's view", "nextView", nextView, "sequencerAddress", listener.sequencerAddress)
+	// TODO: Processing will be implemented in the next PR
+	return nil
+}
+
+func (listener *HotshotListener) processHotshotCurrentView(blockPayload *types.BlockPayload, viewNumber uint64, builderCommitment string) error {
+	log.Info("received hotshot view event")
+	// Decode the block payload
+	encodedTransactions := blockPayload.RawPayload
+
+	nsRange, err := utils.DecodeNSTable(blockPayload.NsTable.Bytes, listener.chainId)
+	if err != nil {
+		return err
+	}
+
+	if nsRange == nil {
+		return err
+	}
+
+	transactionsPayload, err := utils.DecodeTransactionsPayload(encodedTransactions, *nsRange)
+	if err != nil {
+		return err
+	}
+
+	for _, tx := range transactionsPayload {
+		_, _, indices, messages, err := arbutil.ParseHotShotPayload(tx.Payload)
+		if err != nil {
+			return err
+		}
+		if len(messages) == 0 {
+			return nil
+		}
+
+		err = listener.processMessages(messages, indices)
+		if err != nil {
+			log.Error("failed to process messages", "err", err)
+			return err
+		}
+	}
+
+	// Now add the state hash to the view store
+	lastBlockHeader := listener.execution.Bc().CurrentBlock().Hash()
+
+	// Update the view store
+	viewStoreBinaryTree := view_store.Insert(listener.root, viewNumber, builderCommitment, lastBlockHeader)
+	listener.root = viewStoreBinaryTree
+	log.Info("view store updated", "viewStore", viewStoreBinaryTree)
+	return nil
+}
+
+func (listener *HotshotListener) processMessages(messages [][]byte, indices []uint64) error {
+
+	// Now we need to convert the transaction payload to a nitro block and submit it to the sequencer
+	currentBlockNumber := listener.execution.Bc().CurrentBlock().Number.Uint64()
+
+	for i, message := range messages {
+		var messageWithMetadata arbostypes.MessageWithMetadata
+		err := rlp.DecodeBytes(message, &messageWithMetadata)
+		if err != nil {
+			log.Warn("failed to decode message", "err", err)
+			// Instead of returnning an error, we should just skip this message
+			continue
+		}
+
+		if indices[i] <= currentBlockNumber {
+			log.Warn("message index is less than current message pos, skipping", "messageIndex", indices[i], "currentMessagePos", currentBlockNumber)
+			continue
+		}
+		err = listener.createBlock(&messageWithMetadata)
+		if err != nil {
+			log.Error("unable to create block", "err", err)
+			return err
+		}
+	}
+
+	// At the end store the state hash in th view store
+
+	return nil
+}
+
+func (listener *HotshotListener) createBlock(msg *arbostypes.MessageWithMetadata) error {
+
+	lastBlockHeader := listener.execution.Bc().CurrentBlock()
+
+	statedb, err := listener.execution.Bc().StateAt(lastBlockHeader.Root)
+	if err != nil {
+		log.Error("failed to get state at last block header", "err", err)
+		return err
+	}
+
+	startTime := time.Now()
+	block, receipts, err := arbos.ProduceBlock(msg.Message, msg.DelayedMessagesRead, lastBlockHeader, statedb, listener.execution.Bc(), false, core.MessageReplayMode)
+
+	if err != nil || block == nil {
+		log.Error("Failed to produce block", "err", err)
+		return err
+	}
+
+	blockCalcTime := time.Since(startTime)
+
+	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
+
+	err = listener.execution.AppendBlock(block, statedb, receipts, blockCalcTime)
+	if err != nil {
+		log.Error("Failed to append block", "err", err)
+		return err
+	}
+
 	return nil
 }
 
