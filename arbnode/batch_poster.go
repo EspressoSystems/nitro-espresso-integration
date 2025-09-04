@@ -341,7 +341,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// Espresso Specific config //
 
 	// Hotshot currently produces blocks at average of 2 seconds
-	EspressoTxnsPollingInterval: 2 * time.Second,
+	// We set it to 1 second to get updates more often than blocks are produced
+	EspressoTxnsPollingInterval: time.Second,
 	// We should send to espresso at a speed faster than the speed nitro is producing messages
 	EspressoTxnsSendingInterval:      125 * time.Millisecond,
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
@@ -350,7 +351,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
 	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
-	// EspressoTXSXLimit is 1 MB
+	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit: 900 * 1024,
 
 	HotShotBlock:             1,
