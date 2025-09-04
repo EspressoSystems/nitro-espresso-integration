@@ -232,9 +232,6 @@ func (c *BatchPosterConfig) Validate() error {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}
 	c.gasRefunder = common.HexToAddress(c.GasRefunderAddress)
-	if len(c.EspressoTeeVerifierAddress) > 0 && !common.IsHexAddress(c.EspressoTeeVerifierAddress) {
-		return fmt.Errorf("invalid espresso tee verifier address \"%v\"", c.EspressoTeeVerifierAddress)
-	}
 	if c.MaxSize <= 40 {
 		return errors.New("MaxBatchSize too small")
 	}
@@ -281,7 +278,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
-	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
@@ -339,18 +335,24 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	// 5 minutes considering 12-second blocks,
-	DelayBufferAlwaysUpdatable:       true,
-	ParentChainEip7623:               "auto",
-	DelayBufferThresholdMargin:       25, // 5 minutes considering 12-second blocks
-	EspressoTxnsPollingInterval:      time.Second,
-	EspressoTxnsSendingInterval:      time.Second,
+	DelayBufferAlwaysUpdatable: true,
+	ParentChainEip7623:         "auto",
+	DelayBufferThresholdMargin: 25, // 5 minutes considering 12-second blocks
+
+	// Espresso Specific config //
+
+	// Hotshot currently produces blocks at average of 2 seconds
+	EspressoTxnsPollingInterval: 2 * time.Second,
+	// We should send to espresso at a speed faster than the speed nitro is producing messages
+	EspressoTxnsSendingInterval:      125 * time.Millisecond,
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
 	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
-	EspressoTxSizeLimit:              200 * 1024,
+	// EspressoTXSXLimit is 1 MB
+	EspressoTxSizeLimit: 900 * 1024,
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
@@ -653,6 +655,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
 				submitter.WithMaxTransactionSize(cfg.EspressoTxSizeLimit),
 			)
+
+			// Get the espressoTEEVerifier address for the sequencer inbox contract
+			espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+			if err != nil {
+				return nil, err
+			}
+
+			cfg.EspressoTeeVerifierAddress = espresssoTEEVerifierAddress.Hex()
 
 			if cfg.EspressoTeeVerifierAddress != "" {
 				// Setup tee verifier interface
