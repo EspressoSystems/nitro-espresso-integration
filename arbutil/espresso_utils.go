@@ -43,7 +43,7 @@ type EspressoHeaderInfo struct {
 type TransactionType uint8
 
 const (
-	Fallback               TransactionType = 0
+	BatchPosterSignedTxn   TransactionType = 0
 	DecentralizedTimeboost TransactionType = 1
 )
 
@@ -96,8 +96,10 @@ func SignHotShotPayload(
 	result := quoteSizeBuf
 	result = append(result, quote...)
 	result = append(result, unsigned...)
+
+	// Prepare the header
 	header := EspressoHeader{
-		TransactionType: Fallback,
+		TransactionType: BatchPosterSignedTxn,
 		PayloadLength:   uint64(len(result)),
 	}
 
@@ -105,6 +107,7 @@ func SignHotShotPayload(
 	if err != nil {
 		return nil, err
 	}
+	// Put the header at the beginning of the payload
 	headerBuf := make([]byte, HEADER_LEN)
 	binary.BigEndian.PutUint64(headerBuf, uint64(len(encoded)))
 	headerBuf = append(headerBuf, encoded...)
@@ -144,7 +147,7 @@ func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeaderInfo {
 	// if the set header payload length matches the total rest of payload length it must be a header
 	if uint64(len(strippedTx)) == header.PayloadLength {
 		switch header.TransactionType {
-		case Fallback:
+		case BatchPosterSignedTxn:
 			return &EspressoHeaderInfo{
 				TransactionType: header.TransactionType,
 				HeaderLength:    offset,

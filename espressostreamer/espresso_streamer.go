@@ -246,7 +246,7 @@ func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) 
 	return err
 }
 
-func (s *EspressoStreamer) fallbackLegacyVerification(data []byte, userDataHashArr [32]byte, l1Height uint64) error {
+func (s *EspressoStreamer) fallbackLegacyVerification(data []byte, userDataHashArr [32]byte) error {
 	if s.espressoSGXVerifier == nil {
 		return fmt.Errorf("failed to verify attestation quote, legacy header found but sgx verifier is nil")
 	}
@@ -258,7 +258,7 @@ func (s *EspressoStreamer) fallbackLegacyVerification(data []byte, userDataHashA
 	return nil
 }
 
-func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte, l1Height uint64) error {
+func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte, l1Height uint64, fallback bool) error {
 	err := s.verifyBatchPosterSignature(data, userDataHashArr, l1Height)
 	var success bool
 	if err == nil {
@@ -268,28 +268,34 @@ func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte
 		return err
 	} else {
 		log.Warn("failed to verify batch poster signature", "err", err)
+		// this is the case where there is an EspressoHeader and we failed, dont fall back
+		if !fallback {
+			return err
+		}
 	}
 
 	if !success {
-		if err := s.fallbackLegacyVerification(data, userDataHashArr, l1Height); err != nil {
+		if err := s.fallbackLegacyVerification(data, userDataHashArr); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, transactionType *arbutil.TransactionType) error {
-	if transactionType != nil {
-		txType := *transactionType
+func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, header *arbutil.EspressoHeaderInfo) error {
+	noHeader := header == nil
+	if !noHeader {
+		txType := header.TransactionType
 		switch txType {
-		case arbutil.Fallback:
-			if err := s.verifySignature(data, userDataHashArr, l1Height); err != nil {
+		case arbutil.BatchPosterSignedTxn:
+			if err := s.verifySignature(data, userDataHashArr, l1Height, noHeader); err != nil {
 				return err
 			}
+		// TODO: timeboost support
 		default:
 			return fmt.Errorf("failed to verify transaction, received unexpected transaction type: %d", txType)
 		}
-	} else if err := s.verifySignature(data, userDataHashArr, l1Height); err != nil {
+	} else if err := s.verifySignature(data, userDataHashArr, l1Height, noHeader); err != nil {
 		return err
 	}
 	return nil
@@ -321,7 +327,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		return nil, ErrUserDataHashNot32Bytes
 	}
 
-	err = s.verify(signature, [32]byte(userDataHash), l1Height, &header.TransactionType)
+	err = s.verify(signature, [32]byte(userDataHash), l1Height, header)
 	if err != nil {
 		return nil, err
 	}
