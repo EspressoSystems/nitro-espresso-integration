@@ -207,7 +207,6 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress       string                                   `koanf:"espresso-tee-verifier-address"`
 	EspressoTeeType                  string                                   `koanf:"espresso-tee-type"`
 	EspressoRegisterSignerConfig     espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
 	LightClientAddress               string                                   `koanf:"light-client-address"`
@@ -662,45 +661,39 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return nil, err
 			}
 
-			cfg.EspressoTeeVerifierAddress = espresssoTEEVerifierAddress.Hex()
+			teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
+				espresssoTEEVerifierAddress,
+				opts.L1Reader.Client())
+			if err != nil {
+				return nil, err
+			}
+			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
 
-			if cfg.EspressoTeeVerifierAddress != "" {
-				// Setup tee verifier interface
-				espressoTeeVerifierAddress := common.HexToAddress(cfg.EspressoTeeVerifierAddress)
-				teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-					espressoTeeVerifierAddress,
-					opts.L1Reader.Client())
+			var teeType espressotee.TEE
+			configTee := cfg.EspressoTeeType
+			teeType, err = teeType.FromString(configTee)
+			if err != nil {
+				return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
+			}
+
+			var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+			if teeType == espresso_key_manager.NITRO {
+				log.Info("setting up nitro verifier", "tee type", teeType)
+				nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
 				if err != nil {
 					return nil, err
 				}
-				verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espressoTeeVerifierAddress)
-
-				var teeType espressotee.TEE
-				configTee := cfg.EspressoTeeType
-				teeType, err = teeType.FromString(configTee)
-				if err != nil {
-					return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
-				}
-
-				var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-				if teeType == espresso_key_manager.NITRO {
-					log.Info("setting up nitro verifier", "tee type", teeType)
-					nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				if b.dataPoster.Auth() == nil {
-					panic("TransactOpts is nil")
-				}
-				submitterOptions = append(
-					submitterOptions,
-					submitter.WithKeyManager(
-						espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, cfg.EspressoRegisterSignerConfig),
-					),
-				)
 			}
+
+			if b.dataPoster.Auth() == nil {
+				panic("TransactOpts is nil")
+			}
+			submitterOptions = append(
+				submitterOptions,
+				submitter.WithKeyManager(
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, cfg.EspressoRegisterSignerConfig),
+				),
+			)
 
 			submitter, err := submitter.NewPollingEspressoSubmitter(
 				submitterOptions...,
