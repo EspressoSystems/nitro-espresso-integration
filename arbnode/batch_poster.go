@@ -1809,18 +1809,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	if b.building.firstDelayedMsg != nil {
-		log.Info("first delayed msg", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
-		// #nosec G115
-		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
-		if timeSinceMsg >= config.MaxEmptyBatchDelay {
-			log.Info("Batch posting report is older than max empty batch delay", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
-			forcePostBatch = true
-		}
-	}
-
-	log.Info("b.building.msgCount, msgCount, MaxEmptyBatchDelay and forcePostBatch", "b.building.msgCount", b.building.msgCount, "msgCount", msgCount, "MaxEmptyBatchDelay", config.MaxEmptyBatchDelay, "forcePostBatch", forcePostBatch)
-
 	for b.building.msgCount < msgCount {
 		msg, err := b.streamer.GetMessage(b.building.msgCount)
 		if err != nil {
@@ -1898,6 +1886,20 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		b.building.msgCount++
 	}
 
+	// If the espressoKeyManager is enabled, and we are in espresso mode, then we should post a batch by setting both to true.
+	// This maintains compatability with upstream, while fixing a potential bug in posting empty batches when the batch cache is not reset.
+	if b.building.firstDelayedMsg != nil && b.streamer.EspressoKeyManager != nil {
+		log.Info("first delayed msg", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
+		// #nosec G115
+		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
+		if timeSinceMsg >= config.MaxEmptyBatchDelay {
+			log.Info("Batch posting report is older than max empty batch delay", "msg", b.building.firstDelayedMsg.Message.Header.BlockNumber, "timestamp", b.building.firstDelayedMsg.Message.Header.Timestamp)
+			forcePostBatch = true
+			b.building.haveUsefulMessage = true
+		}
+	}
+
+	log.Info("b.building.msgCount, msgCount, MaxEmptyBatchDelay and forcePostBatch", "b.building.msgCount", b.building.msgCount, "msgCount", msgCount, "MaxEmptyBatchDelay", config.MaxEmptyBatchDelay, "forcePostBatch", forcePostBatch)
 	firstUsefulMsgTime := time.Now()
 	if b.building.firstUsefulMsg != nil {
 		// #nosec G115
