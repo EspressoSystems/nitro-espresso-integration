@@ -36,8 +36,8 @@ func TestParsePayload(t *testing.T) {
 	}
 
 	// Parse the signed payload
-	txType := ParseHotshotPayloadForHeader(signedPayload)
-	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, txType)
+	header := ParseHotshotPayloadForHeader(signedPayload)
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, header)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}
@@ -89,8 +89,8 @@ func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
 	}
 
 	// Parse the signed payload
-	txType := ParseHotshotPayloadForHeader(signedPayload)
-	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, txType)
+	header := ParseHotshotPayloadForHeader(signedPayload)
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, header)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}
@@ -124,12 +124,12 @@ func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
 	}
 
 	// Remove header from payload
-	signedPayload = signedPayload[HEADER_LEN+HEADER_SIZE:]
-	txType = ParseHotshotPayloadForHeader(signedPayload)
-	if txType != nil {
+	signedPayload = signedPayload[header.HeaderLength:]
+	header = ParseHotshotPayloadForHeader(signedPayload)
+	if header != nil {
 		t.Fatalf("no header should be parsed")
 	}
-	signature, userDataHash, indices, messages, err = ParseHotShotPayload(signedPayload, txType)
+	signature, userDataHash, indices, messages, err = ParseHotShotPayload(signedPayload, header)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}

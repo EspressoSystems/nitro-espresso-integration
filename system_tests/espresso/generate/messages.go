@@ -214,8 +214,8 @@ func ConvertEspressoTransactionsInBlockToMessages(
 		// We can parse the transactions to get the messages
 		// This is a mock function that simulates the parsing of the transaction
 		// In a real scenario, this would be replaced with the actual parsing logic
-		transactionType := arbutil.ParseHotshotPayloadForHeader(tx)
-		_, _, _, messages, err := arbutil.ParseHotShotPayload(tx, transactionType)
+		header := arbutil.ParseHotshotPayloadForHeader(tx)
+		_, _, _, messages, err := arbutil.ParseHotShotPayload(tx, header)
 		if err != nil {
 			return nil, fmt.Errorf("encountered error while parsing transaction: %w", err)
 		}

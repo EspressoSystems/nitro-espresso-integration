@@ -296,17 +296,20 @@ func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Heigh
 }
 
 func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	transactionType := arbutil.ParseHotshotPayloadForHeader(tx)
-	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx, transactionType)
+	header := arbutil.ParseHotshotPayloadForHeader(tx)
+	signature, userDataHash, indices, messages, err := arbutil.ParseHotShotPayload(tx, header)
 	if err != nil {
-		if transactionType != nil {
+		if header != nil {
 			// in case somehow we parsed a header and there wasnt one, try again
-			transactionType = nil
-			signature, userDataHash, indices, messages, err = arbutil.ParseHotShotPayload(tx, transactionType)
+			header = nil
+			signature, userDataHash, indices, messages, err = arbutil.ParseHotShotPayload(tx, header)
 			if err != nil {
 				log.Warn("failed to parse hotshot payload", "err", err)
 				return nil, err
 			}
+		} else {
+			log.Warn("failed to parse hotshot payload", "err", err)
+			return nil, err
 		}
 
 	}
@@ -318,7 +321,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		return nil, ErrUserDataHashNot32Bytes
 	}
 
-	err = s.verify(signature, [32]byte(userDataHash), l1Height, transactionType)
+	err = s.verify(signature, [32]byte(userDataHash), l1Height, &header.TransactionType)
 	if err != nil {
 		return nil, err
 	}

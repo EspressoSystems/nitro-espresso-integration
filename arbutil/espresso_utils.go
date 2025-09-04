@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"fmt"
-	"math"
 	"time"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/fxamacker/cbor/v2"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -18,8 +17,7 @@ import (
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 const LEN_SIZE int = 8
 const INDEX_SIZE int = 8
-const HEADER_SIZE = 1
-const HEADER_LEN = 4
+const HEADER_LEN int = 8
 
 type SubmittedEspressoTx struct {
 	Hash        string
@@ -28,13 +26,18 @@ type SubmittedEspressoTx struct {
 	SubmittedAt time.Time `rlp:"optional"`
 }
 
-type Header struct {
-	// Version for header in case any of these fields change we can parse correctly based on version
-	Version TransactionVersion
-	// Transaction how the header is formatted
+type EspressoHeader struct {
+	// Transaction type to parse payload
+	TransactionType TransactionType `cbor:"0,keyasint"`
+	// The payload length, excluding the header
+	PayloadLength uint64 `cbor:"1,keyasint"`
+}
+
+type EspressoHeaderInfo struct {
+	// Transaction type to parse payload
 	TransactionType TransactionType
-	// Reserved unused bytes, also helps with header verification
-	Reserved uint16
+	// The length of the header
+	HeaderLength uint64
 }
 
 type TransactionType uint8
@@ -42,12 +45,6 @@ type TransactionType uint8
 const (
 	Fallback               TransactionType = 0
 	DecentralizedTimeboost TransactionType = 1
-)
-
-type TransactionVersion uint8
-
-const (
-	V0 TransactionVersion = 0
 )
 
 func BuildRawHotShotPayload(
@@ -93,34 +90,25 @@ func SignHotShotPayload(
 		return nil, err
 	}
 
-	header := Header{
-		Version:         V0,
-		TransactionType: Fallback,
-		Reserved:        0,
-	}
-
-	encoded := []byte{
-		uint8(header.Version),
-		uint8(header.TransactionType),
-		byte(header.Reserved >> 8),
-		byte(header.Reserved),
-	}
-
-	headerBuf := make([]byte, HEADER_SIZE)
-	size := len(encoded)
-	if size > math.MaxUint8 {
-		return nil, fmt.Errorf("encoded data too large: %d bytes (max %d)", len(encoded), math.MaxUint8)
-	}
-	headerBuf[0] = uint8(size)
-	result := headerBuf
-	result = append(result, encoded...)
-
 	quoteSizeBuf := make([]byte, LEN_SIZE)
 	binary.BigEndian.PutUint64(quoteSizeBuf, uint64(len(quote)))
 	// Put the signature first. That would help easier parsing.
-	result = append(result, quoteSizeBuf...)
+	result := quoteSizeBuf
 	result = append(result, quote...)
 	result = append(result, unsigned...)
+	header := EspressoHeader{
+		TransactionType: Fallback,
+		PayloadLength:   uint64(len(result)),
+	}
+
+	encoded, err := cbor.Marshal(header)
+	if err != nil {
+		return nil, err
+	}
+	headerBuf := make([]byte, HEADER_LEN)
+	binary.BigEndian.PutUint64(headerBuf, uint64(len(encoded)))
+	headerBuf = append(headerBuf, encoded...)
+	result = append(headerBuf, result...)
 
 	return result, nil
 }
@@ -136,40 +124,47 @@ func ValidateIfPayloadIsInBlock(p []byte, payloads []espressoTypes.Bytes) bool {
 	return validated
 }
 
-func ParseHotshotPayloadForHeader(tx []byte) *TransactionType {
-	if len(tx) < HEADER_SIZE+HEADER_LEN {
+func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeaderInfo {
+	if len(tx) < HEADER_LEN {
 		log.Warn("hotshot transaction is too small for a header")
 		return nil
 	}
+	headerLength := uint64(HEADER_LEN)
 	// Try and see if there is a header
-	size := tx[0]
-	if size == HEADER_LEN {
-		encoded := tx[HEADER_SIZE : HEADER_SIZE+HEADER_LEN]
-		header := Header{
-			Version:         TransactionVersion(encoded[0]),
-			TransactionType: TransactionType(encoded[1]),
-			Reserved:        binary.BigEndian.Uint16(encoded[2:4]),
-		}
-
-		var transactionType TransactionType
-		if header.Version == V0 && header.Reserved == 0 {
-			switch header.TransactionType {
-			case Fallback:
-				transactionType = Fallback
-			case DecentralizedTimeboost:
-				transactionType = DecentralizedTimeboost
-			default:
-				return nil
+	headerSize := binary.BigEndian.Uint64(tx[:headerLength])
+	offset := headerLength + headerSize
+	encoded := tx[headerLength:offset]
+	var header EspressoHeader
+	err := cbor.Unmarshal(encoded, &header)
+	if err != nil {
+		log.Warn("failed to decode header", "err", err)
+		return nil
+	}
+	strippedTx := tx[offset:]
+	// if the set header payload length matches the total rest of payload length it must be a header
+	if uint64(len(strippedTx)) == header.PayloadLength {
+		switch header.TransactionType {
+		case Fallback:
+			return &EspressoHeaderInfo{
+				TransactionType: header.TransactionType,
+				HeaderLength:    offset,
 			}
-			return &transactionType
+		case DecentralizedTimeboost:
+			return &EspressoHeaderInfo{
+				TransactionType: header.TransactionType,
+				HeaderLength:    offset,
+			}
+		default:
+			return nil
 		}
 	}
 	return nil
 }
 
-func ParseHotShotPayload(payload []byte, txType *TransactionType) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
-	if txType != nil {
-		payload = payload[HEADER_SIZE+HEADER_LEN:]
+func ParseHotShotPayload(payload []byte, header *EspressoHeaderInfo) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+	if header != nil {
+		// parse the payload with no header
+		payload = payload[header.HeaderLength:]
 	}
 	if len(payload) < LEN_SIZE {
 		return nil, nil, nil, nil, errors.New("payload too short to parse signature size")
