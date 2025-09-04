@@ -20,6 +20,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/helpers"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
@@ -75,7 +76,8 @@ type EspressoStreamer struct {
 
 	PerfRecorder *PerfRecorder
 
-	batcherAddressesFetcher func(l1Height uint64) []common.Address
+	batcherAddressesFetcher  func(l1Height uint64) []common.Address
+	isDecentralizedTimeboost bool
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -88,6 +90,7 @@ func NewEspressoStreamer(
 	recordPerformance bool,
 	batcherAddressesFetcher func(l1Height uint64) []common.Address,
 	retryTime time.Duration,
+	isDecentralizedTimeboost bool,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -96,14 +99,15 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:          espressoClient,
-		nextHotshotBlockNum:     nextHotshotBlockNum,
-		namespace:               namespace,
-		espressoSGXVerifier:     espressoSGXVerifier,
-		PerfRecorder:            PerfRecorder,
-		batcherAddressesFetcher: batcherAddressesFetcher,
-		retryTime:               retryTime,
-		currentMessagePos:       1,
+		espressoClient:           espressoClient,
+		nextHotshotBlockNum:      nextHotshotBlockNum,
+		namespace:                namespace,
+		espressoSGXVerifier:      espressoSGXVerifier,
+		PerfRecorder:             PerfRecorder,
+		batcherAddressesFetcher:  batcherAddressesFetcher,
+		retryTime:                retryTime,
+		currentMessagePos:        1,
+		isDecentralizedTimeboost: isDecentralizedTimeboost,
 	}
 }
 
@@ -356,6 +360,23 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 	}
 }
 
+func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
+	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos)
+	if err != nil {
+		return nil, err
+	}
+	if parsedMsg == nil {
+		return []*MessageWithMetadataAndPos{}, nil
+	}
+	log.Info("added timeboost message to queue", "messagePos", parsedMsg.Pos, "currentMessagePos", s.currentMessagePos)
+	msg := &MessageWithMetadataAndPos{
+		MessageWithMeta: parsedMsg.Message,
+		Pos:             parsedMsg.Pos,
+		HotshotHeight:   s.nextHotshotBlockNum,
+	}
+	return []*MessageWithMetadataAndPos{msg}, nil
+}
+
 // Export this function only for testing purpose
 func (s *EspressoStreamer) SetSGXVerifier(sgxVerifier espressotee.EspressoSGXVerifierInterface) {
 	s.espressoSGXVerifier = sgxVerifier
@@ -413,7 +434,13 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		} else {
 			log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
 		}
-		err := s.QueueMessagesFromHotshot(ctx, s.parseEspressoTransaction)
+		var err error
+		if s.isDecentralizedTimeboost {
+			err = s.QueueMessagesFromHotshot(ctx, s.parseDecentralizedTimeboostTransaction)
+		} else {
+			err = s.QueueMessagesFromHotshot(ctx, s.parseEspressoTransaction)
+		}
+
 		if err != nil {
 			logLevel := log.Error
 			logLevel = ephemeralErrorHandler.LogLevel(err, logLevel)
