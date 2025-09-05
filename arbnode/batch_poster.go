@@ -2105,6 +2105,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
 		if timeSinceMsg >= config.MaxEmptyBatchDelay {
 			forcePostBatch = true
+			b.building.haveUsefulMessage = true
 		}
 	}
 
