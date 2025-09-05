@@ -1,0 +1,60 @@
+name: Espresso Regression test CI
+
+on:
+  workflow_run:
+    workflows: ["Espresso Docker build CI"]
+    types: [completed]
+
+  workflow_dispatch:
+    inputs:
+        image:
+            type: choice
+            default: dev
+            required: true
+            description: "Image to use for the regression test"
+            options:
+                - dev # build from source
+                - custom # use custom image
+        custom_image: # please make sure this image is compatible with the nitro-testnode submodule
+            type: string
+            required: false
+            description: "Custom image to use for the regression test"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Espresso Regression test
+    runs-on: ubuntu-24.04-8core
+    steps:
+      - name: Skip if it is triggered by workflow run but not a tag creation
+        if: github.event_name == 'workflow_run' && !startsWith(github.event.workflow_run.ref, 'refs/tags/v')
+        run: exit 0
+
+      - name: Setup environment variables
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            TAG_NAME=$(echo "${{ github.event.workflow_run.ref }}" | sed 's#refs/tags/##')
+            echo "ESPRESSO_VERSION=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:$TAG_NAME" >> $GITHUB_ENV
+          elif [ "${{ github.event.workflow_dispatch.inputs.image }}" = "custom" ]; then
+            echo "ESPRESSO_VERSION=${{ github.event.workflow_dispatch.inputs.custom_image }}" >> $GITHUB_ENV
+          else
+            echo "ESPRESSO_DEV=true" >> $GITHUB_ENV
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run regression test
+        run: |
+          echo "ESPRESSO_VERSION=${{ env.ESPRESSO_VERSION }}"
+          echo "ESPRESSO_DEV=${{ env.ESPRESSO_DEV }}"
+          if [ -z "$ESPRESSO_VERSION" ] && [ -z "$ESPRESSO_DEV" ]; then
+            echo "Neither ESPRESSO_VERSION nor ESPRESSO_DEV is set. Exiting."
+            exit 1
+          fi
+          ./nitro-testnode/regression-test.sh
