@@ -695,6 +695,8 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 
 	reader := builder.L2.ConsensusNode.L1Reader
 
+	fatalErrChan := make(chan error)
+
 	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
 		delayedBridge,
 		reader,
@@ -705,9 +707,8 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 		10,
 		0,
 		seqInboxInterface,
+		fatalErrChan,
 	)
-
-	fatalErrChan := make(chan error)
 
 	forceInclusionChecker := arbnode.NewForceInclusionChecker(mockSeqInbox, config, reader, delayedMessageFetcher, fatalErrChan)
 	err = forceInclusionChecker.Start(ctx)
