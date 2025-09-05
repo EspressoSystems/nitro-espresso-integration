@@ -1937,12 +1937,13 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	firstUsefulMsgTime := time.Now()
-	if b.building.firstUsefulMsg != nil {
+	if b.building.firstUsefulMsg != nil && b.espressoStreamer != nil {
 		// #nosec G115
 		firstUsefulMsgTime = time.Unix(int64(b.building.firstUsefulMsg.Message.Header.Timestamp), 0)
 		if time.Since(firstUsefulMsgTime) >= config.MaxDelay {
 			log.Info("attempting to post batch due to max delay", "firstUsefulMsgTime", firstUsefulMsgTime, "first useful msg timestamp", b.building.firstUsefulMsg.Message.Header.Timestamp)
 			forcePostBatch = true
+			b.building.haveUsefulMessage = true
 		}
 	}
 
