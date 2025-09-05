@@ -206,11 +206,11 @@ func (f *ForceInclusionChecker) getForceInclusionToleranceBlockNumber(ctx contex
 			start := genesis.Uint64()
 			end := parentLatestHeader.Number.Uint64()
 			lastBadBlockNumber, err = binarySearchForBlockNumber(ctx, start, end, func(ctx context.Context, blockNumber uint64) (int, error) {
-				block, err := f.l1Reader.Client().BlockByNumber(ctx, arbmath.UintToBig(blockNumber))
+				header, err := f.l1Reader.Client().HeaderByNumber(ctx, arbmath.UintToBig(blockNumber))
 				if err != nil {
 					return 0, err
 				}
-				l1Block := types.DeserializeHeaderExtraInformation(block.Header()).L1BlockNumber
+				l1Block := types.DeserializeHeaderExtraInformation(header).L1BlockNumber
 				if l1Block < target {
 					return binarySearch_LessThanTarget, nil
 				} else if l1Block > target {
@@ -240,14 +240,14 @@ func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Conte
 	blockNumber := lastBadBlockNumber
 
 	for blockNumber > 0 {
-		block, err := client.BlockByNumber(ctx, arbmath.UintToBig(blockNumber))
+		header, err := client.HeaderByNumber(ctx, arbmath.UintToBig(blockNumber))
 		if err != nil {
 			log.Error("Error getting block", "blockNumber", blockNumber, "err", err)
 			return 0, err
 		}
-		if block.NumberU64() <= lastBadBlockNumber || block.Time() <= lastBadBlockTime {
-			log.Debug("Block number is less than or equal to last bad block number or time", "blockNumber", block.NumberU64(), "lastBadBlockNumber", lastBadBlockNumber, "lastBadBlockTime", lastBadBlockTime)
-			return block.NumberU64(), nil
+		if header.Number.Uint64() <= lastBadBlockNumber || header.Time <= lastBadBlockTime {
+			log.Debug("Block number is less than or equal to last bad block number or time", "blockNumber", blockNumber, "lastBadBlockNumber", lastBadBlockNumber, "lastBadBlockTime", lastBadBlockTime)
+			return blockNumber, nil
 		}
 		log.Debug("Block number Decreasing", "blockNumber", blockNumber)
 		blockNumber--
