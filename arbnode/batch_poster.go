@@ -2007,7 +2007,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 
 		segments, err := b.newBatchSegments(ctx, batchPosition.DelayedMessageCount, use4844)
-		log.Info("Created new batch segments", "segments", segments, "segments max len", segments.sizeLimit)
+		log.Info("Created new batch segments", "segments", segments, "segments max len", segments.sizeLimit, "last compressed size", segments.lastCompressedSize)
 		if err != nil {
 			return false, err
 		}
@@ -2137,6 +2137,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 
 		isDelayed := msg.DelayedMessagesRead > b.building.segments.delayedMsg
 		success, err := b.building.segments.AddMessage(msg)
+		log.Info("Added a message batch segments", "segments", segments, "segments max len", segments.sizeLimit, "last compressed size", segments.lastCompressedSize)
 		if err != nil {
 			// Clear our cache
 			b.building = nil
