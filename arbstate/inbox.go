@@ -46,7 +46,7 @@ type sequencerMessage struct {
 	segments             [][]byte
 }
 
-const MaxDecompressedLen int = 1024 * 1024 * 16 // 16 MiB
+const MaxDecompressedLen int = 1024 * 1024 * 5 // 5 MiB (Modified temporarily due to max size being stuck on espresso batch poster. revert this later)
 const maxZeroheavyDecompressedLen = 101*MaxDecompressedLen/100 + 64
 const MaxSegmentsPerSequencerMessage = 100 * 1024
 
