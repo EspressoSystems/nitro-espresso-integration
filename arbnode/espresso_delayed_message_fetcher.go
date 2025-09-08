@@ -35,6 +35,7 @@ type DelayedMessageFetcher struct {
 	waitForFinalization  bool
 	waitForConfirmations bool
 	requiredBlockDepth   uint64
+	fatalErrChan         chan error
 }
 
 type DelayedMessageFetcherInterface interface {
@@ -334,6 +335,15 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 			continue
 		}
 
+		if seqNum > lastDelayedMessageIndex+1 {
+			// Delayed message fetcher expects to fetch messages strictly in order. If a missing message is detected here,
+			// it indicates a break in sequential fetching. Recovery is not handled by this fetcher and would require additional logic.
+			err := fmt.Errorf("caff node is missing a delayed message with seqNum: %d, lastDelayedMessageIndex: %d", seqNum, lastDelayedMessageIndex)
+			log.Error(err.Error())
+			d.fatalErrChan <- err
+			return err
+		}
+
 		lastDelayedMessageIndex++
 		err = d.storeDelayedMessage(batch, lastDelayedMessageIndex, *msg)
 		if err != nil {
@@ -460,6 +470,7 @@ func NewDelayedMessageFetcher(
 	requiredBlockDepth uint64,
 	fromBlock uint64,
 	sequencerInbox *SequencerInbox,
+	fatalErrChan chan error,
 ) *DelayedMessageFetcher {
 
 	return &DelayedMessageFetcher{
@@ -472,6 +483,7 @@ func NewDelayedMessageFetcher(
 		requiredBlockDepth:   requiredBlockDepth,
 		maxBlocksToRead:      blocksToRead,
 		sequencerInbox:       sequencerInbox,
+		fatalErrChan:         fatalErrChan,
 	}
 }
 
