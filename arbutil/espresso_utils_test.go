@@ -132,6 +132,9 @@ func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
 
 	// Parse the signed payload
 	header := ParseHotshotPayloadForHeader(signedPayload)
+	if header == nil {
+		t.Fatalf("expected there to be a header")
+	}
 	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, header)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
