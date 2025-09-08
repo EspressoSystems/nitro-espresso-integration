@@ -86,14 +86,14 @@ func NewBatcherAddrMonitor(
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
 	deployAt uint64,
-	fromBlock uint64,
+	fromParentBlock uint64,
 ) *BatcherAddrMonitor {
 	seqInboxInterface, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
 	if err != nil {
 		panic(err)
 	}
-	if fromBlock < deployAt+1 {
-		fromBlock = deployAt + 1
+	if fromParentBlock < deployAt+1 {
+		fromParentBlock = deployAt + 1
 	}
 	return &BatcherAddrMonitor{
 		initAddresses:             initAddresses,
@@ -102,7 +102,7 @@ func NewBatcherAddrMonitor(
 		seqInboxAddr:              seqInboxAddr,
 		seqInboxInterface:         seqInboxInterface,
 		deployAt:                  deployAt,
-		lastProcessedParentHeight: fromBlock - 1,
+		lastProcessedParentHeight: fromParentBlock - 1,
 	}
 }
 
@@ -228,7 +228,10 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 		}
 		if !bytes.Equal(data[:4], seqInboxABI.Methods["setIsBatchPoster"].ID) {
 			// Encountering an unknown method, caff node needs to update
-			return nil, fmt.Errorf("failed to parse a log: invalid method: %x", data[:4])
+			// Note: if the method id is `0x27f28813`, it is the create rollup method.
+			// cast sig "createRollup(((uint64,uint64,address,uint256,bytes32,address,address,uint256,string,uint64,(uint256,uint256,uint256,uint256),address),address[],uint256,address,bool,uint256,address[],address))"
+			// that means the addr monitor is somehow fetching events from the genesis block, which is not expected.
+			return nil, fmt.Errorf("failed to parse a log: invalid method: %x, %d", data[:4], l1Height)
 		}
 		args, err := seqInboxABI.Methods["setIsBatchPoster"].Inputs.Unpack(data[4:])
 		if err != nil {
@@ -373,6 +376,10 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	log.Info("batcher addr monitor backfilling")
 	for retry < allowedRetry {
 		if lastProcessedHeight >= latestParentHeight {
+			// Already backfilled to the current known latest height.
+			// However, the latest height might actually be a bit behind,
+			// so update it to match lastProcessedHeight before exiting.
+			latestParentHeight = lastProcessedHeight
 			break
 		}
 
