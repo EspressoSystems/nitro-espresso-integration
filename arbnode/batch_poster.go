@@ -51,6 +51,7 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/arbmath"
@@ -625,6 +626,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStartL1,
 			)
 
+			decentralizedTimeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0x0115F8541162035781B743F4f6DBf6915194656d"), opts.L1Reader.Client())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
+			}
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
 				opts.ChainID,
 				opts.Config().HotShotBlock,
@@ -634,6 +639,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
 				opts.Config().IsDecentralizedTimeboost,
+				decentralizedTimeboostKeyManager,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor
@@ -2598,6 +2604,11 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			return b.config().PollInterval
 		}
 	})
+}
+
+func (b *BatchPoster) CheckBatchCorrectnessAndSign(args []byte) error {
+	log.Info("received")
+	return nil
 }
 
 func (b *BatchPoster) StopAndWait() {

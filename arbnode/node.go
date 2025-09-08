@@ -1403,6 +1403,16 @@ func registerAPIs(currentNode *Node, stack *node.Node) {
 			Public: false,
 		})
 	}
+	if currentNode.BatchPoster != nil {
+		log.Info("registering batcher API")
+		apis = append(apis, rpc.API{
+			Namespace: "batcher",
+			Version:   "1.0",
+			Service: &BatcherApi{
+				currentNode.BatchPoster,
+			},
+		})
+	}
 	stack.RegisterAPIs(apis)
 }
 

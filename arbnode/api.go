@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -74,4 +75,13 @@ func (a *MaintenanceAPI) SecondsSinceLastMaintenance(ctx context.Context) (int64
 
 func (a *MaintenanceAPI) Trigger(ctx context.Context) error {
 	return a.runner.Trigger()
+}
+
+type BatcherApi struct {
+	batchPoster *BatchPoster
+}
+
+func (api *BatcherApi) SubmitBatch(args []byte) error {
+	log.Printf("Received batch submission, length: %d bytes", len(args))
+	return api.batchPoster.CheckBatchCorrectnessAndSign(args)
 }

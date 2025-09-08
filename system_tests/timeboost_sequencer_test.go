@@ -29,6 +29,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.l1StackConfig.WSHost = "0.0.0.0"
 	builder.l1StackConfig.DataDir = t.TempDir()
 	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
+	builder.l2StackConfig.HTTPModules = append(builder.l2StackConfig.HTTPModules, "batcher")
 	builder.l2StackConfig.HTTPPort = 8945
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 	builder.l2StackConfig.IPCPath = tmpPath(t, "test.ipc")
