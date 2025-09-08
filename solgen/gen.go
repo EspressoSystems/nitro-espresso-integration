@@ -91,10 +91,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	filePathsDecentralizedTimeboostContracts, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "timeboost-contracts", "*.sol", "*.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
 	filePaths = append(filePaths, filePathsInternal...)
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
 	filePaths = append(filePaths, filePathsEspressoTeeContracts...)
+	filePaths = append(filePaths, filePathsDecentralizedTimeboostContracts...)
 
 	modules := make(map[string]*moduleInfo)
 
@@ -117,6 +122,11 @@ func main() {
 		if strings.Contains(file, "TEEVerifier") {
 			// override the module name for espresso contracts
 			module = "espressogen"
+		}
+
+		if strings.Contains(file, "KeyManager") {
+			// override the module name for espresso contracts
+			module = "decentralizedtimeboostgen"
 		}
 
 		name := file[:len(file)-5]
