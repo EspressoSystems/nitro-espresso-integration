@@ -300,7 +300,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
 	MaxSize: 100000,
 	// Try to fill 3 blobs per batch
-<<<<<<< HEAD
 	Max4844BatchSize:                 blobs.BlobEncodableData*(params.MaxBlobGasPerBlock/params.BlobTxBlobGasPerBlob)/2 - 2000,
 	PollInterval:                     time.Second * 10,
 	PollIntervalAfterBatchPost:       time.Second * 10,
@@ -325,46 +324,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	MaxEmptyBatchDelay:               3 * 24 * time.Hour,
 	DelayBufferThresholdMargin:       25, // 5 minutes considering 12-second blocks
 	EspressoTxnsPollingInterval:      time.Second,
-	EspressoTxnsSendingInterval:      time.Second,
-=======
-	// The Max4844BatchSize should be calculated from the values from L1 chain configs
-	// using the eip4844 utility package from go-ethereum.
-	// The default value of 0 causes the batch poster to use the value from go-ethereum.
-	Max4844BatchSize:               0,
-	PollInterval:                   time.Second * 10,
-	PollIntervalAfterBatchPost:     time.Second * 10,
-	ErrorDelay:                     time.Second * 10,
-	MaxDelay:                       time.Hour,
-	WaitForMaxDelay:                false,
-	CompressionLevel:               brotli.BestCompression,
-	DASRetentionPeriod:             daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:             "",
-	ExtraBatchGas:                  50_000,
-	Post4844Blobs:                  false,
-	IgnoreBlobPrice:                false,
-	DataPoster:                     dataposter.DefaultDataPosterConfig,
-	ParentChainWallet:              DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                   "",
-	L1BlockBoundBypass:             time.Hour,
-	UseAccessLists:                 true,
-	RedisLock:                      redislock.DefaultCfg,
-	GasEstimateBaseFeeMultipleBips: arbmath.OneInUBips * 3 / 2,
-	ReorgResistanceMargin:          10 * time.Minute,
-	CheckBatchCorrectness:          true,
-	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
-	// 5 minutes considering 12-second blocks,
-	DelayBufferAlwaysUpdatable: true,
-	ParentChainEip7623:         "auto",
-	DelayBufferThresholdMargin: 25, // 5 minutes considering 12-second blocks
-
-	// Espresso Specific config //
-
-	// Hotshot currently produces blocks at average of 2 seconds
-	// We set it to 1 second to get updates more often than blocks are produced
-	EspressoTxnsPollingInterval: time.Second,
-	// We should send to espresso at a speed faster than the speed nitro is producing messages
 	EspressoTxnsSendingInterval:      125 * time.Millisecond,
->>>>>>> 20efad60f (Small fixes to Caff node and Batch poster (#755))
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
