@@ -33,13 +33,6 @@ type EspressoHeader struct {
 	PayloadLength uint64 `cbor:"1,keyasint"`
 }
 
-type EspressoHeaderInfo struct {
-	// Transaction type to parse payload
-	TransactionType TransactionType
-	// The length of the header
-	HeaderLength uint64
-}
-
 type TransactionType uint8
 
 const (
@@ -127,7 +120,7 @@ func ValidateIfPayloadIsInBlock(p []byte, payloads []espressoTypes.Bytes) bool {
 	return validated
 }
 
-func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeaderInfo {
+func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeader {
 	if len(tx) < HEADER_LEN {
 		log.Warn("hotshot transaction is too small for a header")
 		return nil
@@ -147,16 +140,8 @@ func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeaderInfo {
 	// if the set header payload length matches the total rest of payload length it must be a header
 	if uint64(len(strippedTx)) == header.PayloadLength {
 		switch header.TransactionType {
-		case BatchPosterSignedTxn:
-			return &EspressoHeaderInfo{
-				TransactionType: header.TransactionType,
-				HeaderLength:    offset,
-			}
-		case DecentralizedTimeboost:
-			return &EspressoHeaderInfo{
-				TransactionType: header.TransactionType,
-				HeaderLength:    offset,
-			}
+		case BatchPosterSignedTxn, DecentralizedTimeboost:
+			return &header
 		default:
 			return nil
 		}
@@ -164,10 +149,11 @@ func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeaderInfo {
 	return nil
 }
 
-func ParseHotShotPayload(payload []byte, header *EspressoHeaderInfo) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+func ParseHotShotPayload(payload []byte, header *EspressoHeader) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
 	if header != nil {
 		// parse the payload with no header
-		payload = payload[header.HeaderLength:]
+		offset := uint64(len(payload)) - header.PayloadLength
+		payload = payload[offset:]
 	}
 	if len(payload) < LEN_SIZE {
 		return nil, nil, nil, nil, errors.New("payload too short to parse signature size")

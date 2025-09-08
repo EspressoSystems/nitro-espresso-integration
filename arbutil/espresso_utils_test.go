@@ -166,7 +166,8 @@ func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
 	}
 
 	// Remove header from payload
-	signedPayload = signedPayload[header.HeaderLength:]
+	offset := uint64(len(signedPayload)) - header.PayloadLength
+	signedPayload = signedPayload[offset:]
 	header = ParseHotshotPayloadForHeader(signedPayload)
 	if header != nil {
 		t.Fatalf("no header should be parsed")

@@ -282,7 +282,7 @@ func (s *EspressoStreamer) verifySignature(data []byte, userDataHashArr [32]byte
 	return nil
 }
 
-func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, header *arbutil.EspressoHeaderInfo) error {
+func (s *EspressoStreamer) verify(data []byte, userDataHashArr [32]byte, l1Height uint64, header *arbutil.EspressoHeader) error {
 	noHeader := header == nil
 	if !noHeader {
 		txType := header.TransactionType
