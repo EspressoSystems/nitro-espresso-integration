@@ -57,4 +57,5 @@ jobs:
             echo "Neither ESPRESSO_VERSION nor ESPRESSO_DEV is set. Exiting."
             exit 1
           fi
-          ./nitro-testnode/regression-test.sh
+          cd nitro-testnode
+          ./regression-test.bash
