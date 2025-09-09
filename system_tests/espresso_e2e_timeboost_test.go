@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/agglayer/aggkit/test/contracts/erc1967proxy"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/prysmaticlabs/go-ssz"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -29,7 +30,7 @@ import (
 var timeBoostHealth = "/i/health"
 var timeBoostSubmit = "/v1/submit/regular"
 var timeboostUrls = []string{
-	"http://localhost:8800", "http://localhost:8801",
+	"http://localhost:8004", "http://localhost:8014",
 }
 
 func runDecentralizedTimeboost() func() {
@@ -166,16 +167,16 @@ func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, builder
 	Require(t, err)
 	members := []decentralizedtimeboostgen.KeyManagerCommitteeMember{
 		{
-			SigKey:         []byte("qkoZ7xPFuTjNpKmn3SyWL2Y6WLm89wi9jNkDuu9KefXv"),
-			DhKey:          []byte("dh_key_1"),
-			DkgKey:         []byte("dkg_key_1"),
-			NetworkAddress: "127.0.0.1:8080",
+			SigKey:         base58.Decode("eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX"),
+			DhKey:          base58.Decode("AZrLbV37HAGhBWh49JHzup6Wfpu2AAGWGJJnxCDJibiY"),
+			DkgKey:         base58.Decode("7PdmfTS45d2hTXB8NcrTmvDwUVBimpYBbrBaGnu3i5Ne65krVfUpbe7bYRHS3AEg7H"),
+			NetworkAddress: "node0:8000",
 		},
 		{
-			SigKey:         []byte("28y18s4egBUnxoLSJY8vCYXV8KXaKYysD6tUen7syFyPt"),
-			DhKey:          []byte("dh_key_2"),
-			DkgKey:         []byte("dkg_key_2"),
-			NetworkAddress: "127.0.0.1:8081",
+			SigKey:         base58.Decode("vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR"),
+			DhKey:          base58.Decode("FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"),
+			DkgKey:         base58.Decode("7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"),
+			NetworkAddress: "node1:8010",
 		},
 	}
 

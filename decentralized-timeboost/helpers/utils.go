@@ -8,7 +8,6 @@ import (
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
-	"github.com/btcsuite/btcutil/base58"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/zeebo/blake3"
 
@@ -46,13 +45,17 @@ func GetTimeboostBlockHash(round uint64, payload []byte) ([]byte, error) {
 }
 
 // Validate the signatures in the timeboost generate certificate against the committee for one honest threshold
-func ValidateTimeboostCertificate(commitment []byte, sigs map[uint8][]byte, members []decentralizedtimeboostgen.KeyManagerCommitteeMember) error {
+func ValidateTimeboostCertificate(
+	commitment []byte,
+	sigs map[uint8][]byte,
+	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
+) error {
 
 	validSigs := 0
 	for keyId, sig := range sigs {
 		index := int(keyId)
 		member := members[index]
-		pubKey, err := crypto.DecompressPubkey(base58.Decode(string(member.SigKey)))
+		pubKey, err := crypto.DecompressPubkey(member.SigKey)
 		if err != nil {
 			return err
 		}
@@ -75,8 +78,12 @@ func ValidateTimeboostCertificate(commitment []byte, sigs map[uint8][]byte, memb
 	return nil
 }
 
-func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, streamerCurrentPos uint64, keymanager *decentralizedtimeboostgen.KeyManager) (*DecentralizedTimeboostParsedMessage, error) {
-
+func ParseTimeboostEspressoTransaction(
+	tx espressoTypes.Bytes,
+	l1Height uint64,
+	streamerCurrentPos uint64,
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+) (*DecentralizedTimeboostParsedMessage, error) {
 	var block decentralized_timeboost_types.CertifiedBlock
 	if err := cbor.Unmarshal(tx, &block); err != nil {
 		log.Warn("cbor error decoding certified block", "err", err)
@@ -109,7 +116,7 @@ func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, 
 	}
 
 	// Validate the commitment against the committee signatures
-	committee, err := keymanager.GetCommitteeById(&bind.CallOpts{}, 0)
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
 	if err != nil {
 		log.Warn("failed to get committee", "err", err)
 		return nil, err
