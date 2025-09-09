@@ -87,14 +87,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "espresso-tee-contracts", "*", "*.sol", "*.json"))
-	if err != nil {
-		log.Fatal(err)
-	}
 	filePaths = append(filePaths, filePathsInternal...)
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
-	filePaths = append(filePaths, filePathsEspressoTeeContracts...)
 
 	modules := make(map[string]*moduleInfo)
 
@@ -114,11 +109,6 @@ func main() {
 
 		module += "gen"
 
-		if strings.Contains(file, "TEEVerifier") {
-			// override the module name for espresso contracts
-			module = "espressogen"
-		}
-
 		name := file[:len(file)-5]
 
 		data, err := os.ReadFile(path)
@@ -136,6 +126,11 @@ func main() {
 			modules[module] = modInfo
 		}
 		modInfo.addArtifact(artifact)
+	}
+
+	modules, err = GenerateEspressoTEEContracts(modules, parent)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	yulFilePaths, err := filepath.Glob(filepath.Join(parent, "contracts", "out", "*", "*.yul", "*.json"))
@@ -292,4 +287,37 @@ func main() {
 		modules["node_interfacegen"].exportABIs(blockscout)
 		fmt.Println("successfully exported abi files")
 	}
+}
+
+func GenerateEspressoTEEContracts(modules map[string]*moduleInfo, parent string) (map[string]*moduleInfo, error) {
+	filePathsEspressoTeeContracts, err := filepath.Glob(filepath.Join(parent, "espresso-tee-contracts", "out", "*.sol", "*.json"))
+	if err != nil {
+		return modules, fmt.Errorf("failed to get path for espresso tee contracts: %w", err)
+	}
+
+	espressoTEEContractsInfo := modules["espressogen"]
+	if espressoTEEContractsInfo == nil {
+		espressoTEEContractsInfo = &moduleInfo{}
+		modules["espressogen"] = espressoTEEContractsInfo
+	}
+
+	for _, path := range filePathsEspressoTeeContracts {
+		_, file := filepath.Split(path)
+		name := file[:len(file)-5]
+
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return modules, fmt.Errorf("could not read %s for contract %s: %w", path, name, err)
+		}
+		artifact := FoundryArtifact{}
+		if err := json.Unmarshal(data, &artifact); err != nil {
+			return modules, fmt.Errorf("failed to parse espresso contract %s: %w", name, err)
+		}
+		espressoTEEContractsInfo.addArtifact(HardHatArtifact{
+			ContractName: name,
+			Abi:          artifact.Abi,
+			Bytecode:     artifact.Bytecode.Object,
+		})
+	}
+	return modules, nil
 }
