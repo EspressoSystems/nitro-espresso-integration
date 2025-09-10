@@ -1403,7 +1403,7 @@ func registerAPIs(currentNode *Node, stack *node.Node) {
 			Public: false,
 		})
 	}
-	if currentNode.BatchPoster != nil {
+	if currentNode.BatchPoster != nil && currentNode.BatchPoster.config().IsDecentralizedTimeboost {
 		log.Info("registering batcher API")
 		apis = append(apis, rpc.API{
 			Namespace: "batcher",

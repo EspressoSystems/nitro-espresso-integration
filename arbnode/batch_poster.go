@@ -626,9 +626,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStartL1,
 			)
 
-			decentralizedTimeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0x0115F8541162035781B743F4f6DBf6915194656d"), opts.L1Reader.Client())
-			if err != nil {
-				return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
+			var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
+			if opts.Config().IsDecentralizedTimeboost {
+				// TODO: This should read the address from sequencer inbox contract
+				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0x0115F8541162035781B743F4f6DBf6915194656d"), opts.L1Reader.Client())
+				if err != nil {
+					return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
+				}
+			} else {
+				decentralizedTimeboostKeyManager = nil
 			}
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
 				opts.ChainID,
