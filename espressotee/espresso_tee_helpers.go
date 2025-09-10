@@ -115,6 +115,7 @@ func BaseFeeCheck(
 	msg string,
 ) error {
 	lowBaseFee := false
+	var latestBaseFeeVal uint64
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		latestBaseFee, err := fn()
 		if err != nil && attempt < maxRetries-1 {
@@ -140,10 +141,11 @@ func BaseFeeCheck(
 		}
 
 		lowBaseFee = true
+		latestBaseFeeVal = latestBaseFee.Uint64()
 		break
 	}
 	if !lowBaseFee {
-		return fmt.Errorf("base fee is not low enough to attempt to register signer")
+		return fmt.Errorf("base fee: %d is not low enough to attempt to register signer with max base fee: %d", latestBaseFeeVal, maxBaseFee)
 	}
 	return nil
 }

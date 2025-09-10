@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"path"
 	"path/filepath"
 	"time"
@@ -56,8 +57,7 @@ type EspressoCaffNodeConfig struct {
 	QuoteFile               string `koanf:"quote-file"`
 
 	// Data poster config
-	DataPoster   dataposter.DataPosterConfig `koanf:"data-poster" reload:"hot"`
-	TransactOpts *bind.TransactOpts
+	DataPoster dataposter.DataPosterConfig `koanf:"data-poster"`
 
 	// Force Inclusion Checker
 	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
@@ -180,6 +180,8 @@ func NewEspressoCaffNode(
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
 	httpPort int,
+	dataPosterDB ethdb.Database,
+	txOptsCaffNode *bind.TransactOpts,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil

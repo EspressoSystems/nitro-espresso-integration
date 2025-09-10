@@ -527,8 +527,8 @@ func buildOnParentChain(
 	locator, err := server_common.NewMachineLocator(valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	chainTestClient.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-		ctx, chainTestClient.Stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainTestClient.Client,
-		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot())
+		ctx, chainTestClient.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainTestClient.Client,
+		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	err = chainTestClient.ConsensusNode.Start(ctx)
@@ -655,8 +655,8 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+		nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	// Give the node an init message

@@ -255,8 +255,11 @@ func mainImpl() int {
 
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
-	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		teeAddress, err = integrityattestation.ReadEnclaveAddress(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+	var caffNodetxOpts *bind.TransactOpts
+
+	if nodeConfig.Node.EspressoCaffNode.Enable {
+		var key *ecdsa.PrivateKey
+		key, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
@@ -266,6 +269,12 @@ func mainImpl() int {
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
+		if nodeConfig.ParentChain.ID != 0 {
+			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+			if err != nil {
+				flag.Usage()
+				log.Crit("error creating caff node txOpts", "err", err)
+			}
 		}
 	}
 
@@ -605,6 +614,7 @@ func mainImpl() int {
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,
 		wasmModuleRoot,
+		caffNodetxOpts,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)
