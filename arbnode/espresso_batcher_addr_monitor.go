@@ -227,10 +227,19 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 			return nil, fmt.Errorf("failed to parse a log: invalid data")
 		}
 		if !bytes.Equal(data[:4], seqInboxABI.Methods["setIsBatchPoster"].ID) {
+			// 0x1cff79cd is the hex selector for execute(address,bytes)
+			// If this is encountered, it likely means a contract upgrade is happening.
+			// TODO: Check that all current batcher addresses are still valid after upgrade.
+			if bytes.Equal(data[:4], []byte{0x1c, 0xff, 0x79, 0xcd}) {
+				return nil, fmt.Errorf("encountering execute method, caff node needs to update")
+			}
 			// Encountering an unknown method, caff node needs to update
 			// Note: if the method id is `0x27f28813`, it is the create rollup method.
 			// cast sig "createRollup(((uint64,uint64,address,uint256,bytes32,address,address,uint256,string,uint64,(uint256,uint256,uint256,uint256),address),address[],uint256,address,bool,uint256,address[],address))"
 			// that means the addr monitor is somehow fetching events from the genesis block, which is not expected.
+			if bytes.Equal(data[:4], []byte{0x27, 0xf2, 0x88, 0x13}) {
+				return nil, fmt.Errorf("encountering create rollup method, should not happen")
+			}
 			return nil, fmt.Errorf("failed to parse a log: invalid method: %x, %d", data[:4], l1Height)
 		}
 		args, err := seqInboxABI.Methods["setIsBatchPoster"].Inputs.Unpack(data[4:])

@@ -142,6 +142,7 @@ func (s *EspressoStreamer) Next(ctx context.Context) *MessageWithMetadataAndPos 
 }
 
 func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos {
+	log.Debug("espresso streamer: looking for message", "pos", s.currentMessagePos)
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 

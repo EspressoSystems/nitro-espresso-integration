@@ -1919,6 +1919,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
+			log.Debug("resetting streamer to the latest batch position", "batchPosition", batchPosition)
 			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
