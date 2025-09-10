@@ -51,3 +51,6 @@
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
+[submodule "aws-nitro-enclaves-nsm-api"]
+	path = aws-nitro-enclaves-nsm-api
+	url = https://github.com/aws/aws-nitro-enclaves-nsm-api
