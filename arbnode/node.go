@@ -988,6 +988,7 @@ func getEspressoCaffNode(
 
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
+				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
 				teeAddress,
 				exec.ExecEngine,
@@ -999,6 +1000,7 @@ func getEspressoCaffNode(
 				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
+				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)

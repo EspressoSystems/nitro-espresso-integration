@@ -96,7 +96,7 @@ func (m *MockEspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
 }
 
 // SignHotShotPayload implements key_manager.EspressoKeyManagerInterface.
-func (m *MockEspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) {
+func (m *MockEspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 	hash := crypto.Keccak256Hash(message)
 	return crypto.Sign(hash.Bytes(), m.Key)
 }
@@ -104,4 +104,20 @@ func (m *MockEspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, err
 // TeeType implements key_manager.EspressoKeyManagerInterface.
 func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
 	return espressotee.SGX
+}
+
+func (m *MockEspressoKeyManager) RegisterSigner() error {
+	teeType := m.TeeType()
+	switch teeType {
+	case espressotee.SGX:
+		return m.Register(m.getData)
+	case espressotee.NITRO:
+		return m.Register(m.getData)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
+}
+
+func (m *MockEspressoKeyManager) getData(userData []byte) ([]byte, error) {
+	return []byte{}, nil
 }
