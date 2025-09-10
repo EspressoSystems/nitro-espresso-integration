@@ -111,18 +111,6 @@ COPY --from=contracts-builder workspace/contracts-legacy/build/contracts/src/pre
 COPY --from=contracts-builder workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
-FROM rust:1.81.0-slim-bookworm AS nsmlib-builder
-WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y make
-COPY aws-nitro-enclaves-nsm-api aws-nitro-enclaves-nsm-api 
-COPY ./Makefile ./
-COPY ./pkgconfig ./pkgconfig
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-aws-nsm-lib
-
-FROM scratch AS nsmlib-export
-COPY --from=nsmlib-builder /workspace/target/ /
 
 FROM rust:1.84.1-slim-bookworm AS prover-header-builder
 WORKDIR /workspace
@@ -300,7 +288,6 @@ COPY --from=contracts-builder workspace/safe-smart-account/build/ safe-smart-acc
 COPY --from=contracts-builder workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
 COPY --from=contracts-builder workspace/.make/ .make/
 COPY --from=prover-header-export / target/
-COPY --from=nsmlib-export / target/
 COPY --from=brotli-library-export / target/
 COPY --from=prover-export / target/
 RUN mkdir -p target/bin
@@ -415,7 +402,6 @@ USER user
 
 FROM golang:1.23.1-bookworm AS nitro-attestation-cli-builder
 WORKDIR /workspace
-COPY --from=nsmlib-export / target/
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y git && \
