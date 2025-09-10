@@ -50,29 +50,27 @@ func ValidateTimeboostCertificate(
 	sigs map[uint8][]byte,
 	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
 ) error {
-
 	validSigs := 0
+	oneHonestThreshold := (len(members)-1)/3 + 1
+	validCert := false
 	for keyId, sig := range sigs {
-		index := int(keyId)
-		member := members[index]
-		pubKey, err := crypto.DecompressPubkey(member.SigKey)
-		if err != nil {
-			return err
-		}
-		compressedBytes := crypto.CompressPubkey(pubKey)
+		member := members[int(keyId)]
 		hasher := sha256.New()
 		if _, err := hasher.Write(commitment); err != nil {
 			return err
 		}
-		if !crypto.VerifySignature(compressedBytes, hasher.Sum(nil), sig) {
+		if !crypto.VerifySignature(member.SigKey, hasher.Sum(nil), sig) {
 			// Continue through rest of signatures we need f + 1
 			log.Warn("signature verification failed for key", "id", keyId)
 			continue
 		}
 		validSigs += 1
+		if validSigs >= oneHonestThreshold {
+			validCert = true
+			break
+		}
 	}
-	oneHonestThreshold := (len(members)-1)/3 + 1
-	if validSigs < oneHonestThreshold {
+	if !validCert {
 		return fmt.Errorf("not enough signatures found in certificate. wanted: %d have: %d", oneHonestThreshold, validSigs)
 	}
 	return nil
@@ -116,9 +114,9 @@ func ParseTimeboostEspressoTransaction(
 	}
 
 	// Validate the commitment against the committee signatures
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
 	if err != nil {
-		log.Warn("failed to get committee", "err", err)
+		log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
 		return nil, err
 	}
 	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
