@@ -981,7 +981,8 @@ func getEspressoCaffNode(
 ) (*Node, error) {
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
+			espressoCaffNode, err := NewEspressoCaffNode(
+				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
 				snapshotSigner,
 				exec.ExecEngine,
@@ -993,7 +994,11 @@ func getEspressoCaffNode(
 				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
+				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 			)
+			if err != nil {
+				return nil, err
+			}
 
 			return &Node{
 				ArbDB:                   arbDb,
