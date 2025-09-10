@@ -96,7 +96,7 @@ func (m *MockEspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
 }
 
 // SignHotShotPayload implements key_manager.EspressoKeyManagerInterface.
-func (m *MockEspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) {
+func (m *MockEspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 	hash := crypto.Keccak256Hash(message)
 	return crypto.Sign(hash.Bytes(), m.Key)
 }

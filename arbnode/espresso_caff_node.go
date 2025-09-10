@@ -11,12 +11,14 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	flag "github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
@@ -24,28 +26,38 @@ import (
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
 type EspressoCaffNodeConfig struct {
-	Enable                  bool                    `koanf:"enable"`
-	EspressoTeeType         string                  `koanf:"espresso-tee-type"`
-	HotShotUrls             []string                `koanf:"hotshot-urls"`
-	NextHotshotBlock        uint64                  `koanf:"next-hotshot-block"`
-	FromBlock               uint64                  `koanf:"from-block"`
-	Namespace               uint64                  `koanf:"namespace"`
-	RetryTime               time.Duration           `koanf:"retry-time"`
-	HotshotPollingInterval  time.Duration           `koanf:"hotshot-polling-interval"`
-	HotshotPollingTimeout   time.Duration           `koanf:"hotshot-polling-timeout"`
-	EspressoSGXVerifierAddr string                  `koanf:"espresso-sgx-verifier-addr"`
-	BatchPosterAddr         string                  `koanf:"batch-poster-addr"`
-	RecordPerformance       bool                    `koanf:"record-performance"`
-	WaitForFinalization     bool                    `koanf:"wait-for-finalization"`
-	WaitForConfirmations    bool                    `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth      uint64                  `koanf:"required-block-depth"`
-	BlocksToRead            uint64                  `koanf:"blocks-to-read"`
-	Dangerous               DangerousCaffNodeConfig `koanf:"dangerous"`
+	Enable                       bool                                     `koanf:"enable"`
+	HotShotUrls                  []string                                 `koanf:"hotshot-urls"`
+	NextHotshotBlock             uint64                                   `koanf:"next-hotshot-block"`
+	FromBlock                    uint64                                   `koanf:"from-block"`
+	Namespace                    uint64                                   `koanf:"namespace"`
+	RetryTime                    time.Duration                            `koanf:"retry-time"`
+	HotshotPollingInterval       time.Duration                            `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout        time.Duration                            `koanf:"hotshot-polling-timeout"`
+	EspressoSGXVerifierAddr      string                                   `koanf:"espresso-sgx-verifier-addr"`
+	BatchPosterAddr              string                                   `koanf:"batch-poster-addr"`
+	RecordPerformance            bool                                     `koanf:"record-performance"`
+	WaitForFinalization          bool                                     `koanf:"wait-for-finalization"`
+	WaitForConfirmations         bool                                     `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth           uint64                                   `koanf:"required-block-depth"`
+	BlocksToRead                 uint64                                   `koanf:"blocks-to-read"`
+	Dangerous                    DangerousCaffNodeConfig                  `koanf:"dangerous"`
+	EspressoRegisterSignerConfig espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
+	EspressoTeeType              string                                   `koanf:"espresso-tee-type"`
+
+	// SGX specific config, leave empty if not using SGX
+	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
+	QuoteFile               string `koanf:"quote-file"`
+
+	// Data poster config
+	DataPoster   dataposter.DataPosterConfig `koanf:"data-poster" reload:"hot"`
+	TransactOpts *bind.TransactOpts
 
 	// Force Inclusion Checker
 	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
@@ -83,14 +95,18 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RecordPerformance:       false,
 	// Setting these values to the default
 	// values set by Arbitrum
-	WaitForFinalization:     false,
-	WaitForConfirmations:    true,
-	RequiredBlockDepth:      20,
-	BlocksToRead:            10000,
-	Dangerous:               DefaultDangerousCaffNodeConfig,
-	FromBlock:               1,
-	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
-	EspressoTeeType:         "",
+	WaitForFinalization:          false,
+	WaitForConfirmations:         true,
+	RequiredBlockDepth:           20,
+	BlocksToRead:                 10000,
+	Dangerous:                    DefaultDangerousCaffNodeConfig,
+	FromBlock:                    1,
+	KeyPairAttestationsPath:      "caff_node_key_pair_attestations",
+	EspressoTeeType:              "SGX",
+	EspressoRegisterSignerConfig: espressotee.DefaultEspressoRegisterSignerConfig,
+	UserDataAttestationFile:      "",
+	QuoteFile:                    "",
+	DataPoster:                   dataposter.DefaultDataPosterConfig,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -110,8 +126,12 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
-	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "Configures the type of espresso tee to use")
+	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
+	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
+	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
+	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
+	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
 	EspressoStateCheckerConfigAddOptions(prefix+".state-checker", f)
@@ -143,9 +163,12 @@ type EspressoCaffNode struct {
 
 	batcherAddrMonitor *BatcherAddrMonitor
 	currentBlock       *types.Block
+	keyManager         *espresso_key_manager.EspressoKeyManager
+	dataPoster         *dataposter.DataPoster
 }
 
 func NewEspressoCaffNode(
+	ctx context.Context,
 	configFetcher EspressoCaffNodeConfigFetcher,
 	teeAddress *common.Address,
 	execEngine *gethexec.ExecutionEngine,
@@ -214,7 +237,7 @@ func NewEspressoCaffNode(
 	if fromBlock == 0 {
 		fromBlock = configFetcher().FromBlock
 		if fromBlock == 0 {
-			return nil, fmt.Errorf("fromBlock is 0, please provide a valid block number")
+			return nil, errors.New("fromBlock is 0, please provide a valid block number")
 		}
 	}
 
@@ -309,6 +332,8 @@ func NewEspressoCaffNode(
 		forceInclusionChecker: forceInclusionChecker,
 		stateChecker:          stateChecker,
 		batcherAddrMonitor:    batcherAddrMonitor,
+		keyManager:            keyManager,
+		dataPoster:            dataPoster,
 	}, nil
 }
 

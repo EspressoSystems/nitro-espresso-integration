@@ -3,16 +3,24 @@ package keymanager
 import (
 	"crypto/ecdsa"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/hf/nitrite"
+	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -29,7 +37,7 @@ type EspressoKeyManagerInterface interface {
 	Register(getAttestationFunc func([]byte) ([]byte, error)) error
 	RegisterService() error
 	GetCurrentKey() *ecdsa.PublicKey
-	SignHotShotPayload(message []byte) ([]byte, error)
+	SignPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
 }
@@ -61,6 +69,8 @@ func NewEspressoKeyManager(
 	teeType espressotee.TEE,
 	serviceType espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterSignerConfig,
+	userDataAttestationFile string,
+	quoteFile string,
 ) *EspressoKeyManager {
 	// ephemeral key
 	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
@@ -100,7 +110,7 @@ func NewEspressoKeyManager(
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
 		privKey:                   privKey,
-		batchPosterSigner:         signerFunc,
+		signer:                    signerFunc,
 		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		dataPoster:                dataPoster,
@@ -114,6 +124,8 @@ func NewEspressoKeyManager(
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
 			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
+		userDataAttestationFile: userDataAttestationFile,
+		quoteFile:               quoteFile,
 	}
 }
 
@@ -227,8 +239,8 @@ func (k *EspressoKeyManager) TeeType() espressotee.TEE {
 	return k.teeType
 }
 
-func (k *EspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, error) {
-	return k.batchPosterSigner(crypto.Keccak256Hash(message).Bytes())
+func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
+	return k.signer(crypto.Keccak256Hash(message).Bytes())
 }
 
 func (k *EspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
