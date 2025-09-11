@@ -113,7 +113,7 @@ func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 	return true
 }
 
-func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error {
+func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error {
 	return nil
 }
 
