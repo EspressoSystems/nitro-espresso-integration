@@ -40,7 +40,7 @@ type DelayedMessageFetcher struct {
 
 type DelayedMessageFetcherInterface interface {
 	Start(ctx context.Context) bool
-	storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error
+	storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 	getDelayedMessageLatestIndexAtBlock(blockNumber uint64) (uint64, error)
 }
@@ -442,7 +442,7 @@ func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum ui
 		return fmt.Errorf("failed to encode delayed message: %w", err)
 	}
 	// Also update the delayed message count in the database
-	err = f.storeDelayedMessageLatestIndex(f.db, seqNum)
+	err = f.storeDelayedMessageLatestIndex(batch, seqNum)
 	if err != nil {
 		return err
 	}
@@ -452,12 +452,12 @@ func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum ui
 }
 
 // storeDelayedMessageLatestIndex stores the delayed message index in the database
-func (f *DelayedMessageFetcher) storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error {
+func (f *DelayedMessageFetcher) storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error {
 	countBytes, err := rlp.EncodeToBytes(count)
 	if err != nil {
 		return fmt.Errorf("failed to encode delayed message count: %w", err)
 	}
-	return db.Put([]byte(DelayedMessageCountKey), countBytes)
+	return batch.Put([]byte(DelayedMessageCountKey), countBytes)
 }
 
 func NewDelayedMessageFetcher(
