@@ -11,6 +11,10 @@ on:
       - integration
       - celestia-integration
       - release-tee-caff-node
+  workflow_run:
+    workflows: ["socat"]
+    types:
+      - completed
 
 permissions:
   contents: write
