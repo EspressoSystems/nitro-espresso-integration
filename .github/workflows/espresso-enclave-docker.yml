@@ -11,9 +11,6 @@ on:
       - integration
       - celestia-integration
       - release-tee-caff-node
-  workflow_run:
-    workflows: ["socat"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -21,12 +18,6 @@ permissions:
   id-token: write
 
 jobs:
-  build-after-socat:
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' }}
-    steps:
-      - uses: actions/checkout@v4
-      - run: echo "Build after socat success"
   build:
     runs-on: ubuntu-latest
     steps:
