@@ -13,8 +13,7 @@ on:
       - release-tee-caff-node
   workflow_run:
     workflows: ["socat"]
-    types:
-      - completed
+    types: [completed]
 
 permissions:
   contents: write
