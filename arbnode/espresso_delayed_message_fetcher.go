@@ -66,10 +66,11 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 	// which is before the delayed message number stored in the database
 	fromBlock := d.fromBlock
 	log.Info("backfilling delayed messages", "fromBlock", fromBlock, "matureL1Block", matureL1Block)
-	batch := d.db.NewBatch()
 
 	// Loop through the blocks until we reach the matureL1Block
 	for fromBlock < matureL1Block {
+		batch := d.db.NewBatch()
+
 		toBlock := matureL1Block
 		// If the difference is greater than the maxBlocksToRead,
 		// then set the endBlock to fromBlock + maxBlocksToRead
@@ -83,11 +84,14 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 			return err
 		}
 		fromBlock = toBlock + 1
-	}
 
-	err = batch.Write()
-	if err != nil {
-		return err
+		// we need to write the batch after each iteration, otherwise the
+		// the last processed delayed index will not be read correctly in the next iteration
+		// of getting delayed messages in range
+		err = batch.Write()
+		if err != nil {
+			return err
+		}
 	}
 
 	log.Info("Backfilled delayed messages")
