@@ -44,6 +44,7 @@ type DelayedMessageFetcherInterface interface {
 	storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
 	getDelayedMessageLatestIndexAtBlock(blockNumber uint64) (uint64, error)
+	getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error)
 }
 
 var _ DelayedMessageFetcherInterface = new(DelayedMessageFetcher)
@@ -175,7 +176,7 @@ func (f *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 
 	// Get the delayed message count store in the database
-	delayedCount, err := getDelayedMessageLatestIndex(f.db)
+	delayedCount, err := f.getDelayedMessageLatestIndex(f.db)
 	if err != nil {
 		log.Error("Failed to get delayed message count from db", "err", err)
 		return nil, err
@@ -328,7 +329,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 	log.Debug("sequencer delayed messages found", "delayedMessages", msgs)
 
 	// Get the delayed message index stored in the database
-	lastDelayedMessageIndex, err := getDelayedMessageLatestIndex(d.db)
+	lastDelayedMessageIndex, err := d.getDelayedMessageLatestIndex(d.db)
 	if err != nil {
 		log.Error("Failed to get delayed message index from db", "err", err)
 		return err
@@ -377,7 +378,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 }
 
 // getDelayedMessageLatestIndex returns the delayed message index from the database
-func getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error) {
+func (d *DelayedMessageFetcher) getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error) {
 	var delayedCount uint64
 	delayedCountBytes, err := db.Get([]byte(DelayedMessageCountKey))
 	if err != nil {
