@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       socat_version:
-        description: 'Socat version'
+        description: "Socat version"
         required: true
-        default: '1.7.4.4'
+        default: "1.7.4.4"
       socat_sha256:
-        description: 'Socat archive SHA256 hash'
+        description: "Socat archive SHA256 hash"
         required: true
-        default: '0f8f4b9d5c60b8c53d17b60d79ababc4a0f51b3bb6d2bd3ae8a6a4b9d68f195e'
+        default: "0f8f4b9d5c60b8c53d17b60d79ababc4a0f51b3bb6d2bd3ae8a6a4b9d68f195e"
   merge_group:
   pull_request:
   push:
@@ -20,7 +20,6 @@ on:
       - integration
       - celestia-integration
       - release-tee-caff-node
-
 
 permissions:
   packages: write
@@ -33,24 +32,24 @@ jobs:
         run: sudo apt install -y wget make gcc
 
       - name: Download socat sources
-        run: wget http://www.dest-unreach.org/socat/download/socat-${{ github.event.inputs.socat_version }}.tar.gz
-      
+        run: wget http://www.dest-unreach.org/socat/download/socat-1.7.4.4.tar.gz
+
       - name: Verify socat sources
-        run: echo "${{ github.event.inputs.socat_sha256 }} socat-${{ github.event.inputs.socat_version }}.tar.gz" | sha256sum -c -
+        run: echo "0f8f4b9d5c60b8c53d17b60d79ababc4a0f51b3bb6d2bd3ae8a6a4b9d68f195e socat-1.7.4.4.tar.gz" | sha256sum -c -
 
       - name: Unpack socat sources
-        run: tar -xzf socat-${{ github.event.inputs.socat_version }}.tar.gz
-      
+        run: tar -xzf socat-1.7.4.4.tar.gz
+
       - name: Build socat
         run: |
-          cd socat-${{ github.event.inputs.socat_version }}
+          cd socat-1.7.4.4
           ./configure LDFLAGS="-static"
           make
 
       - name: Prepare Dockerfile
         run: |
           echo 'FROM scratch' > Dockerfile
-          echo 'COPY socat-${{ github.event.inputs.socat_version }}/socat /socat' >> Dockerfile
+          echo 'COPY socat-1.7.4.4/socat /socat' >> Dockerfile
           echo 'ENTRYPOINT /socat' >> Dockerfile
 
       - name: Set up Docker Buildx
@@ -62,7 +61,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner  }}
           password: ${{ secrets.GITHUB_TOKEN  }}
-        
+
       - name: Build and push socat artifact container
         uses: docker/build-push-action@v5
         id: build
@@ -70,4 +69,4 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/socat:v${{ github.event.inputs.socat_version }}
+          tags: ghcr.io/${{ github.repository }}/socat:v1.7.4.4
