@@ -145,6 +145,7 @@ type BatchPoster struct {
 
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	espressoRestarting         bool
 }
 
 type l1BlockBound int
@@ -506,6 +507,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
+
+		espressoRestarting: true,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1920,6 +1923,23 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
 			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			if b.espressoRestarting {
+				b.espressoRestarting = false
+				cnt, err := b.streamer.GetMessageCount()
+				if err != nil {
+					return false, err
+				}
+				if cnt > batchPosition.MessageCount {
+					queue := []arbutil.MessageIndex{}
+					for i := batchPosition.MessageCount; i < cnt; i++ {
+						queue = append(queue, arbutil.MessageIndex(i))
+					}
+					err = b.streamer.espressoSubmitter.EnqueuePendingTransaction(queue)
+					if err != nil {
+						return false, err
+					}
+				}
+			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
