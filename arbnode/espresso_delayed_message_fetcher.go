@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sort"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -276,10 +277,8 @@ func (f *DelayedMessageFetcher) getDelayedMessageLatestIndexAtBlock(blockNumber 
 	return count, nil
 }
 
-/*
-getDelayedMessagedInRange fetches all the delayed messages in the range [startBlock, endBlock]
-and stores them in the database
-*/
+// getDelayedMessagedInRange fetches all the delayed messages in the range [startBlock, endBlock]
+// and stores them in the database
 func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, toBlock uint64) error {
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
@@ -309,6 +308,18 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 		log.Error("Failed to lookup delayed messages", "err", err)
 		return err
 	}
+
+	sort.Slice(msgs, func(i, j int) bool {
+		seqNumI, err := msgs[i].Message.Header.SeqNum()
+		if err != nil {
+			return false
+		}
+		seqNumJ, err := msgs[j].Message.Header.SeqNum()
+		if err != nil {
+			return false
+		}
+		return seqNumI < seqNumJ
+	})
 
 	log.Debug("sequencer delayed messages found", "delayedMessages", msgs)
 
