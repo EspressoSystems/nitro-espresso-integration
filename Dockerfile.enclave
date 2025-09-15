@@ -19,7 +19,7 @@ COPY output/nitro.eif /home
 COPY ./run.sh  /home
 RUN chmod +x /home/run.sh
 
-ENV CPU_COUNT=4
+ENV CPU_COUNT=2
 ENV MEMORY_MIB=8192
 ENV AWS_REGION="us-east-2"
 ENV ENCLAVE_CID=16
