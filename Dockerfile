@@ -111,7 +111,6 @@ COPY --from=contracts-builder workspace/contracts-legacy/build/contracts/src/pre
 COPY --from=contracts-builder workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
-
 FROM rust:1.84.1-slim-bookworm AS prover-header-builder
 WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
@@ -407,16 +406,12 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y git && \
     git clone https://github.com/distributed-lab/enclave-extras.git && \
     cd enclave-extras && \
-    git checkout v0.1.1
+    git checkout v0.1.2
 RUN mkdir -p /workspace/target && \
-    cp -R /workspace/enclave-extras/nitro-attestation-cli/* /workspace && \
-    cp -R /workspace/pkgconfig /workspace/target/
-RUN for file in /workspace/target/pkgconfig/*.pc; do \
-    sed -i 's/\/path\/to\/lib/\/workspace\/target\/lib/g' "$file"; \
-    done
+    cp -R /workspace/enclave-extras/nitro-attestation-cli/* /workspace
 RUN go mod download
 RUN mkdir -p target/bin
-RUN PKG_CONFIG_PATH=/workspace/target/pkgconfig go build -o target/bin/nitro-attestation-cli .
+RUN go build -o target/bin/nitro-attestation-cli .
 
 FROM ghcr.io/espressosystems/nitro-espresso-integration/socat:v1.7.4.4 AS socat-export
 
