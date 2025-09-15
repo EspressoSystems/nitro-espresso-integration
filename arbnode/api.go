@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -12,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	"github.com/offchainlabs/nitro/arbutil"
+	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/validator"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -81,7 +81,6 @@ type BatcherApi struct {
 	batchPoster *BatchPoster
 }
 
-func (api *BatcherApi) SubmitBatch(args []byte) error {
-	log.Printf("Received batch submission, length: %d bytes", len(args))
+func (api *BatcherApi) SubmitBatch(args decentralized_timeboost_types.BatchPosterArgs) error {
 	return api.batchPoster.CheckBatchCorrectnessAndSign(args)
 }

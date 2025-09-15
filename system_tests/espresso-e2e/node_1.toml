@@ -6,6 +6,7 @@ http_api = "node1:8014"
 
 [net.internal]
 address = "node1:8013"
+nitro = "host.docker.internal:55001"
 
 [keys.signing]
 secret = "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs"

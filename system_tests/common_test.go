@@ -405,6 +405,16 @@ func (b *NodeBuilder) Build(t *testing.T) func() {
 	return b.BuildL2(t)
 }
 
+func (b *NodeBuilder) BuildOnSameL1(t *testing.T, b2 *NodeBuilder) func() {
+	b.CheckConfig(t)
+	if b.withL1 {
+		b.addresses = b2.addresses
+		b.initMessage = b2.initMessage
+		return b.BuildL2OnL1(t)
+	}
+	return b.BuildL2(t)
+}
+
 func (b *NodeBuilder) CheckConfig(t *testing.T) {
 	if b.chainConfig == nil {
 		b.chainConfig = chaininfo.ArbitrumDevTestChainConfig()

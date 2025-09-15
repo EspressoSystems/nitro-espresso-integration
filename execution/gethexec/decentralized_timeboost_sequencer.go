@@ -388,7 +388,7 @@ outer:
 
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
-		log.Info("enqueueing block to timeboost", "block", block.NumberU64())
+		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex())
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)

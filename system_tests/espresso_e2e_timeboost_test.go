@@ -231,8 +231,9 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, true)
+	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil)
 	defer cleanup()
+	_, _ = createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder)
 
 	err := waitForL1Node(ctx)
 	Require(t, err)

@@ -8,10 +8,13 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"net"
+	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -19,6 +22,7 @@ import (
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum"
@@ -27,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -46,6 +51,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
+	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -225,8 +231,9 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses     []common.Address `koanf:"init-batcher-addresses"`
-	IsDecentralizedTimeboost bool             `koanf:"is-decentralized-timeboost"`
+	InitBatcherAddresses             []common.Address `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost         bool             `koanf:"is-decentralized-timeboost"`
+	DecentralizedTimeboostPrivateKey string           `koanf:"decentralized-timeboost-private-key"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -303,6 +310,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Bool(prefix+".is-decentralized-timeboost", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
+	f.String(prefix+".decentralized-timeboost-private-key", DefaultBatchPosterConfig.DecentralizedTimeboostPrivateKey, "timeboost private key")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -355,11 +363,12 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
-	HotShotBlock:             1,
-	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
-	EspressoEventPollingStep: 100,
-	IsDecentralizedTimeboost: false,
+	HotShotBlock:                     1,
+	HotShotFirstPostingBlock:         1,
+	InitBatcherAddresses:             []common.Address{},
+	EspressoEventPollingStep:         100,
+	IsDecentralizedTimeboost:         false,
+	DecentralizedTimeboostPrivateKey: "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -2424,6 +2433,84 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		log.Debug("Successfully checked that the batch produces correct messages when ran through inbox multiplexer", "sequenceNumber", batchPosition.NextSeqNum)
 	}
 
+	if b.config().IsDecentralizedTimeboost {
+		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+		if err != nil {
+			return false, err
+		}
+		decoded := base58.Decode(b.config().DecentralizedTimeboostPrivateKey)
+		privateKey, err := crypto.ToECDSA(decoded)
+		if err != nil {
+			return false, err
+		}
+		leader := committee.Members[batchPosition.NextSeqNum%uint64(len(committee.Members))]
+		pubkeybyes := crypto.CompressPubkey(&privateKey.PublicKey)
+		if !bytes.Equal(pubkeybyes, leader.SigKey) {
+			log.Info(
+				"batch not sent: not leader",
+				"sequenceNumber", batchPosition.NextSeqNum,
+				"from", batchPosition.MessageCount,
+				"to", b.building.msgCount,
+				"prevDelayed", batchPosition.DelayedMessageCount,
+				"currentDelayed", b.building.segments.delayedMsg,
+				"totalSegments", len(b.building.segments.rawSegments),
+				"numBlobs", len(kzgBlobs),
+				"key", b.config().DecentralizedTimeboostPrivateKey,
+			)
+			return false, nil
+		}
+		seqMsg := binary.BigEndian.AppendUint64([]byte{}, l1BoundMinTimestamp)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxTimestamp)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMinBlockNumber)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxBlockNumber)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, b.building.segments.delayedMsg)
+		seqMsg = append(seqMsg, sequencerMsg...)
+		args := decentralized_timeboost_types.BatchPosterArgs{
+			SequencerNumber:          batchPosition.NextSeqNum,
+			AfterDelayedMessagesRead: batchPosition.DelayedMessageCount,
+			GasRefunder:              b.gasRefunderAddr,
+			PreviousMessageCount:     uint64(batchPosition.MessageCount),
+			NewMessageCount:          uint64(b.building.msgCount),
+			Data:                     seqMsg,
+		}
+		request := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "batcher_submitBatch",
+			"params":  []decentralized_timeboost_types.BatchPosterArgs{args},
+			"id":      1,
+		}
+		jsonData, err := json.Marshal(request)
+		if err != nil {
+			return false, fmt.Errorf("failed to marshal JSON: %w", err)
+		}
+
+		urls := []string{"http://localhost:8945", "http://localhost:8947"}
+		client := http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout:   5 * time.Second,
+					KeepAlive: 30 * time.Second,
+				}).DialContext,
+				Dial: func(network, addr string) (net.Conn, error) {
+					return net.Dial(network, addr)
+				},
+			},
+		}
+		for _, url := range urls {
+			resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+			if err != nil {
+				return false, fmt.Errorf("HTTP request failed: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusOK {
+				log.Warn("error code")
+				return false, fmt.Errorf("server returned status: %s", resp.Status)
+			}
+		}
+
+	}
 	tx, err := b.dataPoster.PostTransaction(ctx,
 		firstUsefulMsgTime,
 		nonce,
@@ -2448,6 +2535,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		"currentDelayed", b.building.segments.delayedMsg,
 		"totalSegments", len(b.building.segments.rawSegments),
 		"numBlobs", len(kzgBlobs),
+		"key", b.config().DecentralizedTimeboostPrivateKey,
 	)
 
 	recentlyHitL1Bounds := time.Since(b.lastHitL1Bounds) < config.PollInterval*3
@@ -2510,6 +2598,80 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	return true, nil
+}
+
+func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_types.BatchPosterArgs) error {
+	_, batchPositionBytes, err := b.dataPoster.GetNextNonceAndMeta(b.GetContext())
+	if err != nil {
+		return err
+	}
+	var batchPosition batchPosterPosition
+	if err := rlp.DecodeBytes(batchPositionBytes, &batchPosition); err != nil {
+		return fmt.Errorf("decoding batch position: %w", err)
+	}
+	if args.SequencerNumber != batchPosition.NextSeqNum {
+		return fmt.Errorf("failed to match seq num")
+	}
+	if args.AfterDelayedMessagesRead != batchPosition.DelayedMessageCount {
+		return fmt.Errorf("failed to match delayed messages")
+	}
+	if args.GasRefunder != b.gasRefunderAddr {
+		return fmt.Errorf("failed to match gas refunder")
+	}
+	if args.PreviousMessageCount != uint64(batchPosition.MessageCount) {
+		return fmt.Errorf("failed to match message count")
+	}
+
+	dapReaders := b.dapReaders
+
+	muxBackend := &simulatedMuxBackend{
+		batchSeqNum: batchPosition.NextSeqNum,
+		allMsgs:     make(map[arbutil.MessageIndex]*arbostypes.MessageWithMetadata),
+	}
+
+	prevDelayedMessagesRead := batchPosition.DelayedMessageCount
+
+	for index := args.PreviousMessageCount; index < args.NewMessageCount; index++ {
+		message, err := b.streamer.getMessageWithMetadataAndBlockInfo(arbutil.MessageIndex(index))
+		if err != nil {
+			return fmt.Errorf("error")
+		}
+		muxBackend.allMsgs[arbutil.MessageIndex(index)] = &message.MessageWithMeta
+		// add the message to delayed message queue if delayed messages read
+		// increases in this message
+		if prevDelayedMessagesRead < message.MessageWithMeta.DelayedMessagesRead {
+			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &message.MessageWithMeta)
+			prevDelayedMessagesRead += 1
+		}
+	}
+
+	muxBackend.seqMsg = args.Data
+	muxBackend.delayedInboxStart = batchPosition.DelayedMessageCount
+	muxBackend.SetPositionWithinMessage(0)
+
+	simMux := arbstate.NewInboxMultiplexer(muxBackend,
+		prevDelayedMessagesRead,
+		dapReaders, daprovider.KeysetValidate)
+
+	for i := args.PreviousMessageCount; i < args.NewMessageCount; i++ {
+		msg, err := simMux.Pop(b.GetContext())
+		if err != nil {
+			log.Error("sim pop error", "err", err)
+			return err
+		}
+		if msg.DelayedMessagesRead != muxBackend.allMsgs[arbutil.MessageIndex(i)].DelayedMessagesRead {
+			log.Error("delayed messages do not match")
+			return fmt.Errorf("delayed messages do not match")
+		}
+
+		if !msg.Message.Equals(muxBackend.allMsgs[arbutil.MessageIndex(i)].Message) {
+			log.Error("message mismatch")
+			return fmt.Errorf("error")
+		}
+
+	}
+	log.Info("successfully verified batch!!", "key", b.config().DecentralizedTimeboostPrivateKey)
+	return nil
 }
 
 func (b *BatchPoster) GetBacklogEstimate() uint64 {
@@ -2610,11 +2772,6 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			return b.config().PollInterval
 		}
 	})
-}
-
-func (b *BatchPoster) CheckBatchCorrectnessAndSign(args []byte) error {
-	log.Info("received")
-	return nil
 }
 
 func (b *BatchPoster) StopAndWait() {

@@ -79,7 +79,7 @@ type EspressoStreamer struct {
 
 	batcherAddressesFetcher  func(l1Height uint64) []common.Address
 	isDecentralizedTimeboost bool
-	timeboostKeyManager      *decentralizedtimeboostgen.KeyManager
+	TimeboostKeyManager      *decentralizedtimeboostgen.KeyManager
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -111,7 +111,7 @@ func NewEspressoStreamer(
 		retryTime:                retryTime,
 		currentMessagePos:        1,
 		isDecentralizedTimeboost: isDecentralizedTimeboost,
-		timeboostKeyManager:      keyManager,
+		TimeboostKeyManager:      keyManager,
 	}
 }
 
@@ -365,7 +365,7 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.timeboostKeyManager)
+	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.TimeboostKeyManager)
 	if err != nil {
 		return nil, err
 	}

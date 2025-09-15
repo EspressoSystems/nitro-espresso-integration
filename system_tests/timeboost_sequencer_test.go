@@ -20,17 +20,28 @@ func createL1AndL2NodeForTimeboost(
 	t *testing.T,
 	delayedSequencer bool,
 	batchPoster bool,
+	privKey string,
+	nodeBuilder *NodeBuilder,
 ) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
-	builder.l1StackConfig.HTTPPort = 8545
-	builder.l1StackConfig.WSPort = 8546
-	builder.l1StackConfig.HTTPHost = "0.0.0.0"
-	builder.l1StackConfig.HTTPVirtualHosts = []string{"*"}
-	builder.l1StackConfig.WSHost = "0.0.0.0"
-	builder.l1StackConfig.DataDir = t.TempDir()
-	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
+	if nodeBuilder == nil {
+		builder.l1StackConfig.HTTPPort = 8545
+		builder.l1StackConfig.WSPort = 8546
+		builder.l1StackConfig.HTTPHost = "0.0.0.0"
+		builder.l1StackConfig.HTTPVirtualHosts = []string{"*"}
+		builder.l1StackConfig.WSHost = "0.0.0.0"
+		builder.l1StackConfig.DataDir = t.TempDir()
+		builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
+		builder.l2StackConfig.HTTPPort = 8945
+	} else {
+		builder.L1Info = nodeBuilder.L1Info
+		builder.L1 = nodeBuilder.L1
+		builder.l1StackConfig = nodeBuilder.l1StackConfig
+		builder.withL1 = true
+		builder.l2StackConfig.HTTPPort = 8947
+	}
+
 	builder.l2StackConfig.HTTPModules = append(builder.l2StackConfig.HTTPModules, "batcher")
-	builder.l2StackConfig.HTTPPort = 8945
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 	builder.l2StackConfig.IPCPath = tmpPath(t, "test.ipc")
 	builder.useL1StackConfig = true
@@ -43,6 +54,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 1000 * time.Hour
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = batchPoster
+	builder.nodeConfig.BatchPoster.DecentralizedTimeboostPrivateKey = privKey
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
@@ -70,13 +82,21 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
+	if nodeBuilder != nil {
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"
+	}
 
-	cleanup := builder.Build(t)
-
-	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
-	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
-	Require(t, err)
-	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
+	var cleanup func()
+	if nodeBuilder == nil {
+		cleanup = builder.Build(t)
+		mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
+		err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
+		Require(t, err)
+		builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
+	} else {
+		cleanup = builder.BuildOnSameL1(t, nodeBuilder)
+	}
 
 	return builder, cleanup
 }
@@ -149,7 +169,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 	defer valNodeCleanup()
 	// In future, we also need to create a version of
 	// delayed sequencer for timeboost
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false)
+	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)
