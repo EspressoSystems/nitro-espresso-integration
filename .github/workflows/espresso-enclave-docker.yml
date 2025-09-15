@@ -160,6 +160,7 @@ jobs:
           context: .
           file: Dockerfile
           no-cache: true
+          load: true
           target: nitro-node-enclave
           tags: nitro-node-enclave:latest
 
@@ -180,4 +181,4 @@ jobs:
           context: .
           file: Dockerfile.enclave
           push: true
-          tags: ghcr.io/${{ github.repository }}/enclave:${{ github.sha }}
+          tags: ghcr.io/espressosystems/nitro-espresso-integration/aws-nitro-enclave:${{ github.sha }}
