@@ -1924,11 +1924,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.espressoStreamer != nil {
 			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
 			if b.espressoRestarting {
-				b.espressoRestarting = false
 				cnt, err := b.streamer.GetMessageCount()
 				if err != nil {
 					return false, err
 				}
+				// Submit transactions that were already in tx streamer
 				if cnt > batchPosition.MessageCount {
 					queue := []arbutil.MessageIndex{}
 					for i := batchPosition.MessageCount; i < cnt; i++ {
@@ -1939,6 +1939,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 						return false, err
 					}
 				}
+				b.espressoRestarting = false
 			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
