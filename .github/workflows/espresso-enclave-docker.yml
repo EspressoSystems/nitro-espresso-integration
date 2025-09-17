@@ -152,6 +152,17 @@ jobs:
         with:
           submodules: recursive
 
+      # Build the main Docker image
+      - name: Build Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile
+          no-cache: true
+          load: true
+          target: nitro-node-enclave
+          tags: nitro-node-enclave:latest
+
       # Create directory for artifacts
       - name: Create Output Directory
         run: |
@@ -160,7 +171,7 @@ jobs:
       # Create the EIF file
       - name: Create EIF
         run: |
-          nitro-cli build-enclave --docker-uri ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:pr-778 --output-file output/nitro.eif
+          nitro-cli build-enclave --docker-uri nitro-node-enclave:latest --output-file output/nitro.eif
 
       # Build and push the enclave Docker image
       - name: Build and push the enclave Docker image
