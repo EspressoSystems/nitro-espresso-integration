@@ -160,7 +160,7 @@ jobs:
       # Create the EIF file
       - name: Create EIF
         run: |
-          nitro-cli build-enclave --docker-uri ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:v3.6.7-7128814 --output-file output/nitro.eif
+          nitro-cli build-enclave --docker-uri ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:pr-778 --output-file output/nitro.eif
 
       # Build and push the enclave Docker image
       - name: Build and push the enclave Docker image
