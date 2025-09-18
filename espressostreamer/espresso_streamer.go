@@ -103,7 +103,6 @@ func NewEspressoStreamer(
 		PerfRecorder:            PerfRecorder,
 		batcherAddressesFetcher: batcherAddressesFetcher,
 		retryTime:               retryTime,
-		currentMessagePos:       1,
 	}
 }
 
@@ -115,9 +114,9 @@ func NewEspressoStreamer(
 //
 // Return value:
 //
-//	a uint64 representing the estimated message count.
+//	a uint64 representing the count of unique messages in the EspressoStreamer's internal buffer.
 func (s *EspressoStreamer) GetMessageCount() uint64 {
-	return s.currentMessagePos + CountUniqueEntries(&s.messageWithMetadataAndPos)
+	return CountUniqueEntries(&s.messageWithMetadataAndPos)
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
@@ -381,15 +380,11 @@ func fetchNextHotshotBlock(
 	}
 
 	header, err := espressoClient.FetchHeaderByHeight(ctx, nextHotshotBlockNum)
-	l1Height := uint64(0)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
-	finalized := header.Header.GetL1Finalized()
-	if finalized != nil {
-		l1Height = finalized.Number
-	}
+	l1Height := header.Header.GetL1Finalized().Number
 	result := []*MessageWithMetadataAndPos{}
 
 	for _, tx := range arbTxns.Transactions {

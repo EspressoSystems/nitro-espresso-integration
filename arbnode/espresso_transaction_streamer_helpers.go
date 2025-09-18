@@ -200,6 +200,7 @@ func ConfigureEspressoFields(
 		TxnsResubmissionInterval:              DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval,
 		MaxTransactionSize:                    DefaultBatchPosterConfig.EspressoTxSizeLimit,
 		ResubmitEspressoTxDeadline:            DefaultBatchPosterConfig.ResubmitEspressoTxDeadline,
+		UseEscapeHatch:                        DefaultBatchPosterConfig.UseEscapeHatch,
 
 		SubmitterCreator: submitter.NewPollingEspressoSubmitter,
 	}
@@ -219,7 +220,10 @@ func ConfigureEspressoFields(
 		submitter.WithTxnsSendingInterval(config.TxnsSendingInterval),
 		submitter.WithTxnsResubmissionInterval(config.TxnsResubmissionInterval),
 		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
+		submitter.WithUseEscapeHatch(config.UseEscapeHatch),
+		submitter.WithEscapeHatchEnabled(config.EscapeHatchEnabled),
 		submitter.WithMaxTransactionSize(config.MaxTransactionSize),
+		submitter.WithMaxBlockLagBeforeEscapeHatch(config.MaxBlockLagBeforeEscapeHatch),
 		submitter.WithInitialFinalizedSequencerMessageCount(config.InitialFinalizedSequencerMessageCount),
 		submitter.WithMultipleOptions(config.SubmitterConfiguration...),
 	)
