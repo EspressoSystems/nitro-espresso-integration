@@ -48,14 +48,16 @@ fi
 echo "Some sleep..."
 sleep 5
 
+# TODO: fix this
+
 echo "Start AWS KMS egress vsock proxy"
 socat TCP-LISTEN:443,bind=127.0.0.2,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8002,keepalive &
 echo "Start AWS STS egress vsock proxy"
 socat TCP-LISTEN:443,bind=127.0.0.3,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8003,keepalive &
 echo "Start L1 node egress vsock proxy"
-socat TCP-LISTEN:8546,bind=127.0.0.4,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8004,keepalive &
+socat TCP-LISTEN:443,bind=127.0.0.4,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8004,keepalive &
 echo "Start L1 beacon node egress vsock proxy"
-socat TCP-LISTEN:3500,bind=127.0.0.5,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8005,keepalive &
+socat TCP-LISTEN:443,bind=127.0.0.5,fork,reuseaddr,keepalive VSOCK-CONNECT:3:8005,keepalive &
 # NFS
 echo "Start NFSv4 egress vsock proxy"
 socat TCP-LISTEN:2049,bind=127.0.0.200,fork,reuseaddr,keepalive VSOCK-CONNECT:3:20000,keepalive &
