@@ -2463,7 +2463,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	b.postedFirstBatch = true
 	log.Info(
 		"BatchPoster: batch sent",
-		"key", hex.EncodeToString(b.batchVerifier.GetCompressedPubKey()),
 		"sequenceNumber", batchPosition.NextSeqNum,
 		"from", batchPosition.MessageCount,
 		"to", b.building.msgCount,
