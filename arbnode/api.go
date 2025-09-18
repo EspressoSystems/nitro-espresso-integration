@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	"github.com/offchainlabs/nitro/arbutil"
-	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
+	decentralized_timeboost_batch_verifier "github.com/offchainlabs/nitro/decentralized-timeboost/batcher"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/validator"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -81,6 +81,6 @@ type BatcherApi struct {
 	batchPoster *BatchPoster
 }
 
-func (api *BatcherApi) SubmitBatch(args decentralized_timeboost_types.BatchPosterArgs) error {
+func (api *BatcherApi) SubmitBatch(args decentralized_timeboost_batch_verifier.BatchPosterArgs) ([]byte, error) {
 	return api.batchPoster.CheckBatchCorrectnessAndSign(args)
 }

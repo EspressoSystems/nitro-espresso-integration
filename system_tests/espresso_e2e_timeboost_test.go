@@ -233,7 +233,8 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 
 	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil)
 	defer cleanup()
-	_, _ = createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder)
+	_, cleanup2 := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder)
+	defer cleanup2()
 
 	err := waitForL1Node(ctx)
 	Require(t, err)
@@ -289,7 +290,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	expectedTxs = append(expectedTxs, delayedTx2)
 
 	// Wait for blocks and batch
-	time.Sleep(time.Second * 60)
+	time.Sleep(time.Second * 90)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)

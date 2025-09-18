@@ -96,6 +96,7 @@ func createL1AndL2NodeForTimeboost(
 		builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
 	} else {
 		cleanup = builder.BuildOnSameL1(t, nodeBuilder)
+		builder.L1.cleanup = nil
 	}
 
 	return builder, cleanup

@@ -8,13 +8,10 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
-	"net"
-	"net/http"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -51,7 +48,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
+	decentralized_timeboost_batch_verifier "github.com/offchainlabs/nitro/decentralized-timeboost/batcher"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -111,6 +108,15 @@ type batchPosterPosition struct {
 	NextSeqNum          uint64
 }
 
+type l1Bounds struct {
+	l1BoundMaxBlockNumber           uint64
+	l1BoundMaxTimestamp             uint64
+	l1BoundMinBlockNumber           uint64
+	l1BoundMinTimestamp             uint64
+	l1BoundMinBlockNumberWithBypass uint64
+	l1BoundMinTimestampWithBypass   uint64
+}
+
 type BatchPoster struct {
 	stopwaiter.StopWaiter
 	l1Reader           *headerreader.HeaderReader
@@ -152,6 +158,7 @@ type BatchPoster struct {
 
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	batchVerifier              *decentralized_timeboost_batch_verifier.BatchVerifier
 }
 
 type l1BlockBound int
@@ -726,6 +733,20 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			}
 
 			opts.Streamer.espressoSubmitter = submitter
+		}
+
+		b.batchVerifier = nil
+		if opts.Config().IsDecentralizedTimeboost {
+			decoded := base58.Decode(b.config().DecentralizedTimeboostPrivateKey)
+			privateKey, err := crypto.ToECDSA(decoded)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode private key: %w", err)
+			}
+			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(privateKey)
+			if err != nil {
+				return nil, err
+			}
+			b.batchVerifier = verifier
 		}
 	}
 
@@ -1480,49 +1501,104 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
 	}
 
-	var arguments abi.Arguments
-	arguments = append(arguments, method.Inputs...)
-	arguments = append(arguments, abi.Argument{Type: uint256Type})
-
-	calldata, err := arguments.Pack(
-		seqNum,
-		l2MessageData,
-		new(big.Int).SetUint64(delayedMsg),
-		b.config().gasRefunder,
-		new(big.Int).SetUint64(uint64(prevMsgNum)),
-		new(big.Int).SetUint64(uint64(newMsgNum)),
-		hotshotBlockNumber,
-	)
-
-	// Later append the delay proof if needed for getting the attestion quote.
-	// If not, only append at the end of the calldata as done below.
-	if err != nil {
-		return nil, err
-	}
-
 	var signature []byte
 	teeType := espresso_key_manager.SGX
-	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		keyManager := espressoSubmitter.GetKeyManager()
-		signature, err = keyManager.SignBatch(calldata)
+	if b.config().IsDecentralizedTimeboost {
+		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
+			return nil, err
+		}
+		leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
+		pubKey := b.batchVerifier.GetCompressedPubKey()
+		if !bytes.Equal(pubKey, leader.SigKey) {
+			log.Info(
+				"batch not sent: not leader",
+				"key", hex.EncodeToString(pubKey),
+				"sequenceNumber", seqNum,
+				"from", prevMsgNum,
+				"to", b.building.msgCount,
+				"prevDelayed", delayedMsg,
+				"currentDelayed", b.building.segments.delayedMsg,
+				"totalSegments", len(b.building.segments.rawSegments),
+			)
+			return nil, fmt.Errorf("not leader for batch")
+		}
+		var arguments abi.Arguments
+		arguments = append(arguments, method.Inputs...)
+
+		calldata, err := arguments.Pack(
+			seqNum,
+			l2MessageData,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+		)
+		if err != nil {
+			return nil, err
 		}
 
-		sigLength := len(signature)
-		if sigLength > 0 {
-			// Get the last byte (v)
-			vIndex := sigLength - 1
-			v := signature[vIndex]
+		sigKeyMap := make(map[string]bool)
+		for _, member := range committee.Members {
+			sigKeyMap[string(member.SigKey)] = true
+		}
+		args, err := b.batchVerifier.HashAndSignBatchData(calldata)
+		if err != nil {
+			return nil, err
+		}
 
-			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
-			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-			// https://github.com/ethereum/go-ethereum/issues/19751
-			if v == 0 || v == 1 {
-				signature[vIndex] = v + 27
+		// TODO: use the signatures to send to sequencer inbox
+		_, err = b.batchVerifier.SendBatchForVerification(
+			args,
+			sigKeyMap,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+	} else {
+		var arguments abi.Arguments
+		arguments = append(arguments, method.Inputs...)
+		arguments = append(arguments, abi.Argument{Type: uint256Type})
+
+		calldata, err := arguments.Pack(
+			seqNum,
+			l2MessageData,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			hotshotBlockNumber,
+		)
+
+		// Later append the delay proof if needed for getting the attestion quote.
+		// If not, only append at the end of the calldata as done below.
+		if err != nil {
+			return nil, err
+		}
+
+		if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
+			keyManager := espressoSubmitter.GetKeyManager()
+			signature, err = keyManager.SignBatch(calldata)
+			if err != nil {
+				return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 			}
+
+			sigLength := len(signature)
+			if sigLength > 0 {
+				// Get the last byte (v)
+				vIndex := sigLength - 1
+				v := signature[vIndex]
+
+				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+				// https://github.com/ethereum/go-ethereum/issues/19751
+				if v == 0 || v == 1 {
+					signature[vIndex] = v + 27
+				}
+			}
+			teeType = keyManager.TeeType()
 		}
-		teeType = keyManager.TeeType()
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)
@@ -1534,12 +1610,11 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
 	}
 
-	espressoMetadata, err := abi.Arguments{
+	packedData, err := abi.Arguments{
 		{Type: uint256Type},
 		{Type: bytesType},
 		{Type: uint8Type},
 	}.Pack(hotshotBlockNumber, signature, teeType)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
 	}
@@ -1548,14 +1623,14 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	if !ok {
 		return nil, errors.New("failed to find add batch method")
 	}
-	calldata, err = method.Inputs.Pack(
+	calldata, err := method.Inputs.Pack(
 		seqNum,
 		l2MessageData,
 		new(big.Int).SetUint64(delayedMsg),
 		b.config().gasRefunder,
 		new(big.Int).SetUint64(uint64(prevMsgNum)),
 		new(big.Int).SetUint64(uint64(newMsgNum)),
-		espressoMetadata,
+		packedData,
 	)
 
 	if err != nil {
@@ -2037,72 +2112,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	config := b.config()
 	forcePostBatch := config.MaxDelay <= 0
 
-	var l1BoundMaxBlockNumber uint64 = math.MaxUint64
-	var l1BoundMaxTimestamp uint64 = math.MaxUint64
-	var l1BoundMinBlockNumber uint64
-	var l1BoundMinTimestamp uint64
-	var l1BoundMinBlockNumberWithBypass uint64
-	var l1BoundMinTimestampWithBypass uint64
-	hasL1Bound := config.l1BlockBound != l1BlockBoundIgnore
-	if hasL1Bound {
-		var l1Bound *types.Header
-		var err error
-		if config.l1BlockBound == l1BlockBoundLatest {
-			l1Bound, err = b.l1Reader.LastHeader(ctx)
-		} else if config.l1BlockBound == l1BlockBoundSafe || config.l1BlockBound == l1BlockBoundDefault {
-			l1Bound, err = b.l1Reader.LatestSafeBlockHeader(ctx)
-			if errors.Is(err, headerreader.ErrBlockNumberNotSupported) && config.l1BlockBound == l1BlockBoundDefault {
-				// If getting the latest safe block is unsupported, and the L1BlockBound configuration is the default,
-				// fall back to using the latest block instead of the safe block.
-				l1Bound, err = b.l1Reader.LastHeader(ctx)
-			}
-		} else {
-			if config.l1BlockBound != l1BlockBoundFinalized {
-				log.Error(
-					"unknown L1 block bound config value; falling back on using finalized",
-					"l1BlockBoundString", config.L1BlockBound,
-					"l1BlockBoundEnum", config.l1BlockBound,
-				)
-			}
-			l1Bound, err = b.l1Reader.LatestFinalizedBlockHeader(ctx)
-		}
-		if err != nil {
-			return false, fmt.Errorf("error getting L1 bound block: %w", err)
-		}
-
-		maxTimeVariationDelayBlocks, maxTimeVariationFutureBlocks, maxTimeVariationDelaySeconds, maxTimeVariationFutureSeconds, err := b.seqInbox.MaxTimeVariation(&bind.CallOpts{
-			Context:     ctx,
-			BlockNumber: l1Bound.Number,
-		})
-		if err != nil {
-			// This might happen if the latest finalized block is old enough that our L1 node no longer has its state
-			log.Warn("error getting max time variation on L1 bound block; falling back on latest block", "err", err)
-			maxTimeVariationDelayBlocks, maxTimeVariationFutureBlocks, maxTimeVariationDelaySeconds, maxTimeVariationFutureSeconds, err = b.seqInbox.MaxTimeVariation(&bind.CallOpts{Context: ctx})
-			if err != nil {
-				return false, fmt.Errorf("error getting max time variation: %w", err)
-			}
-		}
-
-		l1BoundBlockNumber := arbutil.ParentHeaderToL1BlockNumber(l1Bound)
-		l1BoundMaxBlockNumber = arbmath.SaturatingUAdd(l1BoundBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationFutureBlocks))
-		l1BoundMaxTimestamp = arbmath.SaturatingUAdd(l1Bound.Time, arbmath.BigToUintSaturating(maxTimeVariationFutureSeconds))
-
-		latestHeader, err := b.l1Reader.LastHeader(ctx)
-		if err != nil {
-			return false, err
-		}
-		latestBlockNumber := arbutil.ParentHeaderToL1BlockNumber(latestHeader)
-		l1BoundMinBlockNumber = arbmath.SaturatingUSub(latestBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
-		l1BoundMinTimestamp = arbmath.SaturatingUSub(latestHeader.Time, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
-
-		if config.L1BlockBoundBypass > 0 {
-			// #nosec G115
-			blockNumberWithPadding := arbmath.SaturatingUAdd(latestBlockNumber, uint64(config.L1BlockBoundBypass/ethPosBlockTime))
-			// #nosec G115
-			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
-			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
-			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
-		}
+	l1Bounds, err := b.getL1Bounds(ctx)
+	if err != nil {
+		return false, err
 	}
 
 	var getNextMessage func() (*arbostypes.MessageWithMetadata, error)
@@ -2140,26 +2152,26 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			break
 		}
 
-		if msg.Message.Header.BlockNumber < l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1BoundMinTimestampWithBypass {
+		if msg.Message.Header.BlockNumber < l1Bounds.l1BoundMinBlockNumberWithBypass || msg.Message.Header.Timestamp < l1Bounds.l1BoundMinTimestampWithBypass {
 			log.Warn(
 				"disabling L1 bound as batch posting message is close to the maximum delay",
 				"blockNumber", msg.Message.Header.BlockNumber,
-				"l1BoundMinBlockNumberWithBypass", l1BoundMinBlockNumberWithBypass,
+				"l1BoundMinBlockNumberWithBypass", l1Bounds.l1BoundMinBlockNumberWithBypass,
 				"timestamp", msg.Message.Header.Timestamp,
-				"l1BoundMinTimestampWithBypass", l1BoundMinTimestampWithBypass,
+				"l1BoundMinTimestampWithBypass", l1Bounds.l1BoundMinTimestampWithBypass,
 				"l1BlockBoundBypass", config.L1BlockBoundBypass,
 			)
-			l1BoundMaxBlockNumber = math.MaxUint64
-			l1BoundMaxTimestamp = math.MaxUint64
+			l1Bounds.l1BoundMaxBlockNumber = math.MaxUint64
+			l1Bounds.l1BoundMaxTimestamp = math.MaxUint64
 		}
-		if msg.Message.Header.BlockNumber > l1BoundMaxBlockNumber || msg.Message.Header.Timestamp > l1BoundMaxTimestamp {
+		if msg.Message.Header.BlockNumber > l1Bounds.l1BoundMaxBlockNumber || msg.Message.Header.Timestamp > l1Bounds.l1BoundMaxTimestamp {
 			b.lastHitL1Bounds = time.Now()
 			log.Info(
 				"not posting more messages because block number or timestamp exceed L1 bounds",
 				"blockNumber", msg.Message.Header.BlockNumber,
-				"l1BoundMaxBlockNumber", l1BoundMaxBlockNumber,
+				"l1BoundMaxBlockNumber", l1Bounds.l1BoundMaxBlockNumber,
 				"timestamp", msg.Message.Header.Timestamp,
-				"l1BoundMaxTimestamp", l1BoundMaxTimestamp,
+				"l1BoundMaxTimestamp", l1Bounds.l1BoundMaxTimestamp,
 			)
 			break
 		}
@@ -2239,21 +2251,22 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
+	hasL1Bound := config.l1BlockBound != l1BlockBoundIgnore
 	if b.building.firstNonDelayedMsg != nil && hasL1Bound && config.ReorgResistanceMargin > 0 {
 		firstMsgBlockNumber := b.building.firstNonDelayedMsg.Message.Header.BlockNumber
 		firstMsgTimeStamp := b.building.firstNonDelayedMsg.Message.Header.Timestamp
 		// #nosec G115
-		batchNearL1BoundMinBlockNumber := firstMsgBlockNumber <= arbmath.SaturatingUAdd(l1BoundMinBlockNumber, uint64(config.ReorgResistanceMargin/ethPosBlockTime))
+		batchNearL1BoundMinBlockNumber := firstMsgBlockNumber <= arbmath.SaturatingUAdd(l1Bounds.l1BoundMinBlockNumber, uint64(config.ReorgResistanceMargin/ethPosBlockTime))
 		// #nosec G115
-		batchNearL1BoundMinTimestamp := firstMsgTimeStamp <= arbmath.SaturatingUAdd(l1BoundMinTimestamp, uint64(config.ReorgResistanceMargin/time.Second))
+		batchNearL1BoundMinTimestamp := firstMsgTimeStamp <= arbmath.SaturatingUAdd(l1Bounds.l1BoundMinTimestamp, uint64(config.ReorgResistanceMargin/time.Second))
 		if batchNearL1BoundMinTimestamp || batchNearL1BoundMinBlockNumber {
 			log.Error(
 				"Disabling batch posting due to batch being within reorg resistance margin from layer 1 minimum block or timestamp bounds",
 				"reorgResistanceMargin", config.ReorgResistanceMargin,
 				"firstMsgTimeStamp", firstMsgTimeStamp,
-				"l1BoundMinTimestamp", l1BoundMinTimestamp,
+				"l1BoundMinTimestamp", l1Bounds.l1BoundMinTimestamp,
 				"firstMsgBlockNumber", firstMsgBlockNumber,
-				"l1BoundMinBlockNumber", l1BoundMinBlockNumber,
+				"l1BoundMinBlockNumber", l1Bounds.l1BoundMinBlockNumber,
 			)
 			return false, errors.New("batch is within reorg resistance margin from layer 1 minimum block or timestamp bounds")
 		}
@@ -2405,10 +2418,10 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.building.use4844 {
 			dapReaders = append(dapReaders, daprovider.NewReaderForBlobReader(&simulatedBlobReader{kzgBlobs}))
 		}
-		seqMsg := binary.BigEndian.AppendUint64([]byte{}, l1BoundMinTimestamp)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxTimestamp)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMinBlockNumber)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxBlockNumber)
+		seqMsg := binary.BigEndian.AppendUint64([]byte{}, l1Bounds.l1BoundMinTimestamp)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMaxTimestamp)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMinBlockNumber)
+		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMaxBlockNumber)
 		seqMsg = binary.BigEndian.AppendUint64(seqMsg, b.building.segments.delayedMsg)
 		seqMsg = append(seqMsg, sequencerMsg...)
 		b.building.muxBackend.seqMsg = seqMsg
@@ -2433,84 +2446,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		log.Debug("Successfully checked that the batch produces correct messages when ran through inbox multiplexer", "sequenceNumber", batchPosition.NextSeqNum)
 	}
 
-	if b.config().IsDecentralizedTimeboost {
-		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
-		if err != nil {
-			return false, err
-		}
-		decoded := base58.Decode(b.config().DecentralizedTimeboostPrivateKey)
-		privateKey, err := crypto.ToECDSA(decoded)
-		if err != nil {
-			return false, err
-		}
-		leader := committee.Members[batchPosition.NextSeqNum%uint64(len(committee.Members))]
-		pubkeybyes := crypto.CompressPubkey(&privateKey.PublicKey)
-		if !bytes.Equal(pubkeybyes, leader.SigKey) {
-			log.Info(
-				"batch not sent: not leader",
-				"sequenceNumber", batchPosition.NextSeqNum,
-				"from", batchPosition.MessageCount,
-				"to", b.building.msgCount,
-				"prevDelayed", batchPosition.DelayedMessageCount,
-				"currentDelayed", b.building.segments.delayedMsg,
-				"totalSegments", len(b.building.segments.rawSegments),
-				"numBlobs", len(kzgBlobs),
-				"key", b.config().DecentralizedTimeboostPrivateKey,
-			)
-			return false, nil
-		}
-		seqMsg := binary.BigEndian.AppendUint64([]byte{}, l1BoundMinTimestamp)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxTimestamp)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMinBlockNumber)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1BoundMaxBlockNumber)
-		seqMsg = binary.BigEndian.AppendUint64(seqMsg, b.building.segments.delayedMsg)
-		seqMsg = append(seqMsg, sequencerMsg...)
-		args := decentralized_timeboost_types.BatchPosterArgs{
-			SequencerNumber:          batchPosition.NextSeqNum,
-			AfterDelayedMessagesRead: batchPosition.DelayedMessageCount,
-			GasRefunder:              b.gasRefunderAddr,
-			PreviousMessageCount:     uint64(batchPosition.MessageCount),
-			NewMessageCount:          uint64(b.building.msgCount),
-			Data:                     seqMsg,
-		}
-		request := map[string]interface{}{
-			"jsonrpc": "2.0",
-			"method":  "batcher_submitBatch",
-			"params":  []decentralized_timeboost_types.BatchPosterArgs{args},
-			"id":      1,
-		}
-		jsonData, err := json.Marshal(request)
-		if err != nil {
-			return false, fmt.Errorf("failed to marshal JSON: %w", err)
-		}
-
-		urls := []string{"http://localhost:8945", "http://localhost:8947"}
-		client := http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				DialContext: (&net.Dialer{
-					Timeout:   5 * time.Second,
-					KeepAlive: 30 * time.Second,
-				}).DialContext,
-				Dial: func(network, addr string) (net.Conn, error) {
-					return net.Dial(network, addr)
-				},
-			},
-		}
-		for _, url := range urls {
-			resp, err := client.Post(url, "application/json", bytes.NewBuffer(jsonData))
-			if err != nil {
-				return false, fmt.Errorf("HTTP request failed: %w", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusOK {
-				log.Warn("error code")
-				return false, fmt.Errorf("server returned status: %s", resp.Status)
-			}
-		}
-
-	}
 	tx, err := b.dataPoster.PostTransaction(ctx,
 		firstUsefulMsgTime,
 		nonce,
@@ -2528,6 +2463,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	b.postedFirstBatch = true
 	log.Info(
 		"BatchPoster: batch sent",
+		"key", hex.EncodeToString(b.batchVerifier.GetCompressedPubKey()),
 		"sequenceNumber", batchPosition.NextSeqNum,
 		"from", batchPosition.MessageCount,
 		"to", b.building.msgCount,
@@ -2535,7 +2471,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		"currentDelayed", b.building.segments.delayedMsg,
 		"totalSegments", len(b.building.segments.rawSegments),
 		"numBlobs", len(kzgBlobs),
-		"key", b.config().DecentralizedTimeboostPrivateKey,
 	)
 
 	recentlyHitL1Bounds := time.Since(b.lastHitL1Bounds) < config.PollInterval*3
@@ -2600,28 +2535,128 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	return true, nil
 }
 
-func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_types.BatchPosterArgs) error {
+func (b *BatchPoster) getL1Bounds(ctx context.Context) (*l1Bounds, error) {
+	var l1BoundMaxBlockNumber uint64 = math.MaxUint64
+	var l1BoundMaxTimestamp uint64 = math.MaxUint64
+	var l1BoundMinBlockNumber uint64
+	var l1BoundMinTimestamp uint64
+	var l1BoundMinBlockNumberWithBypass uint64
+	var l1BoundMinTimestampWithBypass uint64
+	config := b.config()
+
+	hasL1Bound := config.l1BlockBound != l1BlockBoundIgnore
+	if hasL1Bound {
+		var l1Bound *types.Header
+		var err error
+		if config.l1BlockBound == l1BlockBoundLatest {
+			l1Bound, err = b.l1Reader.LastHeader(ctx)
+		} else if config.l1BlockBound == l1BlockBoundSafe || config.l1BlockBound == l1BlockBoundDefault {
+			l1Bound, err = b.l1Reader.LatestSafeBlockHeader(ctx)
+			if errors.Is(err, headerreader.ErrBlockNumberNotSupported) && config.l1BlockBound == l1BlockBoundDefault {
+				// If getting the latest safe block is unsupported, and the L1BlockBound configuration is the default,
+				// fall back to using the latest block instead of the safe block.
+				l1Bound, err = b.l1Reader.LastHeader(ctx)
+			}
+		} else {
+			if config.l1BlockBound != l1BlockBoundFinalized {
+				log.Error(
+					"unknown L1 block bound config value; falling back on using finalized",
+					"l1BlockBoundString", config.L1BlockBound,
+					"l1BlockBoundEnum", config.l1BlockBound,
+				)
+			}
+			l1Bound, err = b.l1Reader.LatestFinalizedBlockHeader(ctx)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error getting L1 bound block: %w", err)
+		}
+
+		maxTimeVariationDelayBlocks, maxTimeVariationFutureBlocks, maxTimeVariationDelaySeconds, maxTimeVariationFutureSeconds, err := b.seqInbox.MaxTimeVariation(&bind.CallOpts{
+			Context:     ctx,
+			BlockNumber: l1Bound.Number,
+		})
+		if err != nil {
+			// This might happen if the latest finalized block is old enough that our L1 node no longer has its state
+			log.Warn("error getting max time variation on L1 bound block; falling back on latest block", "err", err)
+			maxTimeVariationDelayBlocks, maxTimeVariationFutureBlocks, maxTimeVariationDelaySeconds, maxTimeVariationFutureSeconds, err = b.seqInbox.MaxTimeVariation(&bind.CallOpts{Context: ctx})
+			if err != nil {
+				return nil, fmt.Errorf("error getting max time variation: %w", err)
+			}
+		}
+
+		l1BoundBlockNumber := arbutil.ParentHeaderToL1BlockNumber(l1Bound)
+		l1BoundMaxBlockNumber = arbmath.SaturatingUAdd(l1BoundBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationFutureBlocks))
+		l1BoundMaxTimestamp = arbmath.SaturatingUAdd(l1Bound.Time, arbmath.BigToUintSaturating(maxTimeVariationFutureSeconds))
+
+		latestHeader, err := b.l1Reader.LastHeader(ctx)
+		if err != nil {
+			return nil, err
+		}
+		latestBlockNumber := arbutil.ParentHeaderToL1BlockNumber(latestHeader)
+		l1BoundMinBlockNumber = arbmath.SaturatingUSub(latestBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+		l1BoundMinTimestamp = arbmath.SaturatingUSub(latestHeader.Time, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+
+		if config.L1BlockBoundBypass > 0 {
+			// #nosec G115
+			blockNumberWithPadding := arbmath.SaturatingUAdd(latestBlockNumber, uint64(config.L1BlockBoundBypass/ethPosBlockTime))
+			// #nosec G115
+			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
+			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+		}
+	}
+	return &l1Bounds{
+		l1BoundMaxBlockNumber:           l1BoundMaxBlockNumber,
+		l1BoundMaxTimestamp:             l1BoundMaxTimestamp,
+		l1BoundMinBlockNumber:           l1BoundMinBlockNumber,
+		l1BoundMinTimestamp:             l1BoundMinTimestamp,
+		l1BoundMinBlockNumberWithBypass: l1BoundMinBlockNumberWithBypass,
+		l1BoundMinTimestampWithBypass:   l1BoundMinTimestampWithBypass,
+	}, nil
+}
+
+func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_batch_verifier.BatchPosterArgs) ([]byte, error) {
 	_, batchPositionBytes, err := b.dataPoster.GetNextNonceAndMeta(b.GetContext())
+	if err != nil {
+		return nil, err
+	}
+
+	signedData, err := b.batchVerifier.GetSignedDataFromBytes(args.SignedData)
+	if err != nil {
+		return nil, err
+	}
+
+	var batchPosition batchPosterPosition
+	if err := rlp.DecodeBytes(batchPositionBytes, &batchPosition); err != nil {
+		return nil, fmt.Errorf("error decoding batch position: %w", err)
+	}
+	if err = b.batchVerifier.VerifySignedDataCorrectness(
+		signedData,
+		batchPosition.NextSeqNum,
+		b.gasRefunderAddr,
+		batchPosition.MessageCount,
+		args,
+	); err != nil {
+		return nil, err
+	}
+
+	if err = b.VerifiyBatchCorrectness(batchPosition, signedData); err != nil {
+		return nil, err
+	}
+
+	data, err := b.batchVerifier.HashAndSignBatchData(args.SignedData)
+	if err != nil {
+		return nil, err
+	}
+	return data.Signature, err
+}
+
+func (b *BatchPoster) VerifiyBatchCorrectness(batchPosition batchPosterPosition, signedData *decentralized_timeboost_batch_verifier.SigningData) error {
+	ctx := b.GetContext()
+	l1Bounds, err := b.getL1Bounds(ctx)
 	if err != nil {
 		return err
 	}
-	var batchPosition batchPosterPosition
-	if err := rlp.DecodeBytes(batchPositionBytes, &batchPosition); err != nil {
-		return fmt.Errorf("decoding batch position: %w", err)
-	}
-	if args.SequencerNumber != batchPosition.NextSeqNum {
-		return fmt.Errorf("failed to match seq num")
-	}
-	if args.AfterDelayedMessagesRead != batchPosition.DelayedMessageCount {
-		return fmt.Errorf("failed to match delayed messages")
-	}
-	if args.GasRefunder != b.gasRefunderAddr {
-		return fmt.Errorf("failed to match gas refunder")
-	}
-	if args.PreviousMessageCount != uint64(batchPosition.MessageCount) {
-		return fmt.Errorf("failed to match message count")
-	}
-
 	dapReaders := b.dapReaders
 
 	muxBackend := &simulatedMuxBackend{
@@ -2631,46 +2666,50 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 
 	prevDelayedMessagesRead := batchPosition.DelayedMessageCount
 
-	for index := args.PreviousMessageCount; index < args.NewMessageCount; index++ {
-		message, err := b.streamer.getMessageWithMetadataAndBlockInfo(arbutil.MessageIndex(index))
+	var index arbutil.MessageIndex
+	for index = signedData.PreviousMessageCount; index < signedData.NewMessageCount; index++ {
+		message, err := b.streamer.getMessageWithMetadataAndBlockInfo(index)
 		if err != nil {
-			return fmt.Errorf("error")
+			return fmt.Errorf("error getting message at index: %d, err: %w", index, err)
 		}
-		muxBackend.allMsgs[arbutil.MessageIndex(index)] = &message.MessageWithMeta
-		// add the message to delayed message queue if delayed messages read
-		// increases in this message
+		muxBackend.allMsgs[index] = &message.MessageWithMeta
 		if prevDelayedMessagesRead < message.MessageWithMeta.DelayedMessagesRead {
 			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &message.MessageWithMeta)
 			prevDelayedMessagesRead += 1
 		}
 	}
 
-	muxBackend.seqMsg = args.Data
+	seqMsg := binary.BigEndian.AppendUint64([]byte{}, l1Bounds.l1BoundMinTimestamp)
+	seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMaxTimestamp)
+	seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMinBlockNumber)
+	seqMsg = binary.BigEndian.AppendUint64(seqMsg, l1Bounds.l1BoundMaxBlockNumber)
+	seqMsg = binary.BigEndian.AppendUint64(seqMsg, signedData.AfterDelayedMessagesRead)
+	seqMsg = append(seqMsg, signedData.Data...)
+
+	muxBackend.seqMsg = seqMsg
 	muxBackend.delayedInboxStart = batchPosition.DelayedMessageCount
 	muxBackend.SetPositionWithinMessage(0)
 
-	simMux := arbstate.NewInboxMultiplexer(muxBackend,
-		prevDelayedMessagesRead,
-		dapReaders, daprovider.KeysetValidate)
+	simMux := arbstate.NewInboxMultiplexer(
+		muxBackend,
+		batchPosition.DelayedMessageCount,
+		dapReaders,
+		daprovider.KeysetValidate,
+	)
 
-	for i := args.PreviousMessageCount; i < args.NewMessageCount; i++ {
-		msg, err := simMux.Pop(b.GetContext())
+	for index = signedData.PreviousMessageCount; index < signedData.NewMessageCount; index++ {
+		msg, err := simMux.Pop(ctx)
 		if err != nil {
-			log.Error("sim pop error", "err", err)
 			return err
 		}
-		if msg.DelayedMessagesRead != muxBackend.allMsgs[arbutil.MessageIndex(i)].DelayedMessagesRead {
-			log.Error("delayed messages do not match")
-			return fmt.Errorf("delayed messages do not match")
+		if msg.DelayedMessagesRead != muxBackend.allMsgs[index].DelayedMessagesRead {
+			return fmt.Errorf("delayed messages do not match! got: %d, wanted: %d", msg.DelayedMessagesRead, muxBackend.allMsgs[index].DelayedMessagesRead)
 		}
 
-		if !msg.Message.Equals(muxBackend.allMsgs[arbutil.MessageIndex(i)].Message) {
-			log.Error("message mismatch")
-			return fmt.Errorf("error")
+		if !msg.Message.Equals(muxBackend.allMsgs[index].Message) {
+			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message, muxBackend.allMsgs[index].Message)
 		}
-
 	}
-	log.Info("successfully verified batch!!", "key", b.config().DecentralizedTimeboostPrivateKey)
 	return nil
 }
 
