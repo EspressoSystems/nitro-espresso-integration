@@ -12,6 +12,15 @@ socat VSOCK-LISTEN:8004,fork,keepalive TCP:$L1_NODE,keepalive &
 socat VSOCK-LISTEN:8005,fork,keepalive TCP:$L1_BEACON_NODE,keepalive &
 # NFS Server
 socat VSOCK-LISTEN:20000,fork,keepalive TCP:$NFS_SERVER,keepalive &
+# Decaf query node 1
+socat VSOCK-LISTEN:8006,fork,keepalive TCP:query-0.decaf.testnet.espresso.network:443,keepalive &
+# Decaf query node 2
+socat VSOCK-LISTEN:8007,fork,keepalive TCP:query-1.decaf.testnet.espresso.network:443,keepalive &
+# Decaf query node 3
+socat VSOCK-LISTEN:8008,fork,keepalive TCP:query-2.decaf.testnet.espresso.network:443,keepalive &
+# Decaf query node 4
+socat VSOCK-LISTEN:8009,fork,keepalive TCP:query-3.decaf.testnet.espresso.network:443,keepalive &
+
 
 # Inbound enclave connections
 
