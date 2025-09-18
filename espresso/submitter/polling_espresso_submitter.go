@@ -117,7 +117,7 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 	}, nil
 }
 
-func (s *PollingEspressoSubmitter) enqueuePendingTransaction(pos []arbutil.MessageIndex) error {
+func (s *PollingEspressoSubmitter) EnqueuePendingTransaction(pos []arbutil.MessageIndex) error {
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
 	err := s.SubmitEspressoTransactionPos(pos)
@@ -723,7 +723,7 @@ func (s *PollingEspressoSubmitter) NotifyNewPendingMessages(firstMsgIdx arbutil.
 	}
 
 	if len(messagesToEnqueue) > 0 {
-		err := s.enqueuePendingTransaction(messagesToEnqueue)
+		err := s.EnqueuePendingTransaction(messagesToEnqueue)
 		if err != nil {
 			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
 			return err
