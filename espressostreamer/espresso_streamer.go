@@ -27,6 +27,7 @@ import (
 )
 
 const NextHotshotBlockKey = "nextHotshotBlock"
+const HotshotBlockSignatureKey = "hotshotBlockSignature"
 
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
@@ -48,7 +49,8 @@ type EspressoStreamerInterface interface {
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
-	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
+	StoreHotshotBlock(batch ethdb.Batch, nextHotshotBlock uint64) error
+	StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error
 	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
@@ -321,15 +323,39 @@ func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64
 	return nextHotshotBlock, nil
 }
 
-func (s *EspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
+func (s *EspressoStreamer) StoreHotshotBlock(batch ethdb.Batch, nextHotshotBlock uint64) error {
 	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
 	if err != nil {
 		return fmt.Errorf("failed to encode next hotshot block: %w", err)
 	}
 
-	err = db.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
+	err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
 	if err != nil {
 		return fmt.Errorf("failed to put next hotshot block: %w", err)
+	}
+
+	return nil
+}
+
+func (s *EspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
+	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
+	if err != nil {
+		return fmt.Errorf("failed to encode next hotshot block: %w", err)
+	}
+
+	err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
+	if err != nil {
+		return fmt.Errorf("failed to put next hotshot block: %w", err)
+	}
+
+	signatureBytes, err := rlp.EncodeToBytes(signature)
+	if err != nil {
+		return fmt.Errorf("failed to encode signature: %w", err)
+	}
+
+	err = batch.Put([]byte(HotshotBlockSignatureKey), signatureBytes)
+	if err != nil {
+		return fmt.Errorf("failed to put signature: %w", err)
 	}
 
 	return nil
