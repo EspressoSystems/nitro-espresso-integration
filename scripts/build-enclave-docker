@@ -56,13 +56,13 @@ cd "$repo_dir"
 export PATH="$build_dir/aws-nitro-enclaves-cli/build/nitro_cli/release:$PATH"
 
 echo "Building Docker image..."
-docker build -f Dockerfile --no-cache --target nitro-node-enclave -t nitro-node-enclave:latest .
+docker build -f Dockerfile --no-cache --target xchain-enclave -t xchain-enclave:latest .
 
 mkdir -p "$build_dir/output"
 mkdir -p "$build_dir/log"
 
 echo "Creating EIF file..."
-NITRO_CLI_LOGS_PATH="$build_dir/log" NITRO_CLI_BLOBS="$blobs_path" nitro-cli build-enclave --docker-uri nitro-node-enclave:latest --output-file "$build_dir/output/nitro.eif"
+NITRO_CLI_LOGS_PATH="$build_dir/log" NITRO_CLI_BLOBS="$blobs_path" nitro-cli build-enclave --docker-uri xchain-enclave:latest --output-file "$build_dir/output/nitro.eif"
 
 echo "Build complete!"
 echo "EIF file: $build_dir/output/nitro.eif"

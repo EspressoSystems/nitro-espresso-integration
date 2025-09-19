@@ -437,5 +437,9 @@ RUN chmod 700 runeif.sh && \
     chmod 700 close_chain.sh
 ENTRYPOINT [ "/home/user/runeif.sh" ]
 
+FROM nitro-node-enclave AS xchain-enclave
+# Copy Hyperlane validator binary from the official image
+COPY --from=gcr.io/abacus-labs-dev/hyperlane-agent:agents-v1.4.0 /app/validator /app/validator
+
 FROM nitro-node AS nitro-node-default
 # Just to ensure nitro-node-dist is default
