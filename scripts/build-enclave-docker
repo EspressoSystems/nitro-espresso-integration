@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+build_dir="$repo_dir/target/enclave-build"
+mkdir -p "$build_dir"
+blobs_path="$build_dir/blobs"
+mkdir -p "$blobs_path"
+
+cd "$build_dir"
+
+echo "Building Nitro CLI..."
+if [ ! -d "aws-nitro-enclaves-cli" ]; then
+    git clone https://github.com/aws/aws-nitro-enclaves-cli.git
+fi
+cd aws-nitro-enclaves-cli
+make nitro-cli
+
+cd "$build_dir"
+
+if [ ! "$(ls -A "$blobs_path")" ]; then
+    echo "Building Nitro kernel blobs..."
+    if [ ! -d "aws-nitro-enclaves-sdk-bootstrap" ]; then
+        git clone https://github.com/aws/aws-nitro-enclaves-sdk-bootstrap.git
+    fi
+    cd aws-nitro-enclaves-sdk-bootstrap
+
+    # Add kernel config for device mapper and crypto support
+    tee -a kernel/microvm-kernel-config-x86_64 <<EOF
+CONFIG_MD=y
+CONFIG_MD_BITMAP_FILE=y
+CONFIG_BLK_DEV_DM_BUILTIN=y
+CONFIG_BLK_DEV_DM=y
+CONFIG_DM_CRYPT=y
+EOF
+
+    tee -a kernel/microvm-kernel-config-aarch64 <<EOF
+CONFIG_MD=y
+CONFIG_MD_BITMAP_FILE=y
+CONFIG_BLK_DEV_DM_BUILTIN=y
+CONFIG_BLK_DEV_DM=y
+CONFIG_DM_CRYPT=y
+EOF
+
+    docker build -t blobs_all .
+    docker create --name extract_blobs blobs_all
+    docker cp extract_blobs:/blobs/. "$blobs_path"
+    docker rm extract_blobs
+else
+    echo "Using cached kernel blobs"
+fi
+
+cd "$repo_dir"
+
+export PATH="$build_dir/aws-nitro-enclaves-cli/build/nitro_cli/release:$PATH"
+
+echo "Building Docker image..."
+docker build -f Dockerfile --no-cache --target nitro-node-enclave -t nitro-node-enclave:latest .
+
+mkdir -p "$build_dir/output"
+mkdir -p "$build_dir/log"
+
+echo "Creating EIF file..."
+NITRO_CLI_LOGS_PATH="$build_dir/log" NITRO_CLI_BLOBS="$blobs_path" nitro-cli build-enclave --docker-uri nitro-node-enclave:latest --output-file "$build_dir/output/nitro.eif"
+
+echo "Build complete!"
+echo "EIF file: $build_dir/output/nitro.eif"
