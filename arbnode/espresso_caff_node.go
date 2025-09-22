@@ -176,6 +176,7 @@ func NewEspressoCaffNode(
 		batcherAddrMonitor.GetValidAddresses,
 		configFetcher().RetryTime,
 		false,
+		nil,
 	)
 
 	fromBlock := configFetcher().FromBlock

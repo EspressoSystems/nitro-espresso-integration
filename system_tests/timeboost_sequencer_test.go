@@ -29,6 +29,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.l1StackConfig.WSHost = "0.0.0.0"
 	builder.l1StackConfig.DataDir = t.TempDir()
 	builder.l1StackConfig.WSModules = append(builder.l1StackConfig.WSModules, "eth")
+	builder.l2StackConfig.HTTPModules = append(builder.l2StackConfig.HTTPModules, "batcher")
 	builder.l2StackConfig.HTTPPort = 8945
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 	builder.l2StackConfig.IPCPath = tmpPath(t, "test.ipc")
@@ -68,7 +69,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.ParentChainFinalizationTime = 2 * time.Second
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
-	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:5000"
+	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
 
 	cleanup := builder.Build(t)
 

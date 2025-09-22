@@ -1,0 +1,34 @@
+stamp = "/tmp/timeboost.1.stamp"
+
+[net.public]
+address = "node1:8010"
+http_api = "node1:8014"
+
+[net.internal]
+address = "node1:8013"
+
+[keys.signing]
+secret = "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs"
+public = "vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR"
+
+[keys.dh]
+secret = "4hjtciEvuoFVT55nAzvdP9E76r18QwntWwFoeginCGnP"
+public = "FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"
+
+[keys.dkg]
+secret = "ARtqWGmRWrBqZUr4MmiLaPgzjsiKp5USsC9iQNRMZYy4"
+public = "7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"
+
+[chain]
+namespace = 412346
+
+[chain.parent]
+id = 1337
+rpc_url = "http://host.docker.internal:8545/"
+ibox_contract = "0x1E40d26e4107a7f68903a30CE950e58200615014"
+block_tag = "latest"
+key_manager_contract = "0x0115F8541162035781B743F4f6DBf6915194656d"
+
+[espresso]
+base_url = "http://espresso-dev-node:41000/v1/"
+websockets_base_url = "ws://espresso-dev-node:41000/v1/"

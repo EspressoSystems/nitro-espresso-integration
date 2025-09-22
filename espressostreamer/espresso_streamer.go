@@ -22,6 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/helpers"
 	"github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -78,6 +79,7 @@ type EspressoStreamer struct {
 
 	batcherAddressesFetcher  func(l1Height uint64) []common.Address
 	isDecentralizedTimeboost bool
+	timeboostKeyManager      *decentralizedtimeboostgen.KeyManager
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -91,6 +93,7 @@ func NewEspressoStreamer(
 	batcherAddressesFetcher func(l1Height uint64) []common.Address,
 	retryTime time.Duration,
 	isDecentralizedTimeboost bool,
+	keyManager *decentralizedtimeboostgen.KeyManager,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -108,6 +111,7 @@ func NewEspressoStreamer(
 		retryTime:                retryTime,
 		currentMessagePos:        1,
 		isDecentralizedTimeboost: isDecentralizedTimeboost,
+		timeboostKeyManager:      keyManager,
 	}
 }
 
@@ -361,7 +365,7 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos)
+	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.timeboostKeyManager)
 	if err != nil {
 		return nil, err
 	}

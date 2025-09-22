@@ -1,66 +1,46 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:delayed-msg
+    image: ghcr.io/espressosystems/timeboost:contract
     command:
       [
         "/app/timeboost",
-        "--id", "0",
-        "--http-port", "8800",
-        "--keyset-file", "/app/timeboost-keyset.json",
-        "--stamp", "/tmp/timeboost.stamp",
-        "--namespace", "412346",
-        "--espresso-base-url", "http://espresso-dev-node:41000/v1/",
-        "--espresso-websocket-url", "ws://espresso-dev-node:41000/v1/",
+        "--committee-id", "0",
+        "--config", "/app/node_0.toml",
         "--https-only", "false"
       ]
     environment:
       - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
-      - TIMEBOOST_SAILFISH_PORT=8000
-      - TIMEBOOST_DECRYPT_PORT=10000
-      - TIMEBOOST_CERTIFIER_PORT=11000
-      - TIMEBOOST_RPC_PORT=8800
-      - TIMEBOOST_METRICS_PORT=9000
     ports:
       - "8000:8000"
-      - "10000:10000"
-      - "8800:8800"
-      - "11000:11000"
-      - "9000:9000"
-      - "5000:5000"
+      - "8004:8004"
+      - "8003:8003"
+      - "8200:8200"
+      - "8100:8100"
     volumes:
-      - ./timeboost-keyset.json:/app/timeboost-keyset.json
+      - ./node_0.toml:/app/node_0.toml
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:delayed-msg
+    image: ghcr.io/espressosystems/timeboost:contract
     command:
       [
         "/app/timeboost",
-        "--id", "1",
-        "--http-port", "8801",
-        "--keyset-file", "/app/timeboost-keyset.json",
-        "--stamp", "/tmp/timeboost.stamp",
-        "--namespace", "412346",
-        "--espresso-base-url", "http://host.docker.internal:41000/",
-        "--espresso-websocket-url", "ws://host.docker.internal:41000/",
+        "--committee-id", "0",
+        "--config", "/app/node_1.toml",
+        "--https-only", "false"
       ]
     environment:
       - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,rubusta=info
-      - TIMEBOOST_SAILFISH_PORT=8001
-      - TIMEBOOST_DECRYPT_PORT=10001
-      - TIMEBOOST_CERTIFIER_PORT=11001
-      - TIMEBOOST_RPC_PORT=8801
-      - TIMEBOOST_METRICS_PORT=9001
     ports:
-      - "8001:8001"
-      - "10001:10001"
-      - "8801:8801"
-      - "11001:11001"
-      - "9001:9001"
+      - "8010:8010"
+      - "8014:8014"
+      - "8013:8013"
+      - "8210:8210"
+      - "8110:8110"
     volumes:
-      - ./timeboost-keyset.json:/app/timeboost-keyset.json
+      - ./node_1.toml:/app/node_1.toml
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

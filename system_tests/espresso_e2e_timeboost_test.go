@@ -10,20 +10,27 @@ import (
 	"math/big"
 	"net/http"
 	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/agglayer/aggkit/test/contracts/erc1967proxy"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/prysmaticlabs/go-ssz"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 )
 
 var timeBoostHealth = "/i/health"
 var timeBoostSubmit = "/v1/submit/regular"
 var timeboostUrls = []string{
-	"http://localhost:8800", "http://localhost:8801",
+	"http://localhost:8004", "http://localhost:8014",
 }
 
 func runDecentralizedTimeboost() func() {
@@ -150,6 +157,73 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 	return expectedTxs
 }
 
+func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, builder *NodeBuilder) {
+	parentChainTransactionOpts := builder.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
+	address, tx, _, err := decentralizedtimeboostgen.DeployKeyManager(&parentChainTransactionOpts, builder.L1.Client)
+	if err != nil {
+		t.Fatalf("error deploying key manager contract: %v", err)
+	}
+	_, err = bind.WaitMined(ctx, builder.L1.Client, tx)
+	Require(t, err)
+	members := []decentralizedtimeboostgen.KeyManagerCommitteeMember{
+		{
+			SigKey:         base58.Decode("eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX"),
+			DhKey:          base58.Decode("AZrLbV37HAGhBWh49JHzup6Wfpu2AAGWGJJnxCDJibiY"),
+			DkgKey:         base58.Decode("7PdmfTS45d2hTXB8NcrTmvDwUVBimpYBbrBaGnu3i5Ne65krVfUpbe7bYRHS3AEg7H"),
+			NetworkAddress: "node0:8000",
+		},
+		{
+			SigKey:         base58.Decode("vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR"),
+			DhKey:          base58.Decode("FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"),
+			DkgKey:         base58.Decode("7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"),
+			NetworkAddress: "node1:8010",
+		},
+	}
+
+	keyManagerABI, err := abi.JSON(strings.NewReader(decentralizedtimeboostgen.KeyManagerABI))
+	Require(t, err)
+	initData, err := keyManagerABI.Pack("initialize", parentChainTransactionOpts.From)
+	Require(t, err)
+
+	proxyAddr, tx, _, err := erc1967proxy.DeployErc1967proxy(&parentChainTransactionOpts, builder.L1.Client, address, initData)
+	Require(t, err)
+	receipt, err := bind.WaitMined(ctx, builder.L1.Client, tx)
+	Require(t, err)
+	if receipt.Status == 0 {
+		t.Fatal("Proxy deployment failed")
+	}
+
+	proxyContract, err := decentralizedtimeboostgen.NewKeyManager(proxyAddr, builder.L1.Client)
+	if err != nil {
+		t.Fatalf("Failed to bind proxy as KeyManager: %v", err)
+	}
+
+	manager, err := proxyContract.Manager(&bind.CallOpts{})
+	if err != nil {
+		t.Fatalf("Failed to call manager(): %v", err)
+	}
+	if manager != parentChainTransactionOpts.From {
+		t.Fatalf("Manager not set correctly: got %s, want %s", manager.Hex(), parentChainTransactionOpts.From.Hex())
+	}
+
+	timestamp := time.Now().Unix() - 1000
+	if timestamp < 0 {
+		t.Fatalf("timestamp cannot be negative")
+	}
+	tx, err = proxyContract.SetNextCommittee(&parentChainTransactionOpts, uint64(timestamp), members)
+	Require(t, err)
+	receipt, err = bind.WaitMined(ctx, builder.L1.Client, tx)
+	Require(t, err)
+	if receipt.Status == 0 {
+		t.Fatal("failed to set next committee", "err", err)
+	}
+
+	id, err := proxyContract.CurrentCommitteeId(&bind.CallOpts{})
+	Require(t, err)
+	_, err = proxyContract.GetCommitteeById(&bind.CallOpts{}, id)
+	Require(t, err)
+}
+
 func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -162,6 +236,8 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 
 	err := waitForL1Node(ctx)
 	Require(t, err)
+
+	setupTimeboostKeyManagerContract(t, ctx, builder)
 
 	shutdown := runDecentralizedTimeboost()
 	defer shutdown()

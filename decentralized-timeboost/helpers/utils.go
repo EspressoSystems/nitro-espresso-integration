@@ -8,16 +8,17 @@ import (
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
-	"github.com/btcsuite/btcutil/base58"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/zeebo/blake3"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 )
 
 type DecentralizedTimeboostParsedMessage struct {
@@ -44,39 +45,43 @@ func GetTimeboostBlockHash(round uint64, payload []byte) ([]byte, error) {
 }
 
 // Validate the signatures in the timeboost generate certificate against the committee for one honest threshold
-func ValidateTimeboostCertificate(commitment []byte, sigs map[uint8][]byte) error {
-	// TODO: These should be read from contract, for now use the hard coded keyset.json for our e2e test
-	publicKeyMap := map[uint8][]byte{
-		0: base58.Decode("qkoZ7xPFuTjNpKmn3SyWL2Y6WLm89wi9jNkDuu9KefXv"),
-		1: base58.Decode("28y18s4egBUnxoLSJY8vCYXV8KXaKYysD6tUen7syFyPt"),
-	}
-
+func ValidateTimeboostCertificate(
+	commitment []byte,
+	sigs map[uint8][]byte,
+	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
+) error {
 	validSigs := 0
+	oneHonestThreshold := (len(members)-1)/3 + 1
+	validCert := false
 	for keyId, sig := range sigs {
-		pubKey, err := crypto.DecompressPubkey(publicKeyMap[keyId])
-		if err != nil {
-			return err
-		}
-		compressedBytes := crypto.CompressPubkey(pubKey)
+		member := members[int(keyId)]
 		hasher := sha256.New()
 		if _, err := hasher.Write(commitment); err != nil {
 			return err
 		}
-		if !crypto.VerifySignature(compressedBytes, hasher.Sum(nil), sig) {
+		if !crypto.VerifySignature(member.SigKey, hasher.Sum(nil), sig) {
 			// Continue through rest of signatures we need f + 1
 			log.Warn("signature verification failed for key", "id", keyId)
 			continue
 		}
 		validSigs += 1
+		if validSigs >= oneHonestThreshold {
+			validCert = true
+			break
+		}
 	}
-	oneHonestThreshold := (len(publicKeyMap)-1)/3 + 1
-	if validSigs < oneHonestThreshold {
+	if !validCert {
 		return fmt.Errorf("not enough signatures found in certificate. wanted: %d have: %d", oneHonestThreshold, validSigs)
 	}
 	return nil
 }
 
-func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, streamerCurrentPos uint64) (*DecentralizedTimeboostParsedMessage, error) {
+func ParseTimeboostEspressoTransaction(
+	tx espressoTypes.Bytes,
+	l1Height uint64,
+	streamerCurrentPos uint64,
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+) (*DecentralizedTimeboostParsedMessage, error) {
 	var block decentralized_timeboost_types.CertifiedBlock
 	if err := cbor.Unmarshal(tx, &block); err != nil {
 		log.Warn("cbor error decoding certified block", "err", err)
@@ -109,7 +114,12 @@ func ParseTimeboostEspressoTransaction(tx espressoTypes.Bytes, l1Height uint64, 
 	}
 
 	// Validate the commitment against the committee signatures
-	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures); err != nil {
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
+	if err != nil {
+		log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
+		return nil, err
+	}
+	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
 		return nil, err
 	}
 
