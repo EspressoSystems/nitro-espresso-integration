@@ -15,7 +15,7 @@ import (
 )
 
 // MultiWorkerQueueEspressoSubmitter is an implementation of `EspressoSubmitter`
-// that utilities multiple worker queues to perform Transaction Submission to
+// that utilizes multiple worker queues to perform Transaction Submission to
 // Espresso, and ensure its inclusion.
 //
 // It approaches the problem by dividing up the task into two separate phases,
