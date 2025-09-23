@@ -13,6 +13,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -89,8 +90,8 @@ var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
 	InitialFinalizedSequencerMessageCount: big.NewInt(0),
-	NumberOfSubmitTransactionWorkers:      getNumCPUs() * 2,
-	NumberOfTransactionIncludedWorkers:    getNumCPUs() * 2,
+	NumberOfSubmitTransactionWorkers:      util.GetNumCPUs() * 2,
+	NumberOfTransactionIncludedWorkers:    util.GetNumCPUs() * 2,
 	MessageIndexQueueSize:                 1024,
 	SubmitTransactionsQueueSize:           1024,
 	TransactionIncludedQueueSize:          1024,

@@ -24,55 +24,9 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-// signedInteger represents any type that is a signed integer, or whose
-// underlying type is a signed integer.
-type signedInteger interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64
-}
-
-// convertToUint64WithFallback is a helper function that converts a signed
-// integer value to a type whose underlying type is an unsigned 64-bit integer,
-// and returns a fallback value if the signed value is negative. If the value
-func convertToUint64WithFallback[T signedInteger, U ~uint64](value T, fallback U) U {
-	if value < 0 {
-		return fallback
-	}
-
-	return U(value)
-}
-
-// unsignedInteger represents any type that is an unsigned integer, or whose
-// underlying type is an unsigned integer.
-type unsignedInteger interface {
-	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
-}
-
-// convertToInt64WithFallback is a helper function that converts an unsigned
-// integer value to a type whose underlying type is a signed 64-bit integer,
-// and returns a fallback value if the unsigned value is greater than the
-// maximum value for a signed 64-bit integer.
-func convertToInt64WithFallback[T unsignedInteger, U ~int64](value T, fallback U) U {
-	if uint64(value) > 0x7FFF_FFFF_FFFF_FFFF {
-		return fallback
-	}
-
-	return U(value)
-}
-
-// getNumCPUs is a helper function that returns the number of CPUs available
-// to process.  This returns the value of [runtime.NumCPU] if it is greater
-// than 0, otherwise it returns 1.
-//
-// NOTE: this function is provided to prevent the linting error for converting
-// between an int and a uint.
-func getNumCPUs() uint64 {
-	// We should always have at least one CPU core available, otherwise
-	// how is this code even being run?
-	return convertToUint64WithFallback[int, uint64](2, 1)
-}
 
 // MultiWorkerQueueEspressoSubmitter is an implementation of `EspressoSubmitter`
 // that utilities multiple worker queues to perform Transaction Submission to
@@ -207,18 +161,14 @@ func (n *NitroMessageToEspressoTransactionAdapter) fetchMessageForPos(pos arbuti
 	return b, nil
 }
 
-type RangeInclusive[T integer] struct {
-	Start, End T
-}
-
 // bundleTransactions builds an Espresso Transaction attempting to bundle as
 // many messages as possible into a single transaction.
 func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactions(startPos, endPos arbutil.MessageIndex) (arbutil.MessageIndex, error) {
 	i := startPos
-	pendingTxnsPos := createSliceOfIntegerForRangeInclusive(startPos, endPos)
+	pendingTxnsPos := util.CreateSliceOfIntegerForRangeInclusive(startPos, endPos)
 	for i < endPos {
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, n.fetchMessageForPos, n.espressoMaxTransactionSize)
-		i += convertToUint64WithFallback[int, arbutil.MessageIndex](msgCnt, 1)
+		i += util.ConvertToUint64WithFallback[int, arbutil.MessageIndex](msgCnt, 1)
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
 
 		if msgCnt == 0 {
@@ -416,35 +366,6 @@ func (n *NitroMessageToEspressoTransactionAdapter) RegisterSigner() error {
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
-}
-
-// integer represents any type that is an integer.  It specifies all types
-// that are either directly integer primitives, or a type that inherits their
-// functionality via wrapping.
-type integer interface {
-	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
-}
-
-// createSliceOfIntegerForRangeInclusive creates a slice of integers from the given
-// start to the end inclusive.
-//
-// The resulting slice will contain a sequence of integers starting at
-// `start`, and ending at `endInclusive`, inclusive.
-//
-// Comprehension: [x | x ∈ [start, endInclusive]]
-func createSliceOfIntegerForRangeInclusive[T integer](start, endInclusive T) []T {
-	if start > endInclusive {
-		return nil
-	}
-
-	len := int(endInclusive - start + 1)
-	result := make([]T, 0, len)
-
-	for i := start; i <= endInclusive; i++ {
-		result = append(result, i)
-	}
-
-	return result
 }
 
 // ErrorWorkerQueuesAreFull is an error that is returned when the worker queues
@@ -780,7 +701,7 @@ func (w *submitTransactionWorker) startWorker(_ context.Context) {
 		// Process the job
 		if job.attempt > 0 {
 			// Let's slow down a little
-			time.Sleep(convertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * 100 * time.Millisecond)
+			time.Sleep(util.ConvertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * 100 * time.Millisecond)
 		}
 
 		log.Info("Submitting transaction to Espresso", "commit", common.Hash(job.txn.Commit()), "worker", w.id)
@@ -926,7 +847,7 @@ func (w *transactionIncludedQueueWorker) startWorker(_ context.Context) {
 
 		if job.attempt > 0 {
 			// Let's slow down a little
-			time.Sleep(convertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * 100 * time.Millisecond)
+			time.Sleep(util.ConvertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * 100 * time.Millisecond)
 		}
 
 		details, err := w.client.FetchTransactionByHash(ctx, &job.txnHash)
