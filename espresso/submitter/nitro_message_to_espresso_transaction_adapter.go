@@ -75,7 +75,7 @@ func (n *NitroMessageToEspressoTransactionAdapter) fetchMessageForPos(pos arbuti
 func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactions(startPos, endPos arbutil.MessageIndex) (arbutil.MessageIndex, error) {
 	i := startPos
 	pendingTxnsPos := util.CreateSliceOfIntegerForRangeInclusive(startPos, endPos)
-	for i < endPos {
+	for i <= endPos {
 		payload, msgCnt := arbutil.BuildRawHotShotPayload(pendingTxnsPos, n.fetchMessageForPos, n.espressoMaxTransactionSize)
 		i += util.ConvertToUint64WithFallback[int, arbutil.MessageIndex](msgCnt, 1)
 		pendingTxnsPos = pendingTxnsPos[msgCnt:]
