@@ -79,7 +79,7 @@ func (w *transactionIncludedQueueWorker) startWorker(_ context.Context) {
 		// Wait for a job to be sent to us
 		job, ok := <-ch
 		if !ok {
-			log.Info("Transaction inclusion job queue closed, exiting", "worker", w.id)
+			log.Warn("Transaction inclusion job queue closed, exiting", "worker", w.id)
 			return
 		}
 		// Process the job

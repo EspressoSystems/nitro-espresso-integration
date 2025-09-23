@@ -74,7 +74,7 @@ func (w *submitTransactionWorker) startWorker(_ context.Context) {
 		// Wait for a job to be sent to us
 		job, ok := <-ch
 		if !ok {
-			log.Info("Submit transaction job queue closed, exiting", "worker", w.id)
+			log.Warn("Submit transaction job queue closed, exiting", "worker", w.id)
 			return
 		}
 
@@ -84,7 +84,7 @@ func (w *submitTransactionWorker) startWorker(_ context.Context) {
 		if err != nil {
 			// This is unfortunate, but we shouldn't stop processing the job
 			// just because of a small reference failure.
-			log.Info("Failed to estimate transaction hash", "error", err, "commit", common.Hash(commit), "worker", w.id)
+			log.Warn("Failed to estimate transaction hash", "error", err, "commit", common.Hash(commit), "worker", w.id)
 			estimatedHash = new(tagged_base64.TaggedBase64)
 		}
 

@@ -293,6 +293,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) drainSubmitTransactionWorkers() {
 	for i := uint64(0); i < w.numSubmitTransactionWorkers; i++ {
 		worker, workerOk := <-w.submitTxnsJobQueue
 		if !workerOk {
+			log.Warn("Submit transaction job queue already closed, exiting")
 			// The job queue is closed, so we can exit.
 			return
 		}
@@ -311,7 +312,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) submitTransactionScheduler(ctx conte
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Submit transaction scheduler exiting")
+			log.Warn("Submit transaction scheduler exiting")
 			return
 
 		case job, ok := <-w.submitTxnsQueue:
@@ -319,7 +320,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) submitTransactionScheduler(ctx conte
 			// job to it.
 
 			if !ok {
-				log.Info("Submit transaction job queue closed, exiting")
+				log.Warn("Submit transaction job queue closed, exiting")
 				return
 			}
 
@@ -339,7 +340,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) submitTransactionResponseHandler(ctx
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Submit transaction response handler exiting")
+			log.Warn("Submit transaction response handler exiting")
 			return
 
 		case response := <-w.submitTxnsResponse:
@@ -349,7 +350,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) submitTransactionResponseHandler(ctx
 			if response.err != nil || response.hash == nil {
 				// Handle error case
 				job := response.job
-				log.Info("Failed to submit transaction to Espresso", "error", response.err, "attempts", job.attempt, "commit", common.Hash(job.txn.Commit()))
+				log.Warn("Failed to submit transaction to Espresso", "error", response.err, "attempts", job.attempt, "commit", common.Hash(job.txn.Commit()))
 				job.attempt++
 				job.lastAttempt = time.Now()
 				w.submitTxnsQueue <- job
@@ -380,6 +381,7 @@ func (w *MultiWorkerQueueEspressoSubmitter) drainTransactionInclusionWorkers() {
 		worker, workerOk := <-w.transactionIncludedJobQueue
 		if !workerOk {
 			// The job queue is closed, so we can exit.
+			log.Warn("Transaction inclusion job queue already closed, exiting")
 			return
 		}
 

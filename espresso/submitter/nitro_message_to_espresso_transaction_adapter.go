@@ -116,10 +116,12 @@ func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactionsProcess(ctx
 	for {
 		select {
 		case <-ctx.Done():
+			log.Warn("Bundle transactions process exiting, due to context done", "error", ctx.Err())
 			return
 
 		case pos, ok := <-n.availableTransaction:
 			if !ok {
+				log.Warn("Available transaction channel closed, exiting bundle transactions process")
 				// The channel is closed, so we can exit
 				return
 			}
