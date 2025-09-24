@@ -88,8 +88,8 @@ func (m *MockEspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch,
 	return nil
 }
 
-func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
-	return m.dbHotShot, nil
+func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(ethdb.Database) (uint64, []byte, error) {
+	return m.dbHotShot, nil, nil
 }
 
 type MockDelayedMessageFetcher struct{}

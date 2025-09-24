@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -137,7 +138,6 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 	if endBlock == 0 {
 		return nil
 	}
-	batch := d.db.NewBatch()
 
 	// Get the from block from the database
 	fromBlock := d.fromBlock
@@ -148,7 +148,6 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 		return err
 	}
 
-	err = batch.Write()
 	if err != nil {
 		return err
 	}
@@ -188,8 +187,11 @@ Reads the "current from" block from the database.
 func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 	var blockNumber uint64
 	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentFromBlockKey))
-	if err != nil {
+	if err != nil && !dbutil.IsErrNotFound(err) {
 		return 0, nil, fmt.Errorf("failed to get next from block: %w", err)
+	}
+	if dbutil.IsErrNotFound(err) {
+		return 0, nil, nil
 	}
 	if blockNumberBytes != nil {
 		err = rlp.DecodeBytes(blockNumberBytes, &blockNumber)
@@ -355,6 +357,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, f
 		}
 
 		lastDelayedMessageIndex++
+
 		d.delayedMessages[lastDelayedMessageIndex] = msg
 		d.delayedMessagesFromBlock[lastDelayedMessageIndex] = fromBlock
 	}
@@ -416,17 +419,18 @@ func NewDelayedMessageFetcher(
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
 ) *DelayedMessageFetcher {
-
 	return &DelayedMessageFetcher{
-		fromBlock:            fromBlock,
-		delayedBridge:        delayedBridge,
-		l1Reader:             l1Reader,
-		waitForFinalization:  waitForFinalization,
-		waitForConfirmations: waitForConfirmations,
-		requiredBlockDepth:   requiredBlockDepth,
-		maxBlocksToRead:      blocksToRead,
-		sequencerInbox:       sequencerInbox,
-		fatalErrChan:         fatalErrChan,
+		fromBlock:                fromBlock,
+		delayedBridge:            delayedBridge,
+		l1Reader:                 l1Reader,
+		waitForFinalization:      waitForFinalization,
+		waitForConfirmations:     waitForConfirmations,
+		requiredBlockDepth:       requiredBlockDepth,
+		maxBlocksToRead:          blocksToRead,
+		sequencerInbox:           sequencerInbox,
+		fatalErrChan:             fatalErrChan,
+		delayedMessages:          make(map[uint64]*DelayedInboxMessage),
+		delayedMessagesFromBlock: make(map[uint64]uint64),
 	}
 }
 

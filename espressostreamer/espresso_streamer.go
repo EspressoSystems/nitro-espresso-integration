@@ -22,6 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
+	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -308,8 +309,11 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 	var nextHotshotBlock uint64
 	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
-	if err != nil {
+	if err != nil && !dbutil.IsErrNotFound(err) {
 		return 0, nil, fmt.Errorf("failed to get next hotshot block: %w", err)
+	}
+	if dbutil.IsErrNotFound(err) {
+		return 0, nil, nil
 	}
 	if nextHotshotBytes != nil {
 		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)

@@ -217,7 +217,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
 
-		if configFetcher().EspressoTeeType != "" {
+		if configFetcher().EspressoTeeType != "" && fromBlock != 0 {
 			fromBlockHash, err := getHashOverUint64(fromBlock)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
@@ -497,7 +497,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}
 
-		if n.configFetcher().EspressoTeeType != "" {
+		if n.configFetcher().EspressoTeeType != "" && nextHotshotBlock != 0 {
 			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
 			if err != nil {
 				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
