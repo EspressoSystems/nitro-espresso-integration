@@ -6,10 +6,13 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/util/signature"
 )
+
+var BlockSignaturePrefix = []byte("blockSignature")
 
 var (
 	binarySearch_LessThanTarget    = -1
@@ -106,4 +109,14 @@ func getHashOverUint64(data uint64) ([]byte, error) {
 	binary.BigEndian.PutUint64(uintBytes, data)
 	hash := crypto.Keccak256Hash(uintBytes)
 	return hash.Bytes(), nil
+}
+
+func storeBlockSignature(batch ethdb.Batch, blockNumber uint64, blockSignature []byte) error {
+	key := dbKey(BlockSignaturePrefix, (blockNumber))
+	return batch.Put(key, blockSignature)
+}
+
+func getBlockSignature(db ethdb.Database, blockNumber uint64) ([]byte, error) {
+	key := dbKey(BlockSignaturePrefix, (blockNumber))
+	return db.Get(key)
 }

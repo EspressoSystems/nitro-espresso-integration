@@ -29,8 +29,6 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-var BlockSignaturePrefix = []byte("blockSignature")
-
 type EspressoCaffNodeConfig struct {
 	Enable                  bool                    `koanf:"enable"`
 	EspressoTeeType         string                  `koanf:"espresso-tee-type"`
@@ -390,7 +388,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		log.Error("failed to get signature for block", "err", err)
 		return false
 	}
-	err = n.storeBlockSignature(batch, block.NumberU64(), blockSignature)
+	err = storeBlockSignature(batch, block.NumberU64(), blockSignature)
 	if err != nil {
 		log.Error("failed to store signature for block", "err", err)
 		return false
@@ -416,19 +414,6 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	n.espressoStreamer.RecordTimeDurationBetweenHotshotAndCurrentBlock(messageWithMetadataAndPos.HotshotHeight, time.Now())
 
 	return true
-}
-
-func (n *EspressoCaffNode) storeBlockSignature(batch ethdb.Batch, blockNumber uint64, blockSignature []byte) error {
-	if n.snapshotSigner == nil {
-		return nil
-	}
-	key := dbKey(BlockSignaturePrefix, (blockNumber))
-	return batch.Put(key, blockSignature)
-}
-
-func (n *EspressoCaffNode) getBlockSignature(db ethdb.Database, blockNumber uint64) ([]byte, error) {
-	key := dbKey(BlockSignaturePrefix, (blockNumber))
-	return db.Get(key)
 }
 
 func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStreamerInterface {
@@ -472,7 +457,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		publicKeyBytes := crypto.FromECDSAPub(n.snapshotPublicKey)
 
 		// Get the block signature
-		blockSignature, err := n.getBlockSignature(n.db, currentBlock.NumberU64())
+		blockSignature, err := getBlockSignature(n.db, currentBlock.NumberU64())
 		if err != nil {
 			return fmt.Errorf("failed to get block signature: %w", err)
 		}
