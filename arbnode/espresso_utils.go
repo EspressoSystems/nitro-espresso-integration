@@ -2,9 +2,11 @@ package arbnode
 
 import (
 	"context"
+	"encoding/binary"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/util/signature"
 )
@@ -56,4 +58,52 @@ func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, 
 	}
 
 	return crypto.PubkeyToAddress(*publicKey), nil
+}
+
+// Create a signatue over a uint64 value given a signer
+func generateSignatureFromUint64(signer signature.DataSignerFunc, data uint64) ([]byte, error) {
+	if signer == nil {
+		return nil, nil
+	}
+	hash, err := getHashOverUint64(data)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := signer(hash)
+	if err != nil {
+		return nil, err
+	}
+	return signature, nil
+}
+
+func generateSignatureOverInterface(signer signature.DataSignerFunc, data interface{}) ([]byte, error) {
+	if signer == nil {
+		return nil, nil
+	}
+	hash, err := getHashOverInterface(data)
+	if err != nil {
+		return nil, err
+	}
+	signature, err := signer(hash)
+	if err != nil {
+		return nil, err
+	}
+	return signature, nil
+}
+
+func getHashOverInterface(data interface{}) ([]byte, error) {
+
+	dataBytes, err := rlp.EncodeToBytes(data)
+	if err != nil {
+		return nil, err
+	}
+	hash := crypto.Keccak256Hash(dataBytes)
+	return hash.Bytes(), nil
+}
+
+func getHashOverUint64(data uint64) ([]byte, error) {
+	uintBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(uintBytes, data)
+	hash := crypto.Keccak256Hash(uintBytes)
+	return hash.Bytes(), nil
 }

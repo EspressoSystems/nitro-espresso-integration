@@ -696,7 +696,6 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
 		delayedBridge,
 		reader,
-		builder.L2.ConsensusNode.ArbDB,
 		100,
 		false,
 		false,

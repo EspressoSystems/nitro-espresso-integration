@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/espressostreamer"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -186,16 +185,16 @@ func (d *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 /*
 Reads the "current from" block from the database.
 */
-func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, error) {
+func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 	var blockNumber uint64
 	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentFromBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next from block: %w", err)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to get next from block: %w", err)
 	}
 	if blockNumberBytes != nil {
 		err = rlp.DecodeBytes(blockNumberBytes, &blockNumber)
 		if err != nil {
-			return 0, fmt.Errorf("failed to decode next from block: %w", err)
+			return 0, nil, fmt.Errorf("failed to decode next from block: %w", err)
 		}
 	}
 
@@ -205,21 +204,21 @@ func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, error) {
 
 	// Also get the signature and check that signaure is valid
 	fromBlockSignatureBytes, err := db.Get(DelayedFetcherCurrentFromBlockSignatureKey)
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next from block signature: %w", err)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to get next from block signature: %w", err)
 	}
 	if fromBlockSignatureBytes != nil {
 		var fromBlockSignature []byte
 		err = rlp.DecodeBytes(fromBlockSignatureBytes, &fromBlockSignature)
 		if err != nil {
-			return 0, fmt.Errorf("failed to decode next from block signature: %w", err)
+			return 0, nil, fmt.Errorf("failed to decode next from block signature: %w", err)
 		}
 		if !crypto.VerifySignature(fromBlockSignature, blockNumberHash.Bytes(), fromBlockSignature) {
-			return 0, fmt.Errorf("invalid signature for from block %d", blockNumber)
+			return 0, nil, fmt.Errorf("invalid signature for from block %d", blockNumber)
 		}
 	}
 
-	return blockNumber, nil
+	return blockNumber, nil, nil
 }
 
 func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
