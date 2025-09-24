@@ -44,6 +44,7 @@
 [submodule "nitro-testnode"]
 	path = nitro-testnode
 	url = https://github.com/EspressoSystems/nitro-testnode
+	branch = regression
 [submodule "bold"]
 	path = bold
 	url = https://github.com/EspressoSystems/bold.git
