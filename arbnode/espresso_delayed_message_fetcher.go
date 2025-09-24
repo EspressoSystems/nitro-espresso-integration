@@ -34,7 +34,6 @@ type DelayedMessageFetcher struct {
 	sequencerInbox           *SequencerInbox
 	l1Reader                 *headerreader.HeaderReader
 	maxBlocksToRead          uint64
-	db                       ethdb.Database
 	waitForFinalization      bool
 	waitForConfirmations     bool
 	requiredBlockDepth       uint64
