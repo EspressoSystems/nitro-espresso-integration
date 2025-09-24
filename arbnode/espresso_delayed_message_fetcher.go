@@ -336,6 +336,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, f
 		if err != nil {
 			return err
 		}
+		log.Info("Caff node: processing delayed message", "seqNum", seqNum)
 		if seqNum == 0 {
 			// init message
 			log.Debug("caff node: skip storing init message")
@@ -360,6 +361,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, f
 
 		d.delayedMessages[lastDelayedMessageIndex] = msg
 		d.delayedMessagesFromBlock[lastDelayedMessageIndex] = fromBlock
+		d.delayedCount += 1
 	}
 
 	// Store the from block in the database

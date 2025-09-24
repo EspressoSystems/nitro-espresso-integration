@@ -172,7 +172,7 @@ func AssertEventOrdering(t *testing.T, firstEventFunc func() error, secondEventF
 	}
 }
 
-func TestEspressoCaffNode(t *testing.T) {
+func TestEspressoCaffNodeInitial(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -191,6 +191,8 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = waitForEspressoNode(ctx)
 	Require(t, err)
 
+	log.Info("Starting the caff node")
+
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
 	Require(t, err)
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
@@ -207,6 +209,7 @@ func TestEspressoCaffNode(t *testing.T) {
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
 
+	log.Info("Sent delayed tx")
 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
 		balance := builder.L2.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
@@ -214,7 +217,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	})
 	Require(t, err)
 
-	log.Info("Starting the caff node")
+	log.Info("Starting the caff node -2")
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
@@ -230,6 +233,8 @@ func TestEspressoCaffNode(t *testing.T) {
 		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
 	})
 	Require(t, err)
+
+	log.Info("Completed waiting for balance after wait for finalize as false")
 
 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
 		balance := builderCaffNode.GetBalance(t, addr)
@@ -282,6 +287,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	err = rpcClient.CallContext(ctx, nil, "eth_getBlockByNumber", "safe", false)
 	Require(t, err)
 
+	log.Info("Starting the trusted node")
 	// start the trusted node
 	trustedPort := 9000
 	trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
