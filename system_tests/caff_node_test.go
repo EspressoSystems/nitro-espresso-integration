@@ -282,7 +282,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	// start the trusted node
-
 	trustedPort := 9000
 	trustedCleanup := mockTrustedNode(t, ctx, trustedPort)
 	defer trustedCleanup()
