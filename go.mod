@@ -8,8 +8,6 @@ replace github.com/ethereum/go-ethereum => ./go-ethereum
 
 replace github.com/offchainlabs/bold => ./bold
 
-replace github.com/espressosystems/espresso-tee-contracts/espressogen => ./espresso-tee-contracts
-
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
@@ -178,7 +176,7 @@ require (
 	github.com/google/go-github/v62 v62.0.0
 	github.com/google/pprof v0.0.0-20231023181126-ff6d637d2a7b // indirect
 	github.com/gorilla/mux v1.8.0 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/gorilla/websocket v1.5.0
 	github.com/graph-gophers/graphql-go v1.3.0 // indirect
 	github.com/h2non/filetype v1.0.6 // indirect
 	github.com/hashicorp/go-bexpr v0.1.10 // indirect
