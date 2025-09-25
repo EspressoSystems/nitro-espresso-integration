@@ -1588,6 +1588,10 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
+
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
 	}

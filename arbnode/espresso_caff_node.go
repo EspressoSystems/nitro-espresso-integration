@@ -214,19 +214,22 @@ func NewEspressoCaffNode(
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
-
 		if configFetcher().EspressoTeeType != "" && fromBlock != 0 {
 			fromBlockHash, err := getHashOverUint64(fromBlock)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
 			}
-
-			if !(crypto.VerifySignature(fromBlockSignature, fromBlockHash, fromBlockSignature)) {
+			// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
+			// so we need to strip V which is the last byte
+			if len(fromBlockSignature) > 64 {
+				fromBlockSignature = fromBlockSignature[:64]
+			}
+			publicKeyBytes := crypto.FromECDSAPub(snapshotPublicKey)
+			if !(crypto.VerifySignature(publicKeyBytes, fromBlockHash, fromBlockSignature)) {
 				return nil, fmt.Errorf("failed to verify signature over from block")
 			}
 		}
 	}
-
 	if fromBlock == 0 {
 		fromBlock = configFetcher().FromBlock
 		if fromBlock == 0 {
@@ -307,7 +310,6 @@ func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.M
 
 // Creates a block from the next message in the queue.
 func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
-
 	lastBlockHeader := n.currentBlock.Header()
 
 	messageWithMetadataAndPos, fromBlock, err := n.peekMessage(ctx)
@@ -375,6 +377,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 			log.Error("Failed to get signature for from block", "err", err)
 			return false
 		}
+
 		err = storeFromBlockWithSignature(batch, fromBlock, fromBlockSignature)
 		if err != nil {
 			log.Error("failed to store signature for from block", "err", err)
@@ -421,7 +424,6 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 }
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
-	log.Info("Starting espresso caff node")
 	n.StopWaiter.Start(ctx, n)
 	err := n.espressoStreamer.Start(ctx)
 	if err != nil {
@@ -447,7 +449,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
-	if n.configFetcher().EspressoTeeType != "" {
+	if n.configFetcher().EspressoTeeType != "" && currentBlock.NumberU64() > 0 {
 		blockhash, err := getHashOverInterface(currentBlock)
 		if err != nil {
 			log.Error("failed to get hash of current block", "err", err)
@@ -461,7 +463,11 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to get block signature: %w", err)
 		}
-
+		// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
+		// so we need to strip V which is the last byte
+		if len(blockSignature) > 64 {
+			blockSignature = blockSignature[:64]
+		}
 		if !crypto.VerifySignature(publicKeyBytes, blockhash, blockSignature) {
 			return fmt.Errorf("failed to verify signature over the stored current block")
 		}
@@ -490,13 +496,16 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
 			}
 			publicKeyBytes := crypto.FromECDSAPub(n.snapshotPublicKey)
-
+			// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
+			// so we need to strip V which is the last byte
+			if len(nextHotshotBlockSignature) > 64 {
+				nextHotshotBlockSignature = nextHotshotBlockSignature[:64]
+			}
 			if !crypto.VerifySignature(publicKeyBytes, hotshotBlockHash, nextHotshotBlockSignature) {
 				return fmt.Errorf("failed to verify signature over hotshot block number")
 			}
 		}
 	}
-
 	if nextHotshotBlock == 0 {
 		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
 		nextHotshotBlock = n.configFetcher().NextHotshotBlock
@@ -504,6 +513,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			return errors.New("no next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
 		}
 	}
+
 	// The reason we do the reset here is because database is only initialized after Caff node is initialized
 	// so if we want to read the current position from the database, we need to reset the streamer
 	// during the start of the espresso streamer and caff node
@@ -539,4 +549,12 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (n *EspressoCaffNode) StopAndWait() {
+	n.StopWaiter.StopAndWait()
+	n.batcherAddrMonitor.StopAndWait()
+	n.delayedMessageFetcher.StopAndWait()
+	n.espressoStreamer.StopAndWait()
+	n.forceInclusionChecker.StopAndWait()
 }

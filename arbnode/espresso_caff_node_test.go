@@ -30,6 +30,11 @@ type MockEspressoStreamer struct {
 	dbHotShot  uint64
 }
 
+// StopAndWait implements espressostreamer.EspressoStreamerInterface.
+func (m *MockEspressoStreamer) StopAndWait() {
+	panic("unimplemented")
+}
+
 var _ espressostreamer.EspressoStreamerInterface = (*MockEspressoStreamer)(nil)
 
 // SetBatcherAddressesFetcher implements espressostreamer.EspressoStreamerInterface.
@@ -118,6 +123,10 @@ func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 }
 
 func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
+	return
+}
+
+func (m *MockDelayedMessageFetcher) StopAndWait() {
 	return
 }
 

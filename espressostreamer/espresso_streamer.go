@@ -54,6 +54,7 @@ type EspressoStreamerInterface interface {
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
+	StopAndWait()
 }
 
 type MessageWithMetadataAndPos struct {
@@ -341,12 +342,7 @@ func (s *EspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nex
 		return fmt.Errorf("failed to put next hotshot block: %w", err)
 	}
 
-	signatureBytes, err := rlp.EncodeToBytes(signature)
-	if err != nil {
-		return fmt.Errorf("failed to encode signature: %w", err)
-	}
-
-	err = batch.Put([]byte(HotshotBlockSignatureKey), signatureBytes)
+	err = batch.Put([]byte(HotshotBlockSignatureKey), signature)
 	if err != nil {
 		return fmt.Errorf("failed to put signature: %w", err)
 	}
@@ -447,4 +443,8 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return 0
 	})
 	return err
+}
+
+func (s *EspressoStreamer) StopAndWait() {
+	s.StopWaiter.StopAndWait()
 }

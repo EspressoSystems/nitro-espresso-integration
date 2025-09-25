@@ -2,12 +2,10 @@ package arbnode
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -48,6 +46,7 @@ type DelayedMessageFetcherInterface interface {
 	storeDelayedMessageLatestIndex(count uint64)
 	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, uint64, error)
 	getDelayedMessageLatestIndexAtBlock(blockNumber uint64) (uint64, error)
+	StopAndWait()
 }
 
 var _ DelayedMessageFetcherInterface = new(DelayedMessageFetcher)
@@ -147,10 +146,6 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 		return err
 	}
 
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -199,40 +194,30 @@ func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 		}
 	}
 
-	fromBlockBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(fromBlockBytes, blockNumber)
-	blockNumberHash := crypto.Keccak256Hash(fromBlockBytes)
-
 	// Also get the signature and check that signaure is valid
 	fromBlockSignatureBytes, err := db.Get(DelayedFetcherCurrentFromBlockSignatureKey)
-	if err != nil {
+	if err != nil && !dbutil.IsErrNotFound(err) {
 		return 0, nil, fmt.Errorf("failed to get next from block signature: %w", err)
 	}
-	if fromBlockSignatureBytes != nil {
-		var fromBlockSignature []byte
-		err = rlp.DecodeBytes(fromBlockSignatureBytes, &fromBlockSignature)
-		if err != nil {
-			return 0, nil, fmt.Errorf("failed to decode next from block signature: %w", err)
-		}
-		if !crypto.VerifySignature(fromBlockSignature, blockNumberHash.Bytes(), fromBlockSignature) {
-			return 0, nil, fmt.Errorf("invalid signature for from block %d", blockNumber)
-		}
+	if dbutil.IsErrNotFound(err) {
+		return 0, nil, nil
 	}
 
-	return blockNumber, nil, nil
+	log.Info("Read from block signature", "fromBlock", blockNumber, "fromBlockSignature", fromBlockSignatureBytes)
+	return blockNumber, fromBlockSignatureBytes, nil
 }
 
 func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
 
-	if err := batch.Put(DelayedFetcherCurrentFromBlockKey, uint64ToKey(fromBlock)); err != nil {
+	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
+	if err != nil {
+		return fmt.Errorf("failed to encode next from block: %w", err)
+	}
+	if err := batch.Put(DelayedFetcherCurrentFromBlockKey, blockNumberBytes); err != nil {
 		return fmt.Errorf("failed to put from block: %w", err)
 	}
-	encodedFromBlockSignature, err := rlp.EncodeToBytes(fromBlockSignature)
-	if err != nil {
-		return fmt.Errorf("failed to encode from block signature: %w", err)
-	}
 
-	return batch.Put(DelayedFetcherCurrentFromBlockSignatureKey, encodedFromBlockSignature)
+	return batch.Put(DelayedFetcherCurrentFromBlockSignatureKey, fromBlockSignature)
 }
 
 /*
@@ -447,4 +432,8 @@ func (d *DelayedMessageFetcher) Start(ctx context.Context) bool {
 	}
 	d.startWatchDelayedMessages(ctx)
 	return true
+}
+
+func (d *DelayedMessageFetcher) StopAndWait() {
+	d.StopWaiter.StopAndWait()
 }
