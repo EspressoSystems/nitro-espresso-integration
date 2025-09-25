@@ -614,7 +614,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	@touch $@
 
 .make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
-	mkdir -p espresso-tee-contracts/go/
+	mkdir -p espresso-tee-contracts/espressogen/
 	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
 	@touch $@
 
