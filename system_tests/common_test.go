@@ -714,10 +714,10 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 
 	if withSnapshotSigner {
 		snapshotSigner := signature.DataSignerFromPrivateKey(existing.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
-		snapshotSignerPublicKey := b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey.PublicKey
+		snapshotAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, &snapshotSignerPublicKey, snapshotSigner, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+			l1Client, deployInfo, nil, nil, nil, &snapshotAddress, snapshotSigner, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
@@ -761,8 +761,8 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	var currentNode *arbnode.Node
 	if withSnapshotSigner {
 		snapshotSigner := signature.DataSignerFromPrivateKey(b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
-		signerPublicKey := b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey.PublicKey
-		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerPublicKey, snapshotSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, snapshotSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())

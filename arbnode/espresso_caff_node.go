@@ -2,7 +2,6 @@ package arbnode
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"path"
@@ -128,10 +127,10 @@ type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
 type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
-	executionEngine   *gethexec.ExecutionEngine
-	snapshotPublicKey *ecdsa.PublicKey
-	snapshotSigner    signature.DataSignerFunc
-	espressoStreamer  espressostreamer.EspressoStreamerInterface
+	executionEngine  *gethexec.ExecutionEngine
+	snapshotAddress  *common.Address
+	snapshotSigner   signature.DataSignerFunc
+	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
 	db            ethdb.Database
@@ -149,7 +148,7 @@ type EspressoCaffNode struct {
 
 func NewEspressoCaffNode(
 	configFetcher EspressoCaffNodeConfigFetcher,
-	snapshotPublicKey *ecdsa.PublicKey,
+	snapshotAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
@@ -170,8 +169,8 @@ func NewEspressoCaffNode(
 	}
 
 	if configFetcher().EspressoTeeType != "" {
-		// Check that snapsnotSigner and snapshotPublicKey are not nil
-		if snapshotSigner == nil || snapshotPublicKey == nil {
+		// Check that snapsnotSigner is not nil
+		if snapshotSigner == nil || snapshotAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
 	}
@@ -219,14 +218,21 @@ func NewEspressoCaffNode(
 			if err != nil {
 				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
 			}
-			// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
-			// so we need to strip V which is the last byte
-			if len(fromBlockSignature) > 64 {
-				fromBlockSignature = fromBlockSignature[:64]
+
+			publicKeyBytes, err := crypto.Ecrecover(fromBlockHash, fromBlockSignature)
+			if err != nil {
+				return nil, fmt.Errorf("failed to recover public key from signature: %w", err)
 			}
-			publicKeyBytes := crypto.FromECDSAPub(snapshotPublicKey)
-			if !(crypto.VerifySignature(publicKeyBytes, fromBlockHash, fromBlockSignature)) {
-				return nil, fmt.Errorf("failed to verify signature over from block")
+			pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+			if err != nil || pubKey == nil {
+				return nil, fmt.Errorf("failed to unmarshal public key: %w", err)
+			}
+			// Public Key to address
+			publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
+			// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
+			// to be able to decrypt the snapshot
+			if publicKeyAddress != *snapshotAddress {
+				return nil, fmt.Errorf("public key address does not match from address")
 			}
 		}
 	}
@@ -262,7 +268,7 @@ func NewEspressoCaffNode(
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
-		snapshotPublicKey:     snapshotPublicKey,
+		snapshotAddress:       snapshotAddress,
 		snapshotSigner:        snapshotSigner,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
@@ -456,23 +462,32 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			return fmt.Errorf("failed to get hash of current block: %w", err)
 		}
 
-		publicKeyBytes := crypto.FromECDSAPub(n.snapshotPublicKey)
-
 		// Get the block signature
 		blockSignature, err := getBlockSignature(n.db, currentBlock.NumberU64())
 		if err != nil {
 			return fmt.Errorf("failed to get block signature: %w", err)
 		}
-		// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
-		// so we need to strip V which is the last byte
-		if len(blockSignature) > 64 {
-			blockSignature = blockSignature[:64]
+
+		publicKeyBytes, err := crypto.Ecrecover(blockhash, blockSignature)
+		if err != nil {
+			return fmt.Errorf("failed to recover public key from signature: %w", err)
 		}
-		if !crypto.VerifySignature(publicKeyBytes, blockhash, blockSignature) {
-			return fmt.Errorf("failed to verify signature over the stored current block")
+		pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+		if err != nil || pubKey == nil {
+			return fmt.Errorf("failed to unmarshal public key: %w", err)
 		}
+		// Public Key to address
+		publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
+		// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
+		// to be able to decrypt the snapshot
+		if publicKeyAddress != *n.snapshotAddress {
+			return fmt.Errorf("snapshot address does not match from address")
+		}
+
 	}
 
+	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
+	// from block?
 	n.currentBlock = currentBlock
 
 	currentBlockNum := currentBlockHeader.Number.Uint64() + 1
@@ -495,14 +510,21 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
 			}
-			publicKeyBytes := crypto.FromECDSAPub(n.snapshotPublicKey)
-			// By default, the signature is 65 bytes which contains R, S, V but VerifySignature expects 64 bytes
-			// so we need to strip V which is the last byte
-			if len(nextHotshotBlockSignature) > 64 {
-				nextHotshotBlockSignature = nextHotshotBlockSignature[:64]
+
+			publicKeyBytes, err := crypto.Ecrecover(hotshotBlockHash, nextHotshotBlockSignature)
+			if err != nil {
+				return fmt.Errorf("failed to recover public key from signature for hotshot block: %w", err)
 			}
-			if !crypto.VerifySignature(publicKeyBytes, hotshotBlockHash, nextHotshotBlockSignature) {
-				return fmt.Errorf("failed to verify signature over hotshot block number")
+			pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+			if err != nil || pubKey == nil {
+				return fmt.Errorf("failed to unmarshal public key for hotshot block: %w", err)
+			}
+			// Public Key to address
+			publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
+			// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
+			// to be able to decrypt the snapshot
+			if publicKeyAddress != *n.snapshotAddress {
+				return fmt.Errorf("public key address does not match from address for hotshot block")
 			}
 		}
 	}

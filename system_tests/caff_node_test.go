@@ -591,7 +591,6 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	Require(t, err)
 
 	// start the node
-	builder.nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
 	time.Sleep(1 * time.Minute)
 
 	builderCaffNode.RestartCaffNode(t, true)
