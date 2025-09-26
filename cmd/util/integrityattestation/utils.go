@@ -18,8 +18,6 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/offchainlabs/nitro/util/signature"
 )
@@ -102,7 +100,7 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclavePrivateKey(attestationsPath string) (*common.Address, signature.DataSignerFunc, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PublicKey, signature.DataSignerFunc, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -127,9 +125,7 @@ func ReadEnclavePrivateKey(attestationsPath string) (*common.Address, signature.
 		return nil, nil, fmt.Errorf("failed to get attested public key: %w", err)
 	}
 
-	address := crypto.PubkeyToAddress(*publicKey)
-
-	return &address, signature.DataSignerFromPrivateKey(privateKey), nil
+	return publicKey, signature.DataSignerFromPrivateKey(privateKey), nil
 }
 
 // Safely pointer dereference

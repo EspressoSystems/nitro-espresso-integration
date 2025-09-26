@@ -231,6 +231,7 @@ func mainImpl() int {
 	var dataSigner signature.DataSignerFunc
 	var snapshotSigner signature.DataSignerFunc
 	var snapshotAddress *common.Address
+	var snapshotPublicKey *ecdsa.PublicKey
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
 	// If sequencer and signing is enabled or batchposter is enabled without
@@ -254,12 +255,13 @@ func mainImpl() int {
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
 	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		snapshotAddress, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		snapshotPublicKey, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
-
+		publicKeyAddress := crypto.PubkeyToAddress(*snapshotPublicKey)
+		snapshotAddress = &publicKeyAddress
 	}
 
 	if sequencerNeedsKey || nodeConfig.Node.BatchPoster.ParentChainWallet.OnlyCreateKey {
