@@ -8,6 +8,7 @@ on:
     branches:
       - integration
       - celestia-integration
+      - release-tee-caff-node
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
