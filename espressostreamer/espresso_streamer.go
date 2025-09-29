@@ -365,20 +365,25 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.TimeboostKeyManager)
+	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.TimeboostKeyManager)
 	if err != nil {
 		return nil, err
 	}
-	if parsedMsg == nil {
-		return []*MessageWithMetadataAndPos{}, nil
+
+	var msgs []*MessageWithMetadataAndPos
+	if parsedMsgs == nil {
+		return msgs, nil
 	}
-	log.Info("added timeboost message to queue", "messagePos", parsedMsg.Pos, "currentMessagePos", s.currentMessagePos)
-	msg := &MessageWithMetadataAndPos{
-		MessageWithMeta: parsedMsg.Message,
-		Pos:             parsedMsg.Pos,
-		HotshotHeight:   s.nextHotshotBlockNum,
+
+	for _, msg := range parsedMsgs {
+		log.Info("added timeboost message to queue", "messagePos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+		msgs = append(msgs, &MessageWithMetadataAndPos{
+			MessageWithMeta: msg.Message,
+			Pos:             msg.Pos,
+			HotshotHeight:   s.nextHotshotBlockNum,
+		})
 	}
-	return []*MessageWithMetadataAndPos{msg}, nil
+	return msgs, nil
 }
 
 // Export this function only for testing purpose

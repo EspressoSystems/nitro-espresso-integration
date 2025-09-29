@@ -70,7 +70,6 @@ import (
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -1403,11 +1402,9 @@ func deployOnParentChain(
 
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
-	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-	Require(t, err)
 
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+	proxyAddr := setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+
 	Require(t, err)
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
@@ -1458,7 +1455,7 @@ func deployOnParentChain(
 			NumBigStepLevel:              3,
 			ChallengeGracePeriodBlocks:   3,
 			BufferConfig:                 bufferConfig,
-			EspressoTEEVerifier:          espressoTEEVerifierAddress,
+			EspressoTEEVerifier:          proxyAddr,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(
@@ -1488,13 +1485,6 @@ func deployOnParentChain(
 			DeployedAt:             boldAddresses.DeployedAt,
 		}
 	} else {
-
-		//  Deploy a espressoTEEVerifierMock contract
-		espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-		Require(t, err)
-		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-		Require(t, err)
-
 		addresses, err = deploy.DeployLegacyOnParentChain(
 			ctx,
 			parentChainReader,
@@ -1502,7 +1492,7 @@ func deployOnParentChain(
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
+			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, proxyAddr),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
@@ -1513,7 +1503,7 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
-	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
+	parentChainInfo.SetContract("TimeboostKeyManager", proxyAddr)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }

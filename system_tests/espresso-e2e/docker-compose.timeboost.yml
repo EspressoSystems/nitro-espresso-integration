@@ -1,15 +1,14 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:contract
+    image: ghcr.io/espressosystems/timeboost:contract2
     command:
       [
         "/app/timeboost",
-        "--committee-id", "0",
         "--config", "/app/node_0.toml",
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
+      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,rubusta=info
     ports:
       - "8000:8000"
       - "8004:8004"
@@ -23,11 +22,10 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:contract
+    image: ghcr.io/espressosystems/timeboost:contract2
     command:
       [
         "/app/timeboost",
-        "--committee-id", "0",
         "--config", "/app/node_1.toml",
         "--https-only", "false"
       ]

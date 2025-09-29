@@ -31,6 +31,10 @@ type CertifiedBlock struct {
 	Cert    Certificate `cbor:"2,keyasint"`
 }
 
+type Body struct {
+	Blocks []CertifiedBlock `cbor:"0,keyasint"`
+}
+
 type MessagePayload struct {
 	Position uint64 `cbor:"pos"`
 	Message  []byte `cbor:"msg"`

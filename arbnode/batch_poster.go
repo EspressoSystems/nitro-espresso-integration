@@ -645,7 +645,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
 			if opts.Config().IsDecentralizedTimeboost {
 				// TODO: This should read the address from sequencer inbox contract
-				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0x0115F8541162035781B743F4f6DBf6915194656d"), opts.L1Reader.Client())
+				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"), opts.L1Reader.Client())
 				if err != nil {
 					return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
 				}
@@ -1502,7 +1502,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 
 	var signature []byte
-	teeType := espresso_key_manager.SGX
+	var sigs []byte
 	if b.config().IsDecentralizedTimeboost {
 		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
 		if err != nil {
@@ -1538,19 +1538,14 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 			return nil, err
 		}
 
-		sigKeyMap := make(map[string]bool)
-		for _, member := range committee.Members {
-			sigKeyMap[string(member.SigKey)] = true
-		}
 		args, err := b.batchVerifier.HashAndSignBatchData(calldata)
 		if err != nil {
 			return nil, err
 		}
 
-		// TODO: use the signatures to send to sequencer inbox
-		_, err = b.batchVerifier.SendBatchForVerification(
+		sigs, err = b.batchVerifier.SendBatchForVerification(
 			args,
-			sigKeyMap,
+			committee.Members,
 		)
 		if err != nil {
 			return nil, err
@@ -1597,26 +1592,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 					signature[vIndex] = v + 27
 				}
 			}
-			teeType = keyManager.TeeType()
 		}
-	}
-
-	bytesType, err := abi.NewType("bytes", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bytes type: %w", err)
-	}
-	uint8Type, err := abi.NewType("uint8", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
-	}
-
-	packedData, err := abi.Arguments{
-		{Type: uint256Type},
-		{Type: bytesType},
-		{Type: uint8Type},
-	}.Pack(hotshotBlockNumber, signature, teeType)
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
 	}
 
 	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
@@ -1630,7 +1606,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		b.config().gasRefunder,
 		new(big.Int).SetUint64(uint64(prevMsgNum)),
 		new(big.Int).SetUint64(uint64(newMsgNum)),
-		packedData,
+		sigs,
 	)
 
 	if err != nil {

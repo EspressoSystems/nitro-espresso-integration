@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 )
 
 type BatchPosterArgs struct {
@@ -81,9 +82,9 @@ func (v *BatchVerifier) GetCompressedPubKey() []byte {
 
 func (v *BatchVerifier) SendBatchForVerification(
 	args *BatchPosterArgs,
-	sigKeyMap map[string]bool,
-) ([][]byte, error) {
-	requiredQuorum := 2*(len(sigKeyMap)-1)/3 + 1
+	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
+) ([]byte, error) {
+	requiredQuorum := 2*(len(members)-1)/3 + 1
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "batcher_submitBatch",
@@ -96,10 +97,9 @@ func (v *BatchVerifier) SendBatchForVerification(
 	}
 
 	// TODO: Read from contract, currently not in the contract
-	urls := []string{"http://localhost:8945", "http://localhost:8947"}
 	var sigs [][]byte
-	for _, url := range urls {
-		resp, err := v.client.Post(url, "application/json", bytes.NewBuffer(jsonData))
+	for _, member := range members {
+		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return nil, fmt.Errorf("http request failed: %w", err)
 		}
@@ -112,35 +112,48 @@ func (v *BatchVerifier) SendBatchForVerification(
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Error("failed to read response body", "err", err, "url", url)
+			log.Error("failed to read response body", "err", err, "url", member.BatchPosterAddress)
 			continue
 		}
 		var rpcResponse BatchRpcResponse
 		if err := json.Unmarshal(body, &rpcResponse); err != nil {
-			log.Error("failed to unmarshal json response", "err", err, "url", url)
+			log.Error("failed to unmarshal json response", "err", err, "url", member.BatchPosterAddress)
 			continue
 		}
 		if rpcResponse.Error != nil {
-			log.Error("got error from request", "err", rpcResponse.Error.Message, "url", url)
+			log.Error("got error from request", "err", rpcResponse.Error.Message, "url", member.BatchPosterAddress)
 			continue
 		}
 
 		pubKey, err := crypto.SigToPub(args.Hash, rpcResponse.Result)
 		if err != nil {
-			log.Error("failed to recover public key", "err", err, "url", url)
+			log.Error("failed to recover public key", "err", err, "url", member.BatchPosterAddress)
 			continue
 		}
 
-		if !sigKeyMap[string(crypto.CompressPubkey(pubKey))] {
-			log.Error("failed to validate signature in the committee", "url", url)
+		if !bytes.Equal(crypto.CompressPubkey(pubKey), member.SigKey) {
+			log.Error("failed to validate signature in the committee", "url", member.BatchPosterAddress)
 			continue
+		}
+		sigLength := len(rpcResponse.Result)
+		if sigLength > 0 {
+			// Get the last byte (v)
+			vIndex := sigLength - 1
+			v := rpcResponse.Result[vIndex]
+
+			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+			// https://github.com/ethereum/go-ethereum/issues/19751
+			if v == 0 || v == 1 {
+				rpcResponse.Result[vIndex] = v + 27
+			}
 		}
 		sigs = append(sigs, rpcResponse.Result)
 	}
 	if len(sigs) < requiredQuorum {
 		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, len(sigs))
 	}
-	return sigs, nil
+	return bytes.Join(sigs, nil), nil
 }
 
 func (v *BatchVerifier) HashBatchData(data []byte) []byte {
