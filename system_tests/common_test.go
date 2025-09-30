@@ -714,10 +714,10 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 
 	if withSnapshotSigner {
 		snapshotSigner := signature.DataSignerFromPrivateKey(existing.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
-		snapshotAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
+		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, &snapshotAddress, snapshotSigner, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, snapshotSigner, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(

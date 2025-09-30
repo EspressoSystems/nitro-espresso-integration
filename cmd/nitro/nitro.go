@@ -230,7 +230,7 @@ func mainImpl() int {
 
 	var dataSigner signature.DataSignerFunc
 	var snapshotSigner signature.DataSignerFunc
-	var snapshotAddress *common.Address
+	var snapshotSignerAddress *common.Address
 	var snapshotPublicKey *ecdsa.PublicKey
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
@@ -261,7 +261,7 @@ func mainImpl() int {
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 		publicKeyAddress := crypto.PubkeyToAddress(*snapshotPublicKey)
-		snapshotAddress = &publicKeyAddress
+		snapshotSignerAddress = &publicKeyAddress
 	}
 
 	if sequencerNeedsKey || nodeConfig.Node.BatchPoster.ParentChainWallet.OnlyCreateKey {
@@ -580,7 +580,7 @@ func mainImpl() int {
 		l1TransactionOptsValidator,
 		l1TransactionOptsBatchPoster,
 		dataSigner,
-		snapshotAddress,
+		snapshotSignerAddress,
 		snapshotSigner,
 		fatalErrChan,
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),

@@ -3,6 +3,7 @@ package arbnode
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -79,29 +80,16 @@ func generateSignatureFromUint64(signer signature.DataSignerFunc, data uint64) (
 	return signature, nil
 }
 
-func generateSignatureOverInterface(signer signature.DataSignerFunc, data interface{}) ([]byte, error) {
+func generateSignatureOverHash(signer signature.DataSignerFunc, hash []byte) ([]byte, error) {
 	if signer == nil {
 		return nil, nil
 	}
-	hash, err := getHashOverInterface(data)
-	if err != nil {
-		return nil, err
-	}
+
 	signature, err := signer(hash)
 	if err != nil {
 		return nil, err
 	}
 	return signature, nil
-}
-
-func getHashOverInterface(data interface{}) ([]byte, error) {
-
-	dataBytes, err := rlp.EncodeToBytes(data)
-	if err != nil {
-		return nil, err
-	}
-	hash := crypto.Keccak256Hash(dataBytes)
-	return hash.Bytes(), nil
 }
 
 func getHashOverUint64(data uint64) ([]byte, error) {
@@ -111,12 +99,47 @@ func getHashOverUint64(data uint64) ([]byte, error) {
 	return hash.Bytes(), nil
 }
 
-func storeBlockSignature(batch ethdb.Batch, blockNumber uint64, blockSignature []byte) error {
+func storeBlockSignature(batch ethdb.Batch, blockHash common.Hash, blockSignature []byte) error {
+	blockNumber := binary.BigEndian.Uint64(blockHash.Bytes())
 	key := dbKey(BlockSignaturePrefix, (blockNumber))
 	return batch.Put(key, blockSignature)
 }
 
-func getBlockSignature(db ethdb.Database, blockNumber uint64) ([]byte, error) {
+func getBlockSignature(db ethdb.Database, blockHash common.Hash) ([]byte, error) {
+	blockNumber := binary.BigEndian.Uint64(blockHash.Bytes())
 	key := dbKey(BlockSignaturePrefix, (blockNumber))
 	return db.Get(key)
+}
+
+func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
+
+	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
+	if err != nil {
+		return fmt.Errorf("failed to encode next from block: %w", err)
+	}
+	if err := batch.Put(DelayedFetcherCurrentFromBlockKey, blockNumberBytes); err != nil {
+		return fmt.Errorf("failed to put from block: %w", err)
+	}
+
+	return batch.Put(DelayedFetcherCurrentFromBlockSignatureKey, fromBlockSignature)
+}
+
+func verifySignature(db ethdb.Database, signature []byte, hash []byte, snapshotSignerAddress common.Address) error {
+	publicKeyBytes, err := crypto.Ecrecover(hash, signature)
+	if err != nil {
+		return fmt.Errorf("unable to recover public key")
+	}
+	pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
+	if err != nil || pubKey == nil {
+		return fmt.Errorf("invalid public key")
+	}
+	// Public Key to address
+	publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
+	// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
+	// to be able to decrypt the snapshot
+
+	if publicKeyAddress != snapshotSignerAddress {
+		return fmt.Errorf("invalid snapshot address")
+	}
+	return nil
 }

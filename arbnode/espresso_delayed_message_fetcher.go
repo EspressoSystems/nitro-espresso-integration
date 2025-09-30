@@ -207,25 +207,10 @@ func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 	return blockNumber, fromBlockSignatureBytes, nil
 }
 
-func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
-
-	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next from block: %w", err)
-	}
-	if err := batch.Put(DelayedFetcherCurrentFromBlockKey, blockNumberBytes); err != nil {
-		return fmt.Errorf("failed to put from block: %w", err)
-	}
-
-	return batch.Put(DelayedFetcherCurrentFromBlockSignatureKey, fromBlockSignature)
-}
-
 /*
 Reads the delayed message from the database
 */
-func (f *DelayedMessageFetcher) readDelayedMessageAndFromBlock(seqNum uint64) (*DelayedInboxMessage, uint64, error) {
-	key := seqNum
-
+func (f *DelayedMessageFetcher) readDelayedMessageAndFromBlock(key uint64) (*DelayedInboxMessage, uint64, error) {
 	if _, ok := f.delayedMessages[key]; !ok {
 		return nil, 0, fmt.Errorf("delayed message not found")
 	}

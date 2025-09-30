@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -127,10 +126,10 @@ type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
 type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
-	executionEngine  *gethexec.ExecutionEngine
-	snapshotAddress  *common.Address
-	snapshotSigner   signature.DataSignerFunc
-	espressoStreamer espressostreamer.EspressoStreamerInterface
+	executionEngine       *gethexec.ExecutionEngine
+	snapshotSignerAddress *common.Address
+	snapshotSigner        signature.DataSignerFunc
+	espressoStreamer      espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
 	db            ethdb.Database
@@ -148,7 +147,7 @@ type EspressoCaffNode struct {
 
 func NewEspressoCaffNode(
 	configFetcher EspressoCaffNodeConfigFetcher,
-	snapshotAddress *common.Address,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
@@ -170,7 +169,7 @@ func NewEspressoCaffNode(
 
 	if configFetcher().EspressoTeeType != "" {
 		// Check that snapsnotSigner is not nil
-		if snapshotSigner == nil || snapshotAddress == nil {
+		if snapshotSigner == nil || snapshotSignerAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
 	}
@@ -219,20 +218,9 @@ func NewEspressoCaffNode(
 				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
 			}
 
-			publicKeyBytes, err := crypto.Ecrecover(fromBlockHash, fromBlockSignature)
+			err = verifySignature(db, fromBlockSignature, fromBlockHash, *snapshotSignerAddress)
 			if err != nil {
-				return nil, fmt.Errorf("failed to recover public key from signature: %w", err)
-			}
-			pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-			if err != nil || pubKey == nil {
-				return nil, fmt.Errorf("failed to unmarshal public key: %w", err)
-			}
-			// Public Key to address
-			publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
-			// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
-			// to be able to decrypt the snapshot
-			if publicKeyAddress != *snapshotAddress {
-				return nil, fmt.Errorf("public key address does not match from address")
+				return nil, fmt.Errorf("failed to verify from block signature: %w", err)
 			}
 		}
 	}
@@ -268,7 +256,7 @@ func NewEspressoCaffNode(
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
-		snapshotAddress:       snapshotAddress,
+		snapshotSignerAddress: snapshotSignerAddress,
 		snapshotSigner:        snapshotSigner,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
@@ -392,12 +380,12 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	}
 
 	// Store block with signature if snapshot signer is configured
-	blockSignature, err := generateSignatureOverInterface(n.snapshotSigner, block)
+	blockSignature, err := generateSignatureOverHash(n.snapshotSigner, block.Hash().Bytes())
 	if err != nil {
 		log.Error("failed to get signature for block", "err", err)
 		return false
 	}
-	err = storeBlockSignature(batch, block.NumberU64(), blockSignature)
+	err = storeBlockSignature(batch, block.Hash(), blockSignature)
 	if err != nil {
 		log.Error("failed to store signature for block", "err", err)
 		return false
@@ -456,34 +444,18 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
 	if n.configFetcher().EspressoTeeType != "" && currentBlock.NumberU64() > 0 {
-		blockhash, err := getHashOverInterface(currentBlock)
-		if err != nil {
-			log.Error("failed to get hash of current block", "err", err)
-			return fmt.Errorf("failed to get hash of current block: %w", err)
-		}
+		blockhash := currentBlock.Hash()
 
 		// Get the block signature
-		blockSignature, err := getBlockSignature(n.db, currentBlock.NumberU64())
+		blockSignature, err := getBlockSignature(n.db, blockhash)
 		if err != nil {
 			return fmt.Errorf("failed to get block signature: %w", err)
 		}
 
-		publicKeyBytes, err := crypto.Ecrecover(blockhash, blockSignature)
+		err = verifySignature(n.db, blockSignature, blockhash.Bytes(), *n.snapshotSignerAddress)
 		if err != nil {
-			return fmt.Errorf("failed to recover public key from signature: %w", err)
+			return fmt.Errorf("failed to verify block signature: %w", err)
 		}
-		pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-		if err != nil || pubKey == nil {
-			return fmt.Errorf("failed to unmarshal public key: %w", err)
-		}
-		// Public Key to address
-		publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
-		// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
-		// to be able to decrypt the snapshot
-		if publicKeyAddress != *n.snapshotAddress {
-			return fmt.Errorf("snapshot address does not match from address")
-		}
-
 	}
 
 	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
@@ -511,20 +483,9 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
 			}
 
-			publicKeyBytes, err := crypto.Ecrecover(hotshotBlockHash, nextHotshotBlockSignature)
+			err = verifySignature(n.db, nextHotshotBlockSignature, hotshotBlockHash, *n.snapshotSignerAddress)
 			if err != nil {
-				return fmt.Errorf("failed to recover public key from signature for hotshot block: %w", err)
-			}
-			pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-			if err != nil || pubKey == nil {
-				return fmt.Errorf("failed to unmarshal public key for hotshot block: %w", err)
-			}
-			// Public Key to address
-			publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
-			// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
-			// to be able to decrypt the snapshot
-			if publicKeyAddress != *n.snapshotAddress {
-				return fmt.Errorf("public key address does not match from address for hotshot block")
+				return fmt.Errorf("failed to verify signature for hotshot block: %w", err)
 			}
 		}
 	}
