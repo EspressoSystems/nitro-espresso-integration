@@ -40,10 +40,12 @@ import (
 type MultiWorkerQueueEspressoSubmitter struct {
 	client espresso_client.EspressoClient
 
-	chainID                       uint64
-	resubmissionDeadline          time.Duration
-	numSubmitTransactionWorkers   uint64
-	numTransactionIncludedWorkers uint64
+	chainID                         uint64
+	resubmissionDeadline            time.Duration
+	numSubmitTransactionWorkers     uint64
+	numTransactionIncludedWorkers   uint64
+	submissionFailureDelayPenalty   time.Duration
+	verificationFailureDelayPenalty time.Duration
 
 	submitTxnsQueue    chan SubmitTransactionJob
 	submitTxnsJobQueue chan chan SubmitTransactionJob
@@ -90,13 +92,15 @@ func NewMultiWorkerQueueEspressoSubmitter(options ...EspressoSubmitterConfigOpti
 		quoteFile:                  config.QuoteFile,
 		espressoMaxTransactionSize: config.EspressoMaxTransactionSize,
 		submitter: &MultiWorkerQueueEspressoSubmitter{
-			chainID:                       config.ChainID,
-			resubmissionDeadline:          config.ResubmitEspressoTxDeadline,
-			numSubmitTransactionWorkers:   config.NumberOfSubmitTransactionWorkers,
-			numTransactionIncludedWorkers: config.NumberOfTransactionIncludedWorkers,
-			client:                        config.EspressoClient,
-			submitTxnsQueue:               make(chan SubmitTransactionJob, config.SubmitTransactionsQueueSize),
-			transactionIncludedQueue:      make(chan TransactionIncludedJob, config.TransactionIncludedQueueSize),
+			chainID:                         config.ChainID,
+			resubmissionDeadline:            config.ResubmitEspressoTxDeadline,
+			numSubmitTransactionWorkers:     config.NumberOfSubmitTransactionWorkers,
+			numTransactionIncludedWorkers:   config.NumberOfTransactionIncludedWorkers,
+			client:                          config.EspressoClient,
+			submissionFailureDelayPenalty:   config.SubmissionFailureDelayPenalty,
+			verificationFailureDelayPenalty: config.VerificationFailureDelayPenalty,
+			submitTxnsQueue:                 make(chan SubmitTransactionJob, config.SubmitTransactionsQueueSize),
+			transactionIncludedQueue:        make(chan TransactionIncludedJob, config.TransactionIncludedQueueSize),
 		},
 	}, nil
 }
@@ -160,7 +164,7 @@ func (e ErrorFailedToLaunchSubmitTransactionResponseHandler) Unwrap() error {
 func (w *MultiWorkerQueueEspressoSubmitter) startSubmitTransactionProcess(sw *stopwaiter.StopWaiter) error {
 	// Launch the workers, scheduler, and responser handler for submit transaction
 	for i := uint64(0); i < w.numSubmitTransactionWorkers; i++ {
-		if err := sw.LaunchThreadSafe(newSubmitTransactionWorker(i, w.client, w.submitTxnsJobQueue, w.submitTxnsResponse).startWorker); err != nil {
+		if err := sw.LaunchThreadSafe(newSubmitTransactionWorker(i, w.client, w.submissionFailureDelayPenalty, w.submitTxnsJobQueue, w.submitTxnsResponse).startWorker); err != nil {
 			return ErrorFailedToLaunchSubmitTransactionQueueWorker{Worker: i, Cause: err}
 		}
 	}
@@ -229,7 +233,7 @@ func (e ErrorFailedToLaunchTransactionIncludedResponseHandler) Unwrap() error {
 // in a new goroutine using the provided stop waiter.
 func (w *MultiWorkerQueueEspressoSubmitter) startTransactionIncludedProcess(sw *stopwaiter.StopWaiter) error {
 	for i := uint64(0); i < w.numTransactionIncludedWorkers; i++ {
-		if err := sw.LaunchThreadSafe(newTransactionIncludedQueueWorker(i, w.chainID, w.client, w.transactionIncludedJobQueue, w.transactionIncludedResponse).startWorker); err != nil {
+		if err := sw.LaunchThreadSafe(newTransactionIncludedQueueWorker(i, w.chainID, w.client, w.verificationFailureDelayPenalty, w.transactionIncludedJobQueue, w.transactionIncludedResponse).startWorker); err != nil {
 			return ErrorFailedToLaunchTransactionIncludedQueueWorker{Worker: i, Cause: err}
 		}
 	}

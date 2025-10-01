@@ -41,6 +41,8 @@ type EspressoSubmitterConfig struct {
 	EspressoTxnsResubmissionInterval      time.Duration
 	EspressoMaxTransactionSize            int64
 	ResubmitEspressoTxDeadline            time.Duration
+	SubmissionFailureDelayPenalty         time.Duration
+	VerificationFailureDelayPenalty       time.Duration
 	InitialFinalizedSequencerMessageCount *big.Int
 
 	// These are attestation values that will signify information to load
@@ -92,6 +94,8 @@ var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
 	InitialFinalizedSequencerMessageCount: big.NewInt(0),
 	NumberOfSubmitTransactionWorkers:      util.GetNumCPUs() * 2,
 	NumberOfTransactionIncludedWorkers:    util.GetNumCPUs() * 2,
+	SubmissionFailureDelayPenalty:         100 * time.Millisecond,
+	VerificationFailureDelayPenalty:       100 * time.Millisecond,
 	MessageIndexQueueSize:                 1024,
 	SubmitTransactionsQueueSize:           1024,
 	TransactionIncludedQueueSize:          1024,
@@ -287,6 +291,30 @@ func WithSubmitTransactionsQueueSize(size uint64) EspressoSubmitterConfigOption 
 func WithTransactionIncludedQueueSize(size uint64) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.TransactionIncludedQueueSize = size
+	}
+}
+
+// WithSubmissionFailureDelayPenalty is an [EspressoSubmitterConfigOption] that
+// sets the delay penalty for submission failures in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithSubmissionFailureDelayPenalty(penalty time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.SubmissionFailureDelayPenalty = penalty
+	}
+}
+
+// WithVerificationFailureDelayPenalty is an [EspressoSubmitterConfigOption]
+// that sets the delay penalty for verification failures in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithVerificationFailureDelayPenalty(penalty time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.VerificationFailureDelayPenalty = penalty
 	}
 }
 

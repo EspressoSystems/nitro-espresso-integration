@@ -41,19 +41,24 @@ type transactionIncludedQueueWorker struct {
 	id                          uint64
 	chainID                     uint64
 	client                      espresso_client.EspressoClient
+	failurePenalty              time.Duration
 	transactionIncludedJobQueue chan<- chan TransactionIncludedJob
 	transactionIncludedResponse chan<- TransactionIncludedResponse
 }
 
 // newTransactionIncludedQueueWorker creates a new transaction included queue
 // worker with the given ID, client, job queue, and response channel.
-func newTransactionIncludedQueueWorker(id uint64, chainID uint64, client espresso_client.EspressoClient,
+func newTransactionIncludedQueueWorker(
+	id uint64, chainID uint64, client espresso_client.EspressoClient,
+	failurePenalty time.Duration,
 	transactionIncludedJobQueue chan<- chan TransactionIncludedJob,
-	transactionIncludedResponse chan<- TransactionIncludedResponse) *transactionIncludedQueueWorker {
+	transactionIncludedResponse chan<- TransactionIncludedResponse,
+) *transactionIncludedQueueWorker {
 	return &transactionIncludedQueueWorker{
 		id:                          id,
 		chainID:                     chainID,
 		client:                      client,
+		failurePenalty:              failurePenalty,
 		transactionIncludedJobQueue: transactionIncludedJobQueue,
 		transactionIncludedResponse: transactionIncludedResponse,
 	}
@@ -85,8 +90,20 @@ func (w *transactionIncludedQueueWorker) startWorker(_ context.Context) {
 		// Process the job
 
 		if job.attempt > 0 {
-			// Let's slow down a little
-			time.Sleep(util.ConvertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * 100 * time.Millisecond)
+			// If our attempts is greater than 0, it indicates that this isn't
+			// our first attempt at processing this job.  We want to avoid a
+			// scenario where we are hitting the Espresso Node with too many
+			// requests at once.  Since our job queue doesn't have any sense
+			// of time, the simplest way to handle this is just to sleep for
+			// a little bit longer each time we re-attempt processing the job.
+			// This will help to spread out the requests over time, and avoid
+			// overwhelming the Espresso Node.
+			//
+			// By applying this penalty here we also avoid a potential very
+			// active processing loop where we just requeue the job over and
+			// over without being able to make any progress.
+			log.Info("Re-attempting transaction inclusion check, applying delay penalty", "worker", w.id, "attempt", job.attempt, "delay", util.ConvertToInt64WithFallback[uint, time.Duration](job.attempt, 0)*w.failurePenalty)
+			time.Sleep(util.ConvertToInt64WithFallback[uint, time.Duration](job.attempt, 0) * w.failurePenalty)
 		}
 
 		details, err := w.client.FetchTransactionByHash(ctx, &job.txnHash)
