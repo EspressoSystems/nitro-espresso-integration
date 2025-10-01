@@ -82,15 +82,17 @@ func NewMultiWorkerQueueEspressoSubmitter(options ...EspressoSubmitterConfigOpti
 	}
 
 	return &NitroMessageToEspressoTransactionAdapter{
-		db:                         config.Db,
-		chainID:                    config.ChainID,
-		availableTransaction:       make(chan arbutil.MessageIndex, config.MessageIndexQueueSize),
-		messageGetter:              config.MessageGetter,
-		sendingInterval:            config.EspressoTxnSendingInterval,
-		keyManager:                 config.KeyManager,
-		userDataAttestationFile:    config.UserDataAttestationFile,
-		quoteFile:                  config.QuoteFile,
-		espressoMaxTransactionSize: config.EspressoMaxTransactionSize,
+		db:                           config.Db,
+		chainID:                      config.ChainID,
+		availableTransaction:         make(chan arbutil.MessageIndex, config.MessageIndexQueueSize),
+		messageGetter:                config.MessageGetter,
+		sendingInterval:              config.EspressoTxnSendingInterval,
+		keyManager:                   config.KeyManager,
+		userDataAttestationFile:      config.UserDataAttestationFile,
+		quoteFile:                    config.QuoteFile,
+		espressoMaxTransactionSize:   config.EspressoMaxTransactionSize,
+		initialNitroMessageAvailable: config.InitialNitroMessageAvailable,
+		initialNitroMessageToSubmit:  config.InitialNitroMessageToSubmit,
 		submitter: &MultiWorkerQueueEspressoSubmitter{
 			chainID:                         config.ChainID,
 			resubmissionDeadline:            config.ResubmitEspressoTxDeadline,

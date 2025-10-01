@@ -27,16 +27,18 @@ import (
 // NitroMessageToEspressoTransactionAdapter is an implementation of
 // EspressoSubmitter that adapts Nitro messages to Espresso transactions.
 type NitroMessageToEspressoTransactionAdapter struct {
-	db                         ethdb.Database
-	chainID                    uint64
-	submitter                  *MultiWorkerQueueEspressoSubmitter
-	availableTransaction       chan arbutil.MessageIndex
-	messageGetter              MessageGetter
-	espressoMaxTransactionSize int64
-	sendingInterval            time.Duration
-	keyManager                 espresso_key_manager.EspressoKeyManagerInterface
-	userDataAttestationFile    string
-	quoteFile                  string
+	db                           ethdb.Database
+	chainID                      uint64
+	submitter                    *MultiWorkerQueueEspressoSubmitter
+	availableTransaction         chan arbutil.MessageIndex
+	messageGetter                MessageGetter
+	espressoMaxTransactionSize   int64
+	sendingInterval              time.Duration
+	keyManager                   espresso_key_manager.EspressoKeyManagerInterface
+	userDataAttestationFile      string
+	quoteFile                    string
+	initialNitroMessageAvailable arbutil.MessageIndex
+	initialNitroMessageToSubmit  arbutil.MessageIndex
 }
 
 // Compile time check to ensure WorkerQueues implements EspressoSubmitter
@@ -110,7 +112,7 @@ func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactions(startPos, 
 // messages into multiple Espresso transactions, and submit them to the
 // submit transaction job queue.
 func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactionsProcess(ctx context.Context) {
-	var availablePos, submittedPos arbutil.MessageIndex
+	availablePos, submittedPos := n.initialNitroMessageAvailable, n.initialNitroMessageToSubmit
 	ticker := time.NewTicker(n.sendingInterval)
 
 	for {
