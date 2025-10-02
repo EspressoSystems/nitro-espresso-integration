@@ -100,7 +100,7 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, signature.DataSignerFunc, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PublicKey, signature.DataSignerFunc, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -121,15 +121,11 @@ func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, signatur
 	}
 
 	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
-	if err != nil {
+	if err != nil || publicKey == nil {
 		return nil, nil, fmt.Errorf("failed to get attested public key: %w", err)
 	}
 
-	if _, err = GetAttestedAddress(publicKey, attestationsPath); err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested address: %w", err)
-	}
-
-	return privateKey, signature.DataSignerFromPrivateKey(privateKey), nil
+	return publicKey, signature.DataSignerFromPrivateKey(privateKey), nil
 }
 
 // Safely pointer dereference

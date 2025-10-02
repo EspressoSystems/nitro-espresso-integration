@@ -31,6 +31,7 @@ func createCaffNode(
 	t *testing.T,
 	existing *NodeBuilder,
 	dangerous bool,
+	withSnapshotSigner bool,
 ) (*NodeBuilder, func(), error) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	nodeConfig := builder.nodeConfig
@@ -85,7 +86,13 @@ func createCaffNode(
 		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
 		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
 	}
-	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
+
+	if withSnapshotSigner {
+		nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+	}
+
+	cleanup, err := builder.BuildEspressoCaffNode(t, existing, withSnapshotSigner)
+	builder.L1 = existing.L1
 	return builder, cleanup, err
 }
 
@@ -214,11 +221,10 @@ func TestEspressoCaffNode(t *testing.T) {
 	})
 	Require(t, err)
 
-	log.Info("Starting the caff node")
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 	builderCaffNode := builder.L2
 	defer cleanupCaffNode()
@@ -364,7 +370,7 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 
 	// start the node
 	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 	builderCaffNode := builder2.L2
 	defer cleanupCaffNode()
@@ -422,7 +428,7 @@ func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = true
 	// start the node
 	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 	builderCaffNode := builder2.L2
 	defer cleanupCaffNode()
@@ -474,7 +480,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 
 	// start the node
 	log.Info("Starting the caff node")
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 	builderCaffNode := builder2.L2
 	defer cleanupCaffNode()
@@ -499,6 +505,107 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	if tx3[0].BlockNumber.Int64() <= finalizedHeader.Number.Int64() {
 		t.Fatal("Tx finalized before appearing in the caff node")
 	}
+	Require(t, err)
+}
+
+// Test 1: Check if restart works on EspressoCaffNode without any TEE type specified, this will make sure that if fromBlock and hotshotBlock
+// dont have signatures the node will still restart and work
+func TestEspressoCaffNodeRestart(t *testing.T) {
+	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
+
+	// Set caff node config variables
+	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
+	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+
+	// start the node
+	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false, false)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
+
+	time.Sleep(1 * time.Minute)
+	builderCaffNode.RestartCaffNode(t, false)
+
+	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
+
+	err = builder.L2.Client.SendTransaction(ctx, tx)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
+		// Now the balance should be greater than twice the transfer amount
+		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
+	})
+	Require(t, err)
+}
+
+// Check if restart works on EspressoCaffNode with  TEE type specified,
+// then make sure on restart we are checking the block, fromBlock and hotshotBlock signature
+func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
+	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
+
+	// Set caff node config variables
+	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
+	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+
+	// start the node
+	log.Info("Starting the caff node initially")
+	// Start the caff node with a snapshot signer
+	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false, true)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
+
+	// start the node
+	time.Sleep(1 * time.Minute)
+
+	builderCaffNode.RestartCaffNode(t, true)
+
+	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
+
+	err = builder.L2.Client.SendTransaction(ctx, tx)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
+		// Now the balance should be greater than twice the transfer amount
+		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
+	})
 	Require(t, err)
 }
 
@@ -557,7 +664,7 @@ func TestEspressoCaffNodeDangerousConfig(t *testing.T) {
 	defer cleanup()
 
 	// start the node
-	_, cleanupCaffNode, err := createCaffNode(ctx, t, builder, true)
+	_, cleanupCaffNode, err := createCaffNode(ctx, t, builder, true, false)
 	if cleanupCaffNode != nil {
 		defer cleanupCaffNode()
 	}
@@ -613,7 +720,7 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
 	Require(t, err)
 
-	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	defer cleanupCaffNode()
 	Require(t, err)
 
@@ -696,7 +803,6 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
 		delayedBridge,
 		reader,
-		builder.L2.ConsensusNode.ArbDB,
 		100,
 		false,
 		false,

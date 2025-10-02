@@ -30,6 +30,11 @@ type MockEspressoStreamer struct {
 	dbHotShot  uint64
 }
 
+// StopAndWait implements espressostreamer.EspressoStreamerInterface.
+func (m *MockEspressoStreamer) StopAndWait() {
+	panic("unimplemented")
+}
+
 var _ espressostreamer.EspressoStreamerInterface = (*MockEspressoStreamer)(nil)
 
 // SetBatcherAddressesFetcher implements espressostreamer.EspressoStreamerInterface.
@@ -80,12 +85,16 @@ func (m *MockEspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBl
 func (m *MockEspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time) {
 }
 
-func (m *MockEspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
+func (m *MockEspressoStreamer) StoreHotshotBlock(batch ethdb.Batch, nextHotshotBlock uint64) error {
 	return nil
 }
 
-func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
-	return m.dbHotShot, nil
+func (m *MockEspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
+	return nil
+}
+
+func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(ethdb.Database) (uint64, []byte, error) {
+	return m.dbHotShot, nil, nil
 }
 
 type MockDelayedMessageFetcher struct{}
@@ -95,7 +104,7 @@ func (m *MockDelayedMessageFetcher) getDelayedMessageLatestIndexAtBlock(blockNum
 	return 1, nil
 }
 
-func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
 	if messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead == 2 {
 		return &espressostreamer.MessageWithMetadataAndPos{
 			MessageWithMeta: arbostypes.MessageWithMetadata{
@@ -104,17 +113,21 @@ func (m *MockDelayedMessageFetcher) processDelayedMessage(messageWithMetadataAnd
 			},
 			Pos:           messageWithMetadataAndPos.Pos,
 			HotshotHeight: messageWithMetadataAndPos.HotshotHeight,
-		}, nil
+		}, 0, nil
 	}
-	return messageWithMetadataAndPos, nil
+	return messageWithMetadataAndPos, 0, nil
 }
 
 func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 	return true
 }
 
-func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error {
-	return nil
+func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
+	return
+}
+
+func (m *MockDelayedMessageFetcher) StopAndWait() {
+	return
 }
 
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
@@ -151,7 +164,7 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	caffNode.espressoStreamer = &MockEspressoStreamer{delayedPos: 3, currPos: 0}
 	caffNode.delayedMessageFetcher = &MockDelayedMessageFetcher{}
 	ctx := context.Background()
-	msg1, err := caffNode.peekMessage(ctx)
+	msg1, _, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 
 	require.Equal(t, msg1.MessageWithMeta.DelayedMessagesRead, uint64(1))
@@ -159,21 +172,21 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	require.Equal(t, msg1.Pos, uint64(0))
 	caffNode.espressoStreamer.Advance()
 
-	msg2, err := caffNode.peekMessage(ctx)
+	msg2, _, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg2.MessageWithMeta.DelayedMessagesRead, uint64(1))
 	require.Equal(t, msg2.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
 	require.Equal(t, msg2.Pos, uint64(1))
 	caffNode.espressoStreamer.Advance()
 
-	msg3, err := caffNode.peekMessage(ctx)
+	msg3, _, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg3.MessageWithMeta.DelayedMessagesRead, uint64(1))
 	require.Equal(t, msg3.MessageWithMeta.Message, &arbostypes.EmptyTestIncomingMessage)
 	require.Equal(t, msg3.Pos, uint64(2))
 	caffNode.espressoStreamer.Advance()
 
-	msg4, err := caffNode.peekMessage(ctx)
+	msg4, _, err := caffNode.peekMessage(ctx)
 	require.NoError(t, err)
 	require.Equal(t, msg4.MessageWithMeta.DelayedMessagesRead, uint64(2))
 	require.Equal(t, msg4.MessageWithMeta.Message, arbostypes.InvalidL1Message)

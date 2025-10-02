@@ -526,7 +526,7 @@ func buildOnParentChain(
 	Require(t, err)
 	chainTestClient.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 		ctx, chainTestClient.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainTestClient.Client,
-		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot())
+		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot())
 	Require(t, err)
 
 	err = chainTestClient.ConsensusNode.Start(ctx)
@@ -654,7 +654,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	Require(t, err)
 	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		nil, nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 	Require(t, err)
 
 	// Give the node an init message
@@ -687,7 +687,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	return func() { b.L2.cleanup() }
 }
 
-func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder) (func(), error) {
+func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder, withSnapshotSigner bool) (func(), error) {
 	b.L2 = NewTestClient(b.ctx)
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
@@ -709,10 +709,22 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	fatalErrChan := make(chan error, 10)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
-	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		l1Client, deployInfo, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
-	Require(t, err)
+
+	b.L1Info = existing.L1Info
+
+	if withSnapshotSigner {
+		snapshotSigner := signature.DataSignerFromPrivateKey(existing.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
+		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
+		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
+			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, snapshotSigner, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		Require(t, err)
+	} else {
+		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
+			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		Require(t, err)
+	}
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
 	if err != nil {
@@ -725,11 +737,12 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
 	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.addresses = existing.addresses
 	return func() { b.L2.cleanup() }, nil
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
-func (b *NodeBuilder) RestartL2Node(t *testing.T) {
+func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
@@ -744,7 +757,53 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	feedErrChan := make(chan error, 10)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
-	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+
+	var currentNode *arbnode.Node
+	if withSnapshotSigner {
+		snapshotSigner := signature.DataSignerFromPrivateKey(b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
+		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, snapshotSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		Require(t, err)
+	} else {
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		Require(t, err)
+	}
+
+	Require(t, currentNode.Start(b.ctx))
+	client := ClientForStack(t, stack)
+
+	StartWatchChanErr(t, b.ctx, feedErrChan, currentNode)
+
+	l2 := NewTestClient(b.ctx)
+	l2.ConsensusNode = currentNode
+	l2.Client = client
+	l2.ExecNode = execNode
+	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.Stack = stack
+
+	b.L2 = l2
+	b.L2Info = l2info
+}
+
+// L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
+func (b *NodeBuilder) RestartL2Node(t *testing.T) {
+	if b.L2 == nil {
+		t.Fatalf("L2 was not created")
+	}
+	log.Info("L2 was created")
+	b.L2.cleanup()
+
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
+
+	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
+	Require(t, err)
+
+	feedErrChan := make(chan error, 10)
+	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
+	Require(t, err)
+
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -1370,7 +1429,6 @@ func deployOnParentChain(
 	deployBold bool,
 	delayBufferThreshold uint64,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
-	log.Info("Came inside deployParentChain")
 	parentChainInfo.GenerateAccount("RollupOwner")
 	parentChainInfo.GenerateAccount("Sequencer")
 	parentChainInfo.GenerateAccount("Validator")
@@ -1511,7 +1569,6 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
 	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
-	log.Info("RollupSequencerManager address", "address", rollupSequencerManagerAddress)
 	parentChainInfo.SetContract("RollupSequencerManager", rollupSequencerManagerAddress)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
@@ -1674,9 +1731,9 @@ func Create2ndNodeWithConfig(
 	locator, err := server_common.NewMachineLocator(valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 	if useExecutionClientOnly {
-		currentNode, err = arbnode.CreateNodeExecutionClient(ctx, chainStack, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeExecutionClient(ctx, chainStack, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 	} else {
-		currentNode, err = arbnode.CreateNodeFullExecutionClient(ctx, chainStack, currentExec, currentExec, currentExec, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(ctx, chainStack, currentExec, currentExec, currentExec, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 	}
 
 	Require(t, err)
