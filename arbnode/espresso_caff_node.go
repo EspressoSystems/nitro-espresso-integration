@@ -496,6 +496,24 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
+	// TODO: fix this, SGX should not be used for tests
+	if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && currentBlock.NumberU64() > 0 {
+		blockhash := currentBlock.Hash()
+
+		// Get the block signature
+		blockSignature, err := getBlockSignature(n.db, blockhash)
+		if err != nil {
+			return fmt.Errorf("failed to get block signature: %w", err)
+		}
+
+		err = verifySignature(n.db, blockSignature, blockhash.Bytes(), *n.snapshotSignerAddress)
+		if err != nil {
+			return fmt.Errorf("failed to verify block signature: %w", err)
+		}
+	}
+
+	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
+	// from block?
 	n.currentBlock = currentBlock
 
 	currentBlockNum := currentBlockHeader.Number.Uint64() + 1
@@ -510,6 +528,18 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		nextHotshotBlock, err = n.db.AuthReadNextHotshotBlockNum()
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
+		}
+		// TODO: fix this, SGX should not be used for tests
+		if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && nextHotshotBlock != 0 {
+			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
+			if err != nil {
+				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
+			}
+
+			err = verifySignature(n.db, nextHotshotBlockSignature, hotshotBlockHash, *n.snapshotSignerAddress)
+			if err != nil {
+				return fmt.Errorf("failed to verify signature for hotshot block: %w", err)
+			}
 		}
 	}
 	if nextHotshotBlock == 0 {
