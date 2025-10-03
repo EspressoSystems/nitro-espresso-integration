@@ -263,7 +263,9 @@ func mainImpl() int {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
-
+		privHex := hex.EncodeToString(snapshotPrivateKey.D.Bytes())
+		// This will be used by the hyperlane validator
+		os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
 		if nodeConfig.ParentChain.ID != 0 {
 			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(snapshotPrivateKey, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 			if err != nil {
