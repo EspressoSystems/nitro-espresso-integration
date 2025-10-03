@@ -27,6 +27,7 @@ import (
 const (
 	SGX   = espressotee.SGX
 	NITRO = espressotee.NITRO
+	TESTS = espressotee.TESTS
 )
 
 type EspressoKeyManagerInterface interface {
@@ -244,6 +245,10 @@ func (k *EspressoKeyManager) RegisterSigner() error {
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
+}
+
+func (k *EspressoKeyManager) getAttestationQuoteForTests(userData []byte) ([]byte, error) {
+	return []byte{}, nil
 }
 
 // getAttestationQuote is a method that retrieves the attestation quote for the user data.

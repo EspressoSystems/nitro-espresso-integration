@@ -270,6 +270,9 @@ func mainImpl() int {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
 		}
+		privHex := hex.EncodeToString(snapshotPrivateKey.D.Bytes())
+		// This will be used by the hyperlane validator
+		os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
 		if nodeConfig.ParentChain.ID != 0 {
 			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 			if err != nil {
