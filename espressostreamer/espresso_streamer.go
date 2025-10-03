@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -199,20 +200,15 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 		return fmt.Errorf("failed to convert signature to public key: %w", err)
 	}
 	addr := crypto.PubkeyToAddress(*publicKey)
-	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
 		log.Warn("no valid addresses found", "validAddresses", validAddresses)
 		// No valid addresses right now. Need to catch up
 		return ErrRetryParsingHotShotPayload
 	}
-	for _, allowed := range validAddresses {
-		if allowed == addr {
-			found = true
-			break
-		}
-	}
-	if !found {
+	// if the list of valid addresses doesn't contain the address from the signature, this signature is invalid,
+	// and we must return an error.
+	if !slices.Contains(validAddresses, addr) {
 		log.Warn("batch poster address", "addr", addr, "expected one of", validAddresses)
 		return fmt.Errorf("batch poster address does not match")
 	}
@@ -230,7 +226,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
-	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature)
+	// as of 02/10/2025 there has never been an sgx TEE Caff Node that would want to use this function,
+	// Therefore we can hard code espressotee.BatchPoster
+	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature, espressotee.BatchPoster)
 	if err == nil {
 		return nil
 	}
