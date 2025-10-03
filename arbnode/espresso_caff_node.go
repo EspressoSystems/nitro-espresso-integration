@@ -535,7 +535,8 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
-	if n.configFetcher().EspressoTeeType != "" && currentBlock.NumberU64() > 0 {
+	// TODO: fix this, SGX should not be used for tests
+	if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && currentBlock.NumberU64() > 0 {
 		blockhash := currentBlock.Hash()
 
 		// Get the block signature
@@ -568,8 +569,8 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}
-
-		if n.configFetcher().EspressoTeeType != "" && nextHotshotBlock != 0 {
+		// TODO: fix this, SGX should not be used for tests
+		if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && nextHotshotBlock != 0 {
 			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
 			if err != nil {
 				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
