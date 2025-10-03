@@ -60,4 +60,4 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository }}/socat:v${{ github.event.inputs.socat_version }}
+          tags: ghcr.io/espressosystems/nitro-espresso-integration/socat:v${{ github.event.inputs.socat_version }}

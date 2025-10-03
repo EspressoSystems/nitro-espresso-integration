@@ -965,6 +965,7 @@ func getEspressoCaffNode(
 	ctx context.Context,
 	config *Config,
 	configFetcher ConfigFetcher,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	arbDb ethdb.Database,
 	exec execution.ExecutionClient,
@@ -985,6 +986,7 @@ func getEspressoCaffNode(
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				snapshotSignerAddress,
 				snapshotSigner,
 				exec.ExecEngine,
 				delayedBridge,
@@ -999,7 +1001,7 @@ func getEspressoCaffNode(
 				txOptsCaffNode,
 			)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)
 			}
 
 			return &Node{
@@ -1116,6 +1118,7 @@ func createNodeImpl(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	fatalErrChan chan error,
 	parentChainID *big.Int,
@@ -1181,7 +1184,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, snapshotSigner, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan, txOptsCaffNode)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, snapshotSignerAddress, snapshotSigner, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan, txOptsCaffNode)
 	if err != nil {
 		return nil, err
 	}
@@ -1357,6 +1360,7 @@ func CreateNodeExecutionClient(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	fatalErrChan chan error,
 	parentChainID *big.Int,
@@ -1367,7 +1371,7 @@ func CreateNodeExecutionClient(
 	if executionClient == nil {
 		return nil, errors.New("execution client must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSignerAddress, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
 	if err != nil {
 		return nil, err
 	}
@@ -1390,6 +1394,7 @@ func CreateNodeFullExecutionClient(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	fatalErrChan chan error,
 	parentChainID *big.Int,
@@ -1400,7 +1405,7 @@ func CreateNodeFullExecutionClient(
 	if (executionClient == nil) || (executionSequencer == nil) || (executionRecorder == nil) || (executionBatchPoster == nil) {
 		return nil, errors.New("execution client, sequencer, recorder, and batch poster must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSignerAddress, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
 	if err != nil {
 		return nil, err
 	}
@@ -1589,6 +1594,10 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
+
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
 	}

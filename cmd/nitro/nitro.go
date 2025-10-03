@@ -230,6 +230,9 @@ func mainImpl() int {
 
 	var dataSigner signature.DataSignerFunc
 	var snapshotSigner signature.DataSignerFunc
+	var snapshotSignerAddress *common.Address
+	var snapshotPublicKey *ecdsa.PublicKey
+	var snapshotPrivateKey *ecdsa.PrivateKey
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
 	// If sequencer and signing is enabled or batchposter is enabled without
@@ -254,21 +257,22 @@ func mainImpl() int {
 
 	var caffNodetxOpts *bind.TransactOpts
 
-	if nodeConfig.Node.EspressoCaffNode.Enable {
-		var key *ecdsa.PrivateKey
-		key, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
+		snapshotPublicKey, snapshotSigner, snapshotPrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
 		if nodeConfig.ParentChain.ID != 0 {
-			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(snapshotPrivateKey, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 			if err != nil {
 				flag.Usage()
 				log.Crit("error creating caff node txOpts", "err", err)
 			}
 		}
+		publicKeyAddress := crypto.PubkeyToAddress(*snapshotPublicKey)
+		snapshotSignerAddress = &publicKeyAddress
 	}
 
 	if sequencerNeedsKey || nodeConfig.Node.BatchPoster.ParentChainWallet.OnlyCreateKey {
@@ -587,6 +591,7 @@ func mainImpl() int {
 		l1TransactionOptsValidator,
 		l1TransactionOptsBatchPoster,
 		dataSigner,
+		snapshotSignerAddress,
 		snapshotSigner,
 		fatalErrChan,
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),

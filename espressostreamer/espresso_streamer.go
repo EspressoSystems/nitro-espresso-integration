@@ -27,6 +27,7 @@ import (
 )
 
 const NextHotshotBlockKey = "nextHotshotBlock"
+const HotshotBlockSignatureKey = "hotshotBlockSignature"
 
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
@@ -48,11 +49,12 @@ type EspressoStreamerInterface interface {
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
-	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
-	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
+	StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error
+	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, []byte, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
+	StopAndWait()
 }
 
 type MessageWithMetadataAndPos struct {
@@ -305,31 +307,44 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	return result, nil
 }
 
-func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
+func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
 	var nextHotshotBlock uint64
 	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
 	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
+		return 0, nil, fmt.Errorf("failed to get next hotshot block: %w", err)
+	}
+	if dbutil.IsErrNotFound(err) {
+		return 0, nil, nil
 	}
 	if nextHotshotBytes != nil {
 		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
 		if err != nil {
-			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
+			return 0, nil, fmt.Errorf("failed to decode next hotshot block: %w", err)
 		}
 	}
+	// Also need the signature over hotshot block
+	hotshotBlockSignature, err := db.Get([]byte(HotshotBlockSignatureKey))
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to get signature over hotshot block: %w", err)
+	}
 
-	return nextHotshotBlock, nil
+	return nextHotshotBlock, hotshotBlockSignature, nil
 }
 
-func (s *EspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
+func (s *EspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
 	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
 	if err != nil {
 		return fmt.Errorf("failed to encode next hotshot block: %w", err)
 	}
 
-	err = db.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
+	err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
 	if err != nil {
 		return fmt.Errorf("failed to put next hotshot block: %w", err)
+	}
+
+	err = batch.Put([]byte(HotshotBlockSignatureKey), signature)
+	if err != nil {
+		return fmt.Errorf("failed to put signature: %w", err)
 	}
 
 	return nil
@@ -428,4 +443,8 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return 0
 	})
 	return err
+}
+
+func (s *EspressoStreamer) StopAndWait() {
+	s.StopWaiter.StopAndWait()
 }

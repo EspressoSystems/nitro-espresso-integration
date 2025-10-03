@@ -100,36 +100,32 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, signature.DataSignerFunc, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PublicKey, signature.DataSignerFunc, *ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
-		return nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
+		return nil, nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
 
 	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
 	}
 
 	privateKey, err := GetAttestedPrivateKey(awsConfig, kmsKeyID, attestationsPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested private key: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to get attested private key: %w", err)
 	}
 
 	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested public key: %w", err)
+	if err != nil || publicKey == nil {
+		return nil, nil, nil, fmt.Errorf("failed to get attested public key: %w", err)
 	}
 
-	if _, err = GetAttestedAddress(publicKey, attestationsPath); err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested address: %w", err)
-	}
-
-	return privateKey, signature.DataSignerFromPrivateKey(privateKey), nil
+	return publicKey, signature.DataSignerFromPrivateKey(privateKey), privateKey, nil
 }
 
 // Safely pointer dereference

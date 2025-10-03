@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -49,15 +50,14 @@ type EspressoCaffNodeConfig struct {
 	BlocksToRead                 uint64                                   `koanf:"blocks-to-read"`
 	Dangerous                    DangerousCaffNodeConfig                  `koanf:"dangerous"`
 	EspressoRegisterSignerConfig espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
-	EspressoTeeType              string                                   `koanf:"espresso-tee-type"`
 
 	// SGX specific config, leave empty if not using SGX
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
 
 	// Data poster config
-	DataPoster dataposter.DataPosterConfig `koanf:"data-poster"`
-
+	DataPoster      dataposter.DataPosterConfig `koanf:"data-poster"`
+	EspressoTeeType string                      `koanf:"espresso-tee-type"`
 	// Force Inclusion Checker
 	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
 	StateChecker          StateCheckerConfig          `koanf:"state-checker"`
@@ -101,11 +101,11 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	Dangerous:                    DefaultDangerousCaffNodeConfig,
 	FromBlock:                    1,
 	KeyPairAttestationsPath:      "caff_node_key_pair_attestations",
-	EspressoTeeType:              "SGX",
 	EspressoRegisterSignerConfig: espressotee.DefaultEspressoRegisterSignerConfig,
 	UserDataAttestationFile:      "",
 	QuoteFile:                    "",
 	DataPoster:                   dataposter.DefaultDataPosterConfig,
+	EspressoTeeType:              "",
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -146,9 +146,10 @@ type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
 type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
-	executionEngine  *gethexec.ExecutionEngine
-	snapshotSigner   signature.DataSignerFunc
-	espressoStreamer espressostreamer.EspressoStreamerInterface
+	executionEngine       *gethexec.ExecutionEngine
+	snapshotSignerAddress *common.Address
+	snapshotSigner        signature.DataSignerFunc
+	espressoStreamer      espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
 	db            ethdb.Database
@@ -163,11 +164,13 @@ type EspressoCaffNode struct {
 	batcherAddrMonitor *BatcherAddrMonitor
 	keyManager         *espresso_key_manager.EspressoKeyManager
 	dataPoster         *dataposter.DataPoster
+	currentBlock       *types.Block
 }
 
 func NewEspressoCaffNode(
 	ctx context.Context,
 	configFetcher EspressoCaffNodeConfigFetcher,
+	snapshotSignerAddress *common.Address,
 	snapshotSigner signature.DataSignerFunc,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
@@ -187,7 +190,14 @@ func NewEspressoCaffNode(
 
 	if l1Reader == nil {
 		log.Crit("l1Reader is nil")
-		return nil, fmt.Errorf("l1Reader is nil")
+		return nil, fmt.Errorf("l1 reader is nil")
+	}
+
+	if configFetcher().EspressoTeeType != "" {
+		// Check that snapsnotSigner is not nil
+		if snapshotSigner == nil || snapshotSignerAddress == nil {
+			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
+		}
 	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
@@ -222,21 +232,32 @@ func NewEspressoCaffNode(
 	)
 
 	fromBlock := configFetcher().FromBlock
+	var fromBlockSignature []byte
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = readCurrentFromBlockFromDb(db)
+		fromBlock, fromBlockSignature, err = readCurrentFromBlockFromDb(db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
-	}
+		if configFetcher().EspressoTeeType != "" && fromBlock != 0 {
+			fromBlockHash, err := getHashOverUint64(fromBlock)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
+			}
 
+			err = verifySignature(db, fromBlockSignature, fromBlockHash, *snapshotSignerAddress)
+			if err != nil {
+				return nil, fmt.Errorf("failed to verify from block signature: %w", err)
+			}
+		}
+	}
 	if fromBlock == 0 {
 		fromBlock = configFetcher().FromBlock
 		if fromBlock == 0 {
-			return nil, errors.New("fromBlock is 0, please provide a valid block number")
+			return nil, fmt.Errorf("fromBlock is 0, please provide a valid block number")
 		}
 	}
 
-	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
+	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox, fatalErrChan)
 
 	seqInbox, err := bridgegen.NewSequencerInbox(sequencerInbox.address, l1Reader.Client())
@@ -317,6 +338,7 @@ func NewEspressoCaffNode(
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
+		snapshotSignerAddress: snapshotSignerAddress,
 		snapshotSigner:        snapshotSigner,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
@@ -339,37 +361,36 @@ func NewEspressoCaffNode(
 //
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
-func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, error) {
+func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
 	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
 
 	if messageWithMetadataAndPos == nil {
-		return nil, nil
+		return nil, 0, nil
 	}
 
 	// Check if its a delayed message, if so fetch from the database
 	delayedMessageToProcessIndex, err := n.executionEngine.NextDelayedMessageNumber()
 	if err != nil {
 		log.Error("failed to get next delayed message number", "err", err)
-		return nil, err
+		return nil, 0, err
 	}
 	if delayedMessageToProcessIndex == messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead-1 {
-		messageWithMetadataAndPosDelayed, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
+		messageWithMetadataAndPosDelayed, fromBlock, err := n.delayedMessageFetcher.processDelayedMessage(messageWithMetadataAndPos)
 		if err != nil {
 			log.Error("unable to get the next delayed message", "err", err)
-			return nil, err
+			return nil, 0, err
 		}
-		return messageWithMetadataAndPosDelayed, nil
+		return messageWithMetadataAndPosDelayed, fromBlock, nil
 	}
 
-	return messageWithMetadataAndPos, nil
+	return messageWithMetadataAndPos, 0, nil
 }
 
 // Creates a block from the next message in the queue.
 func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
+	lastBlockHeader := n.currentBlock.Header()
 
-	lastBlockHeader := n.executionEngine.Bc().CurrentBlock()
-
-	messageWithMetadataAndPos, err := n.peekMessage(ctx)
+	messageWithMetadataAndPos, fromBlock, err := n.peekMessage(ctx)
 	if err != nil {
 		log.Warn("unable to get next message", "err", err)
 		return false
@@ -412,9 +433,45 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
 	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
-	err = n.espressoStreamer.StoreHotshotBlock(n.db, hotshotBlockNumber)
+	batch := n.db.NewBatch()
+
+	// Store hotshot block with signature if snapshot signer is configured
+	hotshotBlockSignature, err := generateSignatureFromUint64(n.snapshotSigner, hotshotBlockNumber)
 	if err != nil {
-		log.Warn("Failed to store hotshot block. This should be an ephemeral error", "err", err)
+		log.Error("Failed to get signature for hotshot block", "err", err)
+		return false
+	}
+	err = n.espressoStreamer.StoreHotshotBlockWithSignature(batch, hotshotBlockNumber, hotshotBlockSignature)
+	if err != nil {
+		log.Warn("Failed to store signature for hotshot block. This should be an ephemeral error", "err", err)
+		return false
+	}
+
+	// Store from block with signature if snapshot signer is configured
+	// fromBlock will only be stored when we process a delayed message
+	if fromBlock != 0 {
+		fromBlockSignature, err := generateSignatureFromUint64(n.snapshotSigner, fromBlock)
+		if err != nil {
+			log.Error("Failed to get signature for from block", "err", err)
+			return false
+		}
+
+		err = storeFromBlockWithSignature(batch, fromBlock, fromBlockSignature)
+		if err != nil {
+			log.Error("failed to store signature for from block", "err", err)
+			return false
+		}
+	}
+
+	// Store block with signature if snapshot signer is configured
+	blockSignature, err := generateSignatureOverHash(n.snapshotSigner, block.Hash().Bytes())
+	if err != nil {
+		log.Error("failed to get signature for block", "err", err)
+		return false
+	}
+	err = storeBlockSignature(batch, block.Hash(), blockSignature)
+	if err != nil {
+		log.Error("failed to store signature for block", "err", err)
 		return false
 	}
 
@@ -424,6 +481,13 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		return false
 	}
 
+	// Write the batch to the database
+	if err := batch.Write(); err != nil {
+		log.Error("caff node create block failed to write block to db", "err", err)
+		return false
+	}
+
+	n.currentBlock = block
 	n.espressoStreamer.Advance()
 
 	n.executionEngine.Bc().SetFinalized(block.Header())
@@ -438,7 +502,6 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 }
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
-	log.Info("Starting espresso caff node")
 	n.StopWaiter.Start(ctx, n)
 
 	registered := n.keyManager.HasRegistered()
@@ -469,20 +532,55 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	// This is +1 because the current block is the block after the last processed block
-	currentBlockNum := n.executionEngine.Bc().CurrentBlock().Number.Uint64() + 1
+	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
+	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
+
+	if n.configFetcher().EspressoTeeType != "" && currentBlock.NumberU64() > 0 {
+		blockhash := currentBlock.Hash()
+
+		// Get the block signature
+		blockSignature, err := getBlockSignature(n.db, blockhash)
+		if err != nil {
+			return fmt.Errorf("failed to get block signature: %w", err)
+		}
+
+		err = verifySignature(n.db, blockSignature, blockhash.Bytes(), *n.snapshotSignerAddress)
+		if err != nil {
+			return fmt.Errorf("failed to verify block signature: %w", err)
+		}
+	}
+
+	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
+	// from block?
+	n.currentBlock = currentBlock
+
+	currentBlockNum := currentBlockHeader.Number.Uint64() + 1
 	currentMessagePos, err := n.executionEngine.BlockNumberToMessageIndex(currentBlockNum)
 	if err != nil {
 		return fmt.Errorf("failed to convert block number to message index: %w", err)
 	}
+
 	var nextHotshotBlock uint64
+	var nextHotshotBlockSignature []byte
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, err = n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+		nextHotshotBlock, nextHotshotBlockSignature, err = n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}
-	}
 
+		if n.configFetcher().EspressoTeeType != "" && nextHotshotBlock != 0 {
+			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
+			if err != nil {
+				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
+			}
+
+			err = verifySignature(n.db, nextHotshotBlockSignature, hotshotBlockHash, *n.snapshotSignerAddress)
+			if err != nil {
+				return fmt.Errorf("failed to verify signature for hotshot block: %w", err)
+			}
+		}
+	}
 	if nextHotshotBlock == 0 {
 		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
 		nextHotshotBlock = n.configFetcher().NextHotshotBlock
@@ -490,6 +588,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			return errors.New("no next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
 		}
 	}
+
 	// The reason we do the reset here is because database is only initialized after Caff node is initialized
 	// so if we want to read the current position from the database, we need to reset the streamer
 	// during the start of the espresso streamer and caff node
@@ -501,11 +600,8 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
 	// we store delayedmessagecount-1 because that is the index of the delayed message
 	// that needs to be read
-	err = n.delayedMessageFetcher.storeDelayedMessageLatestIndex(n.db, delayedMessagesRead-1)
-	if err != nil {
-		log.Error("failed to store delayed message count", "err", err)
-		return err
-	}
+	n.delayedMessageFetcher.storeDelayedMessageLatestIndex(delayedMessagesRead - 1)
+
 	log.Debug("stored delayed message count", "delayedMessagesRead", delayedMessagesRead-1)
 
 	// Start the delayed message fetcher
@@ -528,4 +624,12 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (n *EspressoCaffNode) StopAndWait() {
+	n.StopWaiter.StopAndWait()
+	n.batcherAddrMonitor.StopAndWait()
+	n.delayedMessageFetcher.StopAndWait()
+	n.espressoStreamer.StopAndWait()
+	n.forceInclusionChecker.StopAndWait()
 }
