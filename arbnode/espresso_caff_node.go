@@ -19,6 +19,8 @@ import (
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espresso/authdb"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -238,6 +240,62 @@ func NewEspressoCaffNode(
 		fatalErrChan,
 	)
 
+	// Create a new EspressoKeyManager
+	// Get the EspressoTEEVerifier address from SequencerInbox contract
+
+	espressoTEEVerifierAddress, err := sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
+	}
+	espressoTEEVerifier, err := espressogen.NewIEspressoTEEVerifier(espressoTEEVerifierAddress, l1Reader.Client())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)
+	}
+	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
+
+	var teeType espressotee.TEE
+	configTee := configFetcher().EspressoTeeType
+	teeType, err = teeType.FromString(configTee)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
+	}
+
+	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+	if teeType == espresso_key_manager.NITRO {
+		log.Info("setting up nitro verifier", "tee type", teeType)
+		nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(espressoTEEVerifier, l1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	dataPosterConfigFetcher := func() *dataposter.DataPosterConfig {
+		dpCfg := configFetcher().DataPoster
+		return &dpCfg
+	}
+
+	chainId, err := l1Reader.Client().ChainID(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chain id: %w", err)
+	}
+
+	dataPoster, err := dataposter.NewDataPoster(ctx,
+		&dataposter.DataPosterOpts{
+			Database:      dataPosterDB,
+			HeaderReader:  l1Reader,
+			Auth:          txOptsCaffNode,
+			Config:        dataPosterConfigFetcher,
+			ParentChainID: chainId,
+			MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
+				return nil, nil
+			},
+		})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create data poster: %w", err)
+	}
+
+	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSigner, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
@@ -385,6 +443,14 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
+
+	registered := n.keyManager.HasRegistered()
+	if !registered {
+		if err := n.keyManager.RegisterService(); err != nil {
+			return err
+		}
+	}
+
 	err := n.espressoStreamer.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
