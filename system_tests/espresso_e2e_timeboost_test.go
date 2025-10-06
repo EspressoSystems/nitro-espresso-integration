@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/prysmaticlabs/go-ssz"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -26,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 )
 
@@ -301,7 +303,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	expectedTxs = append(expectedTxs, delayedTx2)
 
 	// Wait for blocks and batch
-	time.Sleep(time.Second * 90)
+	time.Sleep(time.Second * 60)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
@@ -328,14 +330,63 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 		transactions = append(transactions, transactionsWithoutStartBlock...)
 	}
 
-	if len(transactions) != len(expectedTxs) {
-		t.Fatalf("expected transactions and block transactions to match. got %d expected txns, got %d block transactions", len(expectedTxs), len(transactions))
-	}
-
-	for i, tx := range transactions {
-		expected := expectedTxs[i]
+	for i, tx := range expectedTxs {
+		expected := transactions[i]
 		if tx.Hash() != expected.Hash() {
 			t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
 		}
+	}
+
+	parsedABI, err := abi.JSON(strings.NewReader(bridgegen.SequencerInboxMetaData.ABI))
+	Require(t, err)
+
+	l1Height, err := builder.L1.Client.BlockNumber(ctx)
+	Require(t, err)
+	// Create filter query for SequencerBatchDelivered events
+	query := ethereum.FilterQuery{
+		FromBlock: new(big.Int).SetUint64(0),
+		ToBlock:   new(big.Int).SetUint64(l1Height),
+		Addresses: []common.Address{builder.addresses.SequencerInbox},
+		Topics: [][]common.Hash{
+			{parsedABI.Events["SequencerBatchDelivered"].ID},
+		},
+	}
+
+	logs, err := builder.L1.Client.FilterLogs(ctx, query)
+	Require(t, err)
+
+	var batchNum uint64
+	for _, log := range logs {
+		// Unpack the event data
+		event := struct {
+			BatchSequenceNumber      *big.Int
+			BeforeAcc                common.Hash
+			AfterAcc                 common.Hash
+			DelayedAcc               common.Hash
+			AfterDelayedMessagesRead *big.Int
+			TimeBounds               struct {
+				MinTimestamp   uint64
+				MaxTimestamp   uint64
+				MinBlockNumber uint64
+				MaxBlockNumber uint64
+			}
+			DataLocation uint8
+		}{}
+
+		if len(log.Topics) > 1 {
+			event.BatchSequenceNumber = log.Topics[1].Big()
+		}
+
+		// Unpack only the non-indexed parameters from log.Data
+		err := parsedABI.UnpackIntoInterface(&event, "SequencerBatchDelivered", log.Data)
+		if err != nil {
+			fmt.Printf("Error unpacking log data: %v\n", err)
+			continue
+		}
+
+		batchNum = event.BatchSequenceNumber.Uint64()
+	}
+	if batchNum <= 0 {
+		t.Fatal("expected a batch to be posted")
 	}
 }

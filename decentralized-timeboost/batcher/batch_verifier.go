@@ -12,7 +12,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/btcsuite/btcutil/base58"
+	"github.com/spf13/pflag"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -55,18 +59,45 @@ type BatchVerifier struct {
 	client     *http.Client
 }
 
-func NewBatchVerifier(privateKey *ecdsa.PrivateKey) (*BatchVerifier, error) {
+type BatchVerifierConfig struct {
+	PrivateKey string        `koanf:"private-key"`
+	RpcTimeout time.Duration `koanf:"rpc-timeout"`
+	// TODO: - should these be configurable or should it be hardcoded?
+	RpcKeepalive time.Duration `koanf:"rpc-keepalive"`
+}
+
+var DefaultBatchVerifierConfig = BatchVerifierConfig{
+	PrivateKey:   "",
+	RpcTimeout:   time.Second * 10,
+	RpcKeepalive: time.Second * 30,
+}
+
+func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag.FlagSet) {
+	f.String(prefix+".private-key", DefaultBatchVerifierConfig.PrivateKey, "batch verifier private key")
+	f.Duration(prefix+".rpc-timeout", DefaultBatchVerifierConfig.RpcTimeout, "timeout for http client")
+	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
+}
+
+func NewBatchVerifier(config BatchVerifierConfig) (*BatchVerifier, error) {
+	if len(config.PrivateKey) == 0 {
+		return nil, fmt.Errorf("decentralized timeboost private key must be set")
+	}
+	decoded := base58.Decode(config.PrivateKey)
+	privateKey, err := crypto.ToECDSA(decoded)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode decentralized timeboost private key: %w", err)
+	}
 	if privateKey == nil {
-		return nil, fmt.Errorf("private key cannot be nil")
+		return nil, fmt.Errorf("decentralized timeboost private key cannot be nil")
 	}
 	return &BatchVerifier{
 		privateKey: privateKey,
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout: config.RpcTimeout,
 			Transport: &http.Transport{
 				DialContext: (&net.Dialer{
-					Timeout:   5 * time.Second,
-					KeepAlive: 30 * time.Second,
+					Timeout:   config.RpcTimeout,
+					KeepAlive: config.RpcKeepalive,
 				}).DialContext,
 				Dial: func(network, addr string) (net.Conn, error) {
 					return net.Dial(network, addr)
@@ -76,11 +107,11 @@ func NewBatchVerifier(privateKey *ecdsa.PrivateKey) (*BatchVerifier, error) {
 	}, nil
 }
 
-func (v *BatchVerifier) GetCompressedPubKey() []byte {
+func (v *BatchVerifier) getCompressedPubKey() []byte {
 	return crypto.CompressPubkey(&v.privateKey.PublicKey)
 }
 
-func (v *BatchVerifier) SendBatchForVerification(
+func (v *BatchVerifier) sendBatchForVerification(
 	args *BatchPosterArgs,
 	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
 ) ([]byte, error) {
@@ -307,4 +338,59 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 		return fmt.Errorf("failed to verify signature: %w", err)
 	}
 	return nil
+}
+
+func (v *BatchVerifier) SignAndSendBatchIfLeader(
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+	arguments abi.Arguments,
+	seqNum *big.Int,
+	l2MessageData []byte,
+	delayedMsg *big.Int,
+	gasRefunder common.Address,
+	prevMsgNum *big.Int,
+	newMsgNum *big.Int,
+) ([]byte, error) {
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+	if err != nil {
+		return nil, err
+	}
+	leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
+	pubKey := v.getCompressedPubKey()
+	if !bytes.Equal(pubKey, leader.SigKey) {
+		log.Debug(
+			"batch not sent: not leader",
+			"key", hex.EncodeToString(pubKey),
+			"sequenceNumber", seqNum,
+			"from", prevMsgNum,
+			"to", *newMsgNum,
+			"prevDelayed", delayedMsg,
+		)
+		return nil, fmt.Errorf("not leader for batch")
+	}
+
+	calldata, err := arguments.Pack(
+		seqNum,
+		l2MessageData,
+		delayedMsg,
+		gasRefunder,
+		prevMsgNum,
+		newMsgNum,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	args, err := v.HashAndSignBatchData(calldata)
+	if err != nil {
+		return nil, err
+	}
+
+	sigs, err := v.sendBatchForVerification(
+		args,
+		committee.Members,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return sigs, nil
 }

@@ -19,7 +19,6 @@ import (
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
-	"github.com/btcsuite/btcutil/base58"
 	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum"
@@ -28,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -238,9 +236,9 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses             []common.Address `koanf:"init-batcher-addresses"`
-	IsDecentralizedTimeboost         bool             `koanf:"is-decentralized-timeboost"`
-	DecentralizedTimeboostPrivateKey string           `koanf:"decentralized-timeboost-private-key"`
+	InitBatcherAddresses                []common.Address                                           `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
+	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -317,7 +315,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Bool(prefix+".is-decentralized-timeboost", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
-	f.String(prefix+".decentralized-timeboost-private-key", DefaultBatchPosterConfig.DecentralizedTimeboostPrivateKey, "timeboost private key")
+	decentralized_timeboost_batch_verifier.DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix+".decentralized-timeboost-batch-verifier", f)
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -370,12 +368,12 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
-	HotShotBlock:                     1,
-	HotShotFirstPostingBlock:         1,
-	InitBatcherAddresses:             []common.Address{},
-	EspressoEventPollingStep:         100,
-	IsDecentralizedTimeboost:         false,
-	DecentralizedTimeboostPrivateKey: "",
+	HotShotBlock:                        1,
+	HotShotFirstPostingBlock:            1,
+	InitBatcherAddresses:                []common.Address{},
+	EspressoEventPollingStep:            100,
+	IsDecentralizedTimeboost:            false,
+	DecentralizedTimeboostBatchVerifier: decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -737,12 +735,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		b.batchVerifier = nil
 		if opts.Config().IsDecentralizedTimeboost {
-			decoded := base58.Decode(b.config().DecentralizedTimeboostPrivateKey)
-			privateKey, err := crypto.ToECDSA(decoded)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decode private key: %w", err)
-			}
-			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(privateKey)
+			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(opts.Config().DecentralizedTimeboostBatchVerifier)
 			if err != nil {
 				return nil, err
 			}
@@ -1504,48 +1497,15 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	var signature []byte
 	var sigs []byte
 	if b.config().IsDecentralizedTimeboost {
-		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
-		if err != nil {
-			return nil, err
-		}
-		leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
-		pubKey := b.batchVerifier.GetCompressedPubKey()
-		if !bytes.Equal(pubKey, leader.SigKey) {
-			log.Info(
-				"batch not sent: not leader",
-				"key", hex.EncodeToString(pubKey),
-				"sequenceNumber", seqNum,
-				"from", prevMsgNum,
-				"to", b.building.msgCount,
-				"prevDelayed", delayedMsg,
-				"currentDelayed", b.building.segments.delayedMsg,
-				"totalSegments", len(b.building.segments.rawSegments),
-			)
-			return nil, fmt.Errorf("not leader for batch")
-		}
-		var arguments abi.Arguments
-		arguments = append(arguments, method.Inputs...)
-
-		calldata, err := arguments.Pack(
+		sigs, err = b.batchVerifier.SignAndSendBatchIfLeader(
+			b.espressoStreamer.TimeboostKeyManager,
+			method.Inputs,
 			seqNum,
 			l2MessageData,
 			new(big.Int).SetUint64(delayedMsg),
 			b.config().gasRefunder,
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		args, err := b.batchVerifier.HashAndSignBatchData(calldata)
-		if err != nil {
-			return nil, err
-		}
-
-		sigs, err = b.batchVerifier.SendBatchForVerification(
-			args,
-			committee.Members,
 		)
 		if err != nil {
 			return nil, err
@@ -2523,7 +2483,9 @@ func (b *BatchPoster) getL1Bounds(ctx context.Context) (*l1Bounds, error) {
 	if hasL1Bound {
 		var l1Bound *types.Header
 		var err error
-		if config.l1BlockBound == l1BlockBoundLatest {
+		if config.IsDecentralizedTimeboost {
+			l1Bound, err = b.l1Reader.LatestFinalizedBlockHeader(ctx)
+		} else if config.l1BlockBound == l1BlockBoundLatest {
 			l1Bound, err = b.l1Reader.LastHeader(ctx)
 		} else if config.l1BlockBound == l1BlockBoundSafe || config.l1BlockBound == l1BlockBoundDefault {
 			l1Bound, err = b.l1Reader.LatestSafeBlockHeader(ctx)
@@ -2682,7 +2644,7 @@ func (b *BatchPoster) VerifiyBatchCorrectness(batchPosition batchPosterPosition,
 		}
 
 		if !msg.Message.Equals(muxBackend.allMsgs[index].Message) {
-			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message, muxBackend.allMsgs[index].Message)
+			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 		}
 	}
 	return nil

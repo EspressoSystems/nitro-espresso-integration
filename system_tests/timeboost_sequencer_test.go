@@ -54,7 +54,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 1000 * time.Hour
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = batchPoster
-	builder.nodeConfig.BatchPoster.DecentralizedTimeboostPrivateKey = privKey
+	builder.nodeConfig.BatchPoster.DecentralizedTimeboostBatchVerifier.PrivateKey = privKey
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
