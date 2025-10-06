@@ -105,3 +105,19 @@ func (m *MockEspressoKeyManager) SignHotShotPayload(message []byte) ([]byte, err
 func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
 	return espressotee.SGX
 }
+
+func (m *MockEspressoKeyManager) RegisterService() error {
+	teeType := m.TeeType()
+	switch teeType {
+	case espressotee.SGX:
+		return m.Register(m.getData)
+	case espressotee.NITRO:
+		return m.Register(m.getData)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
+}
+
+func (m *MockEspressoKeyManager) getData(userData []byte) ([]byte, error) {
+	return []byte{}, nil
+}
