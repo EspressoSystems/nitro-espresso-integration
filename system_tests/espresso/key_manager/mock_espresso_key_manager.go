@@ -106,7 +106,7 @@ func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
 	return espressotee.SGX
 }
 
-func (m *MockEspressoKeyManager) RegisterSigner() error {
+func (m *MockEspressoKeyManager) RegisterService() error {
 	teeType := m.TeeType()
 	switch teeType {
 	case espressotee.SGX:
