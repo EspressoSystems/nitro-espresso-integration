@@ -698,7 +698,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions = append(
 				submitterOptions,
 				submitter.WithKeyManager(
-					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, cfg.EspressoRegisterSignerConfig, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterSignerConfig, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
 				),
 			)
 
@@ -1899,7 +1899,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		registered := espressoSubmitter.GetKeyManager().HasRegistered()
 		if !registered {
 			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
-			err := espressoSubmitter.RegisterSigner()
+			err := espressoSubmitter.RegisterService()
 			if err != nil {
 				return false, fmt.Errorf("unable to register signer: %w", err)
 			}

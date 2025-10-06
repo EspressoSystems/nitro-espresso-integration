@@ -22,11 +22,11 @@ import (
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -333,7 +333,7 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("failed to create data poster: %w", err)
 	}
 
-	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSigner, teeType, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSigner, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -506,7 +506,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 
 	registered := n.keyManager.HasRegistered()
 	if !registered {
-		if err := n.keyManager.RegisterSigner(); err != nil {
+		if err := n.keyManager.RegisterService(); err != nil {
 			return err
 		}
 	}
