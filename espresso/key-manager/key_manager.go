@@ -19,21 +19,21 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressotee"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
 const (
 	SGX   = espressotee.SGX
 	NITRO = espressotee.NITRO
-	TESTS = espressotee.TESTS
+	// TESTS = espressotee.TESTS
 )
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() bool
 	Register(getAttestationFunc func([]byte) ([]byte, error)) error
-	RegisterSigner() error
+	RegisterService() error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignPayload(message []byte) ([]byte, error)
 	SignBatch(message []byte) ([]byte, error)
@@ -51,6 +51,7 @@ type EspressoKeyManager struct {
 	signer                  signature.DataSignerFunc
 	dataPoster              *dataposter.DataPoster
 	teeType                 espressotee.TEE
+	serviceType             espressotee.ServiceType
 	registerSignerOpts      espressotee.EspressoRegisterSignerOpts
 	userDataAttestationFile string
 	quoteFile               string
@@ -64,6 +65,7 @@ func NewEspressoKeyManager(
 	dataPoster *dataposter.DataPoster,
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
+	serviceTupe espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterSignerConfig,
 	userDataAttestationFile string,
 	quoteFile string,
@@ -147,7 +149,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 /*
  * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
  */
-func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
+func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
 	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
 	switch k.teeType {
 	case SGX:
@@ -191,12 +193,12 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	// Get the attestation and data needed to register the signer
-	attestation, data, err := k.PrepareRegisterSigner(getAttestationFunc)
+	attestation, data, err := k.PrepareRegisterService(getAttestationFunc)
 	if err != nil {
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), espressotee.BatchPoster, k.registerSignerOpts)
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
 	if err != nil {
 		return err
 	}
@@ -235,7 +237,7 @@ func (k *EspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
 	return crypto.Sign(hash.Bytes(), k.privKey)
 }
 
-func (k *EspressoKeyManager) RegisterSigner() error {
+func (k *EspressoKeyManager) RegisterService() error {
 	teeType := k.TeeType()
 	switch teeType {
 	case SGX:
