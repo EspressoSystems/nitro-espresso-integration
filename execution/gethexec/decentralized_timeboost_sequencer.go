@@ -58,20 +58,20 @@ type synchronizedTimeboostTransactionQueue struct {
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactionQueueItem) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	q.queue = append(q.queue, item)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueueItems(items []timeboostTransactionQueueItem) {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	q.queue = append(q.queue, items...)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQueueItem {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+	// q.mutex.Lock()
+	// defer q.mutex.Unlock()
 	// Remove the first element from the queue and then return it
 	item := q.queue[0]
 	q.queue = q.queue[1:]
@@ -79,14 +79,14 @@ func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQu
 }
 
 func (q *synchronizedTimeboostTransactionQueue) Len() int {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
+	// q.mutex.RLock()
+	// defer q.mutex.RUnlock()
 	return len(q.queue)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueueItem {
-	q.mutex.RLock()
-	defer q.mutex.RUnlock()
+	// q.mutex.RLock()
+	// defer q.mutex.RUnlock()
 	if len(q.queue) == 0 {
 		return nil
 	}
@@ -106,6 +106,7 @@ type DecentralizedTimeboostSequencer struct {
 	timeboostBridge     *DecentralizedTimeboostBridge
 	delayedMessagesRead uint64
 	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
+	txChan              chan []timeboostTransactionQueueItem
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -166,6 +167,7 @@ func NewDecentralizedTimeboostSequencer(
 		},
 		delayedMessagesRead: 1,
 		delayedSequencer:    delayedSequencer,
+		txChan:              make(chan []timeboostTransactionQueueItem, 10_000),
 	}, nil
 }
 
@@ -174,6 +176,7 @@ func (s *DecentralizedTimeboostSequencer) createBlock(ctx context.Context) (retu
 	queueItems := make([]timeboostTransactionQueueItem, 0)
 	var totalBlockSize int
 	madeBlock := false
+	start := time.Now()
 
 	defer func() {
 		panicErr := recover()
@@ -205,6 +208,7 @@ outer:
 			if tx == nil {
 				break
 			}
+			start = time.Now()
 			empty := len(queueItems) == 0
 			switch tx.txType {
 			case Normal:
@@ -339,7 +343,6 @@ outer:
 		L1BaseFee:   nil,
 	}
 
-	start := time.Now()
 	var block *types.Block
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(l1IncomingMessageHeader, txes, hooks, nil)
@@ -394,6 +397,7 @@ outer:
 		s.nonceCache.Finalize(block)
 		// Add a metric to indicate how long it took to create the block
 		elapsed := time.Since(start)
+		// log.Info("elapsed", "e", elapsed)
 		blockCreationTimer.Update(elapsed)
 		if elapsed >= config.MetricTimeForBlockCreation {
 			blockNum := block.Number()
@@ -604,7 +608,7 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead, "len", s.txQueue.Len())
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -640,7 +644,8 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	// we need to append all the items at once, otherwise the timers can be off
 	// between the different nodes sequencers, where they may start to make the block
 	// with only a few of the transactions
-	s.txQueue.enqueueItems(items)
+	// s.txQueue.enqueueItems(items)
+	s.txChan <- items
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
 	return nil
 }
@@ -656,10 +661,20 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 	}
 
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		select {
+		case items := <-s.txChan:
+			s.txQueue.enqueueItems(items)
+			// s.createBlock(ctx)
+			// Successfully queued
+			// s.delayedMessagesRead = inclusionList.DelayedMessagesRead
+			// return 0
+		case <-ctx.Done():
+			return 0
+		}
 		if s.createBlock(ctx) {
 			return 0
 		}
-		return s.config().BlockRetryDuration
+		return 0
 	})
 	return err
 }
