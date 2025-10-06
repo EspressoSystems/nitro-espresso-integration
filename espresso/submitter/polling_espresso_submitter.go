@@ -592,16 +592,8 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	return true
 }
 
-func (s *PollingEspressoSubmitter) RegisterSigner() error {
-	teeType := s.espressoKeyManager.TeeType()
-	switch teeType {
-	case espresso_key_manager.SGX:
-		return s.espressoKeyManager.Register(s.getAttestationQuote)
-	case espresso_key_manager.NITRO:
-		return s.espressoKeyManager.Register(s.getNitroAttestation)
-	default:
-		return fmt.Errorf("unsupported tee Type: %d", teeType)
-	}
+func (s *PollingEspressoSubmitter) RegisterService() error {
+	return s.espressoKeyManager.RegisterService()
 }
 
 func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
