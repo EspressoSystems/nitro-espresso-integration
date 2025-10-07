@@ -170,8 +170,8 @@ func NewDecentralizedTimeboostSequencer(
 		delayedSequencer:    delayedSequencer,
 		blockHeaderCache: &blockHeaderCache{
 			blockCache: make(map[uint64]*types.Header),
-			keys:       make([]uint64, 0, 300),
-			maxSize:    300,
+			keys:       make([]uint64, 0, 5000),
+			maxSize:    5000,
 		},
 	}, nil
 }
@@ -339,7 +339,7 @@ outer:
 	if err != nil {
 		return madeBlock
 	}
-	log.Info("find", "ts", time.Since(find))
+	findEnd := time.Since(find)
 
 	l1IncomingMessageHeader := &arbostypes.L1IncomingMessageHeader{
 		Kind:        arbostypes.L1MessageType_L2Message,
@@ -350,14 +350,12 @@ outer:
 		L1BaseFee:   nil,
 	}
 
-	blockTimer := time.Now()
 	var block *types.Block
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(l1IncomingMessageHeader, txes, hooks, nil)
 	} else {
 		block, err = s.execEngine.SequenceTransactions(l1IncomingMessageHeader, txes, hooks, nil)
 	}
-	log.Info("block timer", "elapsed", time.Since(blockTimer), "since start", time.Since(start))
 
 	// The hooks.TxErrors should match the txes. For case where there is no error, we should have a nil error
 	if err == nil && len(hooks.TxErrors) != len(txes) {
@@ -401,7 +399,7 @@ outer:
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
-		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "elapsed", elapsed)
+		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "elapsed", elapsed, "find l1 time", findEnd)
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
@@ -450,7 +448,9 @@ func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, 
 		}
 		return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 	} else {
-		log.Warn("block not found in cache", "num", blockNumber)
+		if blockNumber%100 == 0 {
+			log.Warn("block not found in cache", "num", blockNumber)
+		}
 		block, err := s.l1Reader.Client().BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
 		if err != nil {
 			return nil, err
@@ -713,6 +713,9 @@ type blockHeaderCache struct {
 
 func (c *blockHeaderCache) Add(header *types.Header) {
 	blockNumber := header.Number.Uint64()
+	if blockNumber%200 == 0 {
+		log.Info("adding block", "num", blockNumber)
+	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
