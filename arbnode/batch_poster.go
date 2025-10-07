@@ -224,7 +224,7 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses []common.Address `koanf:"init-batcher-addresses"`
+	InitBatcherAddresses []string `koanf:"init-batcher-addresses"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -356,7 +356,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
+	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
 }
 
@@ -405,7 +405,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
+	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
 }
 
@@ -608,12 +608,18 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-			initAddresses := opts.Config().InitBatcherAddresses
+			initStringAddresses := opts.Config().InitBatcherAddresses
+			// Convert the init addresses to common.Address
+			initAddresses := []common.Address{}
+			for _, addr := range initStringAddresses {
+				initAddresses = append(initAddresses, common.HexToAddress(addr))
+			}
 			if len(initAddresses) == 0 {
 				addr, err := recoverAddressFromSigner(opts.DataSigner)
 				if err != nil {
 					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
 				}
+
 				initAddresses = []common.Address{addr}
 			}
 
