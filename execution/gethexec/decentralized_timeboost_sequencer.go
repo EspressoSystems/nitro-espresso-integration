@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
@@ -52,26 +53,25 @@ type timeboostTransactionQueueItem struct {
 }
 
 type synchronizedTimeboostTransactionQueue struct {
-	queue         []timeboostTransactionQueueItem
-	nonceFailures uint64
-	// mutex sync.RWMutex
+	queue []timeboostTransactionQueueItem
+	mutex sync.RWMutex
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactionQueueItem) {
-	// q.mutex.Lock()
-	// defer q.mutex.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 	q.queue = append(q.queue, item)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueueItems(items []timeboostTransactionQueueItem) {
-	// q.mutex.Lock()
-	// defer q.mutex.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 	q.queue = append(q.queue, items...)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQueueItem {
-	// q.mutex.Lock()
-	// defer q.mutex.Unlock()
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
 	// Remove the first element from the queue and then return it
 	item := q.queue[0]
 	q.queue = q.queue[1:]
@@ -79,14 +79,14 @@ func (q *synchronizedTimeboostTransactionQueue) dequeue() timeboostTransactionQu
 }
 
 func (q *synchronizedTimeboostTransactionQueue) Len() int {
-	// q.mutex.RLock()
-	// defer q.mutex.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 	return len(q.queue)
 }
 
 func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueueItem {
-	// q.mutex.RLock()
-	// defer q.mutex.RUnlock()
+	q.mutex.RLock()
+	defer q.mutex.RUnlock()
 	if len(q.queue) == 0 {
 		return nil
 	}
@@ -106,8 +106,8 @@ type DecentralizedTimeboostSequencer struct {
 	timeboostBridge     *DecentralizedTimeboostBridge
 	delayedMessagesRead uint64
 	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
-	txChan              chan []timeboostTransactionQueueItem
 	inclReceived        uint64
+	blockHeaderCache    *blockHeaderCache
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -168,7 +168,11 @@ func NewDecentralizedTimeboostSequencer(
 		},
 		delayedMessagesRead: 1,
 		delayedSequencer:    delayedSequencer,
-		txChan:              make(chan []timeboostTransactionQueueItem, 10_000),
+		blockHeaderCache: &blockHeaderCache{
+			blockCache: make(map[uint64]*types.Header),
+			keys:       make([]uint64, 0, 300),
+			maxSize:    300,
+		},
 	}, nil
 }
 
@@ -329,27 +333,31 @@ outer:
 		log.Error("failed to get latest finalized block header", "err", err)
 		return madeBlock
 	}
+	find := time.Now()
 	// finalized l1 block <= consensus timestamp - parent chain finalization time
-	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Int64(), header.Time)
+	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Uint64(), timestamp)
 	if err != nil {
 		return madeBlock
 	}
+	log.Info("find", "ts", time.Since(find))
 
 	l1IncomingMessageHeader := &arbostypes.L1IncomingMessageHeader{
 		Kind:        arbostypes.L1MessageType_L2Message,
 		Poster:      l1pricing.BatchPosterAddress,
-		BlockNumber: l1Block.NumberU64(),
+		BlockNumber: l1Block.Number.Uint64(),
 		Timestamp:   timestamp,
 		RequestId:   nil,
 		L1BaseFee:   nil,
 	}
 
+	blockTimer := time.Now()
 	var block *types.Block
 	if config.EnableProfiling {
 		block, err = s.execEngine.SequenceTransactionsWithProfiling(l1IncomingMessageHeader, txes, hooks, nil)
 	} else {
 		block, err = s.execEngine.SequenceTransactions(l1IncomingMessageHeader, txes, hooks, nil)
 	}
+	log.Info("block timer", "elapsed", time.Since(blockTimer), "since start", time.Since(start))
 
 	// The hooks.TxErrors should match the txes. For case where there is no error, we should have a nil error
 	if err == nil && len(hooks.TxErrors) != len(txes) {
@@ -435,19 +443,25 @@ outer:
 	return madeBlock
 }
 
-func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber int64, consensusTimestamp uint64) (*types.Block, error) {
-
-	block, err := s.l1Reader.Client().BlockByNumber(ctx, big.NewInt(blockNumber))
-	if err != nil {
-		return nil, err
+func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber uint64, consensusTimestamp uint64) (*types.Header, error) {
+	if block := s.blockHeaderCache.Get(blockNumber); block != nil {
+		if block.Time <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
+			return block, nil
+		}
+		return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
+	} else {
+		log.Warn("block not found in cache", "num", blockNumber)
+		block, err := s.l1Reader.Client().BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+		if err != nil {
+			return nil, err
+		}
+		header := block.Header()
+		s.blockHeaderCache.Add(header)
+		if block.Time() <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
+			return header, nil
+		}
+		return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 	}
-
-	// Only return the header if its less than equal to the consensus timestamp - parent chain finalization time
-	if block.Time() <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
-		return block, nil
-	}
-	// Keep going backward only block at a time until we find a block which satisfies the constraint
-	return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 }
 
 func (s *DecentralizedTimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
@@ -549,13 +563,11 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 					continue
 				}
 				// TODO send the error back to the user
-				s.txQueue.nonceFailures += 1
-				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "failures", s.txQueue.nonceFailures, "backlog", s.txQueue.Len())
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "backlog", s.txQueue.Len())
 				continue
 			} else if err != nil {
-				s.txQueue.nonceFailures += 1
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "failures", s.txQueue.nonceFailures, "backlog", s.txQueue.Len())
+				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "backlog", s.txQueue.Len())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
@@ -648,8 +660,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	// we need to append all the items at once, otherwise the timers can be off
 	// between the different nodes sequencers, where they may start to make the block
 	// with only a few of the transactions
-	// s.txQueue.enqueueItems(items)
-	s.txChan <- items
+	s.txQueue.enqueueItems(items)
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
 	s.inclReceived += 1
 	return nil
@@ -665,23 +676,70 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		return err
 	}
 
-	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		select {
-		case items := <-s.txChan:
-			s.txQueue.enqueueItems(items)
-			// s.createBlock(ctx)
-			// Successfully queued
-			// s.delayedMessagesRead = inclusionList.DelayedMessagesRead
-			// return 0
-		case <-ctx.Done():
-			return 0
-		}
+	if err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		if s.createBlock(ctx) {
 			return 0
+		}
+		return 5 * time.Millisecond
+	}); err != nil {
+		return err
+	}
+
+	headerCh := make(chan *types.Header)
+	sub, err := s.l1Reader.Client().SubscribeNewHead(ctx, headerCh)
+	if err != nil {
+		return err
+	}
+	err = s.CallIterativelySafe(func(ctx context.Context) time.Duration {
+		select {
+		case header := <-headerCh:
+			s.storeHeader(header)
+		case err := <-sub.Err():
+			log.Error("Subscription error", "err", err)
+		case <-ctx.Done():
+			log.Error("Context canceled", "ctx", ctx.Err())
 		}
 		return 0
 	})
 	return err
+}
+
+type blockHeaderCache struct {
+	mutex      sync.RWMutex
+	blockCache map[uint64]*types.Header
+	keys       []uint64
+	maxSize    int
+}
+
+func (c *blockHeaderCache) Add(header *types.Header) {
+	blockNumber := header.Number.Uint64()
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if _, exists := c.blockCache[blockNumber]; exists {
+		c.blockCache[blockNumber] = header
+		return
+	}
+
+	if len(c.blockCache) >= c.maxSize {
+		oldestKey := c.keys[0]
+		delete(c.blockCache, oldestKey)
+		c.keys = c.keys[1:]
+	}
+
+	c.blockCache[blockNumber] = header
+	c.keys = append(c.keys, blockNumber)
+}
+
+func (c *blockHeaderCache) Get(blockNumber uint64) *types.Header {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.blockCache[blockNumber]
+}
+
+func (s *DecentralizedTimeboostSequencer) storeHeader(header *types.Header) {
+	s.blockHeaderCache.Add(header)
 }
 
 func (s *DecentralizedTimeboostSequencer) StopAndWait() {

@@ -156,7 +156,6 @@ func SendInclusionLists(t *testing.T, incls []*protos.InclusionList) {
 		// Send via grpc
 		_, err := grpcClient.SubmitInclusionList(context.Background(), incl)
 		Require(t, err)
-		// time.Sleep(time.Millisecond * 7)
 	}
 }
 
