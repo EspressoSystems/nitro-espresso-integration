@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
@@ -53,8 +52,9 @@ type timeboostTransactionQueueItem struct {
 }
 
 type synchronizedTimeboostTransactionQueue struct {
-	queue []timeboostTransactionQueueItem
-	mutex sync.RWMutex
+	queue         []timeboostTransactionQueueItem
+	nonceFailures uint64
+	// mutex sync.RWMutex
 }
 
 func (q *synchronizedTimeboostTransactionQueue) enqueue(item timeboostTransactionQueueItem) {
@@ -107,6 +107,7 @@ type DecentralizedTimeboostSequencer struct {
 	delayedMessagesRead uint64
 	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
 	txChan              chan []timeboostTransactionQueueItem
+	inclReceived        uint64
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -391,12 +392,13 @@ outer:
 
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
-		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex())
+		elapsed := time.Since(start)
+		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "elapsed", elapsed)
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
 		// Add a metric to indicate how long it took to create the block
-		elapsed := time.Since(start)
+		// elapsed := time.Since(start)
 		// log.Info("elapsed", "e", elapsed)
 		blockCreationTimer.Update(elapsed)
 		if elapsed >= config.MetricTimeForBlockCreation {
@@ -547,11 +549,13 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 					continue
 				}
 				// TODO send the error back to the user
-				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				s.txQueue.nonceFailures += 1
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "failures", s.txQueue.nonceFailures, "backlog", s.txQueue.Len())
 				continue
 			} else if err != nil {
+				s.txQueue.nonceFailures += 1
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "failures", s.txQueue.nonceFailures, "backlog", s.txQueue.Len())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
@@ -608,7 +612,7 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead, "len", s.txQueue.Len())
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead, "received", s.inclReceived)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -647,6 +651,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	// s.txQueue.enqueueItems(items)
 	s.txChan <- items
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
+	s.inclReceived += 1
 	return nil
 }
 
