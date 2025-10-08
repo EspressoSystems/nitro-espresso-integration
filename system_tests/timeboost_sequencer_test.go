@@ -213,9 +213,9 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			txns = append(txns, tx)
 		}
 
-		// Generate and send inclusion lists
 		txnsList := make([][]*types.Transaction, 0)
 		txnsList = append(txnsList, txns)
+		// Generate and send inclusion lists
 		inclusionLists := GenerateInclusionLists(t, users, builder, numIncls, txnsList)
 		SendInclusionLists(t, inclusionLists)
 

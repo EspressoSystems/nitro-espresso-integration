@@ -60,9 +60,8 @@ type BatchVerifier struct {
 }
 
 type BatchVerifierConfig struct {
-	PrivateKey string        `koanf:"private-key"`
-	RpcTimeout time.Duration `koanf:"rpc-timeout"`
-	// TODO: - should these be configurable or should it be hardcoded?
+	PrivateKey   string        `koanf:"private-key"`
+	RpcTimeout   time.Duration `koanf:"rpc-timeout"`
 	RpcKeepalive time.Duration `koanf:"rpc-keepalive"`
 }
 
@@ -127,7 +126,6 @@ func (v *BatchVerifier) sendBatchForVerification(
 		return nil, fmt.Errorf("batch poster failed to marshal JSON: %w", err)
 	}
 
-	// TODO: Read from contract, currently not in the contract
 	var sigs [][]byte
 	for _, member := range members {
 		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))

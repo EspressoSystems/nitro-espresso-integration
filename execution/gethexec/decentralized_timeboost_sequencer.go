@@ -102,9 +102,6 @@ type blockHeaderCache struct {
 
 func (c *blockHeaderCache) Add(header *types.Header) {
 	blockNumber := header.Number.Uint64()
-	if blockNumber%50 == 0 {
-		log.Info("adding block", "num", blockNumber)
-	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -605,7 +602,7 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
