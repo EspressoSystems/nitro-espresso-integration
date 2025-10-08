@@ -93,6 +93,46 @@ func (q *synchronizedTimeboostTransactionQueue) Peek() *timeboostTransactionQueu
 	return &q.queue[0]
 }
 
+type blockHeaderCache struct {
+	mutex      sync.RWMutex
+	blockCache map[uint64]*types.Header
+	keys       []uint64
+	maxSize    int
+}
+
+func (c *blockHeaderCache) Add(header *types.Header) {
+	blockNumber := header.Number.Uint64()
+	if blockNumber%50 == 0 {
+		log.Info("adding block", "num", blockNumber)
+	}
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	if _, exists := c.blockCache[blockNumber]; exists {
+		c.blockCache[blockNumber] = header
+		return
+	}
+
+	if len(c.blockCache) >= c.maxSize {
+		deleteCount := c.maxSize / 2
+		for i := 0; i < deleteCount; i++ {
+			oldestKey := c.keys[i]
+			delete(c.blockCache, oldestKey)
+		}
+		c.keys = c.keys[deleteCount:]
+	}
+
+	c.blockCache[blockNumber] = header
+	c.keys = append(c.keys, blockNumber)
+}
+
+func (c *blockHeaderCache) Get(blockNumber uint64) *types.Header {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+
+	return c.blockCache[blockNumber]
+}
+
 type DecentralizedTimeboostSequencer struct {
 	stopwaiter.StopWaiter
 	config DecentralizedTimeboostSequencerConfigFetcher
@@ -106,7 +146,6 @@ type DecentralizedTimeboostSequencer struct {
 	timeboostBridge     *DecentralizedTimeboostBridge
 	delayedMessagesRead uint64
 	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
-	inclReceived        uint64
 	blockHeaderCache    *blockHeaderCache
 }
 
@@ -128,7 +167,7 @@ type DecentralizedTimeboostSequencerConfig struct {
 
 var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
 	Enable:                             false,
-	BlockRetryDuration:                 time.Second * 5,
+	BlockRetryDuration:                 time.Millisecond * 5,
 	MaxTxDataSize:                      95000,
 	NonceCacheSize:                     1024,
 	MaxRevertGasReject:                 0,
@@ -333,13 +372,12 @@ outer:
 		log.Error("failed to get latest finalized block header", "err", err)
 		return madeBlock
 	}
-	find := time.Now()
+
 	// finalized l1 block <= consensus timestamp - parent chain finalization time
 	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Uint64(), timestamp)
 	if err != nil {
 		return madeBlock
 	}
-	findEnd := time.Since(find)
 
 	l1IncomingMessageHeader := &arbostypes.L1IncomingMessageHeader{
 		Kind:        arbostypes.L1MessageType_L2Message,
@@ -399,13 +437,11 @@ outer:
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
-		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "elapsed", elapsed, "find l1 time", findEnd)
+		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
 		// Add a metric to indicate how long it took to create the block
-		// elapsed := time.Since(start)
-		// log.Info("elapsed", "e", elapsed)
 		blockCreationTimer.Update(elapsed)
 		if elapsed >= config.MetricTimeForBlockCreation {
 			blockNum := block.Number()
@@ -565,11 +601,11 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 					continue
 				}
 				// TODO send the error back to the user
-				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "backlog", s.txQueue.Len())
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash(), "backlog", s.txQueue.Len())
+				log.Warn("failed to process transaction nonce2", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
@@ -626,7 +662,7 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead, "received", s.inclReceived)
+	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -664,7 +700,6 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	// with only a few of the transactions
 	s.txQueue.enqueueItems(items)
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
-	s.inclReceived += 1
 	return nil
 }
 
@@ -682,7 +717,7 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		if s.createBlock(ctx) {
 			return 0
 		}
-		return 5 * time.Millisecond
+		return s.config().BlockRetryDuration
 	}); err != nil {
 		return err
 	}
@@ -697,55 +732,13 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		case header := <-headerCh:
 			s.storeHeader(header)
 		case err := <-sub.Err():
-			log.Error("Subscription error", "err", err)
+			log.Error("subscription error", "err", err)
 		case <-ctx.Done():
-			log.Error("Context canceled", "ctx", ctx.Err())
+			log.Error("context canceled", "ctx", ctx.Err())
 		}
 		return 0
 	})
 	return err
-}
-
-type blockHeaderCache struct {
-	mutex      sync.RWMutex
-	blockCache map[uint64]*types.Header
-	keys       []uint64
-	maxSize    int
-}
-
-func (c *blockHeaderCache) Add(header *types.Header) {
-	blockNumber := header.Number.Uint64()
-	if blockNumber%50 == 0 {
-		log.Info("adding block", "num", blockNumber)
-	}
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-
-	if _, exists := c.blockCache[blockNumber]; exists {
-		c.blockCache[blockNumber] = header
-		return
-	}
-
-	if len(c.blockCache) >= c.maxSize {
-		log.Info("keys full, cleaning out half", "map", len(c.blockCache), "key", len(c.keys))
-		deleteCount := c.maxSize / 2
-		for i := 0; i < deleteCount; i++ {
-			oldestKey := c.keys[i]
-			delete(c.blockCache, oldestKey)
-		}
-		c.keys = c.keys[deleteCount:]
-		log.Info("keys cleaned out half", "map", len(c.blockCache), "key", len(c.keys))
-	}
-
-	c.blockCache[blockNumber] = header
-	c.keys = append(c.keys, blockNumber)
-}
-
-func (c *blockHeaderCache) Get(blockNumber uint64) *types.Header {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-
-	return c.blockCache[blockNumber]
 }
 
 func (s *DecentralizedTimeboostSequencer) storeHeader(header *types.Header) {
