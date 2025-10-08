@@ -1494,10 +1494,9 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
 	}
 
-	var signature []byte
-	var sigs []byte
+	var signatures []byte
 	if b.config().IsDecentralizedTimeboost {
-		sigs, err = b.batchVerifier.SignAndSendBatchIfLeader(
+		signatures, err = b.batchVerifier.SignAndSendBatchIfLeader(
 			b.espressoStreamer.TimeboostKeyManager,
 			method.Inputs,
 			seqNum,
@@ -1534,22 +1533,22 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 
 		if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 			keyManager := espressoSubmitter.GetKeyManager()
-			signature, err = keyManager.SignBatch(calldata)
+			signatures, err = keyManager.SignBatch(calldata)
 			if err != nil {
 				return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 			}
 
-			sigLength := len(signature)
+			sigLength := len(signatures)
 			if sigLength > 0 {
 				// Get the last byte (v)
 				vIndex := sigLength - 1
-				v := signature[vIndex]
+				v := signatures[vIndex]
 
 				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
 				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
 				// https://github.com/ethereum/go-ethereum/issues/19751
 				if v == 0 || v == 1 {
-					signature[vIndex] = v + 27
+					signatures[vIndex] = v + 27
 				}
 			}
 		}
@@ -1566,9 +1565,8 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		b.config().gasRefunder,
 		new(big.Int).SetUint64(uint64(prevMsgNum)),
 		new(big.Int).SetUint64(uint64(newMsgNum)),
-		sigs,
+		signatures,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1600,7 +1598,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	// initially constructing the calldata using the old SequencerBatchPostWithBlobsMethodName method
 	// This will allow us to get the attestation quote on the hash of the dataPoster
 	encodedBlobs, err := abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1617,10 +1614,9 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
 	}
 
-	var signature []byte
-	var sigs []byte
+	var signatures []byte
 	if b.config().IsDecentralizedTimeboost {
-		sigs, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
+		signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
 			b.espressoStreamer.TimeboostKeyManager,
 			seqNum,
 			l2MessageData,
@@ -1655,22 +1651,22 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 
 		if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 			keyManager := espressoSubmitter.GetKeyManager()
-			signature, err = keyManager.SignBatch(calldata)
+			signatures, err = keyManager.SignBatch(calldata)
 			if err != nil {
 				return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 			}
 
-			sigLength := len(signature)
+			sigLength := len(signatures)
 			if sigLength > 0 {
 				// Get the last byte (v)
 				vIndex := sigLength - 1
-				v := signature[vIndex]
+				v := signatures[vIndex]
 
 				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
 				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
 				// https://github.com/ethereum/go-ethereum/issues/19751
 				if v == 0 || v == 1 {
-					signature[vIndex] = v + 27
+					signatures[vIndex] = v + 27
 				}
 			}
 		}
@@ -1682,9 +1678,8 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		b.config().gasRefunder,
 		new(big.Int).SetUint64(uint64(prevMsgNum)),
 		new(big.Int).SetUint64(uint64(newMsgNum)),
-		sigs,
+		signatures,
 	)
-
 	if err != nil {
 		return nil, err
 	}
