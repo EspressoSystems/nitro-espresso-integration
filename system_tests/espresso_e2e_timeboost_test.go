@@ -161,6 +161,14 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 	return expectedTxs
 }
 
+func setMockTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
+	addr, tx, _, err := decentralizedtimeboostgen.DeployMockKeyManager(&parentChainTransactionOpts, l1Client)
+	Require(t, err)
+	_, err = bind.WaitMined(ctx, l1Client, tx)
+	Require(t, err)
+	return addr
+}
+
 func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
 	address, tx, _, err := decentralizedtimeboostgen.DeployKeyManager(&parentChainTransactionOpts, l1Client)
 	if err != nil {
