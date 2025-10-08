@@ -23,6 +23,7 @@ func createL1AndL2NodeForTimeboost(
 	batchPoster bool,
 	privKey string,
 	nodeBuilder *NodeBuilder,
+	blobsEnabled bool,
 ) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	if nodeBuilder == nil {
@@ -51,9 +52,9 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.Enable = batchPoster
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl, hotShotUrl}
 	builder.nodeConfig.BatchPoster.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
-	builder.nodeConfig.BatchPoster.MaxSize = 1000
+	builder.nodeConfig.BatchPoster.MaxSize = 10000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
-	builder.nodeConfig.BatchPoster.MaxDelay = 1000 * time.Hour
+	builder.nodeConfig.BatchPoster.MaxDelay = 30 * time.Second
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = batchPoster
 	builder.nodeConfig.BatchPoster.DecentralizedTimeboostBatchVerifier.PrivateKey = privKey
 
@@ -87,6 +88,16 @@ func createL1AndL2NodeForTimeboost(
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"
 	}
+	if blobsEnabled {
+		builder.nodeConfig.BatchPoster.Post4844Blobs = true
+		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
+		builder.withL1 = true
+		builder.deployBold = false
+		// Enabling this to false because we dont have a blob reader in the tests
+		// which is needed for staker
+		builder.nodeConfig.BlockValidator.Enable = false
+		builder.nodeConfig.Staker.Enable = false
+	}
 
 	var cleanup func()
 	if nodeBuilder == nil {
@@ -97,7 +108,6 @@ func createL1AndL2NodeForTimeboost(
 		builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
 	} else {
 		cleanup = builder.BuildOnSameL1(t, nodeBuilder)
-		builder.L1.cleanup = nil
 	}
 
 	return builder, cleanup
@@ -171,7 +181,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 	defer valNodeCleanup()
 	// In future, we also need to create a version of
 	// delayed sequencer for timeboost
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil)
+	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)

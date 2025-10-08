@@ -462,6 +462,7 @@ func (b *NodeBuilder) BuildL1(t *testing.T) {
 		true,
 		b.deployBold,
 		b.delayBufferThreshold,
+		b.nodeConfig.BatchPoster.IsDecentralizedTimeboost,
 	)
 	b.L1.cleanup = func() { requireClose(t, b.L1.Stack) }
 }
@@ -571,6 +572,7 @@ func (b *NodeBuilder) BuildL3OnL2(t *testing.T) func() {
 		false,
 		b.deployBold,
 		0,
+		b.nodeConfig.BatchPoster.IsDecentralizedTimeboost,
 	)
 
 	b.L3 = buildOnParentChain(
@@ -1378,6 +1380,7 @@ func deployOnParentChain(
 	chainSupportsBlobs bool,
 	deployBold bool,
 	delayBufferThreshold uint64,
+	decentralizedTimeboost bool,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
 	parentChainInfo.GenerateAccount("RollupOwner")
 	parentChainInfo.GenerateAccount("Sequencer")
@@ -1403,7 +1406,13 @@ func deployOnParentChain(
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
 
-	proxyAddr := setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+	var timeboostAddr common.Address
+	if decentralizedTimeboost {
+		timeboostAddr = setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+	} else {
+		timeboostAddr = setMockTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+		log.Info("timeboost addr", "addr", timeboostAddr)
+	}
 
 	Require(t, err)
 	var addresses *chaininfo.RollupAddresses
@@ -1455,7 +1464,7 @@ func deployOnParentChain(
 			NumBigStepLevel:              3,
 			ChallengeGracePeriodBlocks:   3,
 			BufferConfig:                 bufferConfig,
-			EspressoTEEVerifier:          proxyAddr,
+			EspressoTEEVerifier:          timeboostAddr,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(
@@ -1492,7 +1501,7 @@ func deployOnParentChain(
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, proxyAddr),
+			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, timeboostAddr),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
@@ -1503,7 +1512,7 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
-	parentChainInfo.SetContract("TimeboostKeyManager", proxyAddr)
+	parentChainInfo.SetContract("TimeboostKeyManager", timeboostAddr)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }

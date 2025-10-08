@@ -18,7 +18,6 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/prysmaticlabs/go-ssz"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -161,6 +160,14 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 	return expectedTxs
 }
 
+func setMockTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
+	addr, tx, _, err := decentralizedtimeboostgen.DeployMockKeyManager(&parentChainTransactionOpts, l1Client)
+	Require(t, err)
+	_, err = bind.WaitMined(ctx, l1Client, tx)
+	Require(t, err)
+	return addr
+}
+
 func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
 	address, tx, _, err := decentralizedtimeboostgen.DeployKeyManager(&parentChainTransactionOpts, l1Client)
 	if err != nil {
@@ -246,10 +253,130 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
 
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil)
-	defer cleanup()
-	_, cleanup2 := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder)
-	defer cleanup2()
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false)
+
+	err := waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runDecentralizedTimeboost()
+	defer shutdown()
+
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	err = waitForTimeboostNodes(ctx)
+	Require(t, err)
+
+	var users []string
+	const numUsers = 15
+
+	blockNumberBefore, err := builder.L2.Client.BlockNumber(ctx)
+	Require(t, err)
+
+	log.Info("addr", "ibox addr", builder.addresses.Inbox, "seq", builder.addresses.SequencerInbox)
+
+	for num := 0; num < numUsers; num++ {
+		userName := fmt.Sprintf("My_User_%d", num)
+		builder.L2Info.GenerateAccount(userName)
+		users = append(users, userName)
+	}
+
+	expectedTxs := createAndSendBundleToTimeboost(t, builder, users)
+	// account 2 transactions in a bundle
+	if len(expectedTxs) != numUsers+1 {
+		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
+	}
+
+	// Send some delayed messages, any user should be able to do so, not just the owner
+	delayedTx := builder.L2Info.PrepareTx(users[0], users[1], 3e7, big.NewInt(1), nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
+	})
+	delayedTx2 := builder.L2Info.PrepareTx(users[1], users[2], 3e7, big.NewInt(1), nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, delayedTx2, builder.L1Info, "Faucet", 100000),
+	})
+	// User has no funds so TX should fail
+	builder.L2Info.GenerateAccount("luke")
+	invalidTx := builder.L2Info.PrepareTx("luke", users[2], 3e7, big.NewInt(1), nil)
+	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
+		WrapL2ForDelayed(t, invalidTx, builder.L1Info, "Faucet", 100000),
+	})
+	// Send another transaction
+	expectedTxs = append(expectedTxs, createAndSendBundleToTimeboost(t, builder, []string{users[10]})...)
+	// We expect delayed messages blocks to be built last
+	expectedTxs = append(expectedTxs, delayedTx)
+	expectedTxs = append(expectedTxs, delayedTx2)
+
+	// Wait for blocks and batch
+	time.Sleep(time.Second * 40)
+
+	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
+	Require(t, err)
+
+	// msgCntAfter should be greater than msgCntBefore
+	if blockNumberAfter-blockNumberBefore <= 0 {
+		t.Fatalf("expected difference between blockNumberAfter and blockNumberBefore to be greater than 0, got: %d", blockNumberAfter-blockNumberBefore)
+	}
+
+	// Insanity check
+	if blockNumberAfter > math.MaxInt64 {
+		t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+	}
+
+	// Verify blocks are the same from both sequencers
+	var transactions []*types.Transaction
+	var transactions2 []*types.Transaction
+	for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
+		if i > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+		}
+		block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		blockTransactions := block.Transactions()
+		transactionsWithoutStartBlock := blockTransactions[1:]
+		transactions = append(transactions, transactionsWithoutStartBlock...)
+		block, err = builder2.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		blockTransactions = block.Transactions()
+		transactionsWithoutStartBlock = blockTransactions[1:]
+		transactions2 = append(transactions2, transactionsWithoutStartBlock...)
+	}
+
+	// Verify both sequencers blocks with expected
+	for i, tx := range expectedTxs {
+		expected := transactions[i]
+		if tx.Hash() != expected.Hash() {
+			t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
+		}
+		expected = transactions2[i]
+		if tx.Hash() != expected.Hash() {
+			t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
+		}
+	}
+
+	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
+		// Check the sequencer inbox contract
+		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
+		Require(t, err)
+
+		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		Require(t, err)
+		return batchCount.Uint64() > 1
+	})
+	Require(t, err)
+	builder.L2.cleanup()
+	builder.L1.cleanup()
+	builder2.L2.cleanup()
+}
+
+func TestEspressoTimeboostSequencerE2EWithBlobs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, true)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, true)
 
 	err := waitForL1Node(ctx)
 	Require(t, err)
@@ -303,7 +430,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 	expectedTxs = append(expectedTxs, delayedTx2)
 
 	// Wait for blocks and batch
-	time.Sleep(time.Second * 60)
+	time.Sleep(time.Second * 40)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
@@ -318,7 +445,9 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 		t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
 	}
 
+	// Verify blocks are the same from both sequencers
 	var transactions []*types.Transaction
+	var transactions2 []*types.Transaction
 	for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
 		if i > math.MaxInt64 {
 			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
@@ -328,65 +457,36 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 		blockTransactions := block.Transactions()
 		transactionsWithoutStartBlock := blockTransactions[1:]
 		transactions = append(transactions, transactionsWithoutStartBlock...)
+		block, err = builder2.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		blockTransactions = block.Transactions()
+		transactionsWithoutStartBlock = blockTransactions[1:]
+		transactions2 = append(transactions2, transactionsWithoutStartBlock...)
 	}
 
+	// Verify both sequencers blocks with expected
 	for i, tx := range expectedTxs {
 		expected := transactions[i]
 		if tx.Hash() != expected.Hash() {
 			t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
 		}
-	}
-
-	parsedABI, err := abi.JSON(strings.NewReader(bridgegen.SequencerInboxMetaData.ABI))
-	Require(t, err)
-
-	l1Height, err := builder.L1.Client.BlockNumber(ctx)
-	Require(t, err)
-	// Create filter query for SequencerBatchDelivered events
-	query := ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(0),
-		ToBlock:   new(big.Int).SetUint64(l1Height),
-		Addresses: []common.Address{builder.addresses.SequencerInbox},
-		Topics: [][]common.Hash{
-			{parsedABI.Events["SequencerBatchDelivered"].ID},
-		},
-	}
-
-	logs, err := builder.L1.Client.FilterLogs(ctx, query)
-	Require(t, err)
-
-	var batchNum uint64
-	for _, log := range logs {
-		// Unpack the event data
-		event := struct {
-			BatchSequenceNumber      *big.Int
-			BeforeAcc                common.Hash
-			AfterAcc                 common.Hash
-			DelayedAcc               common.Hash
-			AfterDelayedMessagesRead *big.Int
-			TimeBounds               struct {
-				MinTimestamp   uint64
-				MaxTimestamp   uint64
-				MinBlockNumber uint64
-				MaxBlockNumber uint64
-			}
-			DataLocation uint8
-		}{}
-
-		if len(log.Topics) > 1 {
-			event.BatchSequenceNumber = log.Topics[1].Big()
+		expected = transactions2[i]
+		if tx.Hash() != expected.Hash() {
+			t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())
 		}
-
-		// Unpack only the non-indexed parameters from log.Data
-		err := parsedABI.UnpackIntoInterface(&event, "SequencerBatchDelivered", log.Data)
-		if err != nil {
-			fmt.Printf("Error unpacking log data: %v\n", err)
-			continue
-		}
-
-		batchNum = event.BatchSequenceNumber.Uint64()
 	}
-	if batchNum <= 0 {
-		t.Fatal("expected a batch to be posted")
-	}
+
+	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
+		// Check the sequencer inbox contract
+		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
+		Require(t, err)
+
+		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		Require(t, err)
+		return batchCount.Uint64() > 1
+	})
+	Require(t, err)
+	builder.L2.cleanup()
+	builder.L1.cleanup()
+	builder2.L2.cleanup()
 }
