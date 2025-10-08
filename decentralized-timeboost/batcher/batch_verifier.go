@@ -223,7 +223,7 @@ func (v *BatchVerifier) VerifySignatureOverHash(hash []byte, signature []byte, p
 	return nil
 }
 
-func (v *BatchVerifier) getAbiArguments() (*abi.Arguments, error) {
+func (v *BatchVerifier) getAbiArguments() (abi.Arguments, error) {
 	bytesType, err := abi.NewType("bytes", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bytes type: %w", err)
@@ -236,7 +236,7 @@ func (v *BatchVerifier) getAbiArguments() (*abi.Arguments, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create address type: %w", err)
 	}
-	return &abi.Arguments{
+	return abi.Arguments{
 		{Name: "sequencerNumber", Type: uint256Type},
 		{Name: "data", Type: bytesType},
 		{Name: "afterDelayedMessagesRead", Type: uint256Type},
@@ -246,8 +246,37 @@ func (v *BatchVerifier) getAbiArguments() (*abi.Arguments, error) {
 	}, nil
 }
 
-func (v *BatchVerifier) GetSignedDataFromBytes(data []byte) (*SigningData, error) {
-	arguments, err := v.getAbiArguments()
+func (v *BatchVerifier) GetBlobAbiArguments() (abi.Arguments, error) {
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+	}
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
+	addressType, err := abi.NewType("address", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create address type: %w", err)
+	}
+	return abi.Arguments{
+		{Name: "sequencerNumber", Type: uint256Type},
+		{Name: "afterDelayedMessagesRead", Type: uint256Type},
+		{Name: "gasRefunder", Type: addressType},
+		{Name: "prevMessageCount", Type: uint256Type},
+		{Name: "newMessageCount", Type: uint256Type},
+		{Name: "data", Type: bytesType},
+	}, nil
+}
+
+func (v *BatchVerifier) GetSignedDataFromBytes(data []byte, blobs bool) (*SigningData, error) {
+	var arguments abi.Arguments
+	var err error
+	if blobs {
+		arguments, err = v.GetBlobAbiArguments()
+	} else {
+		arguments, err = v.getAbiArguments()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -301,6 +330,7 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	gasRefundAddr common.Address,
 	messageCount arbutil.MessageIndex,
 	args BatchPosterArgs,
+	encodedBlobs []byte,
 ) error {
 	if signedData.SequencerNumber != seqNum {
 		return fmt.Errorf("failed to match seq num. got %d, wanted %d", signedData.SequencerNumber, seqNum)
@@ -312,21 +342,39 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 		return fmt.Errorf("failed to match previous message count. got %d, wanted %d", signedData.PreviousMessageCount, messageCount)
 	}
 
-	arguments, err := v.getAbiArguments()
-	if err != nil {
-		return err
-	}
-
-	calldata, err := arguments.Pack(
-		new(big.Int).SetUint64(signedData.SequencerNumber),
-		signedData.Data,
-		new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
-		signedData.GasRefunder,
-		new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
-		new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
-	)
-	if err != nil {
-		return err
+	var calldata []byte
+	if len(encodedBlobs) > 0 {
+		arguments, err := v.GetBlobAbiArguments()
+		if err != nil {
+			return err
+		}
+		calldata, err = arguments.Pack(
+			new(big.Int).SetUint64(signedData.SequencerNumber),
+			new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
+			signedData.GasRefunder,
+			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
+			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
+			encodedBlobs,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		arguments, err := v.getAbiArguments()
+		if err != nil {
+			return err
+		}
+		calldata, err = arguments.Pack(
+			new(big.Int).SetUint64(signedData.SequencerNumber),
+			signedData.Data,
+			new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
+			signedData.GasRefunder,
+			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
+			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
+		)
+		if err != nil {
+			return err
+		}
 	}
 
 	hash := v.HashBatchData(calldata)
@@ -385,6 +433,82 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 		return nil, err
 	}
 
+	sigs, err := v.sendBatchForVerification(
+		args,
+		committee.Members,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return sigs, nil
+}
+
+func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+	seqNum *big.Int,
+	l2MessageData []byte,
+	delayedMsg *big.Int,
+	gasRefunder common.Address,
+	prevMsgNum *big.Int,
+	newMsgNum *big.Int,
+	encodedBlobs []byte,
+) ([]byte, error) {
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+	if err != nil {
+		return nil, err
+	}
+	leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
+	pubKey := v.getCompressedPubKey()
+	if !bytes.Equal(pubKey, leader.SigKey) {
+		log.Debug(
+			"batch not sent: not leader",
+			"key", hex.EncodeToString(pubKey),
+			"sequenceNumber", seqNum,
+			"from", prevMsgNum,
+			"to", *newMsgNum,
+			"prevDelayed", delayedMsg,
+		)
+		return nil, fmt.Errorf("not leader for batch")
+	}
+
+	// We need to signed the encoded blobs, but send the message meta data for verification
+	// First construct calldata with encoded blobs to be signed
+	arguments, err := v.GetBlobAbiArguments()
+	if err != nil {
+		return nil, err
+	}
+	calldata, err := arguments.Pack(
+		seqNum,
+		delayedMsg,
+		gasRefunder,
+		prevMsgNum,
+		newMsgNum,
+		encodedBlobs,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sign encoded blobs calldata
+	args, err := v.HashAndSignBatchData(calldata)
+	if err != nil {
+		return nil, err
+	}
+
+	// Repack with message data and send this to other nodes
+	// Who will compute encoded blob hashes and sign
+	calldata, err = arguments.Pack(
+		seqNum,
+		delayedMsg,
+		gasRefunder,
+		prevMsgNum,
+		newMsgNum,
+		l2MessageData,
+	)
+	if err != nil {
+		return nil, err
+	}
+	args.SignedData = calldata
 	sigs, err := v.sendBatchForVerification(
 		args,
 		committee.Members,

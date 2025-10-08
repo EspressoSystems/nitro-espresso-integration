@@ -1617,75 +1617,72 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
 	}
 
-	var arguments abi.Arguments
-	arguments = append(arguments, method.Inputs...)
-	arguments = append(arguments, abi.Argument{Type: uint256Type})
-
-	calldata, err := arguments.Pack(
-		seqNum,
-		new(big.Int).SetUint64(delayedMsg),
-		b.config().gasRefunder,
-		new(big.Int).SetUint64(uint64(prevMsgNum)),
-		new(big.Int).SetUint64(uint64(newMsgNum)),
-		encodedBlobs,
-		hotshotBlockNumber,
-	)
-	if err != nil {
-		return nil, err
-	}
-
 	var signature []byte
-	teeType := espresso_key_manager.SGX
-	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		keyManager := espressoSubmitter.GetKeyManager()
-		signature, err = keyManager.SignBatch(calldata)
+	var sigs []byte
+	if b.config().IsDecentralizedTimeboost {
+		sigs, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
+			b.espressoStreamer.TimeboostKeyManager,
+			seqNum,
+			l2MessageData,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			encodedBlobs,
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
+			return nil, err
 		}
 
-		sigLength := len(signature)
-		if sigLength > 0 {
-			// Get the last byte (v)
-			vIndex := sigLength - 1
-			v := signature[vIndex]
+	} else {
 
-			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
-			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-			// https://github.com/ethereum/go-ethereum/issues/19751
-			if v == 0 || v == 1 {
-				signature[vIndex] = v + 27
+		var arguments abi.Arguments
+		arguments = append(arguments, method.Inputs...)
+		arguments = append(arguments, abi.Argument{Type: uint256Type})
+
+		calldata, err := arguments.Pack(
+			seqNum,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			encodedBlobs,
+			hotshotBlockNumber,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
+			keyManager := espressoSubmitter.GetKeyManager()
+			signature, err = keyManager.SignBatch(calldata)
+			if err != nil {
+				return nil, fmt.Errorf("failed to sign the calldata: %w", err)
+			}
+
+			sigLength := len(signature)
+			if sigLength > 0 {
+				// Get the last byte (v)
+				vIndex := sigLength - 1
+				v := signature[vIndex]
+
+				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+				// https://github.com/ethereum/go-ethereum/issues/19751
+				if v == 0 || v == 1 {
+					signature[vIndex] = v + 27
+				}
 			}
 		}
-		teeType = keyManager.TeeType()
 	}
 
-	bytesType, err := abi.NewType("bytes", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bytes type: %w", err)
-	}
-
-	uint8Type, err := abi.NewType("uint8", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint8 type: %w", err)
-	}
-
-	espressoMetadata, err := abi.Arguments{
-		{Type: uint256Type},
-		{Type: bytesType},
-		{Type: uint8Type},
-	}.Pack(hotshotBlockNumber, signature, teeType)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
-	}
-
-	calldata, err = method.Inputs.Pack(
+	calldata, err := method.Inputs.Pack(
 		seqNum,
 		new(big.Int).SetUint64(delayedMsg),
 		b.config().gasRefunder,
 		new(big.Int).SetUint64(uint64(prevMsgNum)),
 		new(big.Int).SetUint64(uint64(newMsgNum)),
-		espressoMetadata,
+		sigs,
 	)
 
 	if err != nil {
@@ -2558,7 +2555,8 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		return nil, err
 	}
 
-	signedData, err := b.batchVerifier.GetSignedDataFromBytes(args.SignedData)
+	isBlob := b.config().Post4844Blobs
+	signedData, err := b.batchVerifier.GetSignedDataFromBytes(args.SignedData, isBlob)
 	if err != nil {
 		return nil, err
 	}
@@ -2567,34 +2565,77 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 	if err := rlp.DecodeBytes(batchPositionBytes, &batchPosition); err != nil {
 		return nil, fmt.Errorf("error decoding batch position: %w", err)
 	}
+	var encodedBlobs []byte
+	var kzgBlobs []kzg4844.Blob
+	if isBlob {
+		kzgBlobs, err = blobs.EncodeBlobs(signedData.Data)
+		if err != nil {
+			return nil, err
+		}
+		_, blobHashes, err := blobs.ComputeCommitmentsAndHashes(kzgBlobs)
+		if err != nil {
+			return nil, err
+		}
+		encodedBlobs, err = abi.Arguments{abi.Argument{Type: b.bytes32ArrayType}}.Pack(blobHashes)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err = b.batchVerifier.VerifySignedDataCorrectness(
 		signedData,
 		batchPosition.NextSeqNum,
 		b.gasRefunderAddr,
 		batchPosition.MessageCount,
 		args,
+		encodedBlobs,
 	); err != nil {
 		return nil, err
 	}
 
-	if err = b.VerifiyBatchCorrectness(batchPosition, signedData); err != nil {
+	if err = b.VerifiyBatchCorrectness(batchPosition, signedData, kzgBlobs); err != nil {
 		return nil, err
 	}
 
-	data, err := b.batchVerifier.HashAndSignBatchData(args.SignedData)
+	calldata := args.SignedData
+	if isBlob {
+		arguments, err := b.batchVerifier.GetBlobAbiArguments()
+		if err != nil {
+			return nil, err
+		}
+		calldata, err = arguments.Pack(
+			new(big.Int).SetUint64(signedData.SequencerNumber),
+			new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
+			signedData.GasRefunder,
+			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
+			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
+			encodedBlobs,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	data, err := b.batchVerifier.HashAndSignBatchData(calldata)
 	if err != nil {
 		return nil, err
 	}
-	return data.Signature, err
+	return data.Signature, nil
+
 }
 
-func (b *BatchPoster) VerifiyBatchCorrectness(batchPosition batchPosterPosition, signedData *decentralized_timeboost_batch_verifier.SigningData) error {
+func (b *BatchPoster) VerifiyBatchCorrectness(
+	batchPosition batchPosterPosition,
+	signedData *decentralized_timeboost_batch_verifier.SigningData,
+	kzgBlobs []kzg4844.Blob,
+) error {
 	ctx := b.GetContext()
 	l1Bounds, err := b.getL1Bounds(ctx)
 	if err != nil {
 		return err
 	}
 	dapReaders := b.dapReaders
+	if len(kzgBlobs) > 0 {
+		dapReaders = append(dapReaders, daprovider.NewReaderForBlobReader(&simulatedBlobReader{kzgBlobs}))
+	}
 
 	muxBackend := &simulatedMuxBackend{
 		batchSeqNum: batchPosition.NextSeqNum,

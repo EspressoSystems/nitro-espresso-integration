@@ -27,7 +27,7 @@ namespace = 412346
 [chain.parent]
 id = 1337
 rpc-url = "http://host.docker.internal:8545/"
-ibox-contract = "0x15819eE2fa5D6075f2A21DD4Cd5CFA3EC2AAA4c2"
+ibox-contract = "0x76C580B9441C62b27F08DE546640c8607D6108e0"
 block-tag = "latest"
 key-manager-contract = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
 ws-url = "ws://host.docker.internal:8546/"
