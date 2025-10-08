@@ -132,7 +132,7 @@ var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequenc
 	MaxTxDataSize:                      95000,
 	NonceCacheSize:                     1024,
 	MaxRevertGasReject:                 0,
-	ParentChainFinalizationTime:        20 * time.Minute,
+	ParentChainFinalizationTime:        64 * time.Second,
 	MaxAcceptableTimestampDelta:        time.Hour,
 	EnableProfiling:                    false,
 	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
@@ -170,8 +170,8 @@ func NewDecentralizedTimeboostSequencer(
 		delayedSequencer:    delayedSequencer,
 		blockHeaderCache: &blockHeaderCache{
 			blockCache: make(map[uint64]*types.Header),
-			keys:       make([]uint64, 0, 5000),
-			maxSize:    5000,
+			keys:       make([]uint64, 0, 512),
+			maxSize:    512,
 		},
 	}, nil
 }
@@ -441,27 +441,29 @@ outer:
 	return madeBlock
 }
 
-func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, blockNumber uint64, consensusTimestamp uint64) (*types.Header, error) {
-	if block := s.blockHeaderCache.Get(blockNumber); block != nil {
-		if block.Time <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
-			return block, nil
+func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, startBlockNumber uint64, consensusTimestamp uint64) (*types.Header, error) {
+	finalizationTime := uint64(s.config().ParentChainFinalizationTime.Seconds())
+	targetTime := consensusTimestamp - finalizationTime
+
+	for blockNumber := startBlockNumber; blockNumber > 0; blockNumber-- {
+		var header *types.Header
+		if cached := s.blockHeaderCache.Get(blockNumber); cached != nil {
+			header = cached
+		} else {
+			block, err := s.l1Reader.Client().BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+			if err != nil {
+				return nil, err
+			}
+			header = block.Header()
+			s.blockHeaderCache.Add(header)
 		}
-		return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
-	} else {
-		if blockNumber%100 == 0 {
-			log.Warn("block not found in cache", "num", blockNumber)
-		}
-		block, err := s.l1Reader.Client().BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
-		if err != nil {
-			return nil, err
-		}
-		header := block.Header()
-		s.blockHeaderCache.Add(header)
-		if block.Time() <= consensusTimestamp-uint64(s.config().ParentChainFinalizationTime.Seconds()) {
+
+		if header.Time <= targetTime {
 			return header, nil
 		}
-		return s.getL1BlockNumber(ctx, blockNumber-1, consensusTimestamp)
 	}
+
+	return nil, fmt.Errorf("no suitable block found before finalized block %d", startBlockNumber)
 }
 
 func (s *DecentralizedTimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
@@ -713,7 +715,7 @@ type blockHeaderCache struct {
 
 func (c *blockHeaderCache) Add(header *types.Header) {
 	blockNumber := header.Number.Uint64()
-	if blockNumber%200 == 0 {
+	if blockNumber%50 == 0 {
 		log.Info("adding block", "num", blockNumber)
 	}
 	c.mutex.Lock()
@@ -725,9 +727,14 @@ func (c *blockHeaderCache) Add(header *types.Header) {
 	}
 
 	if len(c.blockCache) >= c.maxSize {
-		oldestKey := c.keys[0]
-		delete(c.blockCache, oldestKey)
-		c.keys = c.keys[1:]
+		log.Info("keys full, cleaning out half", "map", len(c.blockCache), "key", len(c.keys))
+		deleteCount := c.maxSize / 2
+		for i := 0; i < deleteCount; i++ {
+			oldestKey := c.keys[i]
+			delete(c.blockCache, oldestKey)
+		}
+		c.keys = c.keys[deleteCount:]
+		log.Info("keys cleaned out half", "map", len(c.blockCache), "key", len(c.keys))
 	}
 
 	c.blockCache[blockNumber] = header
