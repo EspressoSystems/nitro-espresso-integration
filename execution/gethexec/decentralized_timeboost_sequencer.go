@@ -342,9 +342,7 @@ outer:
 	// if for some reason the total block size is greater than the max tx data size
 	// then we need to add the transactions to the retry queue
 	if totalBlockSize > config.MaxTxDataSize {
-		for _, queueItem := range queueItems {
-			s.txRetryQueue.enqueue(queueItem)
-		}
+		s.txRetryQueue.enqueueItems(queueItems)
 		log.Error(
 			"put too many transactions in a block",
 			"numTxes", len(queueItems),
@@ -367,12 +365,15 @@ outer:
 	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
+		s.txRetryQueue.enqueueItems(queueItems)
 		return madeBlock
 	}
 
 	// finalized l1 block <= consensus timestamp - parent chain finalization time
 	l1Block, err := s.getL1BlockNumber(ctx, header.Number.Uint64(), timestamp)
 	if err != nil {
+		log.Error("error getting l1 block number, adding to retry queue", "err", err)
+		s.txRetryQueue.enqueueItems(queueItems)
 		return madeBlock
 	}
 
@@ -399,19 +400,14 @@ outer:
 
 	if errors.Is(err, execution.ErrRetrySequencer) {
 		log.Warn("error sequencing transactions", "err", err)
-
-		for _, queueItem := range queueItems {
-			s.txRetryQueue.enqueue(queueItem)
-		}
+		s.txRetryQueue.enqueueItems(queueItems)
 		return madeBlock
 	}
 
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			// thread closed. We'll later try to forward these messages.
-			for _, queueItem := range queueItems {
-				s.txRetryQueue.enqueue(queueItem)
-			}
+			s.txRetryQueue.enqueueItems(queueItems)
 			return madeBlock
 		}
 		log.Error("error sequencing transactions", "err", err)

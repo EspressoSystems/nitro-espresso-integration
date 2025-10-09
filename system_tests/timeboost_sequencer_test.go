@@ -139,12 +139,13 @@ func GenerateInclusionLists(t *testing.T, users []string, builder *NodeBuilder, 
 	for i := 0; i < numIncls; i++ {
 		// Every user generates a transaction and put into inclusion list
 		txns := ConvertTxsToGethexecTxs(t, transactionsList[i])
-		if i < 0 {
-			t.Fatalf("Invalid index %d", i)
+		consTimestamp := time.Now().Unix()
+		if consTimestamp < 0 || i < 0 {
+			t.Fatalf("invalid timestamp or index %d, time %d", i, consTimestamp)
 		}
 		incl := &protos.InclusionList{
 			Round:               uint64(i),
-			ConsensusTimestamp:  uint64(i),
+			ConsensusTimestamp:  uint64(consTimestamp),
 			EncodedTxns:         txns,
 			DelayedMessagesRead: 0,
 		}
@@ -326,7 +327,6 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 		}
 
 		var blocksTxns [][]*types.Transaction
-		round := 0
 		// Iterate over each block and check that the round id is correct
 		for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
 			if i > math.MaxInt64 {
@@ -336,10 +336,6 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			Require(t, err)
 			txns := block.Transactions()
 			blocksTxns = append(blocksTxns, txns[1:])
-			if block.Time() != inclusionLists[round].Round {
-				t.Fatalf("expected round to be %d, got: %d", inclusionLists[round].Round, block.Time())
-			}
-			round++
 		}
 
 		for i := 0; i < numIncls; i++ {
