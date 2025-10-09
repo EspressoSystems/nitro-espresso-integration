@@ -24,7 +24,6 @@ import (
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/util/headerreader"
-	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -128,7 +127,6 @@ type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
 	executionEngine  *gethexec.ExecutionEngine
-	teeSigner        signature.DataSignerFunc
 	teeAddress       *common.Address
 	teeHMAC          hash.Hash
 	espressoStreamer espressostreamer.EspressoStreamerInterface
@@ -149,7 +147,6 @@ type EspressoCaffNode struct {
 
 func NewEspressoCaffNode(
 	configFetcher EspressoCaffNodeConfigFetcher,
-	teeSigner signature.DataSignerFunc,
 	teeAddress *common.Address,
 	teeHMAC hash.Hash,
 	execEngine *gethexec.ExecutionEngine,
@@ -171,8 +168,7 @@ func NewEspressoCaffNode(
 	}
 
 	if configFetcher().EspressoTeeType != "" {
-		// Check that snapsnotSigner is not nil
-		if teeSigner == nil || teeAddress == nil {
+		if teeAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
 	}
@@ -248,7 +244,6 @@ func NewEspressoCaffNode(
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
-		teeSigner:             teeSigner,
 		teeAddress:            teeAddress,
 		teeHMAC:               teeHMAC,
 		delayedMessageFetcher: delayedMessageFetcher,

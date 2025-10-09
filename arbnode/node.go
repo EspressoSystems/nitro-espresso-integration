@@ -967,7 +967,6 @@ func getEspressoCaffNode(
 	ctx context.Context,
 	config *Config,
 	configFetcher ConfigFetcher,
-	teeSigner signature.DataSignerFunc,
 	teeAddress *common.Address,
 	teeHMAC hash.Hash,
 	arbDb ethdb.Database,
@@ -995,7 +994,6 @@ func getEspressoCaffNode(
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
-				teeSigner,
 				teeAddress,
 				teeHMAC,
 				exec.ExecEngine,
@@ -1126,7 +1124,6 @@ func createNodeImpl(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
-	teeSigner signature.DataSignerFunc,
 	teeAddress *common.Address,
 	teeHMAC hash.Hash,
 	fatalErrChan chan error,
@@ -1192,7 +1189,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, teeSigner, teeAddress, teeHMAC, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, teeAddress, teeHMAC, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan)
 	if err != nil {
 		return nil, err
 	}
@@ -1368,7 +1365,6 @@ func CreateNodeExecutionClient(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
-	teeSigner signature.DataSignerFunc,
 	teeAddress *common.Address,
 	teeHMAC hash.Hash,
 	fatalErrChan chan error,
@@ -1379,7 +1375,7 @@ func CreateNodeExecutionClient(
 	if executionClient == nil {
 		return nil, errors.New("execution client must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, teeSigner, teeAddress, teeHMAC, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, teeAddress, teeHMAC, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
 	if err != nil {
 		return nil, err
 	}
