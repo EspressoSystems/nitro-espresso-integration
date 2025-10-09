@@ -2,14 +2,16 @@ package arbnode
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
+	"hash"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -64,82 +66,47 @@ func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, 
 	return crypto.PubkeyToAddress(*publicKey), nil
 }
 
-// Create a signature over a uint64 value given a signer
-func generateSignatureFromUint64(signer signature.DataSignerFunc, data uint64) ([]byte, error) {
+func generateSignatureFromUint64(signer hash.Hash, data uint64) ([]byte, error) {
 	if signer == nil {
 		return nil, nil
 	}
-	hash, err := getHashOverUint64(data)
-	if err != nil {
-		return nil, err
-	}
-	signature, err := signer(hash)
-	if err != nil {
-		return nil, err
-	}
+	uintBytes := authdb.EncodeUint64(data)
+	signer.Write(uintBytes)
+	signature := signer.Sum(nil)
 	return signature, nil
 }
 
-func generateSignatureOverHash(signer signature.DataSignerFunc, hash []byte) ([]byte, error) {
-	if signer == nil {
+func generateSignatureOverBlock(signer hash.Hash, block *types.Block) ([]byte, error) {
+	if block == nil {
 		return nil, nil
 	}
 
-	signature, err := signer(hash)
+	blockBytes, err := rlp.EncodeToBytes(block)
 	if err != nil {
 		return nil, err
 	}
+	signer.Write(blockBytes)
+	signature := signer.Sum(nil)
 	return signature, nil
-}
-
-func getHashOverUint64(data uint64) ([]byte, error) {
-	uintBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(uintBytes, data)
-	hash := crypto.Keccak256Hash(uintBytes)
-	return hash.Bytes(), nil
 }
 
 func storeBlockSignature(batch ethdb.Batch, blockHash common.Hash, blockSignature []byte) error {
-	blockNumber := binary.BigEndian.Uint64(blockHash.Bytes())
-	key := dbKey(BlockSignaturePrefix, (blockNumber))
-	return batch.Put(key, blockSignature)
+	return batch.Put(authdb.BlockSignatureKey(blockHash), blockSignature)
 }
 
-func getBlockSignature(db ethdb.Database, blockHash common.Hash) ([]byte, error) {
-	blockNumber := binary.BigEndian.Uint64(blockHash.Bytes())
-	key := dbKey(BlockSignaturePrefix, (blockNumber))
-	return db.Get(key)
+func getBlockSignature(db authdb.AuthDB, blockHash common.Hash) ([]byte, error) {
+	return db.Get(authdb.BlockSignatureKey(blockHash))
 }
 
 func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
-
-	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
+	// Store the from block in the database
+	err := batch.Put(authdb.DelayedMessageFetcherFromBlockKey(fromBlock), fromBlockSignature)
 	if err != nil {
-		return fmt.Errorf("failed to encode next from block: %w", err)
-	}
-	if err := batch.Put(DelayedFetcherCurrentFromBlockKey, blockNumberBytes); err != nil {
 		return fmt.Errorf("failed to put from block: %w", err)
 	}
-
-	return batch.Put(DelayedFetcherCurrentFromBlockSignatureKey, fromBlockSignature)
-}
-
-func verifySignature(db ethdb.Database, signature []byte, hash []byte, snapshotSignerAddress common.Address) error {
-	publicKeyBytes, err := crypto.Ecrecover(hash, signature)
+	err = batch.Put(authdb.DelayedMessageFetcherFromBlockSignatureKey(fromBlock), fromBlockSignature)
 	if err != nil {
-		return fmt.Errorf("unable to recover public key")
-	}
-	pubKey, err := crypto.UnmarshalPubkey(publicKeyBytes)
-	if err != nil || pubKey == nil {
-		return fmt.Errorf("invalid public key")
-	}
-	// Public Key to address
-	publicKeyAddress := crypto.PubkeyToAddress(*pubKey)
-	// TODO: In follow up PRs, we should allows any valid PCR0 address registered in the contract
-	// to be able to decrypt the snapshot
-
-	if publicKeyAddress != snapshotSignerAddress {
-		return fmt.Errorf("invalid snapshot address")
+		return fmt.Errorf("failed to put from block signature: %w", err)
 	}
 	return nil
 }

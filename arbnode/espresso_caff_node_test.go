@@ -16,6 +16,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/statetransfer"
@@ -93,8 +94,8 @@ func (m *MockEspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch,
 	return nil
 }
 
-func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(ethdb.Database) (uint64, []byte, error) {
-	return m.dbHotShot, nil, nil
+func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(authdb.AuthDB) (uint64, error) {
+	return m.dbHotShot, nil
 }
 
 type MockDelayedMessageFetcher struct{}

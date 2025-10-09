@@ -6,10 +6,9 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -178,33 +177,15 @@ func (d *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 /*
 Reads the "current from" block from the database.
 */
-func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
-	var blockNumber uint64
+func readCurrentFromBlockFromDb(db authdb.AuthDB) (uint64, error) {
 	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentFromBlockKey))
 	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, nil, fmt.Errorf("failed to get next from block: %w", err)
+		return 0, fmt.Errorf("failed to get next from block: %w", err)
 	}
 	if dbutil.IsErrNotFound(err) {
-		return 0, nil, nil
+		return 0, nil
 	}
-	if blockNumberBytes != nil {
-		err = rlp.DecodeBytes(blockNumberBytes, &blockNumber)
-		if err != nil {
-			return 0, nil, fmt.Errorf("failed to decode next from block: %w", err)
-		}
-	}
-
-	// Also get the signature and check that signaure is valid
-	fromBlockSignatureBytes, err := db.Get(DelayedFetcherCurrentFromBlockSignatureKey)
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, nil, fmt.Errorf("failed to get next from block signature: %w", err)
-	}
-	if dbutil.IsErrNotFound(err) {
-		return 0, nil, nil
-	}
-
-	log.Info("Read from block signature", "fromBlock", blockNumber, "fromBlockSignature", fromBlockSignatureBytes)
-	return blockNumber, fromBlockSignatureBytes, nil
+	return authdb.DecodeUint64(blockNumberBytes)
 }
 
 /*

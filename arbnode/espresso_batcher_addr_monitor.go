@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -68,7 +69,7 @@ type BatcherAddrMonitor struct {
 	cachedAddresses []common.Address
 
 	updates []BatcherAddrUpdate
-	db      ethdb.Database
+	db      authdb.AuthDB
 
 	// Init addresses are the addresses that were set as batcher when the rollup was deployed.
 	initAddresses []common.Address
@@ -82,7 +83,7 @@ type BatcherAddrMonitor struct {
 
 func NewBatcherAddrMonitor(
 	initAddresses []common.Address,
-	db ethdb.Database,
+	db authdb.AuthDB,
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
 	deployAt uint64,

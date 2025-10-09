@@ -20,14 +20,12 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-const NextHotshotBlockKey = "nextHotshotBlock"
-const HotshotBlockSignatureKey = "hotshotBlockSignature"
 
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
@@ -50,7 +48,7 @@ type EspressoStreamerInterface interface {
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error
-	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, []byte, error)
+	ReadNextHotshotBlockFromDb(db authdb.AuthDB) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
@@ -307,42 +305,24 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	return result, nil
 }
 
-func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, []byte, error) {
-	var nextHotshotBlock uint64
-	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
+func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db authdb.AuthDB) (uint64, error) {
+	nextHotshotBytes, err := db.Get(authdb.StreamerHotshotBlockKey(s.nextHotshotBlockNum))
 	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, nil, fmt.Errorf("failed to get next hotshot block: %w", err)
+		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
 	}
 	if dbutil.IsErrNotFound(err) {
-		return 0, nil, nil
-	}
-	if nextHotshotBytes != nil {
-		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
-		if err != nil {
-			return 0, nil, fmt.Errorf("failed to decode next hotshot block: %w", err)
-		}
-	}
-	// Also need the signature over hotshot block
-	hotshotBlockSignature, err := db.Get([]byte(HotshotBlockSignatureKey))
-	if err != nil {
-		return 0, nil, fmt.Errorf("failed to get signature over hotshot block: %w", err)
+		return 0, nil
 	}
 
-	return nextHotshotBlock, hotshotBlockSignature, nil
+	return authdb.DecodeUint64(nextHotshotBytes)
 }
 
 func (s *EspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
-	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
+	err := batch.Put(authdb.StreamerHotshotBlockKey(nextHotshotBlock), signature)
 	if err != nil {
-		return fmt.Errorf("failed to encode next hotshot block: %w", err)
+		return fmt.Errorf("failed to put signature: %w", err)
 	}
-
-	err = batch.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next hotshot block: %w", err)
-	}
-
-	err = batch.Put([]byte(HotshotBlockSignatureKey), signature)
+	err = batch.Put(authdb.StreamerHotshotBlockSignatureKey(nextHotshotBlock), signature)
 	if err != nil {
 		return fmt.Errorf("failed to put signature: %w", err)
 	}

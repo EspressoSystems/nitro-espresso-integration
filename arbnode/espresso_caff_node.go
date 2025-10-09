@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash"
 	"path"
 	"path/filepath"
 	"time"
@@ -14,11 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos"
+	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -126,13 +127,14 @@ type EspressoCaffNodeConfigFetcher func() *EspressoCaffNodeConfig
 type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
-	executionEngine       *gethexec.ExecutionEngine
-	snapshotSignerAddress *common.Address
-	snapshotSigner        signature.DataSignerFunc
-	espressoStreamer      espressostreamer.EspressoStreamerInterface
+	executionEngine  *gethexec.ExecutionEngine
+	teeSigner        signature.DataSignerFunc
+	teeAddress       *common.Address
+	teeHMAC          hash.Hash
+	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
-	db            ethdb.Database
+	db            authdb.AuthDB
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
@@ -147,12 +149,13 @@ type EspressoCaffNode struct {
 
 func NewEspressoCaffNode(
 	configFetcher EspressoCaffNodeConfigFetcher,
-	snapshotSignerAddress *common.Address,
-	snapshotSigner signature.DataSignerFunc,
+	teeSigner signature.DataSignerFunc,
+	teeAddress *common.Address,
+	teeHMAC hash.Hash,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	db ethdb.Database,
+	db authdb.AuthDB,
 	recordPerformance bool,
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
@@ -169,7 +172,7 @@ func NewEspressoCaffNode(
 
 	if configFetcher().EspressoTeeType != "" {
 		// Check that snapsnotSigner is not nil
-		if snapshotSigner == nil || snapshotSignerAddress == nil {
+		if teeSigner == nil || teeAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
 	}
@@ -206,22 +209,11 @@ func NewEspressoCaffNode(
 	)
 
 	fromBlock := configFetcher().FromBlock
-	var fromBlockSignature []byte
+
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, fromBlockSignature, err = readCurrentFromBlockFromDb(db)
+		fromBlock, err = readCurrentFromBlockFromDb(db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
-		}
-		if configFetcher().EspressoTeeType != "" && fromBlock != 0 {
-			fromBlockHash, err := getHashOverUint64(fromBlock)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
-			}
-
-			err = verifySignature(db, fromBlockSignature, fromBlockHash, *snapshotSignerAddress)
-			if err != nil {
-				return nil, fmt.Errorf("failed to verify from block signature: %w", err)
-			}
 		}
 	}
 	if fromBlock == 0 {
@@ -256,8 +248,9 @@ func NewEspressoCaffNode(
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
-		snapshotSignerAddress: snapshotSignerAddress,
-		snapshotSigner:        snapshotSigner,
+		teeSigner:             teeSigner,
+		teeAddress:            teeAddress,
+		teeHMAC:               teeHMAC,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
 		db:                    db,
@@ -352,7 +345,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	batch := n.db.NewBatch()
 
 	// Store hotshot block with signature if snapshot signer is configured
-	hotshotBlockSignature, err := generateSignatureFromUint64(n.snapshotSigner, hotshotBlockNumber)
+	hotshotBlockSignature, err := generateSignatureFromUint64(n.teeHMAC, hotshotBlockNumber)
 	if err != nil {
 		log.Error("Failed to get signature for hotshot block", "err", err)
 		return false
@@ -366,7 +359,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	// Store from block with signature if snapshot signer is configured
 	// fromBlock will only be stored when we process a delayed message
 	if fromBlock != 0 {
-		fromBlockSignature, err := generateSignatureFromUint64(n.snapshotSigner, fromBlock)
+		fromBlockSignature, err := generateSignatureFromUint64(n.teeHMAC, fromBlock)
 		if err != nil {
 			log.Error("Failed to get signature for from block", "err", err)
 			return false
@@ -380,7 +373,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	}
 
 	// Store block with signature if snapshot signer is configured
-	blockSignature, err := generateSignatureOverHash(n.snapshotSigner, block.Hash().Bytes())
+	blockSignature, err := generateSignatureOverBlock(n.teeHMAC, block)
 	if err != nil {
 		log.Error("failed to get signature for block", "err", err)
 		return false
@@ -443,23 +436,6 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
-	if n.configFetcher().EspressoTeeType != "" && currentBlock.NumberU64() > 0 {
-		blockhash := currentBlock.Hash()
-
-		// Get the block signature
-		blockSignature, err := getBlockSignature(n.db, blockhash)
-		if err != nil {
-			return fmt.Errorf("failed to get block signature: %w", err)
-		}
-
-		err = verifySignature(n.db, blockSignature, blockhash.Bytes(), *n.snapshotSignerAddress)
-		if err != nil {
-			return fmt.Errorf("failed to verify block signature: %w", err)
-		}
-	}
-
-	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
-	// from block?
 	n.currentBlock = currentBlock
 
 	currentBlockNum := currentBlockHeader.Number.Uint64() + 1
@@ -469,24 +445,11 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	var nextHotshotBlock uint64
-	var nextHotshotBlockSignature []byte
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, nextHotshotBlockSignature, err = n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+		nextHotshotBlock, err = n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
-		}
-
-		if n.configFetcher().EspressoTeeType != "" && nextHotshotBlock != 0 {
-			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
-			if err != nil {
-				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
-			}
-
-			err = verifySignature(n.db, nextHotshotBlockSignature, hotshotBlockHash, *n.snapshotSignerAddress)
-			if err != nil {
-				return fmt.Errorf("failed to verify signature for hotshot block: %w", err)
-			}
 		}
 	}
 	if nextHotshotBlock == 0 {
