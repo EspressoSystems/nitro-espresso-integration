@@ -965,8 +965,6 @@ func getEspressoCaffNode(
 	ctx context.Context,
 	config *Config,
 	configFetcher ConfigFetcher,
-	snapshotSignerAddress *common.Address,
-	snapshotSigner signature.DataSignerFunc,
 	arbDb ethdb.Database,
 	exec execution.ExecutionClient,
 	l1Reader *headerreader.HeaderReader,
@@ -979,15 +977,13 @@ func getEspressoCaffNode(
 	stack *node.Node,
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
-	txOptsCaffNode *bind.TransactOpts,
+	parentChainID *big.Int,
 ) (*Node, error) {
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
-				snapshotSignerAddress,
-				snapshotSigner,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
@@ -998,7 +994,7 @@ func getEspressoCaffNode(
 				fatalErrChan,
 				stack.Config().HTTPPort,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
-				txOptsCaffNode,
+				parentChainID.Uint64(),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)
@@ -1118,13 +1114,10 @@ func createNodeImpl(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
-	snapshotSignerAddress *common.Address,
-	snapshotSigner signature.DataSignerFunc,
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
 	latestWasmModuleRoot common.Hash,
-	txOptsCaffNode *bind.TransactOpts,
 ) (*Node, error) {
 	config := configFetcher.Get()
 
@@ -1184,7 +1177,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, snapshotSignerAddress, snapshotSigner, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan, txOptsCaffNode)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan, parentChainID)
 	if err != nil {
 		return nil, err
 	}
@@ -1371,7 +1364,7 @@ func CreateNodeExecutionClient(
 	if executionClient == nil {
 		return nil, errors.New("execution client must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSignerAddress, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -1405,7 +1398,7 @@ func CreateNodeFullExecutionClient(
 	if (executionClient == nil) || (executionSequencer == nil) || (executionRecorder == nil) || (executionBatchPoster == nil) {
 		return nil, errors.New("execution client, sequencer, recorder, and batch poster must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, snapshotSignerAddress, snapshotSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, txOptsCaffNode)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
 	if err != nil {
 		return nil, err
 	}

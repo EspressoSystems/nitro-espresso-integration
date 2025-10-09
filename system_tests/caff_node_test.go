@@ -59,7 +59,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
 	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig = espressotee.DefaultEspressoRegisterSignerConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
@@ -127,6 +127,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.EspressoCaffNode.FromBlock = 1
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder

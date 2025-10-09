@@ -2,9 +2,13 @@ package arbnode
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"path"
 	"path/filepath"
 	"time"
@@ -16,12 +20,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -170,8 +176,6 @@ type EspressoCaffNode struct {
 func NewEspressoCaffNode(
 	ctx context.Context,
 	configFetcher EspressoCaffNodeConfigFetcher,
-	snapshotSignerAddress *common.Address,
-	snapshotSigner signature.DataSignerFunc,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
@@ -182,7 +186,7 @@ func NewEspressoCaffNode(
 	fatalErrChan chan error,
 	httpPort int,
 	dataPosterDB ethdb.Database,
-	txOptsCaffNode *bind.TransactOpts,
+	parentChainID uint64,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -193,9 +197,53 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("l1 reader is nil")
 	}
 
-	if configFetcher().EspressoTeeType != "" {
+	var teeType espressotee.TEE
+	configTee := configFetcher().EspressoTeeType
+	teeType, err := teeType.FromString(configTee)
+	if err != nil {
+		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
+	}
+
+	var caffNodeTxOpts *bind.TransactOpts
+	var snapshotSignerPubKey *ecdsa.PublicKey
+	var snapshotSignerFunc signature.DataSignerFunc
+	var snapshotPrivateKey *ecdsa.PrivateKey
+	switch teeType {
+	case espressotee.NITRO:
+		snapshotSignerPubKey, snapshotSignerFunc, snapshotPrivateKey, err = integrityattestation.ReadEnclavePrivateKey(configFetcher().KeyPairAttestationsPath)
+
+		if err != nil {
+			flag.Usage()
+			log.Crit("error reading enclave private key for Espresso Caff node", "path", configFetcher().KeyPairAttestationsPath, "err", err)
+		}
+	case espressotee.TEETEST:
+		snapshotSignerPubKey, snapshotSignerFunc, snapshotPrivateKey = GetTestAccount()
+	}
+	log.Info("snapshotSignerFunc", "func", snapshotSignerFunc)
+	privHex := hex.EncodeToString(snapshotPrivateKey.D.Bytes())
+	// This will be used by the hyperlane validator
+	os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
+	if teeType != espressotee.EMPTY {
+		caffNodeTxOpts, err = bind.NewKeyedTransactorWithChainID(snapshotPrivateKey, new(big.Int).SetUint64(parentChainID))
+		if err != nil {
+			flag.Usage()
+			log.Crit("error creating caff node txOpts", "err", err)
+		}
+	} else if teeType == espressotee.TEETEST {
+		// We are running a test, generate a random account for the data poster and overwrite the data poster variables.
+		// export the private variable just incase we need it or to monitor the account used during the tests.
+		log.Info("snapshotSignerFunc", "func", snapshotSignerFunc)
+		os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
+	}
+	//Finally bind the correct address of the signer
+	address := crypto.PubkeyToAddress(*snapshotSignerPubKey)
+	snapshotSignerAddress := &address
+
+	log.Info("snapshotSignerFunc", "func", snapshotSignerFunc)
+
+	if teeType != espressotee.TEETEST {
 		// Check that snapsnotSigner is not nil
-		if snapshotSigner == nil || snapshotSignerAddress == nil {
+		if snapshotSignerFunc == nil || snapshotSignerAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
 	}
@@ -238,7 +286,7 @@ func NewEspressoCaffNode(
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
-		if configFetcher().EspressoTeeType != "" && fromBlock != 0 {
+		if teeType != espressotee.EMPTY && fromBlock != 0 {
 			fromBlockHash, err := getHashOverUint64(fromBlock)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get hash of from block: %w", err)
@@ -292,13 +340,6 @@ func NewEspressoCaffNode(
 	}
 	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
 
-	var teeType espressotee.TEE
-	configTee := configFetcher().EspressoTeeType
-	teeType, err = teeType.FromString(configTee)
-	if err != nil {
-		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
-	}
-
 	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 	if teeType == espresso_key_manager.NITRO {
 		log.Info("setting up nitro verifier", "tee type", teeType)
@@ -322,7 +363,7 @@ func NewEspressoCaffNode(
 		&dataposter.DataPosterOpts{
 			Database:      dataPosterDB,
 			HeaderReader:  l1Reader,
-			Auth:          txOptsCaffNode,
+			Auth:          caffNodeTxOpts,
 			Config:        dataPosterConfigFetcher,
 			ParentChainID: chainId,
 			MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
@@ -332,14 +373,14 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create data poster: %w", err)
 	}
-
-	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSigner, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+	log.Info("key manager stuff", "snapshotSigner", snapshotSignerFunc, "teeType", teeType)
+	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSignerFunc, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
 		snapshotSignerAddress: snapshotSignerAddress,
-		snapshotSigner:        snapshotSigner,
+		snapshotSigner:        snapshotSignerFunc,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
 		db:                    db,
@@ -506,11 +547,12 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 
 	registered := n.keyManager.HasRegistered()
 	if !registered {
+		log.Info("pre-registration")
 		if err := n.keyManager.RegisterService(); err != nil {
 			return err
 		}
 	}
-
+	log.Info("post-registration")
 	err := n.espressoStreamer.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
@@ -627,6 +669,20 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	return nil
 }
 
+// test function to generate a random private key for the duration of the tests.
+func GetTestAccount() (*ecdsa.PublicKey, signature.DataSignerFunc, *ecdsa.PrivateKey) {
+	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+	if err != nil {
+		panic(err)
+	}
+
+	pubKey, ok := privKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		panic("failed to get public key")
+	}
+
+	return pubKey, signature.DataSignerFromPrivateKey(privKey), privKey
+}
 func (n *EspressoCaffNode) StopAndWait() {
 	n.StopWaiter.StopAndWait()
 	n.batcherAddrMonitor.StopAndWait()

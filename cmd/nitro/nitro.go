@@ -54,7 +54,6 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/cmd/util"
 	"github.com/offchainlabs/nitro/cmd/util/confighelpers"
-	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -231,8 +230,6 @@ func mainImpl() int {
 	var dataSigner signature.DataSignerFunc
 	var snapshotSigner signature.DataSignerFunc
 	var snapshotSignerAddress *common.Address
-	var snapshotPublicKey *ecdsa.PublicKey
-	var snapshotPrivateKey *ecdsa.PrivateKey
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
 	// If sequencer and signing is enabled or batchposter is enabled without
@@ -256,26 +253,6 @@ func mainImpl() int {
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
 	var caffNodetxOpts *bind.TransactOpts
-
-	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		snapshotPublicKey, snapshotSigner, snapshotPrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
-		if err != nil {
-			flag.Usage()
-			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
-		}
-		privHex := hex.EncodeToString(snapshotPrivateKey.D.Bytes())
-		// This will be used by the hyperlane validator
-		os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
-		if nodeConfig.ParentChain.ID != 0 {
-			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(snapshotPrivateKey, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
-			if err != nil {
-				flag.Usage()
-				log.Crit("error creating caff node txOpts", "err", err)
-			}
-		}
-		publicKeyAddress := crypto.PubkeyToAddress(*snapshotPublicKey)
-		snapshotSignerAddress = &publicKeyAddress
-	}
 
 	if sequencerNeedsKey || nodeConfig.Node.BatchPoster.ParentChainWallet.OnlyCreateKey {
 		l1TransactionOptsBatchPoster, dataSigner, err = util.OpenWallet("l1-batch-poster", &nodeConfig.Node.BatchPoster.ParentChainWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
