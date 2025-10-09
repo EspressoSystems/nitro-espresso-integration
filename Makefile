@@ -302,7 +302,7 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	@rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/
+	@rm -rf contracts/build contracts/cache solgen/go/
 	@rm -rf contracts-legacy/build contracts-legacy/cache
 	@rm -rf contracts-local/out contracts-local/forge-cache
 	@rm -f .make/*
@@ -608,14 +608,9 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen  $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
 	go run ./solgen/gen.go
-	@touch $@
-
-.make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
-	mkdir -p espresso-tee-contracts/espressogen/
-	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
