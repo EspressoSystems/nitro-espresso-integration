@@ -59,7 +59,7 @@ func NewEspressoKeyManager(
 	dataPoster *dataposter.DataPoster,
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
-	serviceTupe espressotee.ServiceType,
+	serviceType espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterSignerConfig,
 ) *EspressoKeyManager {
 	// ephemeral key
@@ -105,6 +105,7 @@ func NewEspressoKeyManager(
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		dataPoster:                dataPoster,
 		teeType:                   teeType,
+		serviceType:               serviceType,
 		registerSignerOpts: espressotee.EspressoRegisterSignerOpts{
 			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
@@ -129,7 +130,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), espressotee.BatchPoster, k.registerSignerOpts)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
 	if err != nil {
 		return false, err
 	}
@@ -171,8 +172,9 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		}
 		return attestation, data, nil
 	case TESTS:
-		data := crypto.FromECDSAPub(k.pubKey)
-		signature, err := k.noOpSignerFunc(data)
+		key := crypto.FromECDSAPub(k.pubKey)
+		signature, err := k.noOpSignerFunc(key)
+		data := make([]byte, 20)
 		return signature, data, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
@@ -191,10 +193,14 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
+	log.Info("attestation info", "attestation.len", len(attestation), "attestation", attestation)
+	log.Info("Data info", "len(data)", len(data), "data", data)
+	log.Info("RegisterSigner opts", "dataposter", k.dataPoster, "teeType", k.teeType, "Service type", k.serviceType, "registerSignerOpts", k.registerSignerOpts)
 	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
 	if err != nil {
 		return err
 	}
+	log.Info("PostRegistration")
 
 	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
 	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
