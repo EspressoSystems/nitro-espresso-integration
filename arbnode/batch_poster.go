@@ -47,7 +47,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
-	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"

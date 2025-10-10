@@ -42,7 +42,7 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/daclient"
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/das/dasserver"
-	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"

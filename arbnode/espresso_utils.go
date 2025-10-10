@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 
-	authdb "github.com/offchainlabs/nitro/espresso/auth-db"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
