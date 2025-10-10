@@ -8,8 +8,10 @@ import (
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/offchainlabs/nitro/util"
 )
 
