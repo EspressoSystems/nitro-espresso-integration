@@ -10,16 +10,22 @@ import (
 
 // The fields below define which low level database schema prefixes our AuthDB will intercept in Get
 
-const (
-	BlockSignaturePrefix                        = []byte("blkSig-")
-	DelayedMessageFetcherFromBlockKey           = []byte("delayedFetcherFromBlk")
-	DelayedMessageFetcherFromBlockAuthTagPrefix = []byte("delayedFetcherFromBlkTag-")
-	NextHotshotBlockNumKey                      = []byte("nextHsBlkNum")
-	NextHotshotBlockNumAuthTagPrefix            = []byte("nextHsBlkNumTag-")
+var (
+	BlockSignatureAuthTagKey                       = []byte("blkTag-")
+	DelayedMessageFetcherFromBlockKey              = []byte("delayedFetcherFromBlk")
+	DelayedMessageFetcherFromBlockAuthTagPrefix    = []byte("delayedFetcherFromBlkTag-")
+	NextHotshotBlockNumKey                         = []byte("nextHsBlkNum")
+	NextHotshotBlockNumAuthTagPrefix               = []byte("nextHsBlkNumTag-")
+	InitAddressesBatcherAddsMonitorKey             = []byte("initAddressesBatcherAddsMonitor-")
+	InitAddressesBatcherAddsMonitorTagKey          = []byte("initAddressesBatcherAddsMonitorTag-")
+	EventsBatcherAddsMonitorKey                    = []byte("eventsBatcherAddsMonitor-")
+	EventsBatcherAddsMonitorTagKey                 = []byte("eventsBatcherAddsMonitorTag-")
+	LastProcessedHeightKeyBatcherAddsMonitorKey    = []byte("lastProcessedHeightKeyBatcherAddsMonitor-")
+	LastProcessedHeightKeyBatcherAddsMonitorTagKey = []byte("lastProcessedHeightKeyBatcherAddsMonitorTag-")
 )
 
-func BlockSignatureKey(blockHash common.Hash) []byte {
-	return append(BlockSignaturePrefix, blockHash.Bytes()...)
+func BlockSignatureFromAuthTagKey(blockHash common.Hash) []byte {
+	return append(BlockSignatureAuthTagKey, blockHash.Bytes()...)
 }
 
 func DelayedMessageFetcherFromBlockAuthTagKey(blockNum uint64) []byte {

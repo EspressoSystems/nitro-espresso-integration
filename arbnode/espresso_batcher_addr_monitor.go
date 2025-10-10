@@ -3,7 +3,6 @@ package arbnode
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"math/big"
 	"sort"
@@ -13,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -111,6 +109,7 @@ func (b *BatcherAddrMonitor) AddBatchPosterSetEvents(events []BatcherAddrUpdate)
 	if len(events) == 0 {
 		return nil
 	}
+	log.Info("adding batcher addr events", "events", events)
 	b.updates = append(b.updates, events...)
 	// Sort events by l1Height to ensure correct processing order.
 	// Since BatcherAddr events are infrequent, the performance impact of sorting is negligible.
@@ -167,7 +166,7 @@ func (b *BatcherAddrMonitor) GetValidAddresses(targetL1Height uint64) []common.A
 		b.cached = true
 		b.cachedAddresses = validAddrs
 	}
-
+	log.Info("valid addresses in batch monitor", "validAddresses", validAddrs)
 	return validAddrs
 }
 
@@ -259,36 +258,26 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 	return events, nil
 }
 
-func (b *BatcherAddrMonitor) StoreLastProcessedHeight(batch ethdb.Batch, height uint64) error {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, height)
-	return batch.Put([]byte(lastProcessedHeightKey), buf)
-}
-
 func (b *BatcherAddrMonitor) Store() error {
+
+	newBatch := b.db.NewBatch()
+
 	eventsBytes, err := rlp.EncodeToBytes(b.updates)
 	if err != nil {
 		return fmt.Errorf("failed to encode events: %w", err)
 	}
 
-	initAddressesBytes, err := rlp.EncodeToBytes(b.initAddresses)
-	if err != nil {
-		return fmt.Errorf("failed to encode init addresses: %w", err)
-	}
-
-	newBatch := b.db.NewBatch()
-
-	err = newBatch.Put([]byte(eventKey), eventsBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put events: %w", err)
-	}
-
-	err = newBatch.Put([]byte(initAddressesKey), initAddressesBytes)
+	err = b.db.AuthWriteInitAddressesBatcherAddrMonitor(newBatch, b.initAddresses)
 	if err != nil {
 		return fmt.Errorf("failed to put init addresses: %w", err)
 	}
 
-	err = b.StoreLastProcessedHeight(newBatch, b.lastProcessedParentHeight)
+	err = b.db.AuthWriteEventsBatcherAddrMonitor(newBatch, eventsBytes)
+	if err != nil {
+		return fmt.Errorf("failed to put events: %w", err)
+	}
+
+	err = b.db.AuthWriteLastProcessedHeightKeyBatcherAddrMonitor(newBatch, b.lastProcessedParentHeight)
 	if err != nil {
 		return fmt.Errorf("failed to put last processed height: %w", err)
 	}
@@ -297,28 +286,23 @@ func (b *BatcherAddrMonitor) Store() error {
 }
 
 func (b *BatcherAddrMonitor) Restore() error {
-	initAddressesBytes, err := b.db.Get([]byte(initAddressesKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return fmt.Errorf("failed to get init addresses: %w", err)
+
+	initAddresses, err := b.db.AuthReadInitAddressesBatcherAddrMonitor()
+	if err != nil {
+		return fmt.Errorf("failed to get init addresses: %w, init addresses: %v", err, initAddresses)
+	}
+	if initAddresses != nil {
+		b.initAddresses = initAddresses
 	}
 
-	if initAddressesBytes != nil {
-		err = rlp.DecodeBytes(initAddressesBytes, &b.initAddresses)
-		if err != nil {
-			return fmt.Errorf("failed to decode init addresses: %w", err)
-		}
-	}
-
-	lastProcessedHeightBytes, err := b.db.Get([]byte(lastProcessedHeightKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	lastProcessedHeight, err := b.db.AuthReadLastProcessedHeightKeyBatcherAddrMonitor()
+	if err != nil {
 		return fmt.Errorf("failed to get last processed height: %w", err)
 	}
-	if lastProcessedHeightBytes != nil {
-		b.lastProcessedParentHeight = binary.BigEndian.Uint64(lastProcessedHeightBytes)
-	}
+	b.lastProcessedParentHeight = lastProcessedHeight
 
-	eventsBytes, err := b.db.Get([]byte(eventKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	eventsBytes, err := b.db.AuthReadEventsBatcherAddrMonitor()
+	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
 
@@ -443,7 +427,7 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	if len(events) == 0 {
 		// If no events are found, we still need to update the last processed height
 		batch := b.db.NewBatch()
-		err = b.StoreLastProcessedHeight(batch, newHeight)
+		err = b.db.AuthWriteLastProcessedHeightKeyBatcherAddrMonitor(batch, newHeight)
 		if err != nil {
 			return fmt.Errorf("failed to store last processed height: %w", err)
 		}

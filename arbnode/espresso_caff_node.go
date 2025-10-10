@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"hash"
 	"path"
 	"path/filepath"
 	"time"
@@ -128,7 +127,6 @@ type EspressoCaffNode struct {
 
 	executionEngine  *gethexec.ExecutionEngine
 	teeAddress       *common.Address
-	teeHMAC          hash.Hash
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
@@ -148,7 +146,6 @@ type EspressoCaffNode struct {
 func NewEspressoCaffNode(
 	configFetcher EspressoCaffNodeConfigFetcher,
 	teeAddress *common.Address,
-	teeHMAC hash.Hash,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
@@ -245,7 +242,6 @@ func NewEspressoCaffNode(
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
 		teeAddress:            teeAddress,
-		teeHMAC:               teeHMAC,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
 		db:                    db,
@@ -341,7 +337,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Store hotshot block num with auth tag
 	if err := n.db.AuthWriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
-		log.Err("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
+		log.Error("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
 		return false
 	}
 
@@ -354,15 +350,10 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		}
 	}
 
-	// Store block with signature if snapshot signer is configured
-	blockSignature, err := generateSignatureOverBlock(n.teeHMAC, block)
+	// Store block auth tag
+	err = n.db.AuthWriteBlockSignature(batch, block)
 	if err != nil {
-		log.Error("failed to get signature for block", "err", err)
-		return false
-	}
-	err = storeBlockSignature(batch, block.Hash(), blockSignature)
-	if err != nil {
-		log.Error("failed to store signature for block", "err", err)
+		log.Error("failed to store block signature", "err", err)
 		return false
 	}
 

@@ -46,7 +46,6 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
@@ -617,11 +616,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				initAddresses = []common.Address{addr}
 			}
 
-			kv, ok := opts.DataPosterDB.(ethdb.KeyValueStore)
-			if !ok {
-				return nil, fmt.Errorf("opts.DataPosterDB does not implement ethdb.KeyValueStore")
-			}
-			db, err := authdb.NewAuthDB(kv)
+			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, false)
 			if err != nil {
 				return nil, err
 			}

@@ -19,10 +19,8 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -204,6 +202,7 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
+		log.Warn("no valid addresses found", "validAddresses", validAddresses)
 		// No valid addresses right now. Need to catch up
 		return ErrRetryParsingHotShotPayload
 	}

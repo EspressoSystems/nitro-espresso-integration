@@ -2,16 +2,10 @@ package arbnode
 
 import (
 	"context"
-	"fmt"
-	"hash"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/rlp"
 
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -64,26 +58,4 @@ func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, 
 	}
 
 	return crypto.PubkeyToAddress(*publicKey), nil
-}
-
-func generateSignatureOverBlock(signer hash.Hash, block *types.Block) ([]byte, error) {
-	if block == nil {
-		return nil, nil
-	}
-
-	blockBytes, err := rlp.EncodeToBytes(block)
-	if err != nil {
-		return nil, err
-	}
-	signer.Write(blockBytes)
-	signature := signer.Sum(nil)
-	return signature, nil
-}
-
-func storeBlockSignature(batch ethdb.Batch, blockHash common.Hash, blockSignature []byte) error {
-	return batch.Put(authdb.BlockSignatureKey(blockHash), blockSignature)
-}
-
-func getBlockSignature(db authdb.AuthDB, blockHash common.Hash) ([]byte, error) {
-	return db.Get(authdb.BlockSignatureKey(blockHash))
 }

@@ -58,6 +58,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/daprovider/das"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -230,10 +231,8 @@ func mainImpl() int {
 	}
 
 	var dataSigner signature.DataSignerFunc
-	var teeAddressSigner signature.DataSignerFunc
 	var teeAddress *common.Address
 	var teeHMAC hash.Hash
-	var snapshotPublicKey *ecdsa.PublicKey
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
 	// If sequencer and signing is enabled or batchposter is enabled without
@@ -475,6 +474,21 @@ func mainImpl() int {
 		return 1
 	}
 
+	var authCaffDB authdb.AuthDB
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
+		authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, true)
+		if err != nil {
+			log.Error("failed to create auth db", "err", err)
+			return 1
+		}
+	} else {
+		authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, false)
+		if err != nil {
+			log.Error("failed to create auth db", "err", err)
+			return 1
+		}
+	}
+
 	arbDb, err := stack.OpenDatabaseWithExtraOptions("arbitrumdata", 0, 0, "arbitrumdata/", false, nodeConfig.Persistent.Pebble.ExtraOptions("arbitrumdata"))
 	deferFuncs = append(deferFuncs, func() { closeDb(arbDb, "arbDb") })
 	if err != nil {
@@ -579,6 +593,7 @@ func mainImpl() int {
 		execNode,
 		execNode,
 		arbDb,
+		&authCaffDB,
 		&NodeConfigFetcher{liveNodeConfig},
 		l2BlockChain.Config(),
 		l1Client,
@@ -587,7 +602,6 @@ func mainImpl() int {
 		l1TransactionOptsBatchPoster,
 		dataSigner,
 		teeAddress,
-		teeHMAC,
 		fatalErrChan,
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,

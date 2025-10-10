@@ -135,12 +135,8 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 func GenerateHMAC() (hash.Hash, error) {
 	h := sha256.New
 	// TODO: In another PR, we should store this key and encrypt it using AWS KMS
-	key := make([]byte, 32)
-	_, err := rand.Read(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate HMAC key: %w", err)
-	}
-	hmac := hmac.New(h, key)
+	// TODO: use some key which can be deterministic across restarts
+	hmac := hmac.New(h, []byte("test"))
 	return hmac, nil
 }
 
