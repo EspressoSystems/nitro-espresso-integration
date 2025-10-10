@@ -164,7 +164,6 @@ func (s *PollingEspressoSubmitter) checkSubmittedTransactionForFinality(ctx cont
 			} else {
 				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			}
-			log.Info("encountered an error trying to check espresso for a submitted txn", "err", err)
 			continue
 		}
 		log.Info("transaction checked", "hash", hash, "data", blockHeight)
