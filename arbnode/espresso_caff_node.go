@@ -207,7 +207,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = readCurrentFromBlockFromDb(db)
+		fromBlock, err = db.AuthReadDelayedMessageFetchFromBlock()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -339,30 +339,17 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
 	batch := n.db.NewBatch()
 
-	// Store hotshot block with signature if snapshot signer is configured
-	hotshotBlockSignature, err := generateSignatureFromUint64(n.teeHMAC, hotshotBlockNumber)
-	if err != nil {
-		log.Error("Failed to get signature for hotshot block", "err", err)
-		return false
-	}
-	err = n.espressoStreamer.StoreHotshotBlockWithSignature(batch, hotshotBlockNumber, hotshotBlockSignature)
-	if err != nil {
-		log.Warn("Failed to store signature for hotshot block. This should be an ephemeral error", "err", err)
+	// Store hotshot block num with auth tag
+	if err := n.db.AuthWriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
+		log.Err("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
 		return false
 	}
 
 	// Store from block with signature if snapshot signer is configured
 	// fromBlock will only be stored when we process a delayed message
 	if fromBlock != 0 {
-		fromBlockSignature, err := generateSignatureFromUint64(n.teeHMAC, fromBlock)
-		if err != nil {
-			log.Error("Failed to get signature for from block", "err", err)
-			return false
-		}
-
-		err = storeFromBlockWithSignature(batch, fromBlock, fromBlockSignature)
-		if err != nil {
-			log.Error("failed to store signature for from block", "err", err)
+		if err := n.db.AuthWriteDelayedMessageFetchFromBlock(batch, fromBlock); err != nil {
+			log.Error("failed to store delayedMessageFetcherFromBlock and its auth tag", "err", err)
 			return false
 		}
 	}
@@ -442,7 +429,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	var nextHotshotBlock uint64
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, err = n.espressoStreamer.ReadNextHotshotBlockFromDb(n.db)
+		nextHotshotBlock, err = n.db.AuthReadNextHotshotBlockNum()
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}

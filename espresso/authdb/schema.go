@@ -10,32 +10,24 @@ import (
 
 // The fields below define which low level database schema prefixes our AuthDB will intercept in Get
 
-var (
-	BlockSignaturePrefix                          = []byte("blockSignature")
-	DelayedMessageFetcherFromBlockPrefix          = []byte("delayedFetcherFromBlock")
-	DelayedMessageFetcherFromBlockSignaturePrefix = []byte("delayedFetcherFromBlockSignature")
-	StreamerHotshotBlockPrefix                    = []byte("streamerHotshotBlock")
-	StreamerHotshotBlockSignaturePrefix           = []byte("streamerHotshotBlockSignature")
+const (
+	BlockSignaturePrefix                        = []byte("blkSig-")
+	DelayedMessageFetcherFromBlockKey           = []byte("delayedFetcherFromBlk")
+	DelayedMessageFetcherFromBlockAuthTagPrefix = []byte("delayedFetcherFromBlkTag-")
+	NextHotshotBlockNumKey                      = []byte("nextHsBlkNum")
+	NextHotshotBlockNumAuthTagPrefix            = []byte("nextHsBlkNumTag-")
 )
 
 func BlockSignatureKey(blockHash common.Hash) []byte {
 	return append(BlockSignaturePrefix, blockHash.Bytes()...)
 }
 
-func DelayedMessageFetcherFromBlockKey(blockNum uint64) []byte {
-	return append(DelayedMessageFetcherFromBlockPrefix, EncodeUint64(blockNum)...)
+func DelayedMessageFetcherFromBlockAuthTagKey(blockNum uint64) []byte {
+	return append(DelayedMessageFetcherFromBlockAuthTagPrefix, EncodeUint64(blockNum)...)
 }
 
-func DelayedMessageFetcherFromBlockSignatureKey(blockNum uint64) []byte {
-	return append(DelayedMessageFetcherFromBlockSignaturePrefix, EncodeUint64(blockNum)...)
-}
-
-func StreamerHotshotBlockKey(blockNum uint64) []byte {
-	return append(StreamerHotshotBlockPrefix, EncodeUint64(blockNum)...)
-}
-
-func StreamerHotshotBlockSignatureKey(blockNum uint64) []byte {
-	return append(StreamerHotshotBlockSignaturePrefix, EncodeUint64(blockNum)...)
+func NextHotshotBlockNumAuthTagKey(blockNum uint64) []byte {
+	return append(NextHotshotBlockNumAuthTagPrefix, EncodeUint64(blockNum)...)
 }
 
 func EncodeUint64(number uint64) []byte {

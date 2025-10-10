@@ -14,7 +14,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -47,8 +46,6 @@ type EspressoStreamerInterface interface {
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
-	StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error
-	ReadNextHotshotBlockFromDb(db authdb.AuthDB) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
@@ -303,31 +300,6 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		log.Info("Added message to queue", "message", indices[i])
 	}
 	return result, nil
-}
-
-func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db authdb.AuthDB) (uint64, error) {
-	nextHotshotBytes, err := db.Get(authdb.StreamerHotshotBlockKey(s.nextHotshotBlockNum))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
-	}
-	if dbutil.IsErrNotFound(err) {
-		return 0, nil
-	}
-
-	return authdb.DecodeUint64(nextHotshotBytes)
-}
-
-func (s *EspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
-	err := batch.Put(authdb.StreamerHotshotBlockKey(nextHotshotBlock), signature)
-	if err != nil {
-		return fmt.Errorf("failed to put signature: %w", err)
-	}
-	err = batch.Put(authdb.StreamerHotshotBlockSignatureKey(nextHotshotBlock), signature)
-	if err != nil {
-		return fmt.Errorf("failed to put signature: %w", err)
-	}
-
-	return nil
 }
 
 func (s *EspressoStreamer) getEspressoBlockTimestamp(ctx context.Context, blockHeight uint64) (time.Time, error) {

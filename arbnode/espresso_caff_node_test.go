@@ -90,14 +90,6 @@ func (m *MockEspressoStreamer) StoreHotshotBlock(batch ethdb.Batch, nextHotshotB
 	return nil
 }
 
-func (m *MockEspressoStreamer) StoreHotshotBlockWithSignature(batch ethdb.Batch, nextHotshotBlock uint64, signature []byte) error {
-	return nil
-}
-
-func (m *MockEspressoStreamer) ReadNextHotshotBlockFromDb(authdb.AuthDB) (uint64, error) {
-	return m.dbHotShot, nil
-}
-
 type MockDelayedMessageFetcher struct{}
 
 // This function isn't a proper implementation for the tests, but this gets the test to compile.

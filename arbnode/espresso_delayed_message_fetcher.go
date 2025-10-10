@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -172,20 +171,6 @@ func (d *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 	messageWithMetadataAndPos.MessageWithMeta.Message = message.Message
 
 	return messageWithMetadataAndPos, fromBlock, nil
-}
-
-/*
-Reads the "current from" block from the database.
-*/
-func readCurrentFromBlockFromDb(db authdb.AuthDB) (uint64, error) {
-	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentFromBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next from block: %w", err)
-	}
-	if dbutil.IsErrNotFound(err) {
-		return 0, nil
-	}
-	return authdb.DecodeUint64(blockNumberBytes)
 }
 
 /*

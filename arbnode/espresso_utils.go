@@ -66,16 +66,6 @@ func recoverAddressFromSigner(signer signature.DataSignerFunc) (common.Address, 
 	return crypto.PubkeyToAddress(*publicKey), nil
 }
 
-func generateSignatureFromUint64(signer hash.Hash, data uint64) ([]byte, error) {
-	if signer == nil {
-		return nil, nil
-	}
-	uintBytes := authdb.EncodeUint64(data)
-	signer.Write(uintBytes)
-	signature := signer.Sum(nil)
-	return signature, nil
-}
-
 func generateSignatureOverBlock(signer hash.Hash, block *types.Block) ([]byte, error) {
 	if block == nil {
 		return nil, nil
@@ -96,17 +86,4 @@ func storeBlockSignature(batch ethdb.Batch, blockHash common.Hash, blockSignatur
 
 func getBlockSignature(db authdb.AuthDB, blockHash common.Hash) ([]byte, error) {
 	return db.Get(authdb.BlockSignatureKey(blockHash))
-}
-
-func storeFromBlockWithSignature(batch ethdb.Batch, fromBlock uint64, fromBlockSignature []byte) error {
-	// Store the from block in the database
-	err := batch.Put(authdb.DelayedMessageFetcherFromBlockKey(fromBlock), fromBlockSignature)
-	if err != nil {
-		return fmt.Errorf("failed to put from block: %w", err)
-	}
-	err = batch.Put(authdb.DelayedMessageFetcherFromBlockSignatureKey(fromBlock), fromBlockSignature)
-	if err != nil {
-		return fmt.Errorf("failed to put from block signature: %w", err)
-	}
-	return nil
 }
