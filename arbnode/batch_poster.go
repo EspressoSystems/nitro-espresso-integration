@@ -1555,7 +1555,7 @@ func (b *BatchPoster) craftCalldata(
 				return nil, err
 			}
 		}
-
+		log.Info("decentralized timeboost received enough signatures. attempting to post batch", "prev msg", prevMsgNum, "new msg num", newMsgNum)
 	} else {
 		hotshotBlockNumber := new(big.Int).SetUint64(0)
 		// Remove this condition once we have get an espresso streamer
@@ -2586,6 +2586,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 	if err != nil {
 		return nil, err
 	}
+	log.Info("decentralized timeboost successfully verified batch!", "from key", args.PubKey, "prev msg", signedData.PreviousMessageCount, "new msg", signedData.NewMessageCount)
 	return data.Signature, nil
 
 }

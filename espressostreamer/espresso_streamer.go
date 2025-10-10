@@ -376,7 +376,9 @@ func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTyp
 	}
 
 	for _, msg := range parsedMsgs {
-		log.Info("added timeboost message to queue", "messagePos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+		if msg.Pos%100 == 0 {
+			log.Info("added timeboost message to queue", "messagePos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+		}
 		msgs = append(msgs, &MessageWithMetadataAndPos{
 			MessageWithMeta: msg.Message,
 			Pos:             msg.Pos,
