@@ -1482,98 +1482,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		return nil, errors.New("failed to find add batch method")
 	}
 
-	hotshotBlockNumber := new(big.Int).SetUint64(0)
-	// Remove this condition once we have get an espresso streamer
-	if b.espressoStreamer != nil {
-		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
-		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
-	}
-
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
-	}
-
-	var signatures []byte
-	if b.config().IsDecentralizedTimeboost {
-		signatures, err = b.batchVerifier.SignAndSendBatchIfLeader(
-			b.espressoStreamer.TimeboostKeyManager,
-			method.Inputs,
-			seqNum,
-			l2MessageData,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-		)
-		if err != nil {
-			return nil, err
-		}
-
-	} else {
-		var arguments abi.Arguments
-		arguments = append(arguments, method.Inputs...)
-		arguments = append(arguments, abi.Argument{Type: uint256Type})
-
-		calldata, err := arguments.Pack(
-			seqNum,
-			l2MessageData,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			hotshotBlockNumber,
-		)
-
-		// Later append the delay proof if needed for getting the attestion quote.
-		// If not, only append at the end of the calldata as done below.
-		if err != nil {
-			return nil, err
-		}
-
-		if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-			keyManager := espressoSubmitter.GetKeyManager()
-			signatures, err = keyManager.SignBatch(calldata)
-			if err != nil {
-				return nil, fmt.Errorf("failed to sign the calldata: %w", err)
-			}
-
-			sigLength := len(signatures)
-			if sigLength > 0 {
-				// Get the last byte (v)
-				vIndex := sigLength - 1
-				v := signatures[vIndex]
-
-				// Adjusting ECDSA signature 'v' value for Ethereum compatibility
-				// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-				// https://github.com/ethereum/go-ethereum/issues/19751
-				if v == 0 || v == 1 {
-					signatures[vIndex] = v + 27
-				}
-			}
-		}
-	}
-
-	method, ok = b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
-	if !ok {
-		return nil, errors.New("failed to find add batch method")
-	}
-	calldata, err := method.Inputs.Pack(
-		seqNum,
-		l2MessageData,
-		new(big.Int).SetUint64(delayedMsg),
-		b.config().gasRefunder,
-		new(big.Int).SetUint64(uint64(prevMsgNum)),
-		new(big.Int).SetUint64(uint64(newMsgNum)),
-		signatures,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	fullCalldata := append([]byte{}, method.ID...)
-	fullCalldata = append(fullCalldata, calldata...)
-	return fullCalldata, nil
+	return b.craftCalldata(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, nil, delayedMsg)
 }
 
 func (b *BatchPoster) getCalldataForEspressoBlobBatch(
@@ -1601,50 +1510,90 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	if err != nil {
 		return nil, err
 	}
+	return b.craftCalldata(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, encodedBlobs, delayedMsg)
+}
 
-	hotshotBlockNumber := new(big.Int).SetUint64(0)
-	// Remove this condition once we have get an espresso streamer
-	if b.espressoStreamer != nil {
-		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
-		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
-	}
-
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
-	}
-
+func (b *BatchPoster) craftCalldata(
+	l2MessageData []byte,
+	method abi.Method,
+	seqNum *big.Int,
+	prevMsgNum arbutil.MessageIndex,
+	newMsgNum arbutil.MessageIndex,
+	blobs []byte,
+	delayedMsg uint64,
+) ([]byte, error) {
+	useBlobs := len(blobs) > 0
 	var signatures []byte
+	var err error
 	if b.config().IsDecentralizedTimeboost {
-		signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
-			b.espressoStreamer.TimeboostKeyManager,
-			seqNum,
-			l2MessageData,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			encodedBlobs,
-		)
-		if err != nil {
-			return nil, err
+		if useBlobs {
+			signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
+				b.espressoStreamer.TimeboostKeyManager,
+				seqNum,
+				l2MessageData,
+				new(big.Int).SetUint64(delayedMsg),
+				b.config().gasRefunder,
+				new(big.Int).SetUint64(uint64(prevMsgNum)),
+				new(big.Int).SetUint64(uint64(newMsgNum)),
+				blobs,
+			)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			signatures, err = b.batchVerifier.SignAndSendBatchIfLeader(
+				b.espressoStreamer.TimeboostKeyManager,
+				method.Inputs,
+				seqNum,
+				l2MessageData,
+				new(big.Int).SetUint64(delayedMsg),
+				b.config().gasRefunder,
+				new(big.Int).SetUint64(uint64(prevMsgNum)),
+				new(big.Int).SetUint64(uint64(newMsgNum)),
+			)
+			if err != nil {
+				return nil, err
+			}
 		}
 
 	} else {
+		hotshotBlockNumber := new(big.Int).SetUint64(0)
+		// Remove this condition once we have get an espresso streamer
+		if b.espressoStreamer != nil {
+			earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+			hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
+		}
 
+		uint256Type, err := abi.NewType("uint256", "", nil)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+		}
 		var arguments abi.Arguments
 		arguments = append(arguments, method.Inputs...)
 		arguments = append(arguments, abi.Argument{Type: uint256Type})
 
-		calldata, err := arguments.Pack(
-			seqNum,
-			new(big.Int).SetUint64(delayedMsg),
-			b.config().gasRefunder,
-			new(big.Int).SetUint64(uint64(prevMsgNum)),
-			new(big.Int).SetUint64(uint64(newMsgNum)),
-			encodedBlobs,
-			hotshotBlockNumber,
-		)
+		var calldata []byte
+		if useBlobs {
+			calldata, err = arguments.Pack(
+				seqNum,
+				new(big.Int).SetUint64(delayedMsg),
+				b.config().gasRefunder,
+				new(big.Int).SetUint64(uint64(prevMsgNum)),
+				new(big.Int).SetUint64(uint64(newMsgNum)),
+				blobs,
+				hotshotBlockNumber,
+			)
+		} else {
+			calldata, err = arguments.Pack(
+				seqNum,
+				l2MessageData,
+				new(big.Int).SetUint64(delayedMsg),
+				b.config().gasRefunder,
+				new(big.Int).SetUint64(uint64(prevMsgNum)),
+				new(big.Int).SetUint64(uint64(newMsgNum)),
+				hotshotBlockNumber,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -1672,14 +1621,32 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 		}
 	}
 
-	calldata, err := method.Inputs.Pack(
-		seqNum,
-		new(big.Int).SetUint64(delayedMsg),
-		b.config().gasRefunder,
-		new(big.Int).SetUint64(uint64(prevMsgNum)),
-		new(big.Int).SetUint64(uint64(newMsgNum)),
-		signatures,
-	)
+	var calldata []byte
+	if useBlobs {
+		calldata, err = method.Inputs.Pack(
+			seqNum,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			signatures,
+		)
+	} else {
+		newMethod, ok := b.seqInboxABI.Methods[newSequencerBatchPostMethodName]
+		if !ok {
+			return nil, errors.New("failed to find add batch method")
+		}
+		method = newMethod
+		calldata, err = method.Inputs.Pack(
+			seqNum,
+			l2MessageData,
+			new(big.Int).SetUint64(delayedMsg),
+			b.config().gasRefunder,
+			new(big.Int).SetUint64(uint64(prevMsgNum)),
+			new(big.Int).SetUint64(uint64(newMsgNum)),
+			signatures,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -2517,22 +2484,28 @@ func (b *BatchPoster) getL1Bounds(ctx context.Context) (*l1Bounds, error) {
 		l1BoundMaxBlockNumber = arbmath.SaturatingUAdd(l1BoundBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationFutureBlocks))
 		l1BoundMaxTimestamp = arbmath.SaturatingUAdd(l1Bound.Time, arbmath.BigToUintSaturating(maxTimeVariationFutureSeconds))
 
-		latestHeader, err := b.l1Reader.LastHeader(ctx)
-		if err != nil {
-			return nil, err
+		if config.IsDecentralizedTimeboost {
+			latestBlockNumber := arbutil.ParentHeaderToL1BlockNumber(l1Bound)
+			l1BoundMinBlockNumber = arbmath.SaturatingUSub(latestBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+			l1BoundMinTimestamp = arbmath.SaturatingUSub(l1Bound.Time, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+		} else {
+			latestHeader, err := b.l1Reader.LastHeader(ctx)
+			if err != nil {
+				return nil, err
+			}
+			latestBlockNumber := arbutil.ParentHeaderToL1BlockNumber(latestHeader)
+			l1BoundMinBlockNumber = arbmath.SaturatingUSub(latestBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+			l1BoundMinTimestamp = arbmath.SaturatingUSub(latestHeader.Time, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+			if config.L1BlockBoundBypass > 0 {
+				// #nosec G115
+				blockNumberWithPadding := arbmath.SaturatingUAdd(latestBlockNumber, uint64(config.L1BlockBoundBypass/ethPosBlockTime))
+				// #nosec G115
+				timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
+				l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
+				l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
+			}
 		}
-		latestBlockNumber := arbutil.ParentHeaderToL1BlockNumber(latestHeader)
-		l1BoundMinBlockNumber = arbmath.SaturatingUSub(latestBlockNumber, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
-		l1BoundMinTimestamp = arbmath.SaturatingUSub(latestHeader.Time, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
 
-		if config.L1BlockBoundBypass > 0 {
-			// #nosec G115
-			blockNumberWithPadding := arbmath.SaturatingUAdd(latestBlockNumber, uint64(config.L1BlockBoundBypass/ethPosBlockTime))
-			// #nosec G115
-			timestampWithPadding := arbmath.SaturatingUAdd(latestHeader.Time, uint64(config.L1BlockBoundBypass/time.Second))
-			l1BoundMinBlockNumberWithBypass = arbmath.SaturatingUSub(blockNumberWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelayBlocks))
-			l1BoundMinTimestampWithBypass = arbmath.SaturatingUSub(timestampWithPadding, arbmath.BigToUintSaturating(maxTimeVariationDelaySeconds))
-		}
 	}
 	return &l1Bounds{
 		l1BoundMaxBlockNumber:           l1BoundMaxBlockNumber,
@@ -2695,12 +2668,14 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 	b.redisLock.Start(ctxIn)
 	b.StopWaiter.Start(ctxIn, b)
 	if b.espressoStreamer != nil {
-		err := b.espressoBatcherAddrMonitor.Start(ctxIn)
-		if err != nil {
-			log.Error("failed to start espresso batcher addr monitor", "err", err)
-			panic(err)
+		if !b.config().IsDecentralizedTimeboost {
+			err := b.espressoBatcherAddrMonitor.Start(ctxIn)
+			if err != nil {
+				log.Error("failed to start espresso batcher addr monitor", "err", err)
+				panic(err)
+			}
 		}
-		err = b.espressoStreamer.Start(ctxIn)
+		err := b.espressoStreamer.Start(ctxIn)
 		if err != nil {
 			log.Error("failed to start espresso streamer", "err", err)
 			panic(err)

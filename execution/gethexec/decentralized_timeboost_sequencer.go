@@ -101,9 +101,9 @@ type blockHeaderCache struct {
 }
 
 func (c *blockHeaderCache) Add(header *types.Header) {
-	blockNumber := header.Number.Uint64()
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	blockNumber := header.Number.Uint64()
 
 	if _, exists := c.blockCache[blockNumber]; exists {
 		c.blockCache[blockNumber] = header
@@ -113,8 +113,7 @@ func (c *blockHeaderCache) Add(header *types.Header) {
 	if len(c.blockCache) >= c.maxSize {
 		deleteCount := c.maxSize / 2
 		for i := 0; i < deleteCount; i++ {
-			oldestKey := c.keys[i]
-			delete(c.blockCache, oldestKey)
+			delete(c.blockCache, c.keys[i])
 		}
 		c.keys = c.keys[deleteCount:]
 	}
@@ -138,12 +137,13 @@ type DecentralizedTimeboostSequencer struct {
 	execEngine *ExecutionEngine
 	l1Reader   *headerreader.HeaderReader
 	// TODO: We should probably also store the txRetryQueue in storage
-	txRetryQueue        synchronizedTimeboostTransactionQueue
-	nonceCache          *nonceCache
-	timeboostBridge     *DecentralizedTimeboostBridge
-	delayedMessagesRead uint64
-	delayedSequencer    decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
-	blockHeaderCache    *blockHeaderCache
+	txRetryQueue           synchronizedTimeboostTransactionQueue
+	nonceCache             *nonceCache
+	timeboostBridge        *DecentralizedTimeboostBridge
+	delayedMessagesRead    uint64
+	delayedSequencer       decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
+	blockHeaderCache       *blockHeaderCache
+	inclusionListsReceived uint64
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -209,6 +209,7 @@ func NewDecentralizedTimeboostSequencer(
 			keys:       make([]uint64, 0, 512),
 			maxSize:    512,
 		},
+		inclusionListsReceived: 0,
 	}, nil
 }
 
@@ -430,7 +431,9 @@ outer:
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
-		log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
+		if block.NumberU64()%200 == 0 {
+			log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
+		}
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
@@ -655,7 +658,9 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
-	log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
+	if s.inclusionListsReceived%200 == 0 {
+		log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
+	}
 	var items []timeboostTransactionQueueItem
 	for _, protoTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
@@ -693,6 +698,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	// with only a few of the transactions
 	s.txQueue.enqueueItems(items)
 	s.delayedMessagesRead = inclusionList.DelayedMessagesRead
+	s.inclusionListsReceived += 1
 	return nil
 }
 
