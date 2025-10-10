@@ -23,12 +23,6 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-const (
-	eventKey               = "espresso-batcher-addr-event"
-	initAddressesKey       = "espresso-batcher-addr-init-addresses"
-	lastProcessedHeightKey = "espresso-last-processed-height"
-)
-
 var ownerFunctionCalledID common.Hash
 var seqInboxABI abi.ABI
 

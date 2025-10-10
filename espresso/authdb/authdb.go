@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
+
 	"github.com/offchainlabs/nitro/util/dbutil"
 )
 
@@ -75,6 +76,7 @@ func (d *AuthDB) AuthReadNextHotshotBlockNum() (uint64, error) {
 		return 0, fmt.Errorf("failed to get nextHotshotBlockNum: %w", err)
 	}
 	if err != nil {
+		// nolint:nilerr
 		return 0, nil
 	}
 
@@ -129,6 +131,7 @@ func (d *AuthDB) AuthReadDelayedMessageFetchFromBlock() (uint64, error) {
 		return 0, fmt.Errorf("failed to get delayedMessageFetcherFromBlock: %w", err)
 	}
 	if err != nil {
+		// nolint:nilerr
 		return 0, nil
 	}
 	fromBlk, err := DecodeUint64(numBytes)
@@ -189,6 +192,7 @@ func (d *AuthDB) AuthReadInitAddressesBatcherAddrMonitor() ([]common.Address, er
 		return nil, fmt.Errorf("failed to get addrs: %w", err)
 	}
 	if err != nil {
+		// nolint:nilerr
 		return nil, nil
 	}
 	addrs := []common.Address{}
@@ -242,6 +246,7 @@ func (d *AuthDB) AuthReadEventsBatcherAddrMonitor() ([]byte, error) {
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}
 	if err != nil {
+		// nolint:nilerr
 		return nil, nil
 	}
 
@@ -291,6 +296,7 @@ func (d *AuthDB) AuthReadLastProcessedHeightKeyBatcherAddrMonitor() (uint64, err
 		return 0, fmt.Errorf("failed to get last processed height: %w", err)
 	}
 	if err != nil {
+		// nolint:nilerr
 		return 0, nil
 	}
 	height, err := DecodeUint64(heightBytes)
