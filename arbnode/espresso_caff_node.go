@@ -222,6 +222,7 @@ func NewEspressoCaffNode(
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox, fatalErrChan)
 
 	seqInbox, err := bridgegen.NewSequencerInbox(sequencerInbox.address, l1Reader.Client())
+	log.Info("Seq Inbox addr", "addr", sequencerInbox.address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create sequencer inbox: %w", err)
 	}
@@ -247,6 +248,7 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
 	}
+	log.Info("espressoTEEVerifierAddress", "address", espressoTEEVerifierAddress)
 	espressoTEEVerifier, err := espressogen.NewIEspressoTEEVerifier(espressoTEEVerifierAddress, l1Reader.Client())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)

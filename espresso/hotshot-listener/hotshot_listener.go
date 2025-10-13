@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 

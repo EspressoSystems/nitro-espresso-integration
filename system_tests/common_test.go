@@ -69,10 +69,10 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
 	"github.com/offchainlabs/nitro/espresso/authdb"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -1467,6 +1467,7 @@ func deployOnParentChain(
 	maxDataSize := big.NewInt(117964)
 	//  Deploy a espressoTEEVerifierMock contract
 	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+	log.Info("espressoTEEVerifierAddress", "address", espressoTEEVerifierAddress)
 	Require(t, err)
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
