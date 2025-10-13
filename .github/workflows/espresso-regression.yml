@@ -25,6 +25,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  debug:
+    name: Output variables
+    runs-on: ubuntu-latest
+    steps:
+      - name: Output variables
+        run: |
+          echo "github.event_name=${{ github.event_name }}"
+          echo "github.event.workflow_run.ref=${{ github.event.workflow_run.ref }}"
+
   test:
     name: Espresso Regression test
     runs-on: ubuntu-24.04-8core
