@@ -204,7 +204,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = db.AuthReadDelayedMessageFetchFromBlock()
+		fromBlock, err = db.AuthReadFromBlock()
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -344,16 +344,16 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	// Store from block with signature if snapshot signer is configured
 	// fromBlock will only be stored when we process a delayed message
 	if fromBlock != 0 {
-		if err := n.db.AuthWriteDelayedMessageFetchFromBlock(batch, fromBlock); err != nil {
+		if err := n.db.AuthWriteFromBlock(batch, fromBlock); err != nil {
 			log.Error("failed to store delayedMessageFetcherFromBlock and its auth tag", "err", err)
 			return false
 		}
 	}
 
-	// Store block auth tag
-	err = n.db.AuthWriteBlockSignature(batch, block)
+	// Store block and its auth tag
+	err = n.db.AuthWriteBlock(batch, block)
 	if err != nil {
-		log.Error("failed to store block signature", "err", err)
+		log.Error("failed to store block and its auth tag", "err", err)
 		return false
 	}
 

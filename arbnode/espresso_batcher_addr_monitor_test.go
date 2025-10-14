@@ -25,7 +25,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test initial state
 	t.Run("initial state", func(t *testing.T) {
-		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, false)
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil)
 		Require(t, err)
 
 		b := NewBatcherAddrMonitor(initAddresses, caffDb, nil, common.Address{}, 0, 0)
@@ -39,7 +39,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test AddEvent
 	t.Run("add events and get valid addresses", func(t *testing.T) {
-		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, false)
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil)
 		Require(t, err)
 		Require(t, err)
 		b := NewBatcherAddrMonitor(initAddresses, caffDb, nil, common.Address{}, 0, 0)
@@ -78,7 +78,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		dummyClient := &ethclient.Client{}
 		l1Reader, err := headerreader.New(context.Background(), dummyClient, nil, nil)
 		Require(t, err)
-		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, false)
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil)
 		Require(t, err)
 		Require(t, err)
 		b := NewBatcherAddrMonitor(initAddresses, caffDb, l1Reader, common.Address{}, 0, 0)

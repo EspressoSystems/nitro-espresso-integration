@@ -475,20 +475,19 @@ func mainImpl() int {
 	}
 
 	var authCaffDB authdb.AuthDB
-	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, true)
-		if err != nil {
-			log.Error("failed to create auth db", "err", err)
-			return 1
+	if nodeConfig.Node.EspressoCaffNode.Enable {
+		var err error
+		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
+			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC)
+		} else {
+			authCaffDB, err = authdb.NewAuthDB(chainDb, nil)
 		}
-	} else {
-		authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, false)
+
 		if err != nil {
 			log.Error("failed to create auth db", "err", err)
 			return 1
 		}
 	}
-
 	arbDb, err := stack.OpenDatabaseWithExtraOptions("arbitrumdata", 0, 0, "arbitrumdata/", false, nodeConfig.Persistent.Pebble.ExtraOptions("arbitrumdata"))
 	deferFuncs = append(deferFuncs, func() { closeDb(arbDb, "arbDb") })
 	if err != nil {

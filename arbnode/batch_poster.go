@@ -616,7 +616,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				initAddresses = []common.Address{addr}
 			}
 
-			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, false)
+			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil)
 			if err != nil {
 				return nil, err
 			}

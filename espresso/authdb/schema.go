@@ -11,29 +11,26 @@ import (
 // The fields below define which low level database schema prefixes our AuthDB will intercept in Get
 
 var (
-	BlockSignatureAuthTagKey                       = []byte("blkTag-")
-	DelayedMessageFetcherFromBlockKey              = []byte("delayedFetcherFromBlk")
-	DelayedMessageFetcherFromBlockAuthTagPrefix    = []byte("delayedFetcherFromBlkTag-")
-	NextHotshotBlockNumKey                         = []byte("nextHsBlkNum")
-	NextHotshotBlockNumAuthTagPrefix               = []byte("nextHsBlkNumTag-")
-	InitAddressesBatcherAddsMonitorKey             = []byte("initAddressesBatcherAddsMonitor-")
-	InitAddressesBatcherAddsMonitorTagKey          = []byte("initAddressesBatcherAddsMonitorTag-")
-	EventsBatcherAddsMonitorKey                    = []byte("eventsBatcherAddsMonitor-")
-	EventsBatcherAddsMonitorTagKey                 = []byte("eventsBatcherAddsMonitorTag-")
-	LastProcessedHeightKeyBatcherAddsMonitorKey    = []byte("lastProcessedHeightKeyBatcherAddsMonitor-")
-	LastProcessedHeightKeyBatcherAddsMonitorTagKey = []byte("lastProcessedHeightKeyBatcherAddsMonitorTag-")
+	blockPrefix                   = []byte("blk-")
+	blockAuthTagPrefix            = []byte("blkTag-")
+	fromBlockKey                  = []byte("fromBlk")
+	fromBlockAuthTagKey           = []byte("fromBlkTag")
+	nextHotshotBlockNumKey        = []byte("nextHsBlkNum")
+	nextHotshotBlockNumAuthTagKey = []byte("nextHsBlkNumTag")
+	initAddressesKey              = []byte("initAddrs")
+	initAddressesAuthTagKey       = []byte("initAddrsTag")
+	eventsKey                     = []byte("events")
+	eventsAuthTagKey              = []byte("eventsTag")
+	lastProcessedHeightKey        = []byte("lastProcessedHeight")
+	lastProcessedHeightAuthTagKey = []byte("lastProcessedHeightTag")
 )
 
-func BlockSignatureFromAuthTagKey(blockHash common.Hash) []byte {
-	return append(BlockSignatureAuthTagKey, blockHash.Bytes()...)
+func BlockKey(blockNum uint64, blockHash common.Hash) []byte {
+	return append(append(blockPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
 }
 
-func DelayedMessageFetcherFromBlockAuthTagKey(blockNum uint64) []byte {
-	return append(DelayedMessageFetcherFromBlockAuthTagPrefix, EncodeUint64(blockNum)...)
-}
-
-func NextHotshotBlockNumAuthTagKey(blockNum uint64) []byte {
-	return append(NextHotshotBlockNumAuthTagPrefix, EncodeUint64(blockNum)...)
+func BlockAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
+	return append(append(blockAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
 }
 
 func EncodeUint64(number uint64) []byte {

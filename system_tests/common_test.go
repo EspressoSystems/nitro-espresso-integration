@@ -719,14 +719,14 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 	if withSnapshotSigner {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, true)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
 		Require(t, err)
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
 			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, false)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil)
 		Require(t, err)
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
@@ -771,12 +771,12 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		teeHMAC, err := integrityattestation.GenerateHMAC()
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, true)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
 		Require(t, err)
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, nil, false)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil)
 		Require(t, err)
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
