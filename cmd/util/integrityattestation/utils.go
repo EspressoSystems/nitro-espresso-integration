@@ -22,8 +22,7 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/offchainlabs/nitro/util/signature"
 )
 
 const (
@@ -104,33 +103,27 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, signature.DataSignerFunc, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
-		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
+		return nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
 
 	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+		return nil, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
 	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
+		return nil, nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
 	}
 
 	privateKey, err := GetAttestedPrivateKey(awsConfig, kmsKeyID, attestationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get attested private key: %w", err)
+		return nil, nil, fmt.Errorf("failed to get attested private key: %w", err)
 	}
 
-	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
-	if err != nil || publicKey == nil {
-		return nil, fmt.Errorf("failed to get attested public key: %w", err)
-	}
-	publicKeyAddress := crypto.PubkeyToAddress(*publicKey)
-
-	return &publicKeyAddress, nil
+	return privateKey, signature.DataSignerFromPrivateKey(privateKey), nil
 }
 
 func GenerateHMAC() (hash.Hash, error) {

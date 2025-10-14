@@ -256,7 +256,7 @@ func mainImpl() int {
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
 	var caffNodetxOpts *bind.TransactOpts
-
+	var snapshotSigner signature.DataSignerFunc
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var key *ecdsa.PrivateKey
 		key, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
@@ -269,6 +269,7 @@ func mainImpl() int {
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
+		}
 		if nodeConfig.ParentChain.ID != 0 {
 			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 			if err != nil {
@@ -615,6 +616,7 @@ func mainImpl() int {
 		blobReader,
 		wasmModuleRoot,
 		caffNodetxOpts,
+		snapshotSigner,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)
