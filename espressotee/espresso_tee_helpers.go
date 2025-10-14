@@ -20,14 +20,59 @@ type TEE uint8
 const (
 	SGX   TEE = 0 // SGX
 	NITRO TEE = 1 // AWS Nitro
+
+	TEETEST TEE = 254
+	EMPTY   TEE = 255 // Define the empty string, which coudld be useful in certain circumstances
+	// Also define empty and test related contents at the end of the types range to make room
+	// for other sequential TEE types.
 )
 
+// This method on the TEE type allows a caller to determine if the value it is called on is a production
+// TEE, indicating that the node is running inside an enclave, rather than in a test or something similar.
+func (t TEE) IsFakeTEE() bool {
+	switch t {
+	case TEETEST:
+		return true
+	case EMPTY:
+		return true
+	default:
+		// If we aren't in a specifically designated TEE enum variant at the end of the TEE type range,
+		// Then we are in a real TEE
+		return false
+	}
+}
+
+// This method on the TEE type allows a caller to determine if the value it is called on is indicating the
+// node is operating in a test environment.
+func (t TEE) IsTest() bool {
+	switch t {
+	case TEETEST:
+		return true
+	default:
+		return false
+	}
+}
+
+// This method on the TEE type allows a caller to determine if the value it is called on represents
+// a caff node running outside of a TEE.
+func (t TEE) IsEmpty() bool {
+	switch t {
+	case EMPTY:
+		return true
+	default:
+		return false
+	}
+}
 func (t TEE) FromString(s string) (TEE, error) {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
 	case "SGX":
 		return SGX, nil
 	case "NITRO":
 		return NITRO, nil
+	case "TEE-TEST":
+		return TEETEST, nil
+	case "":
+		return EMPTY, nil
 	default:
 		return 0, fmt.Errorf("invalid TEE type: %q", s)
 	}
