@@ -1005,7 +1005,7 @@ func getEspressoCaffNode(
 			}
 
 			return &Node{
-				ArbDB:                   arbDb,
+				ArbDB:                   nil,
 				Stack:                   stack,
 				ExecutionClient:         exec,
 				L1Reader:                nil,
