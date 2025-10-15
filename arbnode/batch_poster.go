@@ -2024,7 +2024,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Next(ctx)
+			espressoMsg := b.espressoStreamer.Peek(ctx)
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -2111,6 +2111,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
+		if b.espressoStreamer != nil {
+			b.espressoStreamer.Advance()
+		}
 	}
 
 	firstUsefulMsgTime := time.Now()
