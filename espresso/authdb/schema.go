@@ -13,6 +13,8 @@ import (
 var (
 	blockPrefix                   = []byte("blk-")
 	blockAuthTagPrefix            = []byte("blkTag-")
+	_headerPrefix                 = []byte("header-")
+	headerAuthTagPrefix           = []byte("headerTag-")
 	fromBlockKey                  = []byte("fromBlk")
 	fromBlockAuthTagKey           = []byte("fromBlkTag")
 	nextHotshotBlockNumKey        = []byte("nextHsBlkNum")
@@ -31,6 +33,15 @@ func blockKey(blockNum uint64, blockHash common.Hash) []byte {
 
 func blockAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
 	return append(append(blockAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
+}
+
+// The `headerKey` name collides with rawdb.headerKey, so we need to use a different name.
+func _headerKey(blockNum uint64, blockHash common.Hash) []byte {
+	return append(append(_headerPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
+}
+
+func headerAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
+	return append(append(headerAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
 }
 
 func EncodeUint64(number uint64) []byte {

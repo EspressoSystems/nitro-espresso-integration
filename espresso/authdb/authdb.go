@@ -3,6 +3,7 @@ package authdb
 import (
 	"bytes"
 	"crypto/hmac"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash"
@@ -54,6 +55,33 @@ func (d *AuthDB) AuthWriteBlock(batch ethdb.Batch, block *types.Block) error {
 	d.mac.Reset()
 	if err := batch.Put(blockAuthTagKey(num, hash), tag); err != nil {
 		return fmt.Errorf("fail to put block auth tag with number=%d, hash=%s: %w", num, hash, err)
+	}
+
+	return nil
+}
+
+func (d *AuthDB) AuthWriteHeader(batch ethdb.Batch, header *types.Header) error {
+	num := header.Number.Uint64()
+	hash := header.Hash()
+	headerBytes, err := rlp.EncodeToBytes(header)
+	if err != nil {
+		return fmt.Errorf("failed to encode block: %w", err)
+	}
+
+	headerKey := _headerKey(num, hash)
+	if err := batch.Put(headerKey, headerBytes); err != nil {
+		return fmt.Errorf("fail to put header with number=%d, hash=%s: %w", num, hash, err)
+	}
+	if d.mac == nil {
+		return nil
+	}
+
+	d.mac.Write(headerKey)
+	d.mac.Write(headerBytes)
+	tag := d.mac.Sum(nil)
+	d.mac.Reset()
+	if err := batch.Put(headerAuthTagKey(num, hash), tag); err != nil {
+		return fmt.Errorf("fail to put header auth tag with number=%d, hash=%s: %w", num, hash, err)
 	}
 
 	return nil
@@ -452,15 +480,53 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 	// switch-case copied over from rawdb.database.go::InspectDatabase()
 	switch {
 	case bytes.HasPrefix(key, headerPrefix) && len(key) == (len(headerPrefix)+8+common.HashLength):
-		// headers.Add(size)
+		number, err := DecodeUint64(key[len(headerPrefix) : len(headerPrefix)+8])
+		if err != nil {
+			log.Error("failed to decode block number from key", "err", err)
+			return nil, err
+		}
+		hash := common.BytesToHash(key[len(headerPrefix)+8 : len(headerPrefix)+8+common.HashLength])
+		headerBytes, err := rlp.EncodeToBytes(d.readHeader(hash, number))
+		if err != nil {
+			log.Error("failed to encode header into bytes", "err", err)
+			return nil, err
+		}
+		return headerBytes, nil
 	case bytes.HasPrefix(key, blockBodyPrefix) && len(key) == (len(blockBodyPrefix)+8+common.HashLength):
-		// bodies.Add(size)
+		number, err := DecodeUint64(key[len(blockBodyPrefix) : len(blockBodyPrefix)+8])
+		if err != nil {
+			log.Error("failed to decode block number from key", "err", err)
+			return nil, err
+		}
+		hash := common.BytesToHash(key[len(blockBodyPrefix)+8 : len(blockBodyPrefix)+8+common.HashLength])
+		body := d.readBody(hash, number)
+		if body == nil {
+			return nil, nil
+		}
+		bodyBytes, err := rlp.EncodeToBytes(body)
+		if err != nil {
+			log.Error("failed to encode body into bytes", "err", err)
+			return nil, err
+		}
+		return bodyBytes, nil
 	case bytes.HasPrefix(key, blockReceiptsPrefix) && len(key) == (len(blockReceiptsPrefix)+8+common.HashLength):
 		// receipts.Add(size)
 	case bytes.HasPrefix(key, headerPrefix) && bytes.HasSuffix(key, headerTDSuffix):
-		// tds.Add(size)
+		log.Error("headerTDSuffix is deprecated")
+		return nil, fmt.Errorf("headerTDSuffix is deprecated")
 	case bytes.HasPrefix(key, headerPrefix) && bytes.HasSuffix(key, headerHashSuffix):
-		// numHashPairings.Add(size)
+		number := binary.BigEndian.Uint64(key[len(headerPrefix) : len(headerPrefix)+8])
+		hashBytes, err := d.db.Get(headerHashKey(number))
+		if err != nil {
+			log.Error("failed to get header hash", "err", err)
+			return nil, err
+		}
+		hash := common.BytesToHash(hashBytes)
+		headerHash := d.readHeaderHash(hash, number)
+		if headerHash == (common.Hash{}) {
+			return nil, fmt.Errorf("header hash not found")
+		}
+		return hash.Bytes(), nil
 	case bytes.HasPrefix(key, headerNumberPrefix) && len(key) == (len(headerNumberPrefix)+common.HashLength):
 		// hashNumPairings.Add(size)
 	// note: IsLegacyTrieNode is not a read op, skipping

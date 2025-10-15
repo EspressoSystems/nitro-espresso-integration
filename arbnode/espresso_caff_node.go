@@ -357,6 +357,13 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		return false
 	}
 
+	// Store header and its auth tag
+	err = n.db.AuthWriteHeader(batch, block.Header())
+	if err != nil {
+		log.Error("failed to store header and its auth tag", "err", err)
+		return false
+	}
+
 	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
