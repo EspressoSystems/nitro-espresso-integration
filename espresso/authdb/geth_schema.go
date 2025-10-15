@@ -15,6 +15,8 @@
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
 // Package rawdb contains a collection of low level database accessors.
+//
+//nolint:unused,gosec
 package authdb
 
 import (
