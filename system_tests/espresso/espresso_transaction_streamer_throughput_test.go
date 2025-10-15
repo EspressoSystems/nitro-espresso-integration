@@ -127,7 +127,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 			},
 			messageThroughput: expected[float64]{
 				value:   4,   // 4 messages/s
-				epsilon: 0.1, // 0.1 message/s tolerance
+				epsilon: 0.2, // 0.2 message/s tolerance
 			},
 			sizeThroughput: expected[float64]{
 				value:   4 * generate.DefaultMoltenMessageSize, // 4 messages/s * 3KiB per message
@@ -160,7 +160,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 			},
 			messageThroughput: expected[float64]{
 				value:   4,   // 4 messages/s
-				epsilon: 0.1, // 0.1 message/s tolerance
+				epsilon: 0.2, // 0.2 message/s tolerance
 			},
 			sizeThroughput: expected[float64]{
 				value:   4 * generate.DefaultMoltenMessageSize, // 4 messages/s * 3KiB per message

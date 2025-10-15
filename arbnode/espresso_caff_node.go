@@ -195,7 +195,7 @@ func NewEspressoCaffNode(
 	}
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
-		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox)
+		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox, fatalErrChan)
 
 	seqInbox, err := bridgegen.NewSequencerInbox(sequencerInbox.address, l1Reader.Client())
 	if err != nil {
@@ -388,17 +388,27 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	log.Info("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
 	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
-	// Nonce of the previous block is the number of delayed messages read
-	// Check `NextDelayedMessageNumber` in execution node to confirm this
-	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
-	// we store delayedmessagecount-1 because that is the index of the delayed message
-	// that needs to be read
-	err = n.delayedMessageFetcher.storeDelayedMessageLatestIndex(n.db, delayedMessagesRead-1)
+	_, err = n.delayedMessageFetcher.getDelayedMessageLatestIndex(n.db)
 	if err != nil {
-		log.Error("failed to store delayed message count", "err", err)
-		return err
+		log.Warn("failed to get delayed message index, will retrieve from previous block's nonce", "err", err)
+		// Nonce of the previous block is the number of delayed messages read
+		// Check `NextDelayedMessageNumber` in execution node to confirm this
+		delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
+		// we store delayedmessagecount-1 because that is the index of the delayed message
+		// that needs to be read
+		batch := n.db.NewBatch()
+		err = n.delayedMessageFetcher.storeDelayedMessageLatestIndex(batch, delayedMessagesRead-1)
+		if err != nil {
+			log.Error("failed to store delayed message count", "err", err)
+			return err
+		}
+		log.Debug("stored delayed message count", "delayedMessagesRead", delayedMessagesRead-1)
+		err = batch.Write()
+		if err != nil {
+			log.Error("failed to write batch", "err", err)
+			return err
+		}
 	}
-	log.Debug("stored delayed message count", "delayedMessagesRead", delayedMessagesRead-1)
 
 	// Start the delayed message fetcher
 	started := n.delayedMessageFetcher.Start(ctx)
