@@ -350,20 +350,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		}
 	}
 
-	// Store block and its auth tag
-	err = n.db.AuthWriteBlock(batch, block)
-	if err != nil {
-		log.Error("failed to store block and its auth tag", "err", err)
-		return false
-	}
-
-	// Store header and its auth tag
-	err = n.db.AuthWriteHeader(batch, block.Header())
-	if err != nil {
-		log.Error("failed to store header and its auth tag", "err", err)
-		return false
-	}
-
+	// the `AuthDB.Put()` adds the auth tags alongside the content of block header, body, and receipts
 	err = n.executionEngine.AppendBlock(block, statedb, receipts, blockCalcTime)
 	if err != nil {
 		log.Error("Failed to append block", "err", err)
