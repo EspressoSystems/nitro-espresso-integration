@@ -113,8 +113,12 @@ func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 	return true
 }
 
-func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error {
+func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error {
 	return nil
+}
+
+func (m *MockDelayedMessageFetcher) getDelayedMessageLatestIndex(ethdb.Database) (uint64, error) {
+	return 1, nil
 }
 
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {

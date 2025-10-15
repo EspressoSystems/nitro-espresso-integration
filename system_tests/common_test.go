@@ -1382,6 +1382,7 @@ func deployOnParentChain(
 	delayBufferThreshold uint64,
 	decentralizedTimeboost bool,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
+	log.Info("Came inside deployParentChain")
 	parentChainInfo.GenerateAccount("RollupOwner")
 	parentChainInfo.GenerateAccount("Sequencer")
 	parentChainInfo.GenerateAccount("Validator")
@@ -1415,6 +1416,7 @@ func deployOnParentChain(
 	}
 
 	Require(t, err)
+
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := localgen.DeployTestWETH9(

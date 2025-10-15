@@ -20,8 +20,8 @@ github.com/DATA-DOG/go-sqlmock v1.5.2 h1:OcvFkGmslmlZibjAjaHm3L//6LiuBgolP7Oputl
 github.com/DATA-DOG/go-sqlmock v1.5.2/go.mod h1:88MAG/4G7SMwSE3CeA0ZKzrT5CiOU3OJ+JlNzwDqpNU=
 github.com/DataDog/zstd v1.5.6 h1:LbEglqepa/ipmmQJUDnSsfvA8e8IStVcGaFWDuxvGOY=
 github.com/DataDog/zstd v1.5.6/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
-github.com/EspressoSystems/espresso-network/sdks/go v0.2.5 h1:ZC5LEdf7mrLEAbSmxln+5wQ7q+fnNaUB+lLr5A69gNA=
-github.com/EspressoSystems/espresso-network/sdks/go v0.2.5/go.mod h1:nX/JxG1/Kog2T0B0Gq/KhL0xZJi2GFuanGO8bxka0vM=
+github.com/EspressoSystems/espresso-network/sdks/go v0.3.0 h1:aGN25tx1MvSQxGRATGsFy/n6H3AdvOHuacpZVbZWuOA=
+github.com/EspressoSystems/espresso-network/sdks/go v0.3.0/go.mod h1:nX/JxG1/Kog2T0B0Gq/KhL0xZJi2GFuanGO8bxka0vM=
 github.com/EspressoSystems/timeboost-proto/go-generated v0.0.0-20250821174701-117696709273 h1:DqwLgSfv2DTltwaXKAmMrM+3cF5xFuADjJYwwYN2A2U=
 github.com/EspressoSystems/timeboost-proto/go-generated v0.0.0-20250821174701-117696709273/go.mod h1:fFNsZW1LfsV0H4JOvJKgEBBWuBfhDzdW6WGvzKxKpvI=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible h1:1G1pk05UrOh0NlF1oeaaix1x8XzrfjIDK47TY0Zehcw=

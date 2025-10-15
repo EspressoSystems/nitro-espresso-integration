@@ -104,6 +104,7 @@ type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
 	DelayedMessageCount uint64
 	NextSeqNum          uint64
+	HotShotBlockNumber  uint64
 }
 
 type l1Bounds struct {
@@ -157,6 +158,7 @@ type BatchPoster struct {
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
 	batchVerifier              *decentralized_timeboost_batch_verifier.BatchVerifier
+	espressoRestarting         bool
 }
 
 type l1BlockBound int
@@ -219,7 +221,6 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeVerifierAddress       string                                   `koanf:"espresso-tee-verifier-address"`
 	EspressoTeeType                  string                                   `koanf:"espresso-tee-type"`
 	EspressoRegisterSignerConfig     espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
 	LightClientAddress               string                                   `koanf:"light-client-address"`
@@ -236,7 +237,7 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses                []common.Address                                           `koanf:"init-batcher-addresses"`
+	InitBatcherAddresses                []string `koanf:"init-batcher-addresses"`                                         `koanf:"init-batcher-addresses"`
 	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
 	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
 }
@@ -246,9 +247,6 @@ func (c *BatchPosterConfig) Validate() error {
 		return fmt.Errorf("invalid gas refunder address \"%v\"", c.GasRefunderAddress)
 	}
 	c.gasRefunder = common.HexToAddress(c.GasRefunderAddress)
-	if len(c.EspressoTeeVerifierAddress) > 0 && !common.IsHexAddress(c.EspressoTeeVerifierAddress) {
-		return fmt.Errorf("invalid espresso tee verifier address \"%v\"", c.EspressoTeeVerifierAddress)
-	}
 	if c.MaxSize <= 40 {
 		return errors.New("MaxBatchSize too small")
 	}
@@ -295,7 +293,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
-	f.String(prefix+".espresso-tee-verifier-address", DefaultBatchPosterConfig.EspressoTeeVerifierAddress, "The Espresso TEE Verifier contract address")
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
@@ -355,22 +352,29 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	CheckBatchCorrectness:          true,
 	MaxEmptyBatchDelay:             3 * 24 * time.Hour,
 	// 5 minutes considering 12-second blocks,
-	DelayBufferAlwaysUpdatable:       true,
-	ParentChainEip7623:               "auto",
-	DelayBufferThresholdMargin:       25, // 5 minutes considering 12-second blocks
-	EspressoTxnsPollingInterval:      time.Second,
-	EspressoTxnsSendingInterval:      time.Second,
+	DelayBufferAlwaysUpdatable: true,
+	ParentChainEip7623:         "auto",
+	DelayBufferThresholdMargin: 25, // 5 minutes considering 12-second blocks
+
+	// Espresso Specific config //
+
+	// Hotshot currently produces blocks at average of 2 seconds
+	// We set it to 1 second to get updates more often than blocks are produced
+	EspressoTxnsPollingInterval: time.Second,
+	// We should send to espresso at a speed faster than the speed nitro is producing messages
+	EspressoTxnsSendingInterval:      125 * time.Millisecond,
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
 	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
-	EspressoTxSizeLimit:              200 * 1024,
+	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
+	EspressoTxSizeLimit: 900 * 1024,
 
 	HotShotBlock:                        1,
 	HotShotFirstPostingBlock:            1,
-	InitBatcherAddresses:                []common.Address{},
+	InitBatcherAddresses:                []string{},
 	EspressoEventPollingStep:            100,
 	IsDecentralizedTimeboost:            false,
 	DecentralizedTimeboostBatchVerifier: decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
@@ -421,7 +425,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
+	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
 }
 
@@ -522,6 +526,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
+
+		espressoRestarting: true,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -622,12 +628,18 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-			initAddresses := opts.Config().InitBatcherAddresses
+			initStringAddresses := opts.Config().InitBatcherAddresses
+			// Convert the init addresses to common.Address
+			initAddresses := []common.Address{}
+			for _, addr := range initStringAddresses {
+				initAddresses = append(initAddresses, common.HexToAddress(addr))
+			}
 			if len(initAddresses) == 0 {
 				addr, err := recoverAddressFromSigner(opts.DataSigner)
 				if err != nil {
 					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
 				}
+
 				initAddresses = []common.Address{addr}
 			}
 
@@ -684,43 +696,45 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				submitter.WithMaxTransactionSize(cfg.EspressoTxSizeLimit),
 			)
 
-			if cfg.EspressoTeeVerifierAddress != "" {
-				// Setup tee verifier interface
-				espressoTeeVerifierAddress := common.HexToAddress(cfg.EspressoTeeVerifierAddress)
-				teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-					espressoTeeVerifierAddress,
-					opts.L1Reader.Client())
+			// Get the espressoTEEVerifier address for the sequencer inbox contract
+			espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+			if err != nil {
+				return nil, err
+			}
+
+			teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
+				espresssoTEEVerifierAddress,
+				opts.L1Reader.Client())
+			if err != nil {
+				return nil, err
+			}
+			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
+
+			var teeType espressotee.TEE
+			configTee := cfg.EspressoTeeType
+			teeType, err = teeType.FromString(configTee)
+			if err != nil {
+				return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
+			}
+
+			var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+			if teeType == espresso_key_manager.NITRO {
+				log.Info("setting up nitro verifier", "tee type", teeType)
+				nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
 				if err != nil {
 					return nil, err
 				}
-				verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espressoTeeVerifierAddress)
-
-				var teeType espressotee.TEE
-				configTee := cfg.EspressoTeeType
-				teeType, err = teeType.FromString(configTee)
-				if err != nil {
-					return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
-				}
-
-				var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-				if teeType == espresso_key_manager.NITRO {
-					log.Info("setting up nitro verifier", "tee type", teeType)
-					nitroVerifier, err = setupNitroVerifier(teeVerifier, opts.L1Reader.Client())
-					if err != nil {
-						return nil, err
-					}
-				}
-
-				if b.dataPoster.Auth() == nil {
-					panic("TransactOpts is nil")
-				}
-				submitterOptions = append(
-					submitterOptions,
-					submitter.WithKeyManager(
-						espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, cfg.EspressoRegisterSignerConfig),
-					),
-				)
 			}
+
+			if b.dataPoster.Auth() == nil {
+				panic("TransactOpts is nil")
+			}
+			submitterOptions = append(
+				submitterOptions,
+				submitter.WithKeyManager(
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, cfg.EspressoRegisterSignerConfig),
+				),
+			)
 
 			submitter, err := submitter.NewPollingEspressoSubmitter(
 				submitterOptions...,
@@ -1910,7 +1924,30 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			if batchPosition.HotShotBlockNumber > 0 {
+				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else {
+				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
+				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			}
+			if b.espressoRestarting {
+				cnt, err := b.streamer.GetMessageCount()
+				if err != nil {
+					return false, err
+				}
+				// Submit transactions that were already in tx streamer
+				if cnt > batchPosition.MessageCount {
+					queue := []arbutil.MessageIndex{}
+					for i := batchPosition.MessageCount; i < cnt; i++ {
+						queue = append(queue, arbutil.MessageIndex(i))
+					}
+					err = b.streamer.espressoSubmitter.EnqueuePendingTransaction(queue)
+					if err != nil {
+						return false, err
+					}
+				}
+				b.espressoRestarting = false
+			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
@@ -2032,11 +2069,12 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	if b.building.firstDelayedMsg != nil {
+	if b.building.firstDelayedMsg != nil && b.espressoStreamer != nil {
 		// #nosec G115
 		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
 		if timeSinceMsg >= config.MaxEmptyBatchDelay {
 			forcePostBatch = true
+			b.building.haveUsefulMessage = true
 		}
 	}
 
@@ -2302,10 +2340,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	var HotShotBlockNumber uint64
+	if b.espressoStreamer != nil {
+		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	}
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,
 		NextSeqNum:          batchPosition.NextSeqNum + 1,
+		HotShotBlockNumber:  HotShotBlockNumber,
 	})
 	if err != nil {
 		return false, err
