@@ -25,11 +25,11 @@ var (
 	lastProcessedHeightAuthTagKey = []byte("lastProcessedHeightTag")
 )
 
-func BlockKey(blockNum uint64, blockHash common.Hash) []byte {
+func blockKey(blockNum uint64, blockHash common.Hash) []byte {
 	return append(append(blockPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
 }
 
-func BlockAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
+func blockAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
 	return append(append(blockAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
 }
 

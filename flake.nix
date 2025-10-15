@@ -11,14 +11,14 @@
 
   outputs = { self, flake-utils, nixpkgs, foundry, rust-overlay, pre-commit-hooks, ... }:
     let
-      goVersion = 23; # Change this to update the whole stack
+      goVersion = 25; # Change this to update the whole stack
       overlays = [
         (import rust-overlay)
         (final: prev: rec {
           go = prev."go_1_${toString goVersion}";
           # Overlaying nodejs here to ensure nodePackages use the desired
           # version of nodejs. Offchainlabs suggests nodejs v18 in the docs.
-          nodejs = prev.nodejs_18;
+          nodejs = prev.nodejs_20;
           yarn = (prev.yarn.override { inherit nodejs; });
           pnpm = (prev.pnpm.override { inherit nodejs; });
           golangci-lint = final.callPackage ./golangci-lint.nix {};
@@ -97,12 +97,12 @@
             wasm = pkgs.mkShell {
               # By default clang-unwrapped does not find its resource dir. See
               # https://discourse.nixos.org/t/why-is-the-clang-resource-dir-split-in-a-separate-package/34114
-              CPATH = "${pkgs.llvmPackages_16.libclang.lib}/lib/clang/16/include";
+              CPATH = "${pkgs.llvmPackages_21.libclang.lib}/lib/clang/21/include";
               packages = with pkgs; [
                 stableToolchain
 
-                llvmPackages_16.clang-unwrapped # provides clang without wrapper
-                llvmPackages_16.bintools # provides wasm-ld
+                llvmPackages_21.clang-unwrapped # provides clang without wrapper
+                llvmPackages_21.bintools # provides wasm-ld
                 cmake
                 wabt  # wasm2wat, wat2wasm, etc
 
@@ -114,12 +114,12 @@
 
               # Ensure the unwrapped clang is used by default.
               shellHook = shellHook + ''
-                export PATH="${pkgs.llvmPackages_16.clang-unwrapped}/bin:$PATH"
+                export PATH="${pkgs.llvmPackages_21.clang-unwrapped}/bin:$PATH"
               '';
             };
 
             # mkShell brings in a `cc` that points to gcc, stdenv.mkDerivation from llvm avoids this.
-            default = let llvmPkgs = pkgs.llvmPackages_16; in llvmPkgs.stdenv.mkDerivation {
+            default = let llvmPkgs = pkgs.llvmPackages_21; in llvmPkgs.stdenv.mkDerivation {
               hardeningDisable = [
                 # By default stack protection is enabled by the clang wrapper but I
                 # think it's not supported for wasm compilation. It causes this
@@ -181,14 +181,14 @@
 
                 pre-commit
               ] ++ lib.optionals stdenv.isDarwin [
-                apple-sdk_11
+                apple-sdk_15
               ] ++ lib.optionals (! stdenv.isDarwin) [
                 glibc_multi.dev # provides gnu/stubs-32.h
               ];
               shellHook = shellHook + ''
-                export LIBCLANG_PATH="${pkgs.llvmPackages_16.libclang.lib}/lib"
-                export CC="${pkgs.clang-tools_16.clang}/bin/clang"
-                export AR="${pkgs.llvm_16}/bin/llvm-ar"
+                export LIBCLANG_PATH="${pkgs.llvmPackages_21.libclang.lib}/lib"
+                export CC="${pkgs.llvmPackages_21.clang}/bin/clang"
+                export AR="${pkgs.llvmPackages_21.llvm}/bin/llvm-ar"
               ''
                 # The clang wrapper cannot find SystemConfiguration symbols on darwin
                 # Undefined symbols for architecture arm64: "_SCDynamicStoreCopyProxies", referenced from:
@@ -201,6 +201,14 @@
                 + pkgs.lib.optionalString pkgs.stdenv.isDarwin
                 ''
                   export NIX_LDFLAGS="-framework SystemConfiguration $NIX_LDFLAGS"
+                  # Fix DEVELOPER_DIR_FOR_TARGET and SDKROOT_FOR_TARGET conflicts for CGO
+                  # Ensure both target variables point to the same SDK to avoid conflicts during Go compilation
+                  export DEVELOPER_DIR_FOR_TARGET="$DEVELOPER_DIR"
+                  export SDKROOT_FOR_TARGET="$SDKROOT"
+                  # Set CGO deployment target to match current macOS version to avoid linker warnings
+                  MACOS_VERSION=$(sw_vers -productVersion)
+                  export CGO_CFLAGS="-mmacosx-version-min=$MACOS_VERSION"
+                  export CGO_LDFLAGS="-mmacosx-version-min=$MACOS_VERSION"
                 ''
                 + self.checks.${system}.pre-commit-check.shellHook;
             };

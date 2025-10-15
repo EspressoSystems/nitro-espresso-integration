@@ -39,7 +39,7 @@ func (d *AuthDB) AuthWriteBlock(batch ethdb.Batch, block *types.Block) error {
 	}
 	// `rawdb.WriteBlock()` will store Body and Header separately under different prefixes
 	// We store the (encoded) block content in one-piece here under a new db key.
-	blockKey := BlockKey(num, hash)
+	blockKey := blockKey(num, hash)
 	if err := batch.Put(blockKey, blockBytes); err != nil {
 		return fmt.Errorf("fail to put block with number=%d, hash=%s: %w", num, hash, err)
 	}
@@ -51,7 +51,7 @@ func (d *AuthDB) AuthWriteBlock(batch ethdb.Batch, block *types.Block) error {
 	d.mac.Write(blockBytes)
 	tag := d.mac.Sum(nil)
 	d.mac.Reset()
-	if err := batch.Put(BlockAuthTagKey(num, hash), tag); err != nil {
+	if err := batch.Put(blockAuthTagKey(num, hash), tag); err != nil {
 		return fmt.Errorf("fail to put block auth tag with number=%d, hash=%s: %w", num, hash, err)
 	}
 
