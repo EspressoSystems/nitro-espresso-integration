@@ -237,7 +237,7 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses                []string `koanf:"init-batcher-addresses"`                                         `koanf:"init-batcher-addresses"`
+	InitBatcherAddresses                []string                                                   `koanf:"init-batcher-addresses"`
 	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
 	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
 }
