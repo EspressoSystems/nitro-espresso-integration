@@ -96,6 +96,7 @@ jobs:
 
       - name: Build & push
         uses: docker/build-push-action@v6
+        id: docker
         with:
           context: .
           file: Dockerfile
@@ -190,6 +191,7 @@ jobs:
 
       - name: Build & push
         uses: docker/build-push-action@v6
+        id: docker
         with:
           context: .
           file: Dockerfile
