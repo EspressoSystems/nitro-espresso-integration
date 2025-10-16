@@ -33,6 +33,7 @@ jobs:
         run: |
           echo "github.event_name=${{ github.event_name }}"
           echo "github.event.workflow_run.ref=${{ github.event.workflow_run.ref }}"
+          echo "github.event.workflow_run.head_branch=${{ github.event.workflow_run.head_branch }}"
 
   test:
     name: Espresso Regression test
