@@ -38,13 +38,13 @@ jobs:
   test:
     name: Espresso Regression test
     runs-on: ubuntu-24.04-8core
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.ref, 'refs/tags/v'))
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
 
       - name: Setup environment variables
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            TAG_NAME=$(echo "${{ github.event.workflow_run.ref }}" | sed 's#refs/tags/##')
+            TAG_NAME=${{ github.event.workflow_run.head_branch }}
             echo "ESPRESSO_VERSION=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:$TAG_NAME" >> $GITHUB_ENV
           elif [ "${{ github.event.workflow_dispatch.inputs.image }}" = "custom" ]; then
             echo "ESPRESSO_VERSION=${{ github.event.workflow_dispatch.inputs.custom_image }}" >> $GITHUB_ENV
