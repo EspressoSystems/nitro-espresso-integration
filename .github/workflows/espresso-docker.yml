@@ -5,8 +5,6 @@ run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head
 
 on:
   workflow_dispatch:
-  merge_group:
-  pull_request:
   push:
     tags:
       - "v*"
@@ -196,7 +194,7 @@ jobs:
           context: .
           file: Dockerfile
           target: nitro-node
-          platforms: linux/amd64
+          platforms: linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
