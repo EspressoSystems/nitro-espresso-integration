@@ -24,13 +24,13 @@ type EspressoTEEVerifierInterface interface {
 		data []byte,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) error
 	RegisteredServices(
 		signer common.Address,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) (bool, error)
 }
 
@@ -50,7 +50,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	data []byte,
 	teeType uint8,
 	serviceType ServiceType,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
@@ -76,6 +76,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	if err != nil {
 		return err
 	}
+
 	msg := ethereum.CallMsg{
 		From:  dataPoster.Sender(),
 		To:    &e.address,
@@ -94,7 +95,9 @@ func (e *EspressoTEEVerifier) RegisterService(
 	}
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
-	log.Info("register signer gas limit", "gas limit", gasLimit)
+	// var gasLimit uint64
+	// gasLimit = 10000000
+	// log.Info("register signer gas limit", "gas limit", gasLimit)
 
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
 	// So the dataposter can track the proper nonce once we start posting batches
@@ -121,6 +124,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	}
 
 	if receipt.Status != types.ReceiptStatusSuccessful {
+		log.Error("tx logs", "Logs", receipt.Logs)
 		return errors.New("transaction failed")
 	}
 
@@ -129,7 +133,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	return nil
 }
 
-func (e *EspressoTEEVerifier) RegisteredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterSignerOpts) (bool, error) {
+func (e *EspressoTEEVerifier) RegisteredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterServiceOpts) (bool, error) {
 	ok, err := ContractVerification(
 		registerSignerOpts.MaxRetries,
 		registerSignerOpts.RetryReadContractDelay,

@@ -193,7 +193,14 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("l1 reader is nil")
 	}
 
-	if configFetcher().EspressoTeeType != "" {
+	var teeType espressotee.TEE
+	teeType, err := teeType.FromString(configFetcher().EspressoTeeType)
+
+	if err != nil {
+		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
+	}
+
+	if teeType != espressotee.EMPTY {
 		if teeAddress == nil {
 			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
 		}
@@ -282,13 +289,6 @@ func NewEspressoCaffNode(
 	}
 	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
 
-	var teeType espressotee.TEE
-	configTee := configFetcher().EspressoTeeType
-	teeType, err = teeType.FromString(configTee)
-	if err != nil {
-		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
-	}
-
 	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 	if teeType == espresso_key_manager.NITRO {
 		log.Info("setting up nitro verifier", "tee type", teeType)
@@ -307,6 +307,8 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chain id: %w", err)
 	}
+
+	log.Info("Data poster opts", "txOptsCaffNode", txOptsCaffNode)
 
 	dataPoster, err := dataposter.NewDataPoster(ctx,
 		&dataposter.DataPosterOpts{

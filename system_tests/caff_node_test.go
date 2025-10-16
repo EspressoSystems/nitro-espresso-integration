@@ -59,7 +59,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
 	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig = espressotee.DefaultEspressoRegisterSignerConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
@@ -94,10 +94,6 @@ func createCaffNode(
 		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
 	}
 
-	if withSnapshotSigner {
-		nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
-	}
-
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing, withSnapshotSigner)
 	builder.L1 = existing.L1
 	return builder, cleanup, err
@@ -127,7 +123,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.EspressoCaffNode.FromBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
@@ -232,11 +228,11 @@ func TestEspressoCaffNode(t *testing.T) {
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
+	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, true)
 	Require(t, err)
 	builderCaffNode := builder.L2
 	defer cleanupCaffNode()
-
+	log.Info("Starting caff node assertions")
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User14"))
 		balance2 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User15"))

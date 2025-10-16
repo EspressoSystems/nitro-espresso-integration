@@ -192,7 +192,7 @@ var DefaultEspressoRegisterSignerConfig = EspressoRegisterSignerConfig{
 	MaxBaseFee:                    70000000,
 }
 
-type EspressoRegisterSignerOpts struct {
+type EspressoRegisterServiceOpts struct {
 	MaxTxnWaitTime                time.Duration
 	RetryBaseFeeDelay             time.Duration
 	RetryReadContractDelay        time.Duration

@@ -23,12 +23,12 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, opts espressotee.EspressoRegisterSignerOpts) error {
+func (m *mockEspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, opts espressotee.EspressoRegisterServiceOpts) error {
 	args := m.Called(dataPoster, attestation, data, teeType, opts)
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8, opts espressotee.EspressoRegisterSignerOpts) (bool, error) {
+func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8, opts espressotee.EspressoRegisterServiceOpts) (bool, error) {
 	args := m.Called(addr, teeType, opts)
 	return args.Bool(0), nil
 }
@@ -37,12 +37,12 @@ type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterSignerOpts) (common.Hash, error) {
+func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterServiceOpts) (common.Hash, error) {
 	args := m.Called(dataPoster, certificate, parentCertHash, isCA, opts)
 	return common.Hash{}, args.Error(0)
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, opts espressotee.EspressoRegisterSignerOpts) ([]byte, []byte, error) {
+func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, opts espressotee.EspressoRegisterServiceOpts) ([]byte, []byte, error) {
 	args := m.Called(attestationBytes, dataPoster, opts)
 	return nil, nil, args.Error(0)
 }
@@ -71,7 +71,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts, "", "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.ServiceType(espressotee.TEETEST), registerOpts, "", "")
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.GetCurrentKey(), "Public key should be set")
 		// assert.NotNil(t, km.privKey, "Private key should be set")

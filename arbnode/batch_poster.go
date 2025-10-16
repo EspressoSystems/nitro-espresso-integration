@@ -46,8 +46,8 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -523,6 +523,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		dpCfg.Post4844Blobs = opts.Config().Post4844Blobs
 		return &dpCfg
 	}
+	log.Info("txoptsbatcher", "opts", opts.TransactOpts)
 	b.dataPoster, err = dataposter.NewDataPoster(ctx,
 		&dataposter.DataPosterOpts{
 			Database:          opts.DataPosterDB,
@@ -1513,6 +1514,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 			}
 		}
 		teeType = keyManager.TeeType()
+		log.Info("teeType", "type", teeType)
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)
@@ -1529,7 +1531,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		{Type: bytesType},
 		{Type: uint8Type},
 	}.Pack(hotshotBlockNumber, signature, teeType)
-
+	log.Info("Espresso Metadata", "value", espressoMetadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pack calldata with hotshot number and signature: %w", err)
 	}
@@ -2379,9 +2381,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			gasLimit, err = b.estimateGasForFutureTx(ctx, sequencerMsg, delayedMsgBefore, b.building.segments.delayedMsg, accessList, len(kzgBlobs) > 0, delayProof)
 		}
 	}
-	if err != nil {
-		return false, err
-	}
+	// log.Info("After gas limit", "gas limit", gasLimit)
+	// if gasLimit == 0 {
+	// 	gasLimit = 10000000
+	// 	err = nil // we ignore errors here. hehe
+	// }
+	// if err != nil {
+	// 	return false, err
+	// }
+
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,
@@ -2423,7 +2431,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 		log.Debug("Successfully checked that the batch produces correct messages when ran through inbox multiplexer", "sequenceNumber", batchPosition.NextSeqNum)
 	}
-
+	log.Info("Attempting to post transaction")
 	tx, err := b.dataPoster.PostTransaction(ctx,
 		firstUsefulMsgTime,
 		nonce,

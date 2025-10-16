@@ -54,7 +54,7 @@ type EspressoKeyManager struct {
 	dataPoster              *dataposter.DataPoster
 	teeType                 espressotee.TEE
 	serviceType             espressotee.ServiceType
-	registerSignerOpts      espressotee.EspressoRegisterSignerOpts
+	registerServiceOpts     espressotee.EspressoRegisterServiceOpts
 	userDataAttestationFile string
 	quoteFile               string
 
@@ -116,7 +116,7 @@ func NewEspressoKeyManager(
 		dataPoster:                dataPoster,
 		teeType:                   teeType,
 		serviceType:               serviceType,
-		registerSignerOpts: espressotee.EspressoRegisterSignerOpts{
+		registerServiceOpts: espressotee.EspressoRegisterServiceOpts{
 			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
 			RetryBaseFeeDelay:             registerSignerConfig.RetryBaseFeeDelay,
@@ -142,7 +142,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType, k.registerServiceOpts)
 	if err != nil {
 		return false, err
 	}
@@ -177,7 +177,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
 			attestationBytes,
 			k.dataPoster,
-			k.registerSignerOpts,
+			k.registerServiceOpts,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
@@ -186,7 +186,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 	case TESTS:
 		key := crypto.FromECDSAPub(k.pubKey)
 		signature, err := k.noOpSignerFunc(key)
-		data := make([]byte, 20)
+		data := k.dataPoster.Sender().Bytes()
 		return signature, data, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
@@ -207,8 +207,8 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 
 	log.Info("attestation info", "attestation.len", len(attestation), "attestation", attestation)
 	log.Info("Data info", "len(data)", len(data), "data", data)
-	log.Info("RegisterSigner opts", "dataposter", k.dataPoster, "teeType", k.teeType, "Service type", k.serviceType, "registerSignerOpts", k.registerSignerOpts)
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
+	log.Info("RegisterSigner opts", "dataposter", k.dataPoster, "teeType", k.teeType, "Service type", k.serviceType, "registerSignerOpts", k.registerServiceOpts)
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType, k.registerServiceOpts)
 	if err != nil {
 		return err
 	}

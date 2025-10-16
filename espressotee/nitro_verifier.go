@@ -27,12 +27,12 @@ type EspressoNitroTEEVerifierInterface interface {
 		certificate []byte,
 		parentCertHash [32]byte,
 		isCA bool,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) (common.Hash, error)
 	VerifyAttestationAndCertificates(
 		attestationBytes []byte,
 		dataPoster *dataposter.DataPoster,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) ([]byte, []byte, error)
 	IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error)
 }
@@ -66,7 +66,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 	dataPoster *dataposter.DataPoster,
 	certificate []byte, parentCertHash [32]byte,
 	isCA bool,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) (common.Hash, error) {
 	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
@@ -169,7 +169,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	attestationBytes []byte,
 	dataPoster *dataposter.DataPoster,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) ([]byte, []byte, error) {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
