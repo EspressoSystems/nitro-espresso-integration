@@ -231,7 +231,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
+	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, true)
 	Require(t, err)
 	builderCaffNode := builder.L2
 	defer cleanupCaffNode()

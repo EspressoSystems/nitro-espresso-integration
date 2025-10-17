@@ -259,7 +259,7 @@ func mainImpl() int {
 
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var key *ecdsa.PrivateKey
-		key, snapshotSigner, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		key, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
@@ -270,7 +270,7 @@ func mainImpl() int {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
 		}
-		privHex := hex.EncodeToString(snapshotPrivateKey.D.Bytes())
+		privHex := hex.EncodeToString(key.D.Bytes())
 		// This will be used by the hyperlane validator
 		os.Setenv("SNAPSHOT_PRIVATE_KEY", privHex)
 		if nodeConfig.ParentChain.ID != 0 {

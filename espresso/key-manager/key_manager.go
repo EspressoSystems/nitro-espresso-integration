@@ -78,8 +78,9 @@ func NewEspressoKeyManager(
 	if !ok {
 		panic("failed to get public key")
 	}
-
-	if signerFunc == nil {
+	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
+	// and if it is we can safely ignore a nil data signer.
+	if signerFunc == nil && teeType != espressotee.SGX {
 		panic("DataSigner is nil")
 	}
 
@@ -178,7 +179,8 @@ func (k *EspressoKeyManager) PrepareRegisterSigner(getAttestationFunc func([]byt
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
 		}
 		return attestation, data, nil
-
+	case TESTS:
+		return k.privKey.D.Bytes(), k.privKey.D.Bytes(), nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}

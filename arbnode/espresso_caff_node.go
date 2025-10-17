@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
@@ -190,11 +191,14 @@ func NewEspressoCaffNode(
 	if l1Reader == nil {
 		return nil, fmt.Errorf("l1 reader is nil")
 	}
-
-	if configFetcher().EspressoTeeType != "" {
-		if teeAddress == nil {
-			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
-		}
+	teeType, err := espressotee.FromString(configFetcher().EspressoTeeType)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing TEE type, %v", err)
+	}
+	if teeType != espressotee.TESTS { // TODO: we don't use the teeAddress ever... figure out what we need to do with it or remove
+		// if teeAddress == nil {
+		// 	return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
+		// }
 	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
@@ -278,9 +282,6 @@ func NewEspressoCaffNode(
 	}
 	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
 
-	var teeType espressotee.TEE
-	configTee := configFetcher().EspressoTeeType
-	teeType, err = teeType.FromString(configTee)
 	if err != nil {
 		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
 	}
@@ -319,7 +320,7 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("failed to create data poster: %w", err)
 	}
 
-	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, snapshotSigner, teeType, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -496,24 +497,6 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	currentBlockHeader := n.executionEngine.Bc().CurrentBlock()
 	currentBlock := n.executionEngine.Bc().GetBlock(currentBlockHeader.Hash(), currentBlockHeader.Number.Uint64())
 
-	// TODO: fix this, SGX should not be used for tests
-	if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && currentBlock.NumberU64() > 0 {
-		blockhash := currentBlock.Hash()
-
-		// Get the block signature
-		blockSignature, err := getBlockSignature(n.db, blockhash)
-		if err != nil {
-			return fmt.Errorf("failed to get block signature: %w", err)
-		}
-
-		err = verifySignature(n.db, blockSignature, blockhash.Bytes(), *n.snapshotSignerAddress)
-		if err != nil {
-			return fmt.Errorf("failed to verify block signature: %w", err)
-		}
-	}
-
-	// TODO: In follow up PRs, think about how to handle the case when on initial startup we dont have a signature over the
-	// from block?
 	n.currentBlock = currentBlock
 
 	currentBlockNum := currentBlockHeader.Number.Uint64() + 1
@@ -528,18 +511,6 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		nextHotshotBlock, err = n.db.AuthReadNextHotshotBlockNum()
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
-		}
-		// TODO: fix this, SGX should not be used for tests
-		if n.configFetcher().EspressoTeeType != "" && n.configFetcher().EspressoTeeType != "SGX" && nextHotshotBlock != 0 {
-			hotshotBlockHash, err := getHashOverUint64(nextHotshotBlock)
-			if err != nil {
-				return fmt.Errorf("failed to get hash of hotshot block: %w", err)
-			}
-
-			err = verifySignature(n.db, nextHotshotBlockSignature, hotshotBlockHash, *n.snapshotSignerAddress)
-			if err != nil {
-				return fmt.Errorf("failed to verify signature for hotshot block: %w", err)
-			}
 		}
 	}
 	if nextHotshotBlock == 0 {

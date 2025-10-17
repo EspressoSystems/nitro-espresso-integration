@@ -681,11 +681,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			}
 			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
 
-			var teeType espressotee.TEE
-			configTee := cfg.EspressoTeeType
-			teeType, err = teeType.FromString(configTee)
+			teeType, err := espressotee.FromString(cfg.EspressoTeeType)
 			if err != nil {
-				return nil, fmt.Errorf("unsupported tee type in config: %s", configTee)
+				return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)
 			}
 
 			var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface

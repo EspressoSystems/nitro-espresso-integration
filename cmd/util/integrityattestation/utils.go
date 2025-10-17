@@ -21,9 +21,6 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -104,7 +101,7 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -124,13 +121,7 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 		return nil, fmt.Errorf("failed to get attested private key: %w", err)
 	}
 
-	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
-	if err != nil || publicKey == nil {
-		return nil, fmt.Errorf("failed to get attested public key: %w", err)
-	}
-	publicKeyAddress := crypto.PubkeyToAddress(*publicKey)
-
-	return &publicKeyAddress, nil
+	return privateKey, nil
 }
 
 func GenerateHMAC() (hash.Hash, error) {
