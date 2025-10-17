@@ -75,3 +75,8 @@ func parseUint64AndHash(key []byte, prefixLen int) (uint64, common.Hash, error) 
 	hash = common.BytesToHash(key[prefixLen+8 : prefixLen+8+common.HashLength])
 	return number, hash, nil
 }
+
+// Parse db-key with pattern: prefix + hash
+func parseHash(key []byte) common.Hash {
+	return common.BytesToHash(key[len(key)-common.HashLength:])
+}

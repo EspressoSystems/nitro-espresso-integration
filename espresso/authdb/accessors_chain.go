@@ -111,26 +111,3 @@ func (d *AuthDB) authReadReceipts(hash common.Hash, number uint64) ([]byte, erro
 
 	return receiptsBytes, nil
 }
-
-// func (d *AuthDB) authReadBlock(hash common.Hash, number uint64) ([]byte, error) {
-// 	bodyBytes, err := d.authReadBody(hash, number)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	body := new(types.Body)
-// 	if err := rlp.DecodeBytes(bodyBytes, body); err != nil {
-// 		return nil, fmt.Errorf("failed to decode body: %w", err)
-// 	}
-
-// 	headerBytes, err := d.authReadHeader(hash, number)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	header := new(types.Header)
-// 	if err := rlp.DecodeBytes(headerBytes, header); err != nil {
-// 		return nil, fmt.Errorf("failed to decode header: %w", err)
-// 	}
-
-// 	block := types.NewBlockWithHeader(header).WithBody(*body)
-// 	return rlp., nil
-// }

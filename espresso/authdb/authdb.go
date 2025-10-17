@@ -30,69 +30,6 @@ func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
 	return AuthDB{db: db, mac: mac}, nil
 }
 
-// // Different from rawdb.WriteBlock which write header and body separately,
-// // we write the full RLP-encoded block under a different key
-// func (d *AuthDB) AuthWriteBlock(batch ethdb.Batch, block *types.Block) error {
-// 	num := block.NumberU64()
-// 	hash := block.Hash()
-// 	blockBytes, err := rlp.EncodeToBytes(block)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to encode block: %w", err)
-// 	}
-// 	// `rawdb.WriteBlock()` will store Body and Header separately under different prefixes
-// 	// We store the (encoded) block content in one-piece here under a new db key.
-// 	blockKey := blockKey(num, hash)
-// 	if err := batch.Put(blockKey, blockBytes); err != nil {
-// 		return fmt.Errorf("fail to put block with number=%d, hash=%s: %w", num, hash, err)
-// 	}
-// 	if d.mac == nil {
-// 		return nil
-// 	}
-
-// 	d.mac.Write(blockKey)
-// 	d.mac.Write(blockBytes)
-// 	tag := d.mac.Sum(nil)
-// 	d.mac.Reset()
-// 	if err := batch.Put(blockAuthTagKey(num, hash), tag); err != nil {
-// 		return fmt.Errorf("fail to put block auth tag with number=%d, hash=%s: %w", num, hash, err)
-// 	}
-
-// 	return nil
-// }
-
-// // Same as rawdb.WriteHeader except with additional auth tag
-// func (d *AuthDB) AuthWriteHeader(batch ethdb.Batch, header *types.Header) error {
-// 	// header writing logic is almost identical to rawdb.WriterHeader except using batch
-// 	var (
-// 		hash   = header.Hash()
-// 		number = header.Number.Uint64()
-// 	)
-// 	// Write the hash -> number mapping
-// 	rawdb.WriteHeaderNumber(batch, hash, number)
-// 	// Write the encoded header
-// 	data, err := rlp.EncodeToBytes(header)
-// 	if err != nil {
-// 		log.Crit("Failed to RLP encode header", "err", err)
-// 	}
-// 	key := headerKey(number, hash)
-// 	if err := d.db.Put(key, data); err != nil {
-// 		log.Crit("Failed to store header", "err", err)
-// 	}
-
-// 	if d.mac == nil {
-// 		return nil
-// 	}
-
-// 	d.mac.Write(key)
-// 	d.mac.Write(data)
-// 	tag := d.mac.Sum(nil)
-// 	d.mac.Reset()
-// 	if err := batch.Put(headerAuthTagKey(number, hash), tag); err != nil {
-// 		return fmt.Errorf("fail to put header auth tag with number=%d, hash=%s: %w", number, hash, err)
-// 	}
-// 	return nil
-// }
-
 func (d *AuthDB) AuthWriteNextHotshotBlockNum(batch ethdb.Batch, num uint64) error {
 	// Add the next hotshot block number to the auth db
 	if err := batch.Put(nextHotshotBlockNumKey, EncodeUint64(num)); err != nil {
@@ -538,6 +475,15 @@ func (d *AuthDB) Has(key []byte) (bool, error) {
 	return true, nil
 }
 
+// # Auditor note:
+// "deny" means unsupported and return err when trying to Get()
+// "skip" means we Get() without additioinal checks
+//
+// - deny legacy trie (i.e. hash scheme) because without prefix, we don't have contexual knowledge of retreival intent (or the db key)
+// - skip stateID because it's only used for Recoverable which won't affect correctness
+// - deny chainconfig because the config should always come from a node config file whose checksum is checked on load
+// - skip genesis state
+// - skip metadata
 func (d *AuthDB) Get(key []byte) ([]byte, error) {
 	// switch-case copied over from rawdb.database.go::InspectDatabase()
 	switch {
@@ -588,16 +534,14 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 			return nil, err
 		}
 		return d.authReadHeader(hash, number)
-	// note: IsLegacyTrieNode is not a read op, skipping
-	// case IsLegacyTrieNode(key, it.Value()):
 	case bytes.HasPrefix(key, stateIDPrefix) && len(key) == len(stateIDPrefix)+common.HashLength:
-		// stateLookups.Add(size)
+		return d.db.Get(key)
 	case IsAccountTrieNode(key):
 		// accountTries.Add(size)
 	case IsStorageTrieNode(key):
 		// storageTries.Add(size)
 	case bytes.HasPrefix(key, CodePrefix) && len(key) == len(CodePrefix)+common.HashLength:
-		// codes.Add(size)
+		return d.authReadCodeWithPrefix(key)
 	case bytes.HasPrefix(key, txLookupPrefix) && len(key) == (len(txLookupPrefix)+common.HashLength):
 		// txLookups.Add(size)
 	case bytes.HasPrefix(key, SnapshotAccountPrefix) && len(key) == (len(SnapshotAccountPrefix)+common.HashLength):
@@ -605,11 +549,12 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 	case bytes.HasPrefix(key, SnapshotStoragePrefix) && len(key) == (len(SnapshotStoragePrefix)+2*common.HashLength):
 		// storageSnaps.Add(size)
 	case bytes.HasPrefix(key, PreimagePrefix) && len(key) == (len(PreimagePrefix)+common.HashLength):
-		// preimages.Add(size)
+		return d.authReadPreimage(key)
 	case bytes.HasPrefix(key, configPrefix) && len(key) == (len(configPrefix)+common.HashLength):
-		// metadata.Add(size)
+		// TODO(espresso): add node config file checksum comparison on caff node startup
+		return d.db.Get(key)
 	case bytes.HasPrefix(key, genesisPrefix) && len(key) == (len(genesisPrefix)+common.HashLength):
-		// metadata.Add(size)
+		return d.db.Get(key)
 	case bytes.HasPrefix(key, bloomBitsPrefix) && len(key) == (len(bloomBitsPrefix)+10+common.HashLength):
 		// bloomBits.Add(size)
 	case bytes.HasPrefix(key, BloomBitsIndexPrefix):
@@ -654,7 +599,10 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		} {
 			//
 		}
+
 	}
+
+	// case IsLegacyTrieNode(key, it.Value()):
 
 	// TODO: decide how to deal with freezer and Ancient reads
 	// var freezers = []string{ChainFreezerName, MerkleStateFreezerName, VerkleStateFreezerName}
@@ -689,8 +637,17 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 	// 	}
 	// }
 
-	// TODO: Intercepts the calls you care about
-	return d.db.Get(key)
+	val, err := d.db.Get(key)
+	if err != nil {
+		log.Error("failed to get uncategorized", "err", err)
+		return nil, err
+	}
+	if IsLegacyTrieNode(key, val) {
+		log.Error("attempted to fetch as legacy trie node", "key", key, "val", val)
+
+	}
+
+	return nil, fmt.Errorf("unsupported db query, key: %v", key)
 }
 
 func (d *AuthDB) NewIterator(prefix []byte, start []byte) ethdb.Iterator {
