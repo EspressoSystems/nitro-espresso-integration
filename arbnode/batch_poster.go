@@ -237,9 +237,10 @@ type BatchPosterConfig struct {
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses                []string                                                   `koanf:"init-batcher-addresses"`
-	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
-	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
+	InitBatcherAddresses                       []string                                                   `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost                   bool                                                       `koanf:"is-decentralized-timeboost"`
+	DecentralizedTimeboostBatchVerifier        decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
+	DecentralizedTimeboostKeyManagementAddress string                                                     `koanf:"decentralized-timeboost-key-management-address"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -312,6 +313,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Bool(prefix+".is-decentralized-timeboost", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
+	f.String(prefix+".decentralized-timeboost-key-managenent-contract-address", DefaultBatchPosterConfig.DecentralizedTimeboostKeyManagementAddress, "decentralized timeboost key management contract address")
 	decentralized_timeboost_batch_verifier.DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix+".decentralized-timeboost-batch-verifier", f)
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
@@ -372,12 +374,13 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit: 900 * 1024,
 
-	HotShotBlock:                        1,
-	HotShotFirstPostingBlock:            1,
-	InitBatcherAddresses:                []string{},
-	EspressoEventPollingStep:            100,
-	IsDecentralizedTimeboost:            false,
-	DecentralizedTimeboostBatchVerifier: decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
+	HotShotBlock:                               1,
+	HotShotFirstPostingBlock:                   1,
+	InitBatcherAddresses:                       []string{},
+	EspressoEventPollingStep:                   100,
+	IsDecentralizedTimeboost:                   false,
+	DecentralizedTimeboostBatchVerifier:        decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
+	DecentralizedTimeboostKeyManagementAddress: "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -655,7 +658,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
 			if opts.Config().IsDecentralizedTimeboost {
 				// TODO: This should read the address from sequencer inbox contract
-				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress("0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"), opts.L1Reader.Client())
+				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress), opts.L1Reader.Client())
 				if err != nil {
 					return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
 				}
@@ -678,7 +681,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			b.espressoStreamer = espressoStreamer
 		}
 
-		if lightClientAddr != "" {
+		if lightClientAddr != "" && !opts.Config().IsDecentralizedTimeboost {
 			lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddr), opts.L1Reader.Client())
 			if err != nil {
 				return nil, err
@@ -2632,7 +2635,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 	if err != nil {
 		return nil, err
 	}
-	log.Info("decentralized timeboost successfully verified batch!", "from key", args.PubKey, "prev msg", signedData.PreviousMessageCount, "new msg", signedData.NewMessageCount)
+	log.Info("decentralized timeboost successfully verified batch!", "from key", "0x"+hex.EncodeToString(args.PubKey), "prev msg", signedData.PreviousMessageCount, "new msg", signedData.NewMessageCount)
 	return data.Signature, nil
 
 }
