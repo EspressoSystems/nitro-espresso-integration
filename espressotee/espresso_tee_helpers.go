@@ -20,7 +20,12 @@ type TEE uint8
 const (
 	SGX   TEE = 0 // SGX
 	NITRO TEE = 1 // AWS Nitro
+
+	EMPTY TEE = 254
 	TESTS TEE = 255
+	// Define the empty string, which coudld be useful in certain circumstances
+	// Also define empty and test related contents at the end of the types range to make room
+	// for other sequential TEE types.
 )
 
 func FromString(s string) (TEE, error) {
@@ -31,6 +36,8 @@ func FromString(s string) (TEE, error) {
 		return NITRO, nil
 	case "TESTS":
 		return TESTS, nil
+	case "":
+		return EMPTY, nil
 	default:
 		return 0, fmt.Errorf("invalid TEE type: %q", s)
 	}

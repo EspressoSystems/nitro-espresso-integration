@@ -59,7 +59,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+	nodeConfig.EspressoCaffNode.EspressoTeeType = ""
 	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig = espressotee.DefaultEspressoRegisterSignerConfig
 	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
@@ -95,7 +95,7 @@ func createCaffNode(
 	}
 
 	if withSnapshotSigner {
-		nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+		nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
 	}
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing, withSnapshotSigner)
@@ -231,7 +231,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, true)
+	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 	builderCaffNode := builder.L2
 	defer cleanupCaffNode()

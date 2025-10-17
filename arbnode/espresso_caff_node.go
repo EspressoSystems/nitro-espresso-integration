@@ -195,11 +195,6 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing TEE type, %v", err)
 	}
-	if teeType != espressotee.TESTS { // TODO: we don't use the teeAddress ever... figure out what we need to do with it or remove
-		// if teeAddress == nil {
-		// 	return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
-		// }
-	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
 	// hotshot transactions using SGX quote. Therefore we create a SGX TEE verifier here.
@@ -295,32 +290,40 @@ func NewEspressoCaffNode(
 		}
 	}
 
-	dataPosterConfigFetcher := func() *dataposter.DataPosterConfig {
-		dpCfg := configFetcher().DataPoster
-		return &dpCfg
-	}
+	var dataPoster *dataposter.DataPoster
+	var keyManager *espresso_key_manager.EspressoKeyManager
+	if teeType != espressotee.EMPTY {
+		if txOptsCaffNode != nil {
+			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
+		}
 
-	chainId, err := l1Reader.Client().ChainID(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get chain id: %w", err)
-	}
+		dataPosterConfigFetcher := func() *dataposter.DataPosterConfig {
+			dpCfg := configFetcher().DataPoster
+			return &dpCfg
+		}
 
-	dataPoster, err := dataposter.NewDataPoster(ctx,
-		&dataposter.DataPosterOpts{
-			Database:      dataPosterDB,
-			HeaderReader:  l1Reader,
-			Auth:          txOptsCaffNode,
-			Config:        dataPosterConfigFetcher,
-			ParentChainID: chainId,
-			MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
-				return nil, nil
-			},
-		})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create data poster: %w", err)
-	}
+		chainId, err := l1Reader.Client().ChainID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get chain id: %w", err)
+		}
 
-	keyManager := espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+		dataPoster, err := dataposter.NewDataPoster(ctx,
+			&dataposter.DataPosterOpts{
+				Database:      dataPosterDB,
+				HeaderReader:  l1Reader,
+				Auth:          txOptsCaffNode,
+				Config:        dataPosterConfigFetcher,
+				ParentChainID: chainId,
+				MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
+					return nil, nil
+				},
+			})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create data poster: %w", err)
+		}
+
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, configFetcher().EspressoRegisterSignerConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+	}
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -466,10 +469,12 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
 
-	registered := n.keyManager.HasRegistered()
-	if !registered {
-		if err := n.keyManager.RegisterSigner(); err != nil {
-			return err
+	if n.keyManager != nil {
+		registered := n.keyManager.HasRegistered()
+		if !registered {
+			if err := n.keyManager.RegisterSigner(); err != nil {
+				return err
+			}
 		}
 	}
 
