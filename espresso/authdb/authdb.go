@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"hash"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/util/dbutil"
 )
@@ -30,289 +28,6 @@ func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
 	return AuthDB{db: db, mac: mac}, nil
 }
 
-func (d *AuthDB) AuthWriteNextHotshotBlockNum(batch ethdb.Batch, num uint64) error {
-	// Add the next hotshot block number to the auth db
-	if err := batch.Put(nextHotshotBlockNumKey, EncodeUint64(num)); err != nil {
-		return fmt.Errorf("failed to put nextHotshotBlockNum: %w", err)
-	}
-	if d.mac == nil {
-		return nil
-	}
-
-	// Only if tee is enalbed, add the auth tag to the auth db
-	d.mac.Write(nextHotshotBlockNumKey)
-	d.mac.Write(EncodeUint64(num))
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if err := batch.Put(nextHotshotBlockNumAuthTagKey, tag); err != nil {
-		return fmt.Errorf("failed to put nextHotshotBlockNumAuthTag: %w", err)
-	}
-
-	return nil
-}
-
-func (d *AuthDB) AuthReadNextHotshotBlockNum() (uint64, error) {
-	numBytes, err := d.db.Get(nextHotshotBlockNumKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("failed to get nextHotshotBlockNum: %w", err)
-	}
-
-	num, err := DecodeUint64(numBytes)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode nextHotshotBlockNum: %w", err)
-	}
-
-	if d.mac == nil {
-		return num, nil
-	}
-
-	expectedTag, err := d.db.Get(nextHotshotBlockNumAuthTagKey)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get nextHotshotBlockNumAuthTag: %w", err)
-	}
-
-	// verify the auth tag
-	d.mac.Write(nextHotshotBlockNumKey)
-	d.mac.Write(numBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if !hmac.Equal(tag, expectedTag) {
-		return 0, fmt.Errorf("failed to verify nextHotshotBlockNumAuthTag for blockNum: %d", num)
-	}
-
-	return num, nil
-}
-
-// Delayed message fetcher's FromBlock info
-func (d *AuthDB) AuthWriteFromBlock(batch ethdb.Batch, fromBlk uint64) error {
-	if err := batch.Put(fromBlockKey, EncodeUint64(fromBlk)); err != nil {
-		return fmt.Errorf("failed to put delayedMessageFetcherFromBlock: %w", err)
-	}
-	if d.mac == nil {
-		return nil
-	}
-	d.mac.Write(fromBlockKey)
-	d.mac.Write(EncodeUint64(fromBlk))
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if err := batch.Put(fromBlockAuthTagKey, tag); err != nil {
-		return fmt.Errorf("failed to put delayedMessageFetcherFromBlockAuthTag for fromBlock: %d", fromBlk)
-	}
-
-	return nil
-}
-
-// Delayed message fetcher's FromBlock info
-func (d *AuthDB) AuthReadFromBlock() (uint64, error) {
-	numBytes, err := d.db.Get(fromBlockKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("failed to get fromBlock: %w", err)
-	}
-	fromBlk, err := DecodeUint64(numBytes)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode delayedMessageFetcherFromBlock: %w", err)
-	}
-
-	if d.mac == nil {
-		return fromBlk, nil
-	}
-
-	expectedTag, err := d.db.Get(fromBlockAuthTagKey)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get delayedMessageFetcherFromBlockAuthTag: %w", err)
-	}
-
-	// verify the auth tag
-	d.mac.Write(fromBlockKey)
-	d.mac.Write(numBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if !hmac.Equal(tag, expectedTag) {
-		return 0, fmt.Errorf("failed to verify delayedMessageFetcherFromBlockAuthTag for fromBlock: %d", fromBlk)
-	}
-
-	return fromBlk, nil
-}
-
-// Batcher address montior's InitAddresses info
-func (d *AuthDB) AuthWriteInitAddresses(batch ethdb.Batch, addrs []common.Address) error {
-	if len(addrs) == 0 {
-		return nil
-	}
-	addrsBytes, err := rlp.EncodeToBytes(addrs)
-	if err != nil {
-		return fmt.Errorf("failed to encode addrs: %w", err)
-	}
-	if err := batch.Put(initAddressesKey, addrsBytes); err != nil {
-		return fmt.Errorf("failed to put addrs: %w", err)
-	}
-
-	if d.mac == nil {
-		return nil
-	}
-
-	d.mac.Write(initAddressesKey)
-	d.mac.Write(addrsBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if err := batch.Put(initAddressesAuthTagKey, tag); err != nil {
-		return fmt.Errorf("failed to put addrs: %w", err)
-	}
-	return nil
-}
-
-// Batcher address montior's InitAddresses info
-func (d *AuthDB) AuthReadInitAddresses() ([]common.Address, error) {
-	addrsBytes, err := d.db.Get(initAddressesKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			// nolint:nilerr
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get init addrs: %w", err)
-	}
-
-	addrs := []common.Address{}
-	err = rlp.DecodeBytes(addrsBytes, &addrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode addrs: %w", err)
-	}
-
-	if d.mac == nil {
-		return addrs, nil
-	}
-
-	expectedTag, err := d.db.Get(initAddressesAuthTagKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get addrs: %w", err)
-	}
-
-	// verify the auth tag
-	d.mac.Write(initAddressesKey)
-	d.mac.Write(addrsBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if !hmac.Equal(tag, expectedTag) {
-		return nil, fmt.Errorf("failed to verify addrsAuthTag for addrs: %d", addrs)
-	}
-
-	return addrs, nil
-}
-
-// Batcher address monitor's Events info
-// We accept RLP-encoded events to avoid cyclic dependency since `BatcherAddrUpdate struct`
-// is defined in `arbnode` which will depend on this function
-func (d *AuthDB) AuthWriteEvents(batch ethdb.Batch, eventsBytes []byte) error {
-	if err := batch.Put(eventsKey, eventsBytes); err != nil {
-		return fmt.Errorf("failed to put events: %w", err)
-	}
-
-	if d.mac == nil {
-		return nil
-	}
-
-	d.mac.Write(eventsKey)
-	d.mac.Write(eventsBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if err := batch.Put(eventsAuthTagKey, tag); err != nil {
-		return fmt.Errorf("failed to put events: %w", err)
-	}
-	return nil
-}
-
-// Batcher address monitor's Events info
-func (d *AuthDB) AuthReadEvents() ([]byte, error) {
-	eventsBytes, err := d.db.Get(eventsKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			// nolint:nilerr
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to get events: %w", err)
-	}
-
-	if d.mac == nil {
-		return eventsBytes, nil
-	}
-
-	expectedTag, err := d.db.Get(eventsAuthTagKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get events: %w", err)
-	}
-
-	// verify the auth tag
-	d.mac.Write(eventsKey)
-	d.mac.Write(eventsBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if !hmac.Equal(tag, expectedTag) {
-		return nil, fmt.Errorf("failed to verify events auth tag for events bytes: %d", eventsBytes)
-	}
-
-	return eventsBytes, nil
-}
-
-// Batcher address monitor's LastProcessedHeight info
-func (d *AuthDB) AuthWriteLastProcessedHeight(batch ethdb.Batch, height uint64) error {
-	if err := batch.Put(lastProcessedHeightKey, EncodeUint64(height)); err != nil {
-		return fmt.Errorf("failed to put last processed height: %w", err)
-	}
-
-	if d.mac == nil {
-		return nil
-	}
-
-	d.mac.Write(lastProcessedHeightKey)
-	d.mac.Write(EncodeUint64(height))
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if err := batch.Put(lastProcessedHeightAuthTagKey, tag); err != nil {
-		return fmt.Errorf("failed to put last processed height: %w", err)
-	}
-	return nil
-}
-
-// Batcher address monitor's LastProcessedHeight info
-func (d *AuthDB) AuthReadLastProcessedHeight() (uint64, error) {
-	heightBytes, err := d.db.Get(lastProcessedHeightKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("failed to get last processed height: %w", err)
-	}
-	height, err := DecodeUint64(heightBytes)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode last processed height: %w", err)
-	}
-
-	if d.mac == nil {
-		return height, nil
-	}
-
-	expectedTag, err := d.db.Get(lastProcessedHeightAuthTagKey)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get last processed height: %w", err)
-	}
-
-	// verify the auth tag
-	d.mac.Write(lastProcessedHeightKey)
-	d.mac.Write(heightBytes)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-	if !hmac.Equal(tag, expectedTag) {
-		return 0, fmt.Errorf("failed to verify last processed height auth tag for height: %d", height)
-	}
-
-	return height, nil
-}
 
 func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 	// TODO: We should intercept the call and return nil?
@@ -388,11 +103,13 @@ func (d *AuthDB) DeleteRange(start []byte, end []byte) error {
 }
 
 func (d *AuthDB) NewBatch() ethdb.Batch {
-	return d.db.NewBatch()
+	inner := d.db.NewBatch()
+	return &AuthBatch{inner: inner, authDB: d}
 }
 
 func (d *AuthDB) NewBatchWithSize(size int) ethdb.Batch {
-	return d.db.NewBatchWithSize(size)
+	inner := d.db.NewBatchWithSize(size)
+	return &AuthBatch{inner: inner, authDB: d}
 }
 
 func (d *AuthDB) WasmDataBase() (ethdb.KeyValueStore, uint32) {
@@ -510,4 +227,88 @@ func (it *AuthIterator) Value() []byte {
 
 func (it *AuthIterator) Release() {
 	it.inner.Release()
+}
+
+// AuthBatch wraps ethdb.Batch to provide authenticated batch operations
+type AuthBatch struct {
+	inner  ethdb.Batch
+	authDB *AuthDB
+	// Track kv pairs for auth tag generation on write (inner's tracker is private)
+	entries map[string][]byte
+}
+
+// Put adds a key-value pair to the batch
+func (b *AuthBatch) Put(key []byte, value []byte) error {
+	if b.entries == nil {
+		b.entries = make(map[string][]byte)
+	}
+	b.entries[string(key)] = value
+	return b.inner.Put(key, value)
+}
+
+// Delete marks a key for deletion in the batch
+func (b *AuthBatch) Delete(key []byte) error {
+	if b.entries != nil {
+		delete(b.entries, string(key))
+	}
+	return b.inner.Delete(key)
+}
+
+// ValueSize returns the amount of data queued up for writing
+func (b *AuthBatch) ValueSize() int {
+	return b.inner.ValueSize()
+}
+
+// Write commits the batch, adding auth tags for each entry if MAC is enabled
+func (b *AuthBatch) Write() error {
+	if b.authDB.mac != nil && b.entries != nil {
+		// Add auth tags for each entry
+		for keyStr, value := range b.entries {
+			key := []byte(keyStr)
+			b.authDB.mac.Write(key)
+			b.authDB.mac.Write(value)
+			tag := b.authDB.mac.Sum(nil)
+			b.authDB.mac.Reset()
+
+			if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
+				return fmt.Errorf("failed to put auth tag for key %s: %w", keyStr, err)
+			}
+		}
+	}
+	return b.inner.Write()
+}
+
+// Reset clears the batch for reuse
+func (b *AuthBatch) Reset() {
+	b.inner.Reset()
+	b.entries = nil
+}
+
+// Replay replays the batch contents on another batch
+func (b *AuthBatch) Replay(w ethdb.KeyValueWriter) error {
+	return b.inner.Replay(w)
+}
+
+// Get retrieves a value from the batch or underlying database
+func (b *AuthBatch) Get(key []byte) ([]byte, error) {
+	// Check if this key was recently put in the batch
+	if b.entries != nil {
+		if value, exists := b.entries[string(key)]; exists {
+			return value, nil
+		}
+	}
+	// Fall back to the underlying AuthDB
+	return b.authDB.Get(key)
+}
+
+// Has checks if a key exists in the batch or underlying database
+func (b *AuthBatch) Has(key []byte) (bool, error) {
+	// Check if this key was recently put in the batch
+	if b.entries != nil {
+		if _, exists := b.entries[string(key)]; exists {
+			return true, nil
+		}
+	}
+	// Fall back to the underlying AuthDB
+	return b.authDB.Has(key)
 }
