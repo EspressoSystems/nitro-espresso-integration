@@ -28,7 +28,6 @@ func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
 	return AuthDB{db: db, mac: mac}, nil
 }
 
-
 func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 	// TODO: We should intercept the call and return nil?
 	return d.db.Ancient(kind, number)
@@ -222,7 +221,28 @@ func (it *AuthIterator) Key() []byte {
 }
 
 func (it *AuthIterator) Value() []byte {
-	return it.inner.Value()
+	key := it.Key()
+	val := it.inner.Value()
+	if it.db.mac == nil || !bytes.HasSuffix(key, genericAuthTagSuffix) {
+		return val
+	}
+
+	expectedTag, err := it.db.Get(genericAuthTagKey(key))
+	if err != nil {
+		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
+		return nil
+	}
+
+	it.db.mac.Write(key)
+	it.db.mac.Write(val)
+	tag := it.db.mac.Sum(nil)
+	it.db.mac.Reset()
+
+	if !hmac.Equal(tag, expectedTag) {
+		log.Error("failed to authenticate", "key", key, "val", val)
+		return nil
+	}
+	return val
 }
 
 func (it *AuthIterator) Release() {
