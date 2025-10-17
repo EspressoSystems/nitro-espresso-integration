@@ -29,6 +29,7 @@ const (
 	SGX   = espressotee.SGX
 	NITRO = espressotee.NITRO
 	TESTS = espressotee.TESTS
+	EMPTY = espressotee.EMPTY
 )
 
 type EspressoKeyManagerInterface interface {
@@ -183,7 +184,9 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		}
 		return attestation, data, nil
 	case TESTS:
-		return k.privKey.D.Bytes(), k.privKey.D.Bytes(), nil
+		data := crypto.FromECDSAPub(k.pubKey)
+		signature, err := k.noOpSignerFunc(data)
+		return signature, data, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
@@ -247,6 +250,8 @@ func (k *EspressoKeyManager) RegisterService() error {
 		return k.Register(k.getAttestationQuote)
 	case NITRO:
 		return k.Register(k.getNitroAttestation)
+	case TESTS:
+		return k.Register(k.noOpSignerFunc)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
@@ -330,6 +335,13 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 		return nil, fmt.Errorf("failed to marshal attestation")
 	}
 	return attestationBytes, nil
+}
+
+// No-Op Signauture
+// This is a function designed to replace a signing function for functionality that depends on operating in a TEE
+
+func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
+	return payload, nil
 }
 
 func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {

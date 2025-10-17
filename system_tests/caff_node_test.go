@@ -127,6 +127,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.EspressoCaffNode.FromBlock = 1
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
