@@ -262,7 +262,7 @@ func mainImpl() int {
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
-		teeHMAC, err = integrityattestation.GenerateHMAC()
+		teeHMAC, err = integrityattestation.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)

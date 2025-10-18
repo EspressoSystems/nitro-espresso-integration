@@ -21,6 +21,7 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
+	"golang.org/x/crypto/hkdf"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -133,12 +134,40 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 	return &publicKeyAddress, nil
 }
 
-func GenerateHMAC() (hash.Hash, error) {
-	h := sha256.New
-	// TODO: In another PR, we should store this key and encrypt it using AWS KMS
-	// TODO: use some key which can be deterministic across restarts
-	hmac := hmac.New(h, []byte("test"))
+// Use HKDF to derive HMAC key from attested private key (as the pseudo random key)
+func DeriveHmac(attestationsPath string) (hash.Hash, error) {
+	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
+	}
+	privateKey, err := GetAttestedPrivateKey(awsConfig, kmsKeyID, attestationsPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get attested private key: %w", err)
+	}
+
+	// underlying hash function for HKDF and HMAC
+	hash := sha256.New
+	// non-secret info value
+	info := []byte("HMAC key derivation")
+
+	// derive HMAC key using HKDF (with nil salt)
+	hkdf := hkdf.New(hash, crypto.FromECDSA(privateKey), nil, info)
+	hmacKey := make([]byte, hash().Size())
+	if _, err := hkdf.Read(hmacKey); err != nil {
+		return nil, fmt.Errorf("failed to derive HMAC key using HKDF: %w", err)
+	}
+
+	hmac := hmac.New(hash, hmacKey)
 	return hmac, nil
+}
+
+func HmacForTest() (hash.Hash, error) {
+	hmacKey := []byte("testHmacKey")
+	return hmac.New(sha256.New, hmacKey), nil
 }
 
 // Safely pointer dereference

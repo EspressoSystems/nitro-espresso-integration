@@ -714,7 +714,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 
 	b.L1Info = existing.L1Info
 
-	teeHMAC, err := integrityattestation.GenerateHMAC()
+	teeHMAC, err := integrityattestation.HmacForTest()
 	Require(t, err)
 	if withSnapshotSigner {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
@@ -769,7 +769,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	var currentNode *arbnode.Node
 	if withSnapshotSigner {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
-		teeHMAC, err := integrityattestation.GenerateHMAC()
+		teeHMAC, err := integrityattestation.HmacForTest()
 		Require(t, err)
 		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
 		Require(t, err)
