@@ -48,4 +48,3 @@ func TestSecurityEnforcement(t *testing.T) {
 		t.Fatalf("expected value 123, got %d", value)
 	}
 }
-
