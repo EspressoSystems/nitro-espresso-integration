@@ -14,16 +14,11 @@ var (
 	genericAuthTagSuffix = []byte("-tag")
 
 	// caff node specific
-	fromBlockKey                  = []byte("fromBlk")
-	fromBlockAuthTagKey           = []byte("fromBlkTag")
-	nextHotshotBlockNumKey        = []byte("nextHsBlkNum")
-	nextHotshotBlockNumAuthTagKey = []byte("nextHsBlkNumTag")
-	initAddressesKey              = []byte("initAddrs")
-	initAddressesAuthTagKey       = []byte("initAddrsTag")
-	eventsKey                     = []byte("events")
-	eventsAuthTagKey              = []byte("eventsTag")
-	lastProcessedHeightKey        = []byte("lastProcessedHeight")
-	lastProcessedHeightAuthTagKey = []byte("lastProcessedHeightTag")
+	fromBlockKey           = []byte("fromBlk")
+	nextHotshotBlockNumKey = []byte("nextHsBlkNum")
+	initAddressesKey       = []byte("initAddrs")
+	eventsKey              = []byte("events")
+	lastProcessedHeightKey = []byte("lastProcessedHeight")
 )
 
 func EncodeUint64(number uint64) []byte {
