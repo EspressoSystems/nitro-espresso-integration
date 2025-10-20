@@ -61,9 +61,9 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.FromBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoTeeType = ""
 	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
-	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig = espressotee.DefaultEspressoRegisterSignerConfig
-	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
-	nodeConfig.EspressoCaffNode.EspressoRegisterSignerConfig.MaxRetries = 5
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
 
 	nodeConfig.EspressoCaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,

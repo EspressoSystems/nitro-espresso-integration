@@ -21,7 +21,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressotee"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
@@ -54,7 +53,7 @@ type EspressoKeyManager struct {
 	dataPoster              *dataposter.DataPoster
 	teeType                 espressotee.TEE
 	serviceType             espressotee.ServiceType
-	registerSignerOpts      espressotee.EspressoRegisterSignerOpts
+	registerSignerOpts      espressotee.EspressoRegisterServiceOpts
 	userDataAttestationFile string
 	quoteFile               string
 
@@ -68,7 +67,7 @@ func NewEspressoKeyManager(
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
 	serviceTupe espressotee.ServiceType,
-	registerSignerConfig espressotee.EspressoRegisterSignerConfig,
+	registerSignerConfig espressotee.EspressoRegisterServiceConfig,
 	userDataAttestationFile string,
 	quoteFile string,
 ) *EspressoKeyManager {
@@ -116,7 +115,7 @@ func NewEspressoKeyManager(
 		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
 		dataPoster:                dataPoster,
 		teeType:                   teeType,
-		registerSignerOpts: espressotee.EspressoRegisterSignerOpts{
+		registerSignerOpts: espressotee.EspressoRegisterServiceOpts{
 			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
 			RetryBaseFeeDelay:             registerSignerConfig.RetryBaseFeeDelay,

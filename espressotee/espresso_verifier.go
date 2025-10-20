@@ -24,13 +24,13 @@ type EspressoTEEVerifierInterface interface {
 		data []byte,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) error
 	RegisteredServices(
 		signer common.Address,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) (bool, error)
 }
 
@@ -50,7 +50,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	data []byte,
 	teeType uint8,
 	serviceType ServiceType,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
@@ -129,7 +129,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 	return nil
 }
 
-func (e *EspressoTEEVerifier) RegisteredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterSignerOpts) (bool, error) {
+func (e *EspressoTEEVerifier) RegisteredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterServiceOpts) (bool, error) {
 	ok, err := ContractVerification(
 		registerSignerOpts.MaxRetries,
 		registerSignerOpts.RetryReadContractDelay,

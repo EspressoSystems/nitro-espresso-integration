@@ -8,8 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
-	"github.com/offchainlabs/nitro/espressotee"
 )
 
 // Reads state from external sources and resets the espresso streamer to start producing

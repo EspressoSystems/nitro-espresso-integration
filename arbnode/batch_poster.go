@@ -46,8 +46,8 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -208,17 +208,17 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeType                  string                                   `koanf:"espresso-tee-type"`
-	EspressoRegisterSignerConfig     espressotee.EspressoRegisterSignerConfig `koanf:"espresso-register-signer-config"`
-	LightClientAddress               string                                   `koanf:"light-client-address"`
-	HotShotUrls                      []string                                 `koanf:"hotshot-urls"`
-	EspressoTxnsPollingInterval      time.Duration                            `koanf:"espresso-txns-polling-interval"`
-	EspressoTxnsSendingInterval      time.Duration                            `koanf:"espresso-txns-sending-interval"`
-	EspressoTxnsResubmissionInterval time.Duration                            `koanf:"espresso-txns-resubmission-interval"`
-	ResubmitEspressoTxDeadline       time.Duration                            `koanf:"resubmit-espresso-tx-deadline"`
-	EspressoTxSizeLimit              int64                                    `koanf:"espresso-tx-size-limit"`
-	UserDataAttestationFile          string                                   `koanf:"user-data-attestation-file"`
-	QuoteFile                        string                                   `koanf:"quote-file"`
+	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
+	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-signer-config"`
+	LightClientAddress               string                                    `koanf:"light-client-address"`
+	HotShotUrls                      []string                                  `koanf:"hotshot-urls"`
+	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
+	EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
+	EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
+	ResubmitEspressoTxDeadline       time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
+	EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
+	UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
+	QuoteFile                        string                                    `koanf:"quote-file"`
 
 	// Fetch messages from HotShot block
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
@@ -300,7 +300,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
-	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -355,7 +355,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
-	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
+	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit:     900 * 1024,
 	UserDataAttestationFile: "",
@@ -407,7 +407,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:       10 * time.Second,
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
-	EspressoRegisterSignerConfig:     espressotee.DefaultEspressoRegisterSignerConfig,
+	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
 	HotShotBlock:             1,
@@ -701,7 +701,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions = append(
 				submitterOptions,
 				submitter.WithKeyManager(
-					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterSignerConfig, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
 				),
 			)
 
