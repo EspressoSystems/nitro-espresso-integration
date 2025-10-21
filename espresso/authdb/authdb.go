@@ -6,12 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"math"
 	"time"
 
-	"math"
-
 	"github.com/ethereum/go-ethereum/common"
-
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -477,18 +475,7 @@ func (b *AuthBatch) Has(key []byte) (bool, error) {
 	return b.authDB.Has(key)
 }
 
-func (d *AuthDB) writeTag(key []byte, value []byte) error {
-	d.mac.Write(key)
-	d.mac.Write(value)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
-
-	if err := d.Put(genericAuthTagKey(key), tag); err != nil {
-		return fmt.Errorf("failed to put auth tag for key %s: %w", key, err)
-	}
-	return nil
-}
-
+// InitAuthTags initializes auth tags for all keys in the database
 func (d *AuthDB) InitAuthTags() error {
 	var (
 		prefix    []byte
@@ -501,20 +488,109 @@ func (d *AuthDB) InitAuthTags() error {
 	it := d.db.NewIterator(prefix, start)
 	defer it.Release()
 
-	// For each key value pair in the database add a auth tag
+	// For each key value pair in the database add an auth tag
 	for it.Next() {
 		key := it.Key()
 		value := it.Value()
-		err := d.writeTag(key, value)
-		if err != nil {
-			return fmt.Errorf("unable to add auth tag for key: %v and value: %v", key, value)
+		tag := d.computeMac(key, value)
+
+		if err := d.db.Put(genericAuthTagKey(key), tag); err != nil {
+			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
 		}
+
 		count++
 		if time.Since(logged) > 8*time.Second {
-			log.Info("Add auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
 			logged = time.Now()
 		}
 	}
 
+	return nil
+}
+
+// InitAncientAuthTags initializes auth tags for all ancient data in the database
+func (d *AuthDB) InitAncientAuthTags() error {
+	firstBlockNumInAncients, err := d.Tail()
+	if err != nil {
+		return fmt.Errorf("failed to read tail of ancients :%w", err)
+	}
+	lastBlockNumInAncients, err := d.Ancients()
+	if err != nil {
+		return fmt.Errorf("failed to read last block number in ancients :%w", err)
+	}
+	logged := time.Now()
+	startTime := time.Now()
+
+	blockNum := firstBlockNumInAncients
+	for blockNum <= lastBlockNumInAncients {
+		err := d.readAndModifyChainAncients(blockNum)
+		if err != nil {
+			return fmt.Errorf("failed to read and modify chain ancients :%w", err)
+		}
+		err = d.readAndModifyStateAncients(blockNum)
+		if err != nil {
+			return fmt.Errorf("failed to read and modify state ancients :%w", err)
+		}
+		if time.Since(logged) > 8*time.Second {
+			log.Info("Added auth tags to the database", "count", blockNum, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			logged = time.Now()
+		}
+		blockNum++
+	}
+
+	return nil
+}
+
+func (d *AuthDB) readAndModifyChainAncients(blockNum uint64) error {
+	var hashData, blockBodyData, headerData, receiptData []byte
+	var err error
+	err = d.db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
+		hashData, err = reader.Ancient(rawdb.ChainFreezerHashTable, blockNum)
+		if err != nil {
+			return err
+		}
+		blockBodyData, err = reader.Ancient(rawdb.ChainFreezerBodiesTable, blockNum)
+		if err != nil {
+			return err
+		}
+		headerData, err = reader.Ancient(rawdb.ChainFreezerHeaderTable, blockNum)
+		if err != nil {
+			return err
+		}
+		receiptData, err = reader.Ancient(rawdb.ChainFreezerReceiptTable, blockNum)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Error("Failed to read ancient data", "err", err)
+		return err
+	}
+
+	_, err = d.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		if err := op.AppendRaw(rawdb.ChainFreezerHashTable, blockNum, hashData); err != nil {
+			return err
+		}
+		if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, blockNum, headerData); err != nil {
+			log.Error("Failed to append header data to auth db", "err", err)
+			return err
+		}
+		if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, blockNum, blockBodyData); err != nil {
+			log.Error("Failed to append block body data to auth db", "err", err)
+			return err
+		}
+		if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, blockNum, receiptData); err != nil {
+			log.Error("Failed to append receipt data to auth db", "err", err)
+			return err
+		}
+		return nil
+	})
+	return err
+}
+
+func (d *AuthDB) readAndModifyStateAncients(blockNum uint64) error {
+	// TODO: Implement this function, note state id is different from block number so we will have to think about that
 	return nil
 }
