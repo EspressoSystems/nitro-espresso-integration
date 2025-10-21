@@ -10,7 +10,6 @@ import (
 
 var (
 	// authenticated Geth
-	// genericAuthTagPrefix = []byte("tag-")
 	genericAuthTagSuffix = []byte("-tag")
 
 	// caff node specific

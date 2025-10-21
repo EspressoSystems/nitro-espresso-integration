@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"math"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -30,6 +31,14 @@ func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
 	return AuthDB{db: db, mac: mac}, nil
 }
 
+// computeMac computes HMAC for key-value pair
+func (d *AuthDB) computeMac(key []byte, val []byte) []byte {
+	d.mac.Reset()
+	d.mac.Write(key)
+	d.mac.Write(val)
+	return d.mac.Sum(nil)
+}
+
 // either in-memory check (e.g. Freezer) or delegated to `Ancient` (e.g. remotedb.Database),
 // thus safe to pass through
 func (d *AuthDB) HasAncient(kind string, number uint64) (bool, error) {
@@ -49,8 +58,8 @@ func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 	return d.authenticateAncientData(kind, number, data)
 }
 
-// computeMAC computes HMAC for kind, number, and data
-func (d *AuthDB) computeMAC(kind string, number uint64, data []byte) []byte {
+// computeMac computes HMAC for kind, number, and data
+func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) []byte {
 	d.mac.Reset()
 	d.mac.Write([]byte(kind))
 	d.mac.Write(EncodeUint64(number))
@@ -66,7 +75,7 @@ func (d *AuthDB) authenticateAncientData(kind string, number uint64, data []byte
 		expectedTag := data[dataSize:]
 		actualData := data[:dataSize]
 
-		tag := d.computeMAC(kind, number, actualData)
+		tag := d.computeMacForAncient(kind, number, actualData)
 		if !hmac.Equal(tag, expectedTag) {
 			return nil, fmt.Errorf("failed to verify auth tag for kind: %v, number: %v", kind, number)
 		}
@@ -85,7 +94,7 @@ func (d *AuthDB) authenticateAncientData(kind string, number uint64, data []byte
 			return nil, err
 		}
 
-		tag := d.computeMAC(kind, number, buf.Bytes())
+		tag := d.computeMacForAncient(kind, number, buf.Bytes())
 		if !hmac.Equal(tag, authItem.tag) {
 			log.Error("auth tag mismatch in AncientItemWithTag")
 			return nil, fmt.Errorf("auth tag mismatch for AncientItemWithTag, kind: %v, number: %v", kind, number)
@@ -108,6 +117,11 @@ func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]b
 
 	// Verify authentication for each item
 	result := make([][]byte, len(raw))
+	// overflow check
+	if start > math.MaxUint64-uint64(len(raw)) {
+		return nil, fmt.Errorf("ancient range uint64 overflow: start %d, len %d", start, len(raw))
+	}
+
 	for i, data := range raw {
 		number := start + uint64(i) // #nosec G115 - i is bounded by len(raw)
 		verifiedData, err := d.authenticateAncientData(kind, number, data)
@@ -267,7 +281,10 @@ func (d *AuthDB) Put(key []byte, value []byte) error {
 	}
 
 	// add auth tags to every entry
-	tag := d.computeMAC("", 0, append(key, value...))
+	d.mac.Reset()
+	d.mac.Write(key)
+	d.mac.Write(value)
+	tag := d.mac.Sum(nil)
 
 	err = d.db.Put(genericAuthTagKey(key), tag)
 	if err != nil {
@@ -305,7 +322,7 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	tag := d.computeMAC("", 0, append(key, val...))
+	tag := d.computeMac(key, val)
 
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
@@ -326,9 +343,8 @@ type AuthIterator struct {
 	db    *AuthDB
 }
 
-func NewAuthIterator(inner ethdb.Iterator, db ethdb.Database) AuthIterator {
-	authDB, _ := db.(*AuthDB)
-	return AuthIterator{inner: inner, db: authDB}
+func NewAuthIterator(inner ethdb.Iterator, db *AuthDB) AuthIterator {
+	return AuthIterator{inner: inner, db: db}
 }
 
 func (it *AuthIterator) Next() bool {
@@ -353,17 +369,17 @@ func (it *AuthIterator) Key() []byte {
 func (it *AuthIterator) Value() []byte {
 	key := it.Key()
 	val := it.inner.Value()
-	if it.db.mac == nil || !bytes.HasSuffix(key, genericAuthTagSuffix) {
+	if it.db.mac == nil {
 		return val
 	}
 
-	expectedTag, err := it.db.Get(genericAuthTagKey(key))
+	expectedTag, err := it.db.db.Get(genericAuthTagKey(key))
 	if err != nil {
 		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
 		return nil
 	}
 
-	tag := it.db.computeMAC("", 0, append(key, val...))
+	tag := it.db.computeMac(key, val)
 
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
@@ -412,7 +428,7 @@ func (b *AuthBatch) Write() error {
 		// Add auth tags for each entry
 		for keyStr, value := range b.entries {
 			key := []byte(keyStr)
-			tag := b.authDB.computeMAC("", 0, append(key, value...))
+			tag := b.authDB.computeMac(key, value)
 
 			if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
 				return fmt.Errorf("failed to put auth tag for key %s: %w", keyStr, err)
