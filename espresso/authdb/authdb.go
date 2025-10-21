@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -331,4 +333,46 @@ func (b *AuthBatch) Has(key []byte) (bool, error) {
 	}
 	// Fall back to the underlying AuthDB
 	return b.authDB.Has(key)
+}
+
+func (d *AuthDB) writeTag(key []byte, value []byte) error {
+	d.mac.Write(key)
+	d.mac.Write(value)
+	tag := d.mac.Sum(nil)
+	d.mac.Reset()
+
+	if err := d.Put(genericAuthTagKey(key), tag); err != nil {
+		return fmt.Errorf("failed to put auth tag for key %s: %w", key, err)
+	}
+	return nil
+}
+
+func (d *AuthDB) InitAuthTags() error {
+	var (
+		prefix    []byte
+		start     []byte
+		startTime = time.Now()
+		logged    = time.Now()
+		count     = 0
+	)
+
+	it := d.db.NewIterator(prefix, start)
+	defer it.Release()
+
+	// For each key value pair in the database add a auth tag
+	for it.Next() {
+		key := it.Key()
+		value := it.Value()
+		err := d.writeTag(key, value)
+		if err != nil {
+			return fmt.Errorf("unable to add auth tag for key: %v and value: %v", key, value)
+		}
+		count++
+		if time.Since(logged) > 8*time.Second {
+			log.Info("Add auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			logged = time.Now()
+		}
+	}
+
+	return nil
 }
