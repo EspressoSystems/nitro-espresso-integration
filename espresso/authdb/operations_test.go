@@ -1,6 +1,7 @@
 package authdb
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -22,7 +23,7 @@ func TestSecurityEnforcement(t *testing.T) {
 	}
 
 	expectedErrMsg := "db must be *AuthDB or *AuthBatch to ensure authenticated operations"
-	if !contains(err.Error(), expectedErrMsg) {
+	if !strings.Contains(err.Error(), expectedErrMsg) {
 		t.Fatalf("expected error message to contain %q, got %q", expectedErrMsg, err.Error())
 	}
 
@@ -46,17 +47,4 @@ func TestSecurityEnforcement(t *testing.T) {
 	if value != 123 {
 		t.Fatalf("expected value 123, got %d", value)
 	}
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || (len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsSubstring(s, substr))))
-}
-
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }

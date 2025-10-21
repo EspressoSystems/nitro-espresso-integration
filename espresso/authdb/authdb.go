@@ -8,9 +8,14 @@ import (
 	"hash"
 	"time"
 
+	"math"
+
 	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/util/dbutil"
 )
@@ -30,53 +35,188 @@ func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
 	return AuthDB{db: db, mac: mac}, nil
 }
 
-func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
-	// TODO: We should intercept the call and return nil?
-	return d.db.Ancient(kind, number)
+// computeMac computes HMAC for key-value pair
+func (d *AuthDB) computeMac(key []byte, val []byte) []byte {
+	d.mac.Reset()
+	d.mac.Write(key)
+	d.mac.Write(val)
+	return d.mac.Sum(nil)
 }
 
-func (d *AuthDB) AncientDatadir() (string, error) {
-	return d.db.AncientDatadir()
-}
-
-func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
-	// TODO: We should intercept the call and return nil?
-	return d.db.AncientRange(kind, start, count, maxBytes)
-}
-
-func (d *AuthDB) Ancients() (uint64, error) {
-	// TODO: We should intercept the call and return nil?
-	return d.db.Ancients()
-}
-
-func (d *AuthDB) AncientSize(kind string) (uint64, error) {
-	return d.db.AncientSize(kind)
-}
-
+// either in-memory check (e.g. Freezer) or delegated to `Ancient` (e.g. remotedb.Database),
+// thus safe to pass through
 func (d *AuthDB) HasAncient(kind string, number uint64) (bool, error) {
-	// TODO: We should intercept the call and return nil?
 	return d.db.HasAncient(kind, number)
 }
 
-func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
-	return d.db.ModifyAncients(fn)
+func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
+	data, err := d.db.Ancient(kind, number)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.mac == nil {
+		return data, nil
+	}
+
+	return d.authenticateAncientData(kind, number, data)
 }
 
-func (d *AuthDB) ReadAncients(fn func(ethdb.AncientReaderOp) error) error {
-	// TODO: We should intercept the call and return nil?
-	return d.db.ReadAncients(fn)
+// computeMac computes HMAC for kind, number, and data
+func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) []byte {
+	d.mac.Reset()
+	d.mac.Write([]byte(kind))
+	d.mac.Write(EncodeUint64(number))
+	d.mac.Write(data)
+	return d.mac.Sum(nil)
 }
 
+// authenticateAncientData verifies authentication for ancient data
+func (d *AuthDB) authenticateAncientData(kind string, number uint64, data []byte) ([]byte, error) {
+	switch kind {
+	case rawdb.ChainFreezerHashTable:
+		dataSize := len(data) - d.mac.Size()
+		expectedTag := data[dataSize:]
+		actualData := data[:dataSize]
+
+		tag := d.computeMacForAncient(kind, number, actualData)
+		if !hmac.Equal(tag, expectedTag) {
+			return nil, fmt.Errorf("failed to verify auth tag for kind: %v, number: %v", kind, number)
+		}
+		return actualData, nil
+
+	case rawdb.ChainFreezerBodiesTable, rawdb.ChainFreezerHeaderTable, rawdb.ChainFreezerReceiptTable:
+		authItem := new(AncientItemWithTag)
+		if err := rlp.DecodeBytes(data, authItem); err != nil {
+			log.Error("invalid freezer rlp", "err", err)
+			return nil, err
+		}
+
+		var buf bytes.Buffer
+		if err := rlp.Encode(&buf, authItem.item); err != nil {
+			log.Error("failed to RLP encode", "err", err)
+			return nil, err
+		}
+
+		tag := d.computeMacForAncient(kind, number, buf.Bytes())
+		if !hmac.Equal(tag, authItem.tag) {
+			log.Error("auth tag mismatch in AncientItemWithTag")
+			return nil, fmt.Errorf("auth tag mismatch for AncientItemWithTag, kind: %v, number: %v", kind, number)
+		}
+		return buf.Bytes(), nil
+	default:
+		return nil, fmt.Errorf("unsupported chain freezer kind: %s", kind)
+	}
+}
+
+func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
+	raw, err := d.db.AncientRange(kind, start, count, maxBytes)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.mac == nil {
+		return raw, nil
+	}
+
+	// Verify authentication for each item
+	result := make([][]byte, len(raw))
+	// overflow check
+	if start > math.MaxUint64-uint64(len(raw)) {
+		return nil, fmt.Errorf("ancient range uint64 overflow: start %d, len %d", start, len(raw))
+	}
+
+	for i, data := range raw {
+		number := start + uint64(i) // #nosec G115 - i is bounded by len(raw)
+		verifiedData, err := d.authenticateAncientData(kind, number, data)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = verifiedData
+	}
+
+	return result, nil
+}
+
+// unauthenticated, but not security-sensitive
+func (d *AuthDB) Ancients() (uint64, error) {
+	return d.db.Ancients()
+}
+
+// unauthenticated, but not security-sensitive
 func (d *AuthDB) Tail() (uint64, error) {
 	return d.db.Tail()
 }
 
-func (d *AuthDB) Stat() (string, error) {
-	return d.db.Stat()
+// we don't change ancient size during `ModifyAncients`.
+// unauthenticated, but not security-sensitive
+func (d *AuthDB) AncientSize(kind string) (uint64, error) {
+	return d.db.AncientSize(kind)
 }
 
-func (d *AuthDB) Sync() error {
-	return d.db.Sync()
+func (d *AuthDB) ReadAncients(fn func(ethdb.AncientReaderOp) error) error {
+	return d.db.ReadAncients(fn)
+}
+
+// the item to be appended in ancient store, with an auth tag
+type AncientItemWithTag struct {
+	item interface{}
+	tag  []byte
+}
+
+func NewAncientItemWithTag(kind string, number uint64, item interface{}, mac hash.Hash) (*AncientItemWithTag, error) {
+	var buf bytes.Buffer
+	if err := rlp.Encode(&buf, item); err != nil {
+		log.Error("failed to RLP encode", "err", err)
+		return nil, err
+	}
+
+	mac.Reset()
+	mac.Write([]byte(kind))
+	mac.Write(EncodeUint64(number))
+	mac.Write(buf.Bytes())
+	tag := mac.Sum(nil)
+	return &AncientItemWithTag{item: item, tag: tag}, nil
+}
+
+// Wrapping AncientWriteOp with auth tags injection
+type AuthAncientWriteOp struct {
+	inner ethdb.AncientWriteOp
+	mac   hash.Hash
+}
+
+// tag = HMAC(kind || number || rlp.Encode(item)),
+// actual appended/persisted item is AncientItemWithTag
+// we first RLP encode the item when computing the tag because we don't know its exact type
+func (op AuthAncientWriteOp) Append(kind string, number uint64, item interface{}) error {
+	authItem, err := NewAncientItemWithTag(kind, number, item, op.mac)
+	if err != nil {
+		return err
+	}
+	return op.inner.Append(kind, number, authItem)
+}
+
+// tag = HMAC(kind || number || item)
+// actual appended/persisted item is (item || tag)
+func (op AuthAncientWriteOp) AppendRaw(kind string, number uint64, item []byte) error {
+	op.mac.Reset()
+	op.mac.Write([]byte(kind))
+	op.mac.Write(EncodeUint64(number))
+	op.mac.Write(item)
+	tag := op.mac.Sum(nil)
+
+	return op.inner.AppendRaw(kind, number, append(item, tag...))
+}
+
+func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
+	authFn := func(op ethdb.AncientWriteOp) error {
+		authOp := AuthAncientWriteOp{
+			inner: op,
+			mac:   d.mac,
+		}
+		return fn(authOp)
+	}
+	return d.db.ModifyAncients(authFn)
 }
 
 func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
@@ -85,6 +225,18 @@ func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
 
 func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
 	return d.db.TruncateTail(n)
+}
+
+func (d *AuthDB) Sync() error {
+	return d.db.Sync()
+}
+
+func (d *AuthDB) AncientDatadir() (string, error) {
+	return d.db.AncientDatadir()
+}
+
+func (d *AuthDB) Stat() (string, error) {
+	return d.db.Stat()
 }
 
 func (d *AuthDB) Close() error {
@@ -133,10 +285,10 @@ func (d *AuthDB) Put(key []byte, value []byte) error {
 	}
 
 	// add auth tags to every entry
+	d.mac.Reset()
 	d.mac.Write(key)
 	d.mac.Write(value)
 	tag := d.mac.Sum(nil)
-	d.mac.Reset()
 
 	err = d.db.Put(genericAuthTagKey(key), tag)
 	if err != nil {
@@ -174,10 +326,7 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	d.mac.Write(key)
-	d.mac.Write(val)
-	tag := d.mac.Sum(nil)
-	d.mac.Reset()
+	tag := d.computeMac(key, val)
 
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
@@ -198,9 +347,8 @@ type AuthIterator struct {
 	db    *AuthDB
 }
 
-func NewAuthIterator(inner ethdb.Iterator, db ethdb.Database) AuthIterator {
-	authDB, _ := db.(*AuthDB)
-	return AuthIterator{inner: inner, db: authDB}
+func NewAuthIterator(inner ethdb.Iterator, db *AuthDB) AuthIterator {
+	return AuthIterator{inner: inner, db: db}
 }
 
 func (it *AuthIterator) Next() bool {
@@ -225,20 +373,17 @@ func (it *AuthIterator) Key() []byte {
 func (it *AuthIterator) Value() []byte {
 	key := it.Key()
 	val := it.inner.Value()
-	if it.db.mac == nil || !bytes.HasSuffix(key, genericAuthTagSuffix) {
+	if it.db.mac == nil {
 		return val
 	}
 
-	expectedTag, err := it.db.Get(genericAuthTagKey(key))
+	expectedTag, err := it.db.db.Get(genericAuthTagKey(key))
 	if err != nil {
 		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
 		return nil
 	}
 
-	it.db.mac.Write(key)
-	it.db.mac.Write(val)
-	tag := it.db.mac.Sum(nil)
-	it.db.mac.Reset()
+	tag := it.db.computeMac(key, val)
 
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
@@ -287,10 +432,7 @@ func (b *AuthBatch) Write() error {
 		// Add auth tags for each entry
 		for keyStr, value := range b.entries {
 			key := []byte(keyStr)
-			b.authDB.mac.Write(key)
-			b.authDB.mac.Write(value)
-			tag := b.authDB.mac.Sum(nil)
-			b.authDB.mac.Reset()
+			tag := b.authDB.computeMac(key, value)
 
 			if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
 				return fmt.Errorf("failed to put auth tag for key %s: %w", keyStr, err)

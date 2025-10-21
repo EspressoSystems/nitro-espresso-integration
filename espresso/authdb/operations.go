@@ -105,7 +105,7 @@ func ReadInitAddresses(db ethdb.KeyValueReader) ([]common.Address, error) {
 		return nil, fmt.Errorf("failed to get init addrs: %w", err)
 	}
 
-	addrs := []common.Address{}
+	var addrs []common.Address
 	err = rlp.DecodeBytes(addrsBytes, &addrs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode addrs: %w", err)
