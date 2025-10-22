@@ -226,8 +226,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
-	// as of 02/10/2025 there has never been an sgx TEE Caff Node that would want to use this function,
-	// Therefore we can hard code espressotee.BatchPoster
+	// as of 02/10/2025 there has never been an sgx TEE Caff Node that has signed a transaction meant to be checked by the verify function.
+	// Therefore we can hard code espressotee.BatchPoster as we will only ever need to check batch poster pcr0 values
+	// to verify the signature on messages.
 	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature, espressotee.BatchPoster)
 	if err == nil {
 		return nil
