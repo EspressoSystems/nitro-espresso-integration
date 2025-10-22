@@ -105,7 +105,7 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
+func loadPrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -125,6 +125,15 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 		return nil, fmt.Errorf("failed to get attested private key: %w", err)
 	}
 
+	return privateKey, nil
+}
+
+func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
+	privateKey, err := loadPrivateKey(attestationsPath)
+	if err != nil {
+		return nil, err
+	}
+
 	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
 	if err != nil || publicKey == nil {
 		return nil, fmt.Errorf("failed to get attested public key: %w", err)
@@ -134,48 +143,37 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 	return &publicKeyAddress, nil
 }
 
-// Use HKDF to derive HMAC key from attested private key (as the pseudo random key)
+// DeriveHmac derives an HMAC from the attested private key using HKDF.
 func DeriveHmac(attestationsPath string) (hash.Hash, error) {
-	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
+	privateKey, err := loadPrivateKey(attestationsPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
-	}
-	privateKey, err := GetAttestedPrivateKey(awsConfig, kmsKeyID, attestationsPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get attested private key: %w", err)
+		return nil, err
 	}
 
-	// underlying hash function for HKDF and HMAC
+	return deriveHmac(privateKey), nil
+}
+
+func deriveHmac(privateKey *ecdsa.PrivateKey) hash.Hash {
 	hash := sha256.New
-	// non-secret info value
 	info := []byte("HMAC key derivation")
 
-	// derive HMAC key using HKDF (with nil salt)
 	hkdf := hkdf.New(hash, crypto.FromECDSA(privateKey), nil, info)
 	hmacKey := make([]byte, hash().Size())
 	if _, err := hkdf.Read(hmacKey); err != nil {
-		return nil, fmt.Errorf("failed to derive HMAC key using HKDF: %w", err)
+		panic(fmt.Sprintf("hkdf.Read failed: %v", err))
 	}
 
-	hmac := hmac.New(hash, hmacKey)
-	return hmac, nil
+	return hmac.New(hash, hmacKey)
 }
-
 func HmacForTest() (hash.Hash, error) {
 	hmacKey := []byte("testHmacKey")
 	return hmac.New(sha256.New, hmacKey), nil
 }
 
-// Safely pointer dereference
 func deref[T any](p *T) T {
 	if p != nil {
 		return *p
 	}
-	// Declares a variable of type T, initialized to its zero value
 	var zero T
 	return zero
 }
