@@ -257,7 +257,7 @@ func mainImpl() int {
 
 	var caffNodetxOpts *bind.TransactOpts
 
-	if nodeConfig.Node.EspressoCaffNode.Enable {
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
 		var key *ecdsa.PrivateKey
 		key, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
