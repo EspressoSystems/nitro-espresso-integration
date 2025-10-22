@@ -66,7 +66,7 @@ func NewEspressoKeyManager(
 	dataPoster *dataposter.DataPoster,
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
-	serviceTupe espressotee.ServiceType,
+	serviceType espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterServiceConfig,
 	userDataAttestationFile string,
 	quoteFile string,
@@ -83,7 +83,7 @@ func NewEspressoKeyManager(
 	}
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
 	// and if it is we can safely ignore a nil data signer.
-	if signerFunc == nil && teeType != espressotee.SGX {
+	if signerFunc == nil && serviceType != espressotee.CaffNode {
 		panic("DataSigner is nil")
 	}
 
