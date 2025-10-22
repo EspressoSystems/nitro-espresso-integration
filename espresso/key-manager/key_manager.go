@@ -256,10 +256,6 @@ func (k *EspressoKeyManager) RegisterService() error {
 	}
 }
 
-func (k *EspressoKeyManager) getAttestationQuoteForTests(userData []byte) ([]byte, error) {
-	return []byte{}, nil
-}
-
 // getAttestationQuote is a method that retrieves the attestation quote for the user data.
 // This function generates the attestation quote for the user data.
 // The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.

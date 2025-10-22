@@ -126,12 +126,11 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
-	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "Configures the type of espresso tee to use")
+	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
-	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -193,7 +192,7 @@ func NewEspressoCaffNode(
 	}
 	teeType, err := espressotee.FromString(configFetcher().EspressoTeeType)
 	if err != nil {
-		return nil, fmt.Errorf("Error parsing TEE type, %v", err)
+		return nil, fmt.Errorf("Error parsing TEE type, %w", err)
 	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
@@ -276,10 +275,6 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)
 	}
 	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
-
-	if err != nil {
-		return nil, fmt.Errorf("unsupported tee type in config: %w", err)
-	}
 
 	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 	if teeType == espresso_key_manager.NITRO {
