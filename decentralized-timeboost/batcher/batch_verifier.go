@@ -408,7 +408,7 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 			"key", hex.EncodeToString(pubKey),
 			"sequenceNumber", seqNum,
 			"from", prevMsgNum,
-			"to", *newMsgNum,
+			"to", newMsgNum,
 			"prevDelayed", delayedMsg,
 		)
 		return nil, fmt.Errorf("not leader for batch")

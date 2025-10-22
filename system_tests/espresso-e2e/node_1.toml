@@ -4,6 +4,7 @@ stamp = "/tmp/timeboost.1.stamp"
 [net.public]
 address = "node1:8010"
 http-api = "node1:8014"
+batch-poster-api = "http://localhost:8947"
 
 [net.internal]
 address = "node1:8013"
@@ -34,5 +35,6 @@ ws-url = "ws://host.docker.internal:8546/"
 
 [espresso]
 base-url = "http://espresso-dev-node:41000/v1/"
+builder-base-url = "http://espresso-dev-node:41000/v1/"
 websockets-base-url = "ws://espresso-dev-node:41000/v1/"
 max-transaction-size = 1048576

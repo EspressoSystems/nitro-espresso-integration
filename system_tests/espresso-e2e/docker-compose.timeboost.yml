@@ -44,7 +44,7 @@ services:
     networks:
       - nitro-timeboost
   espresso-dev-node:
-    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:20250826
+    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:20250910-patch1
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_BUILDER_PORT:$ESPRESSO_BUILDER_PORT"
