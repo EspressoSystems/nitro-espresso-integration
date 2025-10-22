@@ -1928,7 +1928,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
 			if batchPosition.HotShotBlockNumber > 0 {
-				log.Info("resetting", "count", batchPosition.MessageCount)
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
 			} else {
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
@@ -2800,7 +2799,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			logLevel = storageRaceEphemeralErrorHandler.LogLevel(err, logLevel)
 			logLevel = normalGasEstimationFailedEphemeralErrorHandler.LogLevel(err, logLevel)
 			logLevel = accumulatorNotFoundEphemeralErrorHandler.LogLevel(err, logLevel)
-			// logLevel("error posting batch", "err", err)
+			logLevel("error posting batch", "err", err)
 			batchPosterFailureCounter.Inc(1)
 			return b.config().ErrorDelay
 		} else if posted {
