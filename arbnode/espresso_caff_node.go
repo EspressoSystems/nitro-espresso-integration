@@ -49,7 +49,7 @@ type EspressoCaffNodeConfig struct {
 	RequiredBlockDepth            uint64                                    `koanf:"required-block-depth"`
 	BlocksToRead                  uint64                                    `koanf:"blocks-to-read"`
 	Dangerous                     DangerousCaffNodeConfig                   `koanf:"dangerous"`
-	EspressoRegisterServiceConfig espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-signer-config"`
+	EspressoRegisterServiceConfig espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
 	EspressoTeeType               string                                    `koanf:"espresso-tee-type"`
 
 	// SGX specific config, leave empty if not using SGX
@@ -287,7 +287,7 @@ func NewEspressoCaffNode(
 
 	var dataPoster *dataposter.DataPoster
 	var keyManager *espresso_key_manager.EspressoKeyManager
-	if teeType != espressotee.EMPTY {
+	if teeType != espressotee.EMPTY && teeType != espressotee.TESTS {
 		if txOptsCaffNode != nil {
 			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
 		}

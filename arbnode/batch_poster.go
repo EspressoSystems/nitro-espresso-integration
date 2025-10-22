@@ -209,7 +209,7 @@ type BatchPosterConfig struct {
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
 	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
-	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-signer-config"`
+	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
 	LightClientAddress               string                                    `koanf:"light-client-address"`
 	HotShotUrls                      []string                                  `koanf:"hotshot-urls"`
 	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`

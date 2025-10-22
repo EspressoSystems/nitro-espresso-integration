@@ -581,8 +581,8 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 
 	// start the node
 	log.Info("Starting the caff node initially")
-	// Start the caff node with a snapshot signer
-	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false, true)
+	// Start the caff node without a snapshot signer
+	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false, false)
 	Require(t, err)
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
