@@ -151,7 +151,39 @@ func (d *AuthDB) AncientSize(kind string) (uint64, error) {
 }
 
 func (d *AuthDB) ReadAncients(fn func(ethdb.AncientReaderOp) error) error {
-	return d.db.ReadAncients(fn)
+	return d.db.ReadAncients(func(op ethdb.AncientReaderOp) error {
+		return fn(&AuthAncientReaderOp{inner: op, authDB: d})
+	})
+}
+
+// AuthAncientReaderOp wraps AncientReaderOp to provide authenticated reads
+type AuthAncientReaderOp struct {
+	inner  ethdb.AncientReaderOp
+	authDB *AuthDB
+}
+
+func (op *AuthAncientReaderOp) HasAncient(kind string, number uint64) (bool, error) {
+	return op.authDB.HasAncient(kind, number)
+}
+
+func (op *AuthAncientReaderOp) Ancient(kind string, number uint64) ([]byte, error) {
+	return op.authDB.Ancient(kind, number)
+}
+
+func (op *AuthAncientReaderOp) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
+	return op.authDB.AncientRange(kind, start, count, maxBytes)
+}
+
+func (op *AuthAncientReaderOp) Ancients() (uint64, error) {
+	return op.authDB.Ancients()
+}
+
+func (op *AuthAncientReaderOp) Tail() (uint64, error) {
+	return op.authDB.Tail()
+}
+
+func (op *AuthAncientReaderOp) AncientSize(kind string) (uint64, error) {
+	return op.authDB.AncientSize(kind)
 }
 
 // the item to be appended in ancient store, with an auth tag
@@ -262,7 +294,21 @@ func (d *AuthDB) NewBatchWithSize(size int) ethdb.Batch {
 }
 
 func (d *AuthDB) WasmDataBase() (ethdb.KeyValueStore, uint32) {
-	return d.db.WasmDataBase()
+	innerDB, version := d.db.WasmDataBase()
+
+	switch v := innerDB.(type) {
+	case *AuthDB:
+		return v, version
+	case ethdb.Database:
+		authDB, err := NewAuthDB(v, d.mac)
+		if err != nil {
+			log.Crit("failed to create AuthDB for WasmDataBase", "err", err)
+		}
+		return &authDB, version
+	default:
+		log.Crit("WasmDataBase is not AuthDB, might violate auth integrity", "inner type", fmt.Sprintf("%T", innerDB))
+		return nil, 0
+	}
 }
 
 func (d *AuthDB) WasmTargets() []ethdb.WasmTarget {
@@ -396,24 +442,27 @@ func (it *AuthIterator) Release() {
 type AuthBatch struct {
 	inner  ethdb.Batch
 	authDB *AuthDB
-	// Track kv pairs for auth tag generation on write (inner's tracker is private)
-	entries map[string][]byte
 }
 
 // Put adds a key-value pair to the batch
 func (b *AuthBatch) Put(key []byte, value []byte) error {
-	if b.entries == nil {
-		b.entries = make(map[string][]byte)
+	if err := b.inner.Put(key, value); err != nil {
+		return err
 	}
-	b.entries[string(key)] = value
-	return b.inner.Put(key, value)
+
+	if b.authDB.mac != nil {
+		tag := b.authDB.computeMac(key, value)
+
+		if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
+			return fmt.Errorf("failed to put auth tag for key %s: %w", key, err)
+		}
+
+	}
+	return nil
 }
 
 // Delete marks a key for deletion in the batch
 func (b *AuthBatch) Delete(key []byte) error {
-	if b.entries != nil {
-		delete(b.entries, string(key))
-	}
 	return b.inner.Delete(key)
 }
 
@@ -422,26 +471,14 @@ func (b *AuthBatch) ValueSize() int {
 	return b.inner.ValueSize()
 }
 
-// Write commits the batch, adding auth tags for each entry if MAC is enabled
+// Write commits the batch
 func (b *AuthBatch) Write() error {
-	if b.authDB.mac != nil && b.entries != nil {
-		// Add auth tags for each entry
-		for keyStr, value := range b.entries {
-			key := []byte(keyStr)
-			tag := b.authDB.computeMac(key, value)
-
-			if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
-				return fmt.Errorf("failed to put auth tag for key %s: %w", keyStr, err)
-			}
-		}
-	}
 	return b.inner.Write()
 }
 
 // Reset clears the batch for reuse
 func (b *AuthBatch) Reset() {
 	b.inner.Reset()
-	b.entries = nil
 }
 
 // Replay replays the batch contents on another batch
@@ -449,26 +486,26 @@ func (b *AuthBatch) Replay(w ethdb.KeyValueWriter) error {
 	return b.inner.Replay(w)
 }
 
-// Get retrieves a value from the batch or underlying database
+// Get retrieves a value from the batch with authentication
 func (b *AuthBatch) Get(key []byte) ([]byte, error) {
-	// Check if this key was recently put in the batch
-	if b.entries != nil {
-		if value, exists := b.entries[string(key)]; exists {
-			return value, nil
-		}
+	val, err := b.authDB.db.Get(key)
+	if err != nil {
+		return nil, err
 	}
-	// Fall back to the underlying AuthDB
-	return b.authDB.Get(key)
-}
+	if b.authDB.mac == nil {
+		return val, nil
+	}
 
-// Has checks if a key exists in the batch or underlying database
-func (b *AuthBatch) Has(key []byte) (bool, error) {
-	// Check if this key was recently put in the batch
-	if b.entries != nil {
-		if _, exists := b.entries[string(key)]; exists {
-			return true, nil
-		}
+	expectedTag, err := b.authDB.db.Get(genericAuthTagKey(key))
+	if err != nil {
+		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
+		return nil, err
 	}
-	// Fall back to the underlying AuthDB
-	return b.authDB.Has(key)
+
+	tag := b.authDB.computeMac(key, val)
+	if !hmac.Equal(tag, expectedTag) {
+		log.Error("failed to authenticate", "key", key, "val", val)
+		return nil, fmt.Errorf("failed to authenticate body, key: %v, val: %d", key, val)
+	}
+	return val, nil
 }
