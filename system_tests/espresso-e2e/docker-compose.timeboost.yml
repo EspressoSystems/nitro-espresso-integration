@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:contract2
+    image: ghcr.io/espressosystems/timeboost:contract3
     command:
       [
         "/app/timeboost",
@@ -8,7 +8,7 @@ services:
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,rubusta=info
+      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
     ports:
       - "8000:8000"
       - "8004:8004"
@@ -22,7 +22,7 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:contract2
+    image: ghcr.io/espressosystems/timeboost:contract3
     command:
       [
         "/app/timeboost",
@@ -30,7 +30,7 @@ services:
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,rubusta=info
+      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
     ports:
       - "8010:8010"
       - "8014:8014"

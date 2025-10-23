@@ -1917,6 +1917,23 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("decoding batch position: %w", err)
 	}
 
+	if b.config().IsDecentralizedTimeboost {
+		id, err := b.espressoStreamer.TimeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
+		if err != nil {
+			return false, err
+		}
+		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+		if err != nil {
+			return false, err
+		}
+		// TODO: Fallback if leader fails to submit
+		leader := committee.Members[batchPosition.NextSeqNum%uint64(len(committee.Members))]
+		pubKey := b.batchVerifier.GetCompressedPubKey()
+		if !bytes.Equal(pubKey, leader.SigKey) {
+			return false, nil
+		}
+	}
+
 	dbBatchCount, err := b.inbox.GetBatchCount()
 	if err != nil {
 		log.Error("Error getting batch count", "err", err)
@@ -1929,11 +1946,13 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.espressoStreamer != nil {
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else if b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber() > 0 {
+				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()))
 			} else {
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
 			}
-			if b.espressoRestarting {
+			if b.espressoRestarting && !b.config().IsDecentralizedTimeboost {
 				cnt, err := b.streamer.GetMessageCount()
 				if err != nil {
 					return false, err

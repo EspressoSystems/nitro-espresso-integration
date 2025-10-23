@@ -106,7 +106,7 @@ func NewBatchVerifier(config BatchVerifierConfig) (*BatchVerifier, error) {
 	}, nil
 }
 
-func (v *BatchVerifier) getCompressedPubKey() []byte {
+func (v *BatchVerifier) GetCompressedPubKey() []byte {
 	return crypto.CompressPubkey(&v.privateKey.PublicKey)
 }
 
@@ -396,22 +396,13 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 	prevMsgNum *big.Int,
 	newMsgNum *big.Int,
 ) ([]byte, error) {
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+	id, err := timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return nil, err
 	}
-	leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
-	pubKey := v.getCompressedPubKey()
-	if !bytes.Equal(pubKey, leader.SigKey) {
-		log.Debug(
-			"batch not sent: not leader",
-			"key", hex.EncodeToString(pubKey),
-			"sequenceNumber", seqNum,
-			"from", prevMsgNum,
-			"to", newMsgNum,
-			"prevDelayed", delayedMsg,
-		)
-		return nil, fmt.Errorf("not leader for batch")
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+	if err != nil {
+		return nil, err
 	}
 
 	calldata, err := arguments.Pack(
@@ -451,24 +442,14 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 	newMsgNum *big.Int,
 	encodedBlobs []byte,
 ) ([]byte, error) {
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, 0)
+	id, err := timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return nil, err
 	}
-	leader := committee.Members[seqNum.Uint64()%uint64(len(committee.Members))]
-	pubKey := v.getCompressedPubKey()
-	if !bytes.Equal(pubKey, leader.SigKey) {
-		log.Debug(
-			"batch not sent: not leader",
-			"key", hex.EncodeToString(pubKey),
-			"sequenceNumber", seqNum,
-			"from", prevMsgNum,
-			"to", *newMsgNum,
-			"prevDelayed", delayedMsg,
-		)
-		return nil, fmt.Errorf("not leader for batch")
+	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+	if err != nil {
+		return nil, err
 	}
-
 	// We need to signed the encoded blobs, but send the message meta data for verification
 	// First construct calldata with encoded blobs to be signed
 	arguments, err := v.GetBlobAbiArguments()
