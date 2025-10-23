@@ -61,7 +61,7 @@ type BatcherAddrMonitor struct {
 	cachedAddresses []common.Address
 
 	updates []BatcherAddrUpdate
-	db      authdb.AuthDB
+	db      *authdb.AuthDB
 
 	// Init addresses are the addresses that were set as batcher when the rollup was deployed.
 	initAddresses []common.Address
@@ -75,7 +75,7 @@ type BatcherAddrMonitor struct {
 
 func NewBatcherAddrMonitor(
 	initAddresses []common.Address,
-	db authdb.AuthDB,
+	db *authdb.AuthDB,
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
 	deployAt uint64,
@@ -281,7 +281,7 @@ func (b *BatcherAddrMonitor) Store() error {
 
 func (b *BatcherAddrMonitor) Restore() error {
 
-	initAddresses, err := authdb.ReadInitAddresses(&b.db)
+	initAddresses, err := authdb.ReadInitAddresses(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get init addresses: %w, init addresses: %v", err, initAddresses)
 	}
@@ -289,13 +289,13 @@ func (b *BatcherAddrMonitor) Restore() error {
 		b.initAddresses = initAddresses
 	}
 
-	lastProcessedHeight, err := authdb.ReadLastProcessedHeight(&b.db)
+	lastProcessedHeight, err := authdb.ReadLastProcessedHeight(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get last processed height: %w", err)
 	}
 	b.lastProcessedParentHeight = lastProcessedHeight
 
-	eventsBytes, err := authdb.ReadEvents(&b.db)
+	eventsBytes, err := authdb.ReadEvents(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}

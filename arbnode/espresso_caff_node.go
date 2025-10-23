@@ -133,7 +133,7 @@ type EspressoCaffNode struct {
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
-	db            authdb.AuthDB
+	db            *authdb.AuthDB
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
@@ -153,7 +153,7 @@ func NewEspressoCaffNode(
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	db authdb.AuthDB,
+	db *authdb.AuthDB,
 	recordPerformance bool,
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
@@ -208,7 +208,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = authdb.ReadFromBlock(&db)
+		fromBlock, err = authdb.ReadFromBlock(db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -433,7 +433,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	var nextHotshotBlock uint64
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, err = authdb.ReadNextHotshotBlockNum(&n.db)
+		nextHotshotBlock, err = authdb.ReadNextHotshotBlockNum(n.db)
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}

@@ -21,7 +21,7 @@ func enforceAuthenticatedWriter(db ethdb.KeyValueWriter) error {
 	}
 }
 
-func enforceAuthenticatedReader(db ethdb.KeyValueReader) error {
+func enforceAuthenticatedReader(db any) error {
 	switch db.(type) {
 	case *AuthDB, *AuthBatch:
 		return nil
