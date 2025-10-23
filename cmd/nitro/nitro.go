@@ -478,9 +478,10 @@ func mainImpl() int {
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var err error
 		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC)
+			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, nodeConfig.Node.EspressoCaffNode.UseSnapshot)
 		} else {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, nil)
+			// Outside the tee, we need to remove tmac and also disable auth reads
+			authCaffDB, err = authdb.NewAuthDB(chainDb, nil, true)
 		}
 
 		if err != nil {

@@ -719,14 +719,14 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 	if withSnapshotSigner {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, false)
 		Require(t, err)
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
 			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, nil)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil, true)
 		Require(t, err)
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
@@ -750,7 +750,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
-func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
+func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool, useSnapshot bool) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
@@ -771,12 +771,12 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		teeHMAC, err := integrityattestation.GenerateHMAC()
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, useSnapshot)
 		Require(t, err)
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, nil)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil, false)
 		Require(t, err)
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
 		Require(t, err)

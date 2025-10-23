@@ -4,10 +4,17 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
+	"os"
+	"path"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/rogpeppe/go-internal/dirhash"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -151,4 +158,53 @@ func ParseHotShotPayload(payload []byte) (signature []byte, userDataHash []byte,
 	}
 
 	return signature, userDataHash, indices, messages, nil
+}
+
+var ignoreRE = []*regexp.Regexp{
+	regexp.MustCompile(`(^|/)LOCK$`),
+	regexp.MustCompile(`(^|/)FLOCK$`),
+	regexp.MustCompile(`(^|/)CURRENT(\.bak)?$`),
+	regexp.MustCompile(`(^|/)MANIFEST(-\d+)?$`),
+	regexp.MustCompile(`(^|/)OPTIONS(-\d+)?$`),
+	regexp.MustCompile(`(^|/)LOG(\.old)?$`),
+	regexp.MustCompile(`(^|/)\d{6}\.log$`),
+}
+
+func shouldIgnore(rel string) bool {
+	rel = strings.TrimPrefix(rel, "./")
+	rel = strings.TrimSuffix(rel, "/")
+	for _, re := range ignoreRE {
+		if re.MatchString(rel) {
+			return true
+		}
+		// also check just the base name for convenience
+		if re.MatchString(path.Base(rel)) {
+			return true
+		}
+	}
+	return false
+}
+
+func HashDirectory(root string) (string, error) {
+	files, err := dirhash.DirFiles(root, "")
+
+	if err != nil {
+		return "", err
+	}
+
+	// Exclude LOCK and FLOCK files
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		if shouldIgnore(f) {
+			continue
+		}
+		out = append(out, f)
+		// Print out all the files names and their sizes
+		log.Info("File names is:", f)
+	}
+
+	// Hash (h1: base64(SHA-256)) of file contents
+	return dirhash.Hash1(out, func(name string) (io.ReadCloser, error) {
+		return os.Open(filepath.Join(root, filepath.FromSlash(name)))
+	})
 }

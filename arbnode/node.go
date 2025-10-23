@@ -999,6 +999,7 @@ func getEspressoCaffNode(
 				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
+				stack.ResolvePath("l2chaindata"),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)
@@ -1591,9 +1592,6 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
-	if n.EspressoCaffNode != nil {
-		n.EspressoCaffNode.StopAndWait()
-	}
 
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
@@ -1619,9 +1617,7 @@ func (n *Node) StopAndWait() {
 		// Just stops the redis client (most other stuff was stopped earlier)
 		n.SeqCoordinator.StopAndWait()
 	}
-	if n.EspressoCaffNode != nil {
-		n.EspressoCaffNode.StopAndWait()
-	}
+
 	if n.SyncMonitor != nil {
 		n.SyncMonitor.StopAndWait()
 	}
@@ -1633,6 +1629,9 @@ func (n *Node) StopAndWait() {
 	}
 	if err := n.Stack.Close(); err != nil {
 		log.Error("error on stack close", "err", err)
+	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
 	}
 }
 

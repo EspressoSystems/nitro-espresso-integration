@@ -51,6 +51,7 @@ type EspressoCaffNodeConfig struct {
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
 	UseSnapshot             bool   `koanf:"use-snapshot"`
+	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -91,6 +92,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
 	EspressoTeeType:         "",
 	UseSnapshot:             false,
+	SnapshotChecksum:        "",
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -112,6 +114,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "Configures the type of espresso tee to use")
 	f.Bool(prefix+".use-snapshot", DefaultEspressoCaffNodeConfig.UseSnapshot, "Configures the caff node to use a snapshot of the state db")
+	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -144,7 +147,7 @@ type EspressoCaffNode struct {
 
 	batcherAddrMonitor *BatcherAddrMonitor
 	currentBlock       *types.Block
-	snapshotVerifier   *EspressoSnapshotHandler
+	snapshotHandler    *EspressoSnapshotHandler
 }
 
 func NewEspressoCaffNode(
@@ -159,6 +162,7 @@ func NewEspressoCaffNode(
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
 	httpPort int,
+	databaseRootDir string,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -242,7 +246,7 @@ func NewEspressoCaffNode(
 		fatalErrChan,
 	)
 
-	snapshotVerifier := NewEspressoSnapshotHandler(db)
+	snapshotHandler := NewEspressoSnapshotHandler(db, databaseRootDir, configFetcher().SnapshotChecksum)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -255,7 +259,7 @@ func NewEspressoCaffNode(
 		forceInclusionChecker: forceInclusionChecker,
 		stateChecker:          stateChecker,
 		batcherAddrMonitor:    batcherAddrMonitor,
-		snapshotVerifier:      snapshotVerifier,
+		snapshotHandler:       snapshotHandler,
 	}, nil
 }
 
@@ -391,8 +395,8 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		if n.configFetcher().EspressoTeeType == "" {
 			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
 		}
-
-		err := n.snapshotVerifier.Start(ctx)
+		log.Info("did I start the snapshot handler")
+		err := n.snapshotHandler.Start(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to start snapshot verifier: %w", err)
 		}
@@ -489,4 +493,5 @@ func (n *EspressoCaffNode) StopAndWait() {
 	n.delayedMessageFetcher.StopAndWait()
 	n.espressoStreamer.StopAndWait()
 	n.forceInclusionChecker.StopAndWait()
+	n.snapshotHandler.StopAndWait()
 }

@@ -540,7 +540,7 @@ func TestEspressoCaffNodeRestart(t *testing.T) {
 	Require(t, err)
 
 	time.Sleep(1 * time.Minute)
-	builderCaffNode.RestartCaffNode(t, false)
+	builderCaffNode.RestartCaffNode(t, false, false)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
 
@@ -590,10 +590,10 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	})
 	Require(t, err)
 
-	// start the node
-	time.Sleep(1 * time.Minute)
+	log.Info("Restarting the caff node initially")
 
-	builderCaffNode.RestartCaffNode(t, true)
+	builderCaffNode.nodeConfig.EspressoCaffNode.UseSnapshot = true
+	builderCaffNode.RestartCaffNode(t, true, true)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
 

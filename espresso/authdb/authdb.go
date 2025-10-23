@@ -31,20 +31,26 @@ type AuthDB struct {
 
 	// Tag freezer stores authentication tags in separate ancient store
 	tagFreezer *rawdb.Freezer
+
+	// isAuthReadsDisabled is a flag to disable auth reads
+	// Its used during initial bootstrapping to avoid reading auth tags so that we can
+	// add new tags using the new tmac key from a different enclave code
+	isAuthReadsDisabled bool
 }
 
-func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
-	return newAuthDBWithFreezerTables(db, mac, authTagTableNoSnappy)
+func NewAuthDB(db ethdb.Database, mac hash.Hash, isAuthReadsDisabled bool) (AuthDB, error) {
+	return newAuthDBWithFreezerTables(db, mac, authTagTableNoSnappy, isAuthReadsDisabled)
 }
 
-func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[string]bool) (AuthDB, error) {
+func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[string]bool, isAuthReadsDisabled bool) (AuthDB, error) {
 	if db == nil {
 		return AuthDB{}, errors.New("db is nil during authdb creation")
 	}
 
 	authDB := AuthDB{
-		Database: db,
-		mac:      mac,
+		Database:            db,
+		mac:                 mac,
+		isAuthReadsDisabled: isAuthReadsDisabled,
 	}
 
 	if mac == nil {
@@ -102,8 +108,33 @@ func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) [
 	return d.mac.Sum(nil)
 }
 
+func (d *AuthDB) verifyTag(key []byte, val []byte) bool {
+	if d.isAuthReadsDisabled {
+		// We return true because we don't want to fail the read operation
+		return true
+	}
+
+	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
+	if err != nil {
+		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
+		return false
+	}
+
+	tag := d.computeMac(key, val)
+	if d.isAuthReadsDisabled {
+		// We return true because we don't want to fail the read operation
+		return true
+	}
+
+	return !hmac.Equal(expectedTag, tag)
+}
+
 // verifyAncientTag reads the tag from the tag store and verifies it matches the data
 func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]byte, error) {
+	if d.isAuthReadsDisabled {
+		// We return true because we don't want to fail the read operation
+		return data, nil
+	}
 	// Get the corresponding tag table name
 	tagTable, ok := getTagTable(kind)
 	if !ok {
@@ -127,7 +158,6 @@ func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]by
 	if !hmac.Equal(expectedTag, storedTag) {
 		return nil, fmt.Errorf("%w: kind=%s number=%d", ErrAuthTagMismatch, kind, number)
 	}
-
 	return data, nil
 }
 
@@ -449,15 +479,7 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil, err
-	}
-
-	tag := d.computeMac(key, val)
-
-	if !hmac.Equal(tag, expectedTag) {
+	if !d.verifyTag(key, val) {
 		log.Error("failed to authenticate", "key", key, "val", val)
 		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
 	}
@@ -498,15 +520,7 @@ func (it *AuthIterator) Value() []byte {
 		return val
 	}
 
-	expectedTag, err := it.db.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil
-	}
-
-	tag := it.db.computeMac(key, val)
-
-	if !hmac.Equal(tag, expectedTag) {
+	if !it.db.verifyTag(key, val) {
 		log.Error("failed to authenticate", "key", key, "val", val)
 		return nil
 	}
@@ -546,14 +560,7 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := b.authDB.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil, err
-	}
-
-	tag := b.authDB.computeMac(key, val)
-	if !hmac.Equal(tag, expectedTag) {
+	if !b.authDB.verifyTag(key, val) {
 		log.Error("failed to authenticate", "key", key, "val", val)
 		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
 	}
@@ -570,7 +577,7 @@ func (d *AuthDB) InitAuthTags() error {
 		count     = 0
 	)
 
-	it := d.db.NewIterator(prefix, start)
+	it := d.NewIterator(prefix, start)
 	defer it.Release()
 
 	// For each key value pair in the database add an auth tag
@@ -579,7 +586,7 @@ func (d *AuthDB) InitAuthTags() error {
 		value := it.Value()
 		tag := d.computeMac(key, value)
 
-		if err := d.db.Put(genericAuthTagKey(key), tag); err != nil {
+		if err := d.Put(genericAuthTagKey(key), tag); err != nil {
 			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
 		}
 
@@ -612,10 +619,7 @@ func (d *AuthDB) InitAncientAuthTags() error {
 		if err != nil {
 			return fmt.Errorf("failed to read and modify chain ancients :%w", err)
 		}
-		err = d.readAndModifyStateAncients(blockNum)
-		if err != nil {
-			return fmt.Errorf("failed to read and modify state ancients :%w", err)
-		}
+
 		if time.Since(logged) > 8*time.Second {
 			log.Info("Added auth tags to the database", "count", blockNum, "elapsed", common.PrettyDuration(time.Since(startTime)))
 			logged = time.Now()
@@ -629,7 +633,7 @@ func (d *AuthDB) InitAncientAuthTags() error {
 func (d *AuthDB) readAndModifyChainAncients(blockNum uint64) error {
 	var hashData, blockBodyData, headerData, receiptData []byte
 	var err error
-	err = d.db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
+	err = d.ReadAncients(func(reader ethdb.AncientReaderOp) error {
 		hashData, err = reader.Ancient(rawdb.ChainFreezerHashTable, blockNum)
 		if err != nil {
 			return err
@@ -673,9 +677,4 @@ func (d *AuthDB) readAndModifyChainAncients(blockNum uint64) error {
 		return nil
 	})
 	return err
-}
-
-func (d *AuthDB) readAndModifyStateAncients(blockNum uint64) error {
-	// TODO: Implement this function, note state id is different from block number so we will have to think about that
-	return nil
 }
