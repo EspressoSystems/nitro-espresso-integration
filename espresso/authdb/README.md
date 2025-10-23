@@ -164,3 +164,38 @@ Several database operations remain unauthenticated by design:
 - **Maintenance operations:** `Sync()`, `Compact()`, `Close()` (operational, not data integrity)
 
 **Rationale:** These operations don't affect data integrity and authentication would add unnecessary overhead.
+
+### WASM Database (Stylus Compilation Cache)
+
+**Authentication Status:** **SKIPPED** - WASM DB operations are not authenticated.
+
+**Location:** The WASM database stores pre-compiled native machine code for Stylus smart contracts, accessible via `WasmStore()` in the wrapped database.
+
+**Directory Structure:**
+```
+<datadir>/
+├── chaindata/     # Main authenticated chain database
+└── wasm/          # Unauthenticated WASM compilation cache
+```
+
+**Why WASM DB is Persisted:**
+
+Stylus programs (WebAssembly smart contracts) are compiled to native machine code (ARM64/AMD64) when first activated on-chain. This compilation is computationally expensive, so compiled artifacts are cached to disk:
+
+1. **Contract Activation** (`arbos/programs/native.go`): When a Stylus contract is deployed/activated, WASM bytecode is compiled to native machine code for all configured targets (WAVM, ARM64, AMD64)
+2. **StateDB Tracking** (`statedb_arbitrum.go`): Compiled artifacts are tracked in `StateDB.arbExtraData.activatedWasms` during transaction execution
+3. **Block Commit** (`statedb.go:1418-1428`): On block commit, activated WASMs are persisted to the WASM DB via `WriteActivation()` to avoid recompilation
+4. **Cache Lookup** (`native.go:236-291`): On subsequent executions, `getLocalAsm()` checks StateDB → WASM DB → recompile as fallback
+
+**Security Rationale for Skipping Authentication:**
+
+WASM DB corruption affects **performance only, not correctness**:
+
+- **Fraud Proof Generation:** WASM compilation is part of fraud proof verification, but tampering only impacts efficiency (forces recompilation). The fraud proof system validates execution results, not compilation artifacts.
+- **Block Processing:** If WASM DB is corrupted/tampered:
+  - Node detects mismatch between stored `moduleHash` and recompiled hash
+  - Falls back to on-the-fly recompilation from on-chain WASM bytecode
+  - Execution results remain deterministic and verifiable
+- **No State Transition Impact:** WASM DB never participates in consensus-critical state transitions. The canonical state is always derived from on-chain WASM bytecode in `StateDB`, not from the compilation cache.
+
+**Trade-off:** Authenticating WASM DB would add significant overhead for minimal security benefit, as the system self-heals through recompilation and hash verification.
