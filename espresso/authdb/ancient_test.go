@@ -22,13 +22,13 @@ var whitelistedKinds = []string{
 // testAuthDB wraps AuthDB to dynamically map arbitrary test kinds to whitelisted kinds.
 // This is necessary since ancienttest.TestAncientSuite will call with kind = "a", "b", etc.
 type testAuthDB struct {
-	authdb  *AuthDB
+	*AuthDB // Embedded - inherits Ancients, Tail, Sync, TruncateHead, TruncateTail, Close, AncientDatadir
 	kindMap map[string]string
 }
 
 func newTestAuthDB(authdb *AuthDB) *testAuthDB {
 	t := &testAuthDB{
-		authdb:  authdb,
+		AuthDB:  authdb,
 		kindMap: make(map[string]string),
 	}
 	return t
@@ -49,16 +49,12 @@ func (t *testAuthDB) mapKind(testKind string) (string, bool) {
 	}
 }
 
-func (d *testAuthDB) AncientDatadir() (string, error) {
-	return d.authdb.AncientDatadir()
-}
-
 func (t *testAuthDB) HasAncient(kind string, number uint64) (bool, error) {
 	mapped, ok := t.mapKind(kind)
 	if !ok {
 		return false, nil
 	}
-	return t.authdb.HasAncient(mapped, number)
+	return t.AuthDB.HasAncient(mapped, number)
 }
 
 func (t *testAuthDB) Ancient(kind string, number uint64) ([]byte, error) {
@@ -66,7 +62,7 @@ func (t *testAuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown table %s", kind)
 	}
-	return t.authdb.Ancient(mapped, number)
+	return t.AuthDB.Ancient(mapped, number)
 }
 
 func (t *testAuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
@@ -74,7 +70,7 @@ func (t *testAuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([
 	if !ok {
 		return nil, fmt.Errorf("unknown table %s", kind)
 	}
-	return t.authdb.AncientRange(mapped, start, count, maxBytes)
+	return t.AuthDB.AncientRange(mapped, start, count, maxBytes)
 }
 
 func (t *testAuthDB) AncientSize(kind string) (uint64, error) {
@@ -82,48 +78,24 @@ func (t *testAuthDB) AncientSize(kind string) (uint64, error) {
 	if !ok {
 		return 0, fmt.Errorf("unknown table %s", kind)
 	}
-	return t.authdb.AncientSize(mapped)
-}
-
-func (t *testAuthDB) Ancients() (uint64, error) {
-	return t.authdb.Ancients()
-}
-
-func (t *testAuthDB) Tail() (uint64, error) {
-	return t.authdb.Tail()
-}
-
-func (t *testAuthDB) Sync() error {
-	return t.authdb.Sync()
-}
-
-func (t *testAuthDB) TruncateHead(n uint64) (uint64, error) {
-	return t.authdb.TruncateHead(n)
-}
-
-func (t *testAuthDB) TruncateTail(n uint64) (uint64, error) {
-	return t.authdb.TruncateTail(n)
-}
-
-func (t *testAuthDB) Close() error {
-	return t.authdb.Close()
+	return t.AuthDB.AncientSize(mapped)
 }
 
 func (t *testAuthDB) ReadAncients(fn func(ethdb.AncientReaderOp) error) error {
-	return t.authdb.ReadAncients(func(op ethdb.AncientReaderOp) error {
-		return fn(&testAncientReaderOp{inner: op, testdb: t})
+	return t.AuthDB.ReadAncients(func(op ethdb.AncientReaderOp) error {
+		return fn(&testAncientReaderOp{AncientReaderOp: op, testdb: t})
 	})
 }
 
 func (t *testAuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
-	return t.authdb.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-		return fn(&testAncientWriteOp{inner: op, testdb: t})
+	return t.AuthDB.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		return fn(&testAncientWriteOp{AncientWriteOp: op, testdb: t})
 	})
 }
 
 type testAncientReaderOp struct {
-	inner  ethdb.AncientReaderOp
-	testdb *testAuthDB
+	ethdb.AncientReaderOp // Embedded - inherits Ancients, Tail
+	testdb                *testAuthDB
 }
 
 func (op *testAncientReaderOp) HasAncient(kind string, number uint64) (bool, error) {
@@ -131,7 +103,7 @@ func (op *testAncientReaderOp) HasAncient(kind string, number uint64) (bool, err
 	if !ok {
 		return false, nil
 	}
-	return op.inner.HasAncient(mapped, number)
+	return op.AncientReaderOp.HasAncient(mapped, number)
 }
 
 func (op *testAncientReaderOp) Ancient(kind string, number uint64) ([]byte, error) {
@@ -139,7 +111,7 @@ func (op *testAncientReaderOp) Ancient(kind string, number uint64) ([]byte, erro
 	if !ok {
 		return nil, fmt.Errorf("unknown table %s", kind)
 	}
-	return op.inner.Ancient(mapped, number)
+	return op.AncientReaderOp.Ancient(mapped, number)
 }
 
 func (op *testAncientReaderOp) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
@@ -147,15 +119,7 @@ func (op *testAncientReaderOp) AncientRange(kind string, start, count, maxBytes 
 	if !ok {
 		return nil, fmt.Errorf("unknown table %s", kind)
 	}
-	return op.inner.AncientRange(mapped, start, count, maxBytes)
-}
-
-func (op *testAncientReaderOp) Ancients() (uint64, error) {
-	return op.inner.Ancients()
-}
-
-func (op *testAncientReaderOp) Tail() (uint64, error) {
-	return op.inner.Tail()
+	return op.AncientReaderOp.AncientRange(mapped, start, count, maxBytes)
 }
 
 func (op *testAncientReaderOp) AncientSize(kind string) (uint64, error) {
@@ -163,12 +127,12 @@ func (op *testAncientReaderOp) AncientSize(kind string) (uint64, error) {
 	if !ok {
 		return 0, fmt.Errorf("unknown table %s", kind)
 	}
-	return op.inner.AncientSize(mapped)
+	return op.AncientReaderOp.AncientSize(mapped)
 }
 
 type testAncientWriteOp struct {
-	inner  ethdb.AncientWriteOp
-	testdb *testAuthDB
+	ethdb.AncientWriteOp // Embedded - no pure pass-through methods, but cleaner interface
+	testdb               *testAuthDB
 }
 
 func (op *testAncientWriteOp) Append(kind string, number uint64, item interface{}) error {
@@ -176,7 +140,7 @@ func (op *testAncientWriteOp) Append(kind string, number uint64, item interface{
 	if !ok {
 		return fmt.Errorf("unknown table %s", kind)
 	}
-	return op.inner.Append(mapped, number, item)
+	return op.AncientWriteOp.Append(mapped, number, item)
 }
 
 func (op *testAncientWriteOp) AppendRaw(kind string, number uint64, item []byte) error {
@@ -184,7 +148,7 @@ func (op *testAncientWriteOp) AppendRaw(kind string, number uint64, item []byte)
 	if !ok {
 		return fmt.Errorf("unknown table %s", kind)
 	}
-	return op.inner.AppendRaw(mapped, number, item)
+	return op.AncientWriteOp.AppendRaw(mapped, number, item)
 }
 
 // testDatabase wraps KeyValueStore and Freezer for test purposes

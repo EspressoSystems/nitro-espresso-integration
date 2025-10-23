@@ -24,8 +24,8 @@ var (
 )
 
 type AuthDB struct {
-	db  ethdb.Database
-	mac hash.Hash // HMAC func or nil to disable authentication
+	ethdb.Database           // Embedded - inherits methods not needing authentication
+	mac            hash.Hash // HMAC func or nil to disable authentication
 
 	// Tag freezer stores authentication tags in separate ancient store
 	tagFreezer *rawdb.Freezer
@@ -41,8 +41,8 @@ func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[
 	}
 
 	authDB := AuthDB{
-		db:  db,
-		mac: mac,
+		Database: db,
+		mac:      mac,
 	}
 
 	if mac == nil {
@@ -78,14 +78,8 @@ func (d *AuthDB) computeMac(key []byte, val []byte) []byte {
 	return d.mac.Sum(nil)
 }
 
-// either in-memory check (e.g. Freezer) or delegated to `Ancient` (e.g. remotedb.Database),
-// thus safe to pass through
-func (d *AuthDB) HasAncient(kind string, number uint64) (bool, error) {
-	return d.db.HasAncient(kind, number)
-}
-
 func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
-	data, err := d.db.Ancient(kind, number)
+	data, err := d.Database.Ancient(kind, number)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +130,7 @@ func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]by
 }
 
 func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
-	raw, err := d.db.AncientRange(kind, start, count, maxBytes)
+	raw, err := d.Database.AncientRange(kind, start, count, maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -164,56 +158,18 @@ func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]b
 	return result, nil
 }
 
-// unauthenticated, but not security-sensitive
-func (d *AuthDB) Ancients() (uint64, error) {
-	return d.db.Ancients()
-}
-
-// unauthenticated, but not security-sensitive
-func (d *AuthDB) Tail() (uint64, error) {
-	return d.db.Tail()
-}
-
-// we don't change ancient size during `ModifyAncients`.
-// unauthenticated, but not security-sensitive
-func (d *AuthDB) AncientSize(kind string) (uint64, error) {
-	return d.db.AncientSize(kind)
-}
+// Ancients, Tail, AncientSize inherited from embedded Database - unauthenticated but not security-sensitive
 
 func (d *AuthDB) ReadAncients(fn func(ethdb.AncientReaderOp) error) error {
-	return d.db.ReadAncients(func(op ethdb.AncientReaderOp) error {
-		return fn(&AuthAncientReaderOp{inner: op, authDB: d})
+	return d.Database.ReadAncients(func(op ethdb.AncientReaderOp) error {
+		return fn(&AuthAncientReaderOp{AuthDB: d})
 	})
 }
 
 // AuthAncientReaderOp wraps AncientReaderOp to provide authenticated reads
+// Embedding authDB provides all methods automatically
 type AuthAncientReaderOp struct {
-	inner  ethdb.AncientReaderOp
-	authDB *AuthDB
-}
-
-func (op *AuthAncientReaderOp) HasAncient(kind string, number uint64) (bool, error) {
-	return op.authDB.HasAncient(kind, number)
-}
-
-func (op *AuthAncientReaderOp) Ancient(kind string, number uint64) ([]byte, error) {
-	return op.authDB.Ancient(kind, number)
-}
-
-func (op *AuthAncientReaderOp) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
-	return op.authDB.AncientRange(kind, start, count, maxBytes)
-}
-
-func (op *AuthAncientReaderOp) Ancients() (uint64, error) {
-	return op.authDB.Ancients()
-}
-
-func (op *AuthAncientReaderOp) Tail() (uint64, error) {
-	return op.authDB.Tail()
-}
-
-func (op *AuthAncientReaderOp) AncientSize(kind string) (uint64, error) {
-	return op.authDB.AncientSize(kind)
+	*AuthDB // Embedded - all ancient read methods delegated
 }
 
 // AuthAncientWriteOp wraps AncientWriteOp to write data and tags separately
@@ -312,14 +268,14 @@ func (op *AuthAncientWriteOp) writeTags() error {
 
 func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
 	if d.mac == nil {
-		return d.db.ModifyAncients(fn)
+		return d.Database.ModifyAncients(fn)
 	}
 
 	// Create our wrapper that collects tag writes
 	var authOp *AuthAncientWriteOp
 
 	// Execute main writes
-	writeSize, err := d.db.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+	writeSize, err := d.Database.ModifyAncients(func(op ethdb.AncientWriteOp) error {
 		authOp = &AuthAncientWriteOp{
 			inner:    op,
 			authDB:   d,
@@ -347,7 +303,7 @@ func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, err
 }
 
 func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
-	old, err := d.db.TruncateHead(n)
+	old, err := d.Database.TruncateHead(n)
 	if err != nil {
 		return old, err
 	}
@@ -369,7 +325,7 @@ func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
 }
 
 func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
-	old, err := d.db.TruncateTail(n)
+	old, err := d.Database.TruncateTail(n)
 	if err != nil {
 		return old, err
 	}
@@ -391,7 +347,7 @@ func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
 }
 
 func (d *AuthDB) Sync() error {
-	err := d.db.Sync()
+	err := d.Database.Sync()
 	if err != nil {
 		return err
 	}
@@ -406,13 +362,7 @@ func (d *AuthDB) Sync() error {
 	return nil
 }
 
-func (d *AuthDB) AncientDatadir() (string, error) {
-	return d.db.AncientDatadir()
-}
-
-func (d *AuthDB) Stat() (string, error) {
-	return d.db.Stat()
-}
+// AncientDatadir, Stat inherited from embedded Database
 
 func (d *AuthDB) Close() error {
 	var errs []error
@@ -426,7 +376,7 @@ func (d *AuthDB) Close() error {
 	}
 
 	// Close main DB
-	if err := d.db.Close(); err != nil {
+	if err := d.Database.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("main db close: %w", err))
 	}
 
@@ -436,40 +386,23 @@ func (d *AuthDB) Close() error {
 	return nil
 }
 
-func (d *AuthDB) Compact(start []byte, limit []byte) error {
-	return d.db.Compact(start, limit)
-}
-
-func (d *AuthDB) Delete(key []byte) error {
-	return d.db.Delete(key)
-}
-
-func (d *AuthDB) DeleteRange(start []byte, end []byte) error {
-	return d.db.DeleteRange(start, end)
-}
+// Compact, Delete, DeleteRange inherited from embedded ethdb.Database
 
 func (d *AuthDB) NewBatch() ethdb.Batch {
-	inner := d.db.NewBatch()
-	return &AuthBatch{inner: inner, authDB: d}
+	inner := d.Database.NewBatch()
+	return &AuthBatch{Batch: inner, authDB: d}
 }
 
 func (d *AuthDB) NewBatchWithSize(size int) ethdb.Batch {
-	inner := d.db.NewBatchWithSize(size)
-	return &AuthBatch{inner: inner, authDB: d}
+	inner := d.Database.NewBatchWithSize(size)
+	return &AuthBatch{Batch: inner, authDB: d}
 }
 
-// Directly pass through because WasmDB is mostly used during fraud game in-memory simulation, nothing persistent
-func (d *AuthDB) WasmDataBase() (ethdb.KeyValueStore, uint32) {
-	return d.db.WasmDataBase()
-}
-
-func (d *AuthDB) WasmTargets() []ethdb.WasmTarget {
-	return d.db.WasmTargets()
-}
+// WasmDataBase, WasmTargets inherited from embedded Database - pass through for in-memory fraud game simulation
 
 func (d *AuthDB) Put(key []byte, value []byte) error {
 	// Always store the actual data first
-	err := d.db.Put(key, value)
+	err := d.Database.Put(key, value)
 	if err != nil {
 		return err
 	}
@@ -484,7 +417,7 @@ func (d *AuthDB) Put(key []byte, value []byte) error {
 	d.mac.Write(value)
 	tag := d.mac.Sum(nil)
 
-	err = d.db.Put(genericAuthTagKey(key), tag)
+	err = d.Database.Put(genericAuthTagKey(key), tag)
 	if err != nil {
 		log.Crit("failed to write auth tag", "dbkey", key, "err", err)
 		return err
@@ -505,7 +438,7 @@ func (d *AuthDB) Has(key []byte) (bool, error) {
 }
 
 func (d *AuthDB) Get(key []byte) ([]byte, error) {
-	val, err := d.db.Get(key)
+	val, err := d.Database.Get(key)
 	if err != nil {
 		return nil, err
 	}
@@ -514,7 +447,7 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := d.db.Get(genericAuthTagKey(key))
+	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
 	if err != nil {
 		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
 		return nil, err
@@ -531,24 +464,24 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 }
 
 func (d *AuthDB) NewIterator(prefix []byte, start []byte) ethdb.Iterator {
-	inner := d.db.NewIterator(prefix, start)
+	inner := d.Database.NewIterator(prefix, start)
 	it := NewAuthIterator(inner, d)
 	return &it
 }
 
 type AuthIterator struct {
-	inner ethdb.Iterator
-	db    *AuthDB
+	ethdb.Iterator // Embedded - inherits Error, Key, Release
+	db             *AuthDB
 }
 
 func NewAuthIterator(inner ethdb.Iterator, db *AuthDB) AuthIterator {
-	return AuthIterator{inner: inner, db: db}
+	return AuthIterator{Iterator: inner, db: db}
 }
 
 func (it *AuthIterator) Next() bool {
-	for it.inner.Next() {
+	for it.Iterator.Next() {
 		// Skip auth tag keys that end with "-tag"
-		key := it.inner.Key()
+		key := it.Iterator.Key()
 		if !bytes.HasSuffix(key, genericAuthTagSuffix) {
 			return true
 		}
@@ -556,22 +489,14 @@ func (it *AuthIterator) Next() bool {
 	return false
 }
 
-func (it *AuthIterator) Error() error {
-	return it.inner.Error()
-}
-
-func (it *AuthIterator) Key() []byte {
-	return it.inner.Key()
-}
-
 func (it *AuthIterator) Value() []byte {
 	key := it.Key()
-	val := it.inner.Value()
+	val := it.Iterator.Value()
 	if it.db.mac == nil {
 		return val
 	}
 
-	expectedTag, err := it.db.db.Get(genericAuthTagKey(key))
+	expectedTag, err := it.db.Database.Get(genericAuthTagKey(key))
 	if err != nil {
 		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
 		return nil
@@ -586,26 +511,22 @@ func (it *AuthIterator) Value() []byte {
 	return val
 }
 
-func (it *AuthIterator) Release() {
-	it.inner.Release()
-}
-
 // AuthBatch wraps ethdb.Batch to provide authenticated batch operations
 type AuthBatch struct {
-	inner  ethdb.Batch
-	authDB *AuthDB
+	ethdb.Batch // Embedded - inherits Delete, ValueSize, Write, Reset, Replay
+	authDB      *AuthDB
 }
 
 // Put adds a key-value pair to the batch
 func (b *AuthBatch) Put(key []byte, value []byte) error {
-	if err := b.inner.Put(key, value); err != nil {
+	if err := b.Batch.Put(key, value); err != nil {
 		return err
 	}
 
 	if b.authDB.mac != nil {
 		tag := b.authDB.computeMac(key, value)
 
-		if err := b.inner.Put(genericAuthTagKey(key), tag); err != nil {
+		if err := b.Batch.Put(genericAuthTagKey(key), tag); err != nil {
 			return fmt.Errorf("failed to put auth tag for key %s: %w", key, err)
 		}
 
@@ -613,34 +534,9 @@ func (b *AuthBatch) Put(key []byte, value []byte) error {
 	return nil
 }
 
-// Delete marks a key for deletion in the batch
-func (b *AuthBatch) Delete(key []byte) error {
-	return b.inner.Delete(key)
-}
-
-// ValueSize returns the amount of data queued up for writing
-func (b *AuthBatch) ValueSize() int {
-	return b.inner.ValueSize()
-}
-
-// Write commits the batch
-func (b *AuthBatch) Write() error {
-	return b.inner.Write()
-}
-
-// Reset clears the batch for reuse
-func (b *AuthBatch) Reset() {
-	b.inner.Reset()
-}
-
-// Replay replays the batch contents on another batch
-func (b *AuthBatch) Replay(w ethdb.KeyValueWriter) error {
-	return b.inner.Replay(w)
-}
-
 // Get retrieves a value from the batch with authentication
 func (b *AuthBatch) Get(key []byte) ([]byte, error) {
-	val, err := b.authDB.db.Get(key)
+	val, err := b.authDB.Database.Get(key)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +544,7 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := b.authDB.db.Get(genericAuthTagKey(key))
+	expectedTag, err := b.authDB.Database.Get(genericAuthTagKey(key))
 	if err != nil {
 		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
 		return nil, err
