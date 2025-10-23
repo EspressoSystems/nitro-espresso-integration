@@ -202,7 +202,7 @@ func TestAuthDBAncientSuite(t *testing.T) {
 				tagTables[tagTable] = true // No snappy compression for tags
 			}
 		}
-		authDB, err := newAuthDBWithFreezerTables(db, mac, tagTables)
+		authDB, err := newAuthDBWithFreezerTables(db, mac, tagTables, false)
 		Require(t, err)
 
 		return newTestAuthDB(&authDB)
@@ -224,7 +224,7 @@ func TestAuthDBAncientSuiteNoAuth(t *testing.T) {
 		Require(t, err)
 		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
 
-		authDB, err := NewAuthDB(db, nil)
+		authDB, err := NewAuthDB(db, nil, false)
 		Require(t, err)
 		return &authDB
 	})

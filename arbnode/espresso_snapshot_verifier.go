@@ -70,9 +70,12 @@ func (s *EspressoSnapshotHandler) VerifySnapshot() error {
 
 func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
-	s.VerifySnapshot()
+	err := s.VerifySnapshot()
+	if err != nil {
+		return fmt.Errorf("failed to verify snapshot: %w", err)
+	}
 
-	err := s.db.InitAuthTags()
+	err = s.db.InitAuthTags()
 	if err != nil {
 		return fmt.Errorf("failed to add auth tags to the database: %w", err)
 	}

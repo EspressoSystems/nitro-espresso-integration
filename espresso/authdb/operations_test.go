@@ -68,7 +68,7 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 
 	hmac, err := integrityattestation.GenerateHMAC()
 	Require(t, err)
-	authdb, err := NewAuthDB(plainDB, hmac)
+	authdb, err := NewAuthDB(plainDB, hmac, false)
 	Require(t, err)
 	defer authdb.Close()
 
