@@ -55,7 +55,7 @@ type EspressoCaffNodeConfig struct {
 	// SGX specific config, leave empty if not using SGX
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
-	NFTVerifierAddr         string `koanf:"nft-verifier-addr"`
+	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
 
 	// Data poster config
 	DataPoster dataposter.DataPosterConfig `koanf:"data-poster"`
@@ -107,7 +107,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	EspressoRegisterServiceConfig: espressotee.DefaultEspressoRegisterServiceConfig,
 	UserDataAttestationFile:       "",
 	QuoteFile:                     "",
-	NFTVerifierAddr:               "",
+	EspressoTEEVerifierAddr:       "",
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 }
 
@@ -131,7 +131,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
-	f.String(prefix+".nft-verifier-addr", DefaultEspressoCaffNodeConfig.NFTVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chian NFT verification")
+	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -268,9 +268,9 @@ func NewEspressoCaffNode(
 
 	// Create a new EspressoKeyManager
 	// Get the EspressoTEEVerifier address from SequencerInbox contract
-	configAddress := configFetcher().NFTVerifierAddr
+	configAddress := configFetcher().EspressoTEEVerifierAddr
 	var espressoTEEVerifierAddress common.Address
-	// parse the nft tee verifier address from config if it exists, otherwise read from the sequencerInbox
+	// parse the espresso tee verifier address from config if it exists, otherwise read from the sequencerInbox
 	// Eventually we should only read from the SequencerInbox
 	if configAddress != "" && common.IsHexAddress(configAddress) {
 		espressoTEEVerifierAddress = common.HexToAddress(configAddress)
