@@ -52,11 +52,9 @@ func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[
 
 	// Determine ancient directory
 	ancientDir, err := db.AncientDatadir()
-	if err != nil {
-		return AuthDB{}, fmt.Errorf("failed to get ancient datadir: %w", err)
-	}
-	if ancientDir == "" {
-		return AuthDB{}, errors.New("ancient datadir is empty: cannot authenticate ancient data without persistent tag storage")
+	if err != nil || ancientDir == "" {
+		log.Warn("no/empty ancient datadir: skip authenticating ancient store")
+		return authDB, nil //nolint:nilerr
 	}
 
 	// Initialize tag freezer
@@ -64,7 +62,7 @@ func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[
 	// The freezer will handle file locks appropriately
 	tagFreezer, err := newAuthTagFreezerWithTables(ancientDir, false, tagTables)
 	if err != nil {
-		return AuthDB{}, fmt.Errorf("failed to initialize tag freezer: %w", err)
+		return authDB, fmt.Errorf("failed to initialize tag freezer: %w", err)
 	}
 	authDB.tagFreezer = tagFreezer
 
