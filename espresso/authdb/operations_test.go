@@ -11,9 +11,7 @@ import (
 func TestSecurityEnforcement(t *testing.T) {
 	// Create a plain memorydb (not AuthDB)
 	plainDB, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "testancient", "test", false)
-	if err != nil {
-		t.Fatalf("failed to create database: %v", err)
-	}
+	Require(t, err)
 	defer plainDB.Close()
 
 	// This should fail because plainDB is not *AuthDB or *AuthBatch
@@ -29,20 +27,14 @@ func TestSecurityEnforcement(t *testing.T) {
 
 	// Test with AuthDB - this should work
 	authDB, err := NewAuthDB(plainDB, nil)
-	if err != nil {
-		t.Fatalf("failed to create AuthDB: %v", err)
-	}
+	Require(t, err)
 
 	err = WriteNextHotshotBlockNum(&authDB, 123)
-	if err != nil {
-		t.Fatalf("expected no error with AuthDB, got %v", err)
-	}
+	Require(t, err)
 
 	// Verify it was stored correctly
 	value, err := ReadNextHotshotBlockNum(&authDB)
-	if err != nil {
-		t.Fatalf("failed to read value: %v", err)
-	}
+	Require(t, err)
 
 	if value != 123 {
 		t.Fatalf("expected value 123, got %d", value)

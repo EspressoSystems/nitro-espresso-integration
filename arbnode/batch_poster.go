@@ -622,7 +622,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			}
 			monitor := NewBatcherAddrMonitor(
 				initAddresses,
-				db,
+				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,

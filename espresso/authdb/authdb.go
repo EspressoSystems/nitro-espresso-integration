@@ -16,19 +16,60 @@ import (
 	"github.com/offchainlabs/nitro/util/dbutil"
 )
 
+var (
+	// ErrAuthTagMissing is returned when a tag cannot be found in the tag store
+	ErrAuthTagMissing = errors.New("authentication tag missing")
+	// ErrAuthTagMismatch is returned when a tag doesn't match the computed value
+	ErrAuthTagMismatch = errors.New("authentication tag mismatch")
+)
+
 type AuthDB struct {
 	db  ethdb.Database
 	mac hash.Hash // HMAC func or nil to disable authentication
+
+	// Tag freezer stores authentication tags in separate ancient store
+	tagFreezer *rawdb.Freezer
 }
 
 func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
+	return newAuthDBWithFreezerTables(db, mac, authTagTableNoSnappy)
+}
+
+func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[string]bool) (AuthDB, error) {
 	if db == nil {
-		return AuthDB{}, errors.New("db is nil")
+		return AuthDB{}, errors.New("db is nil during authdb creation")
 	}
+
+	authDB := AuthDB{
+		db:  db,
+		mac: mac,
+	}
+
 	if mac == nil {
 		log.Warn("new AuthDB with authentication disabled")
+		return authDB, nil
 	}
-	return AuthDB{db: db, mac: mac}, nil
+
+	// Determine ancient directory
+	ancientDir, err := db.AncientDatadir()
+	if err != nil {
+		return AuthDB{}, fmt.Errorf("failed to get ancient datadir: %w", err)
+	}
+	if ancientDir == "" {
+		return AuthDB{}, errors.New("ancient datadir is empty: cannot authenticate ancient data without persistent tag storage")
+	}
+
+	// Initialize tag freezer
+	// Note: We don't know if the DB is read-only from this interface
+	// The freezer will handle file locks appropriately
+	tagFreezer, err := newAuthTagFreezerWithTables(ancientDir, false, tagTables)
+	if err != nil {
+		return AuthDB{}, fmt.Errorf("failed to initialize tag freezer: %w", err)
+	}
+	authDB.tagFreezer = tagFreezer
+
+	log.Info("AuthDB initialized with tag freezer", "ancient_dir", ancientDir)
+	return authDB, nil
 }
 
 // computeMac computes HMAC for key-value pair
@@ -55,10 +96,10 @@ func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 		return data, nil
 	}
 
-	return d.authenticateAncientData(kind, number, data)
+	return d.verifyAncientTag(kind, number, data)
 }
 
-// computeMac computes HMAC for kind, number, and data
+// computeMacForAncient computes HMAC for kind, number, and data
 func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) []byte {
 	d.mac.Reset()
 	d.mac.Write([]byte(kind))
@@ -67,42 +108,33 @@ func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) [
 	return d.mac.Sum(nil)
 }
 
-// authenticateAncientData verifies authentication for ancient data
-func (d *AuthDB) authenticateAncientData(kind string, number uint64, data []byte) ([]byte, error) {
-	switch kind {
-	case rawdb.ChainFreezerHashTable:
-		dataSize := len(data) - d.mac.Size()
-		expectedTag := data[dataSize:]
-		actualData := data[:dataSize]
-
-		tag := d.computeMacForAncient(kind, number, actualData)
-		if !hmac.Equal(tag, expectedTag) {
-			return nil, fmt.Errorf("failed to verify auth tag for kind: %v, number: %v", kind, number)
-		}
-		return actualData, nil
-
-	case rawdb.ChainFreezerBodiesTable, rawdb.ChainFreezerHeaderTable, rawdb.ChainFreezerReceiptTable:
-		authItem := new(AncientItemWithTag)
-		if err := rlp.DecodeBytes(data, authItem); err != nil {
-			log.Error("invalid freezer rlp", "err", err)
-			return nil, err
-		}
-
-		var buf bytes.Buffer
-		if err := rlp.Encode(&buf, authItem.item); err != nil {
-			log.Error("failed to RLP encode", "err", err)
-			return nil, err
-		}
-
-		tag := d.computeMacForAncient(kind, number, buf.Bytes())
-		if !hmac.Equal(tag, authItem.tag) {
-			log.Error("auth tag mismatch in AncientItemWithTag")
-			return nil, fmt.Errorf("auth tag mismatch for AncientItemWithTag, kind: %v, number: %v", kind, number)
-		}
-		return buf.Bytes(), nil
-	default:
-		return nil, fmt.Errorf("unsupported chain freezer kind: %s", kind)
+// verifyAncientTag reads the tag from the tag store and verifies it matches the data
+func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]byte, error) {
+	// Get the corresponding tag table name
+	tagTable, ok := getTagTable(kind)
+	if !ok {
+		return nil, fmt.Errorf("%w: kind: %s", errors.ErrUnsupported, kind)
 	}
+
+	// Retrieve stored tag from tag freezer
+	if d.tagFreezer == nil {
+		return nil, errors.New("tag freezer not initialized")
+	}
+
+	storedTag, err := d.tagFreezer.Ancient(tagTable, number)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAuthTagMissing, err)
+	}
+
+	// Compute expected tag
+	expectedTag := d.computeMacForAncient(kind, number, data)
+
+	// Verify tag
+	if !hmac.Equal(expectedTag, storedTag) {
+		return nil, fmt.Errorf("%w: kind=%s number=%d", ErrAuthTagMismatch, kind, number)
+	}
+
+	return data, nil
 }
 
 func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
@@ -124,7 +156,7 @@ func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]b
 
 	for i, data := range raw {
 		number := start + uint64(i) // #nosec G115 - i is bounded by len(raw)
-		verifiedData, err := d.authenticateAncientData(kind, number, data)
+		verifiedData, err := d.verifyAncientTag(kind, number, data)
 		if err != nil {
 			return nil, err
 		}
@@ -186,77 +218,194 @@ func (op *AuthAncientReaderOp) AncientSize(kind string) (uint64, error) {
 	return op.authDB.AncientSize(kind)
 }
 
-// the item to be appended in ancient store, with an auth tag
-type AncientItemWithTag struct {
-	item interface{}
-	tag  []byte
-}
-
-func NewAncientItemWithTag(kind string, number uint64, item interface{}, mac hash.Hash) (*AncientItemWithTag, error) {
-	var buf bytes.Buffer
-	if err := rlp.Encode(&buf, item); err != nil {
-		log.Error("failed to RLP encode", "err", err)
-		return nil, err
-	}
-
-	mac.Reset()
-	mac.Write([]byte(kind))
-	mac.Write(EncodeUint64(number))
-	mac.Write(buf.Bytes())
-	tag := mac.Sum(nil)
-	return &AncientItemWithTag{item: item, tag: tag}, nil
-}
-
-// Wrapping AncientWriteOp with auth tags injection
+// AuthAncientWriteOp wraps AncientWriteOp to write data and tags separately
 type AuthAncientWriteOp struct {
-	inner ethdb.AncientWriteOp
-	mac   hash.Hash
+	inner    ethdb.AncientWriteOp
+	authDB   *AuthDB
+	tagBatch []tagWrite // Collect tag writes to apply after main writes
 }
 
-// tag = HMAC(kind || number || rlp.Encode(item)),
-// actual appended/persisted item is AncientItemWithTag
-// we first RLP encode the item when computing the tag because we don't know its exact type
-func (op AuthAncientWriteOp) Append(kind string, number uint64, item interface{}) error {
-	authItem, err := NewAncientItemWithTag(kind, number, item, op.mac)
-	if err != nil {
+type tagWrite struct {
+	kind   string
+	number uint64
+	tag    []byte
+}
+
+// Append writes structured data to main store and computes tag
+func (op *AuthAncientWriteOp) Append(kind string, number uint64, item interface{}) error {
+	// Write original data unchanged to main store
+	if err := op.inner.Append(kind, number, item); err != nil {
 		return err
 	}
-	return op.inner.Append(kind, number, authItem)
+
+	// If authentication disabled, we're done
+	if op.authDB.mac == nil {
+		return nil
+	}
+
+	// Compute tag over RLP-encoded item
+	var buf bytes.Buffer
+	if err := rlp.Encode(&buf, item); err != nil {
+		return fmt.Errorf("failed to RLP encode for tag: %w", err)
+	}
+
+	tag := op.authDB.computeMacForAncient(kind, number, buf.Bytes())
+
+	// Store tag write for later
+	op.tagBatch = append(op.tagBatch, tagWrite{
+		kind:   kind,
+		number: number,
+		tag:    tag,
+	})
+
+	return nil
 }
 
-// tag = HMAC(kind || number || item)
-// actual appended/persisted item is (item || tag)
-func (op AuthAncientWriteOp) AppendRaw(kind string, number uint64, item []byte) error {
-	op.mac.Reset()
-	op.mac.Write([]byte(kind))
-	op.mac.Write(EncodeUint64(number))
-	op.mac.Write(item)
-	tag := op.mac.Sum(nil)
+// AppendRaw writes raw data to main store and computes tag
+func (op *AuthAncientWriteOp) AppendRaw(kind string, number uint64, item []byte) error {
+	// Write original data unchanged to main store
+	if err := op.inner.AppendRaw(kind, number, item); err != nil {
+		return err
+	}
 
-	return op.inner.AppendRaw(kind, number, append(item, tag...))
+	// If authentication disabled, we're done
+	if op.authDB.mac == nil {
+		return nil
+	}
+
+	// Compute tag over raw bytes
+	tag := op.authDB.computeMacForAncient(kind, number, item)
+
+	// Store tag write for later
+	op.tagBatch = append(op.tagBatch, tagWrite{
+		kind:   kind,
+		number: number,
+		tag:    tag,
+	})
+
+	return nil
+}
+
+// writeTags writes all collected tags to the tag store
+func (op *AuthAncientWriteOp) writeTags() error {
+	if op.authDB.mac == nil || len(op.tagBatch) == 0 {
+		return nil
+	}
+
+	if op.authDB.tagFreezer == nil {
+		return errors.New("tag freezer not initialized")
+	}
+
+	// Write to tag freezer
+	_, err := op.authDB.tagFreezer.ModifyAncients(func(tagOp ethdb.AncientWriteOp) error {
+		for _, tw := range op.tagBatch {
+			tagTable, ok := getTagTable(tw.kind)
+			if !ok {
+				continue // Skip unsupported tables
+			}
+			if err := tagOp.AppendRaw(tagTable, tw.number, tw.tag); err != nil {
+				return fmt.Errorf("failed to write tag for %s#%d: %w", tw.kind, tw.number, err)
+			}
+		}
+		return nil
+	})
+	return err
 }
 
 func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, error) {
-	authFn := func(op ethdb.AncientWriteOp) error {
-		authOp := AuthAncientWriteOp{
-			inner: op,
-			mac:   d.mac,
+	if d.mac == nil {
+		return d.db.ModifyAncients(fn)
+	}
+
+	// Create our wrapper that collects tag writes
+	var authOp *AuthAncientWriteOp
+
+	// Execute main writes
+	writeSize, err := d.db.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+		authOp = &AuthAncientWriteOp{
+			inner:    op,
+			authDB:   d,
+			tagBatch: make([]tagWrite, 0),
 		}
 		return fn(authOp)
+	})
+
+	// Main write failed - don't write tags
+	if err != nil {
+		return writeSize, err
 	}
-	return d.db.ModifyAncients(authFn)
+
+	// Main writes succeeded - now write tags
+	if authOp != nil {
+		if tagErr := authOp.writeTags(); tagErr != nil {
+			// Future reads will fail verification
+			log.Crit("Failed to write authentication tags after successful main write",
+				"error", tagErr, "writes", len(authOp.tagBatch))
+			return writeSize, fmt.Errorf("tag write failed: %w", tagErr)
+		}
+	}
+
+	return writeSize, nil
 }
 
 func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
-	return d.db.TruncateHead(n)
+	old, err := d.db.TruncateHead(n)
+	if err != nil {
+		return old, err
+	}
+
+	// Truncate tag freezer to match
+	if d.mac != nil && d.tagFreezer != nil {
+		// Truncate all tag tables to the same head, but only if they have data
+		for _, tagTable := range freezerTabletoTagTable {
+			// Check if table has any items before truncating
+			if items, _ := d.tagFreezer.Ancients(); items > 0 {
+				if _, tagErr := d.tagFreezer.TruncateHead(n); tagErr != nil {
+					log.Error("Failed to truncate tag freezer head", "table", tagTable, "n", n, "err", tagErr)
+				}
+			}
+		}
+	}
+
+	return old, nil
 }
 
 func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
-	return d.db.TruncateTail(n)
+	old, err := d.db.TruncateTail(n)
+	if err != nil {
+		return old, err
+	}
+
+	// Truncate tag freezer to match
+	if d.mac != nil && d.tagFreezer != nil {
+		// Truncate all tag tables to the same tail, but only if they have data
+		for _, tagTable := range freezerTabletoTagTable {
+			// Check if table has any items before truncating
+			if items, _ := d.tagFreezer.Ancients(); items > 0 {
+				if _, tagErr := d.tagFreezer.TruncateTail(n); tagErr != nil {
+					log.Error("Failed to truncate tag freezer tail", "table", tagTable, "n", n, "err", tagErr)
+				}
+			}
+		}
+	}
+
+	return old, nil
 }
 
 func (d *AuthDB) Sync() error {
-	return d.db.Sync()
+	err := d.db.Sync()
+	if err != nil {
+		return err
+	}
+
+	// Sync tag freezer
+	if d.tagFreezer != nil {
+		if tagErr := d.tagFreezer.Sync(); tagErr != nil {
+			return fmt.Errorf("failed to sync tag freezer: %w", tagErr)
+		}
+	}
+
+	return nil
 }
 
 func (d *AuthDB) AncientDatadir() (string, error) {
@@ -268,7 +417,25 @@ func (d *AuthDB) Stat() (string, error) {
 }
 
 func (d *AuthDB) Close() error {
-	return d.db.Close()
+	var errs []error
+
+	// Close tag freezer first
+	if d.tagFreezer != nil {
+		if err := d.tagFreezer.Close(); err != nil {
+			log.Error("Failed to close tag freezer", "err", err)
+			errs = append(errs, fmt.Errorf("tag freezer close: %w", err))
+		}
+	}
+
+	// Close main DB
+	if err := d.db.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("main db close: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("close errors: %v", errs)
+	}
+	return nil
 }
 
 func (d *AuthDB) Compact(start []byte, limit []byte) error {
@@ -293,22 +460,9 @@ func (d *AuthDB) NewBatchWithSize(size int) ethdb.Batch {
 	return &AuthBatch{inner: inner, authDB: d}
 }
 
+// Directly pass through because WasmDB is mostly used during fraud game in-memory simulation, nothing persistent
 func (d *AuthDB) WasmDataBase() (ethdb.KeyValueStore, uint32) {
-	innerDB, version := d.db.WasmDataBase()
-
-	switch v := innerDB.(type) {
-	case *AuthDB:
-		return v, version
-	case ethdb.Database:
-		authDB, err := NewAuthDB(v, d.mac)
-		if err != nil {
-			log.Crit("failed to create AuthDB for WasmDataBase", "err", err)
-		}
-		return &authDB, version
-	default:
-		log.Crit("WasmDataBase is not AuthDB, might violate auth integrity", "inner type", fmt.Sprintf("%T", innerDB))
-		return nil, 0
-	}
+	return d.db.WasmDataBase()
 }
 
 func (d *AuthDB) WasmTargets() []ethdb.WasmTarget {
@@ -372,7 +526,7 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("failed to authenticate body, key: %v, val: %d", key, val)
+		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
 	}
 
 	return val, nil
@@ -505,7 +659,7 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 	tag := b.authDB.computeMac(key, val)
 	if !hmac.Equal(tag, expectedTag) {
 		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("failed to authenticate body, key: %v, val: %d", key, val)
+		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
 	}
 	return val, nil
 }

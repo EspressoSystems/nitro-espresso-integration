@@ -993,7 +993,7 @@ func getEspressoCaffNode(
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				*caffDB,
+				caffDB,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
