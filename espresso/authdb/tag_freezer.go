@@ -22,13 +22,7 @@ func newAuthTagFreezerWithTables(ancientDir string, readonly bool, tables map[st
 		return nil, nil
 	}
 
-	// Construct tag freezer path
 	tagFreezerDir := filepath.Join(ancientDir, AuthTagFreezerName)
-
-	// Create the tag freezer with appropriate table configuration
-	// Use table size (100MB) much smaller than chain freezer (2GB) and disable snappy compression
-	// since HMAC tags are random data that doesn't compress well
-	const tagFreezerTableSize = 100 * 1000 * 1000
 	tagFreezer, err := rawdb.NewFreezer(
 		tagFreezerDir,
 		"authdb/tags",
