@@ -276,7 +276,7 @@ outer:
 					log.Debug("no blocks were created from processed delayed messages")
 					return madeBlock
 				}
-				log.Info("enqueueing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
+				log.Info("enqueuing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
 				s.timeboostBridge.EnqueueBlocksToTimeboost(protoBlocks)
 				return true
 			default:
@@ -431,8 +431,8 @@ outer:
 		// We dont want to delay by making an RPC call here as we want block creation to be fast, so just add it to a queue
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
-		if block.NumberU64()%200 == 0 {
-			log.Info("enqueueing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
+		if block.NumberU64()%100 == 0 {
+			log.Info("enqueuing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
 		}
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)

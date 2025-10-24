@@ -1195,10 +1195,15 @@ func (b *BatchPoster) getBatchPosterPosition(ctx context.Context, blockNum *big.
 			return nil, fmt.Errorf("error getting latest batch metadata: %w", err)
 		}
 	}
+	hotshotHeight := uint64(0)
+	if b.config().IsDecentralizedTimeboost && b.batchVerifier.LatestVerified != nil && b.batchVerifier.LatestVerified.MessageCount == prevBatchMeta.MessageCount {
+		hotshotHeight = b.batchVerifier.LatestVerified.HotshotHeight
+	}
 	return rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        prevBatchMeta.MessageCount,
 		DelayedMessageCount: prevBatchMeta.DelayedMessageCount,
 		NextSeqNum:          inboxBatchCount,
+		HotShotBlockNumber:  hotshotHeight,
 	})
 }
 
@@ -1946,8 +1951,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.espressoStreamer != nil {
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
-			} else if b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber() > 0 {
-				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()))
 			} else {
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
@@ -2624,6 +2627,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		batchPosition.MessageCount,
 		args,
 		encodedBlobs,
+		b.espressoStreamer,
 	); err != nil {
 		return nil, err
 	}

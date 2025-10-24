@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -168,7 +169,38 @@ func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos 
 	if messageIndex >= 0 {
 		return s.messageWithMetadataAndPos[messageIndex]
 	}
+	return nil
+}
 
+func (s *EspressoStreamer) VerifyConsecutivePositions(target uint64) *uint64 {
+	s.messageLock.Lock()
+	defer s.messageLock.Unlock()
+	expectedCount := target - s.currentMessagePos + 1
+	result := make(map[uint64]*MessageWithMetadataAndPos)
+
+	height := uint64(math.MaxUint64)
+	foundAll := false
+	// Go from current message position, and to the target, verify all positions are found
+	for _, m := range s.messageWithMetadataAndPos {
+		if m.Pos >= s.currentMessagePos && m.Pos <= target {
+			result[m.Pos] = m
+			if uint64(len(result)) == expectedCount {
+				foundAll = true
+			}
+		}
+		if m.Pos > target && m.HotshotHeight < height {
+			// it is possible a higher position was in earlier hotshot block
+			// this needs to be our min when we call `Reset()`
+			height = m.HotshotHeight
+		}
+	}
+	if foundAll {
+		// If a higher position was in earlier hotshot block, use that instead
+		if height < result[target].HotshotHeight {
+			return &height
+		}
+		return &result[target].HotshotHeight
+	}
 	return nil
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 )
 
@@ -54,9 +55,15 @@ type BatcherError struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
+type VerifiedInfo struct {
+	MessageCount  arbutil.MessageIndex
+	HotshotHeight uint64
+}
+
 type BatchVerifier struct {
-	privateKey *ecdsa.PrivateKey
-	client     *http.Client
+	privateKey     *ecdsa.PrivateKey
+	client         *http.Client
+	LatestVerified *VerifiedInfo
 }
 
 type BatchVerifierConfig struct {
@@ -106,15 +113,34 @@ func NewBatchVerifier(config BatchVerifierConfig) (*BatchVerifier, error) {
 	}, nil
 }
 
-func (v *BatchVerifier) GetCompressedPubKey() []byte {
-	return crypto.CompressPubkey(&v.privateKey.PublicKey)
+func (v *BatchVerifier) getAbiArguments() (abi.Arguments, error) {
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+	}
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
+	addressType, err := abi.NewType("address", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create address type: %w", err)
+	}
+	return abi.Arguments{
+		{Name: "sequencerNumber", Type: uint256Type},
+		{Name: "data", Type: bytesType},
+		{Name: "afterDelayedMessagesRead", Type: uint256Type},
+		{Name: "gasRefunder", Type: addressType},
+		{Name: "prevMessageCount", Type: uint256Type},
+		{Name: "newMessageCount", Type: uint256Type},
+	}, nil
 }
 
 func (v *BatchVerifier) sendBatchForVerification(
 	args *BatchPosterArgs,
 	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
 ) ([]byte, error) {
-	requiredQuorum := 2*(len(members)-1)/3 + 1
+	requiredQuorum := (2 * (len(members) - 1) / 3) + 1
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "batcher_submitBatch",
@@ -127,7 +153,14 @@ func (v *BatchVerifier) sendBatchForVerification(
 	}
 
 	var sigs [][]byte
+	// append our signature
+	v.adjustRecoveryByte(args.Signature)
+	sigs = append(sigs, args.Signature)
 	for _, member := range members {
+		if bytes.Equal(member.SigKey, v.GetCompressedPubKey()) {
+			// we created the batch, no need to send it to ourselves
+			continue
+		}
 		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return nil, fmt.Errorf("http request failed: %w", err)
@@ -164,25 +197,33 @@ func (v *BatchVerifier) sendBatchForVerification(
 			log.Error("failed to validate signature in the committee", "url", member.BatchPosterAddress)
 			continue
 		}
-		sigLength := len(rpcResponse.Result)
-		if sigLength > 0 {
-			// Get the last byte (v)
-			vIndex := sigLength - 1
-			v := rpcResponse.Result[vIndex]
-
-			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
-			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-			// https://github.com/ethereum/go-ethereum/issues/19751
-			if v == 0 || v == 1 {
-				rpcResponse.Result[vIndex] = v + 27
-			}
-		}
+		v.adjustRecoveryByte(rpcResponse.Result)
 		sigs = append(sigs, rpcResponse.Result)
 	}
 	if len(sigs) < requiredQuorum {
 		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, len(sigs))
 	}
 	return bytes.Join(sigs, nil), nil
+}
+
+func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
+	length := len(sig)
+	if length > 0 {
+		// Get the last byte (v)
+		vIndex := length - 1
+		v := sig[vIndex]
+
+		// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+		// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+		// https://github.com/ethereum/go-ethereum/issues/19751
+		if v == 0 || v == 1 {
+			sig[vIndex] = v + 27
+		}
+	}
+}
+
+func (v *BatchVerifier) GetCompressedPubKey() []byte {
+	return crypto.CompressPubkey(&v.privateKey.PublicKey)
 }
 
 func (v *BatchVerifier) HashBatchData(data []byte) []byte {
@@ -219,29 +260,6 @@ func (v *BatchVerifier) VerifySignatureOverHash(hash []byte, signature []byte, p
 	}
 
 	return nil
-}
-
-func (v *BatchVerifier) getAbiArguments() (abi.Arguments, error) {
-	bytesType, err := abi.NewType("bytes", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bytes type: %w", err)
-	}
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
-	}
-	addressType, err := abi.NewType("address", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create address type: %w", err)
-	}
-	return abi.Arguments{
-		{Name: "sequencerNumber", Type: uint256Type},
-		{Name: "data", Type: bytesType},
-		{Name: "afterDelayedMessagesRead", Type: uint256Type},
-		{Name: "gasRefunder", Type: addressType},
-		{Name: "prevMessageCount", Type: uint256Type},
-		{Name: "newMessageCount", Type: uint256Type},
-	}, nil
 }
 
 func (v *BatchVerifier) GetBlobAbiArguments() (abi.Arguments, error) {
@@ -329,6 +347,7 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	messageCount arbutil.MessageIndex,
 	args BatchPosterArgs,
 	encodedBlobs []byte,
+	streamer *espressostreamer.EspressoStreamer,
 ) error {
 	if signedData.SequencerNumber != seqNum {
 		return fmt.Errorf("failed to match seq num. got %d, wanted %d", signedData.SequencerNumber, seqNum)
@@ -338,6 +357,16 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	}
 	if signedData.PreviousMessageCount != messageCount {
 		return fmt.Errorf("failed to match previous message count. got %d, wanted %d", signedData.PreviousMessageCount, messageCount)
+	}
+
+	// We need to verify we have indeed received the transactions from espresso
+	hotshotHeight := streamer.VerifyConsecutivePositions(uint64(signedData.NewMessageCount - 1))
+	if hotshotHeight == nil {
+		return fmt.Errorf("failed to match new message data vs whats in streamer. wanted: %d", signedData.NewMessageCount)
+	}
+	v.LatestVerified = &VerifiedInfo{
+		MessageCount:  signedData.NewMessageCount,
+		HotshotHeight: *hotshotHeight,
 	}
 
 	var calldata []byte

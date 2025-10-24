@@ -8,7 +8,7 @@ services:
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
     ports:
       - "8000:8000"
       - "8004:8004"
@@ -30,7 +30,7 @@ services:
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
     ports:
       - "8010:8010"
       - "8014:8014"
