@@ -612,28 +612,15 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 }
 
 // InitAuthTags initializes auth tags for all keys in the database
-func (d *AuthDB) InitAuthTags() error {
-	var (
-		prefix    []byte
-		start     []byte
-		startTime = time.Now()
-		logged    = time.Now()
-		count     = 0
-	)
-
-	it := d.NewIterator(prefix, start)
-	defer it.Release()
-
-	// For each key value pair in the database add an auth tag
-	for it.Next() {
-		key := it.Key()
-		value := it.Value()
-		tag := d.computeMac(key, value)
-
-		if err := d.Put(genericAuthTagKey(key), tag); err != nil {
+func (d *AuthDB) InitAuthTagsDatabase(key [][]byte, value [][]byte) error {
+	count := 0
+	logged := time.Now()
+	startTime := time.Now()
+	for i := 0; i < len(key); i++ {
+		tag := d.computeMac(key[i], value[i])
+		if err := d.Put(genericAuthTagKey(key[i]), tag); err != nil {
 			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
 		}
-
 		count++
 		if time.Since(logged) > 8*time.Second {
 			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
@@ -644,81 +631,112 @@ func (d *AuthDB) InitAuthTags() error {
 	return nil
 }
 
-// InitAncientAuthTags initializes auth tags for all ancient data in the database
-func (d *AuthDB) InitAncientAuthTags() error {
-	firstBlockNumInAncients, err := d.Tail()
+func (d *AuthDB) InitAncientAuthTags(hashData [][]byte, blockBodyData [][]byte, headerData [][]byte, receiptData [][]byte) error {
+	startBlock, err := d.Tail()
 	if err != nil {
-		return fmt.Errorf("failed to read tail of ancients :%w", err)
-	}
-	lastBlockNumInAncients, err := d.Ancients()
-	if err != nil {
-		return fmt.Errorf("failed to read last block number in ancients :%w", err)
-	}
-	logged := time.Now()
-	startTime := time.Now()
-
-	blockNum := firstBlockNumInAncients
-	for blockNum <= lastBlockNumInAncients {
-		err := d.readAndModifyChainAncients(blockNum)
-		if err != nil {
-			return fmt.Errorf("failed to read and modify chain ancients :%w", err)
-		}
-
-		if time.Since(logged) > 8*time.Second {
-			log.Info("Added auth tags to the database", "count", blockNum, "elapsed", common.PrettyDuration(time.Since(startTime)))
-			logged = time.Now()
-		}
-		blockNum++
-	}
-
-	return nil
-}
-
-func (d *AuthDB) readAndModifyChainAncients(blockNum uint64) error {
-	var hashData, blockBodyData, headerData, receiptData []byte
-	var err error
-	err = d.ReadAncients(func(reader ethdb.AncientReaderOp) error {
-		hashData, err = reader.Ancient(rawdb.ChainFreezerHashTable, blockNum)
-		if err != nil {
-			return err
-		}
-		blockBodyData, err = reader.Ancient(rawdb.ChainFreezerBodiesTable, blockNum)
-		if err != nil {
-			return err
-		}
-		headerData, err = reader.Ancient(rawdb.ChainFreezerHeaderTable, blockNum)
-		if err != nil {
-			return err
-		}
-		receiptData, err = reader.Ancient(rawdb.ChainFreezerReceiptTable, blockNum)
-		if err != nil {
-			return err
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Error("Failed to read ancient data", "err", err)
 		return err
 	}
 
-	_, err = d.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-		if err := op.AppendRaw(rawdb.ChainFreezerHashTable, blockNum, hashData); err != nil {
-			return err
-		}
-		if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, blockNum, headerData); err != nil {
-			log.Error("Failed to append header data to auth db", "err", err)
-			return err
-		}
-		if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, blockNum, blockBodyData); err != nil {
-			log.Error("Failed to append block body data to auth db", "err", err)
-			return err
-		}
-		if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, blockNum, receiptData); err != nil {
-			log.Error("Failed to append receipt data to auth db", "err", err)
-			return err
-		}
-		return nil
-	})
+	lengthOfData := len(hashData)
+
+	// First verify that the length of all the data is the same
+	if lengthOfData != len(blockBodyData) || lengthOfData != len(headerData) || lengthOfData != len(receiptData) {
+		return fmt.Errorf("length of data is not the same")
+	}
+
+	for i := 0; i < lengthOfData; i++ {
+		_, err = d.ModifyAncients(func(op ethdb.AncientWriteOp) error {
+			if err := op.AppendRaw(rawdb.ChainFreezerHashTable, startBlock+uint64(i), hashData[i]); err != nil {
+				return err
+			}
+			if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, startBlock+uint64(i), headerData[i]); err != nil {
+				log.Error("Failed to append header data to auth db", "err", err)
+				return err
+			}
+			if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, startBlock+uint64(i), blockBodyData[i]); err != nil {
+				log.Error("Failed to append block body data to auth db", "err", err)
+				return err
+			}
+			if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, startBlock+uint64(i), receiptData[i]); err != nil {
+				log.Error("Failed to append receipt data to auth db", "err", err)
+				return err
+			}
+			return nil
+		})
+	}
 	return err
+}
+
+func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, error) {
+
+	hashTableSize, err := d.AncientSize(rawdb.ChainFreezerHashTable)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	log.Info("hashtablesize", "hashtablesize", hashTableSize)
+	hashData, err := d.AncientRange(rawdb.ChainFreezerHashTable, 1, hashTableSize, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	bodyTableSize, err := d.AncientSize(rawdb.ChainFreezerBodiesTable)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	log.Info("bodytablesize", "bodytablesize", bodyTableSize)
+	bodyData, err := d.AncientRange(rawdb.ChainFreezerBodiesTable, 1, bodyTableSize, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	receiptTableSize, err := d.AncientSize(rawdb.ChainFreezerReceiptTable)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	log.Info("receipttablesize", "receipttablesize", receiptTableSize)
+	receiptData, err := d.AncientRange(rawdb.ChainFreezerReceiptTable, 1, receiptTableSize, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	headerTableSize, err := d.AncientSize(rawdb.ChainFreezerHeaderTable)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	log.Info("headertablesize", "headertablesize", headerTableSize)
+	headerData, err := d.AncientRange(rawdb.ChainFreezerHeaderTable, 1, headerTableSize, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return hashData, bodyData, receiptData, headerData, nil
+}
+
+func (d *AuthDB) ReadDatabase() ([][]byte, [][]byte, error) {
+	var (
+		prefix    []byte
+		start     []byte
+		startTime = time.Now()
+		logged    = time.Now()
+		count     = 0
+		keys      [][]byte
+		values    [][]byte
+	)
+
+	it := d.NewIterator(prefix, start)
+	defer it.Release()
+
+	// For each key value pair in the database add an auth tag
+	for it.Next() {
+		key := it.Key()
+		value := it.Value()
+
+		keys = append(keys, key)
+		values = append(values, value)
+
+		count++
+		if time.Since(logged) > 8*time.Second {
+			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			logged = time.Now()
+		}
+
+	}
+	return keys, values, nil
 }

@@ -1627,12 +1627,13 @@ func (n *Node) StopAndWait() {
 	if n.ExecutionClient != nil {
 		n.ExecutionClient.StopAndWait()
 	}
-	if err := n.Stack.Close(); err != nil {
-		log.Error("error on stack close", "err", err)
-	}
 	if n.EspressoCaffNode != nil {
 		n.EspressoCaffNode.StopAndWait()
 	}
+	if err := n.Stack.Close(); err != nil {
+		log.Error("error on stack close", "err", err)
+	}
+
 }
 
 func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) containers.PromiseInterface[execution.InboxBatch] {
