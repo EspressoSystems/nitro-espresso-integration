@@ -99,8 +99,8 @@ func ReadInitAddresses(db ethdb.KeyValueReader) ([]common.Address, error) {
 	addrsBytes, err := db.Get(initAddressesKey)
 	if err != nil {
 		if dbutil.IsErrNotFound(err) {
-			// nolint:nilerr
-			return nil, nil
+			// on batcher monitor first run, there may be no init addrs, thus not found is fine
+			return nil, nil // nolint:nilerr
 		}
 		return nil, fmt.Errorf("failed to get init addrs: %w", err)
 	}
@@ -131,8 +131,8 @@ func ReadEvents(db ethdb.KeyValueReader) ([]byte, error) {
 	eventsBytes, err := db.Get(eventsKey)
 	if err != nil {
 		if dbutil.IsErrNotFound(err) {
-			// nolint:nilerr
-			return nil, nil
+			// Returning (nil, nil) is intentional: absence of events is not an error, but indicates no events have been stored yet.
+			return nil, nil // nolint:nilerr
 		}
 		return nil, fmt.Errorf("failed to get events: %w", err)
 	}

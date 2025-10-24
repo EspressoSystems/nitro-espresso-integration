@@ -38,6 +38,9 @@ const (
 	AuthTagReceiptTable = "tag-receipts" // Tags for ChainFreezerReceiptTable
 )
 
+// Use the same size limit chain freezer (2GB)
+const tagFreezerTableSize = 2 * 1000 * 1000 * 1000
+
 // authTagTableNoSnappy configures compression for tag tables.
 // Tags are random HMAC outputs that don't compress well.
 var authTagTableNoSnappy = map[string]bool{

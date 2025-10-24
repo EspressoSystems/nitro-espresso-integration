@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"hash"
-	"math"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -88,7 +87,10 @@ func (d *AuthDB) Ancient(kind string, number uint64) ([]byte, error) {
 		return data, nil
 	}
 
-	return d.verifyAncientTag(kind, number, data)
+	if err = d.verifyAncientTag(kind, number, data); err != nil {
+		return nil, err
+	}
+	return data, nil
 }
 
 // computeMacForAncient computes HMAC for kind, number, and data
@@ -101,21 +103,21 @@ func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) [
 }
 
 // verifyAncientTag reads the tag from the tag store and verifies it matches the data
-func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]byte, error) {
+func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) error {
 	// Get the corresponding tag table name
 	tagTable, ok := getTagTable(kind)
 	if !ok {
-		return nil, fmt.Errorf("%w: kind: %s", errors.ErrUnsupported, kind)
+		return fmt.Errorf("%w: unknown table kind: %s", errors.ErrUnsupported, kind)
 	}
 
 	// Retrieve stored tag from tag freezer
 	if d.tagFreezer == nil {
-		return nil, errors.New("tag freezer not initialized")
+		return errors.New("tag freezer not initialized")
 	}
 
 	storedTag, err := d.tagFreezer.Ancient(tagTable, number)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrAuthTagMissing, err)
+		return fmt.Errorf("%w: %w", ErrAuthTagMissing, err)
 	}
 
 	// Compute expected tag
@@ -123,39 +125,31 @@ func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) ([]by
 
 	// Verify tag
 	if !hmac.Equal(expectedTag, storedTag) {
-		return nil, fmt.Errorf("%w: kind=%s number=%d", ErrAuthTagMismatch, kind, number)
+		return fmt.Errorf("%w: kind=%s number=%d", ErrAuthTagMismatch, kind, number)
 	}
 
-	return data, nil
+	return nil
 }
 
 func (d *AuthDB) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
-	raw, err := d.Database.AncientRange(kind, start, count, maxBytes)
+	items, err := d.Database.AncientRange(kind, start, count, maxBytes)
 	if err != nil {
 		return nil, err
 	}
 
 	if d.mac == nil {
-		return raw, nil
+		return items, nil
 	}
 
-	// Verify authentication for each item
-	result := make([][]byte, len(raw))
-	// overflow check
-	if start > math.MaxUint64-uint64(len(raw)) {
-		return nil, fmt.Errorf("ancient range uint64 overflow: start %d, len %d", start, len(raw))
-	}
-
-	for i, data := range raw {
-		number := start + uint64(i) // #nosec G115 - i is bounded by len(raw)
-		verifiedData, err := d.verifyAncientTag(kind, number, data)
+	for i, data := range items {
+		// #nosec G115 -- i is guaranteed non-negative
+		err := d.verifyAncientTag(kind, start+uint64(i), data)
 		if err != nil {
 			return nil, err
 		}
-		result[i] = verifiedData
 	}
 
-	return result, nil
+	return items, nil
 }
 
 // Ancients, Tail, AncientSize inherited from embedded Database - unauthenticated but not security-sensitive
@@ -303,46 +297,95 @@ func (d *AuthDB) ModifyAncients(fn func(ethdb.AncientWriteOp) error) (int64, err
 }
 
 func (d *AuthDB) TruncateHead(n uint64) (uint64, error) {
+	// Truncate main database first
 	old, err := d.Database.TruncateHead(n)
 	if err != nil {
-		return old, err
+		return old, fmt.Errorf("failed to truncate main database head: %w", err)
 	}
 
-	// Truncate tag freezer to match
-	if d.mac != nil && d.tagFreezer != nil {
-		// Truncate all tag tables to the same head, but only if they have data
-		for _, tagTable := range freezerTabletoTagTable {
-			// Check if table has any items before truncating
-			if items, _ := d.tagFreezer.Ancients(); items > 0 {
-				if _, tagErr := d.tagFreezer.TruncateHead(n); tagErr != nil {
-					log.Error("Failed to truncate tag freezer head", "table", tagTable, "n", n, "err", tagErr)
-				}
-			}
-		}
+	// No tag freezer or auth disabled - nothing to sync
+	if d.mac == nil || d.tagFreezer == nil {
+		return old, nil
 	}
 
+	// Get current tag count
+	items, err := d.tagFreezer.Ancients()
+	if err != nil {
+		log.Crit("Failed to get tag freezer ancients count after main truncation",
+			"n", n, "error", err)
+		return old, fmt.Errorf("failed to get tag freezer ancients count: %w", err)
+	}
+
+	// Check for missing tags - database already corrupt
+	if items < n {
+		log.Crit("Tag freezer has fewer items than main database after truncation",
+			"tag_items", items, "data_items", n, "old", old)
+		return old, fmt.Errorf("tag count mismatch: have %d tags but %d data items", items, n)
+	}
+
+	// Already in sync
+	if items == n {
+		return old, nil
+	}
+
+	// Truncate excess tags
+	_, err = d.tagFreezer.TruncateHead(n)
+	if err != nil {
+		log.Crit("Failed to truncate tag freezer head after main truncation succeeded",
+			"n", n, "old", old, "error", err)
+		return old, fmt.Errorf("tag freezer truncate failed after main truncate: %w", err)
+	}
 	return old, nil
 }
 
 func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
+	// Truncate main database first
 	old, err := d.Database.TruncateTail(n)
 	if err != nil {
-		return old, err
+		return old, fmt.Errorf("failed to truncate main database tail: %w", err)
 	}
 
-	// Truncate tag freezer to match
-	if d.mac != nil && d.tagFreezer != nil {
-		// Truncate all tag tables to the same tail, but only if they have data
-		for _, tagTable := range freezerTabletoTagTable {
-			// Check if table has any items before truncating
-			if items, _ := d.tagFreezer.Ancients(); items > 0 {
-				if _, tagErr := d.tagFreezer.TruncateTail(n); tagErr != nil {
-					log.Error("Failed to truncate tag freezer tail", "table", tagTable, "n", n, "err", tagErr)
-				}
-			}
+	// No tag freezer or auth disabled - nothing to sync
+	if d.mac == nil || d.tagFreezer == nil {
+		return old, nil
+	}
+
+	// Get current tag state
+	items, err := d.tagFreezer.Ancients()
+	if err != nil {
+		log.Crit("Failed to get tag freezer ancients count after main truncation",
+			"n", n, "error", err)
+		return old, fmt.Errorf("failed to get tag freezer ancients count: %w", err)
+	}
+
+	tail, err := d.tagFreezer.Tail()
+	if err != nil {
+		log.Crit("Failed to get tag freezer tail after main truncation",
+			"n", n, "error", err)
+		return old, fmt.Errorf("failed to get tag freezer tail: %w", err)
+	}
+
+	// Tag tail ahead of requested position - database corrupt
+	if tail > n {
+		log.Crit("Tag freezer tail is ahead of main database after TruncateTail",
+			"tag_tail", tail, "requested_n", n, "old", old)
+		return old, fmt.Errorf("tag tail mismatch: tag_tail=%d > n=%d", tail, n)
+	}
+
+	// Already in sync
+	if tail == n {
+		return old, nil
+	}
+
+	// Truncate tail to match main database
+	if items > 0 {
+		_, err = d.tagFreezer.TruncateTail(n)
+		if err != nil {
+			log.Crit("Failed to truncate tag freezer tail after main truncation succeeded",
+				"n", n, "old", old, "error", err)
+			return old, fmt.Errorf("tag freezer truncate failed after main truncate: %w", err)
 		}
 	}
-
 	return old, nil
 }
 
