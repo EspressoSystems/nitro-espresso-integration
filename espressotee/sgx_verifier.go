@@ -5,19 +5,19 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
 type EspressoSGXVerifierInterface interface {
-	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (espressogen.EnclaveReport, error)
+	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte, serviceType ServiceType) (espressogen.EnclaveReport, error)
 }
 
 type EspressoSGXVerifier struct {
 	verifier *espressogen.IEspressoSGXTEEVerifier
 }
 
-func (v *EspressoSGXVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (espressogen.EnclaveReport, error) {
-	return v.verifier.Verify(opts, rawQuote, reportDataHash)
+func (v *EspressoSGXVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte, serviceType ServiceType) (espressogen.EnclaveReport, error) {
+	return v.verifier.Verify(opts, rawQuote, reportDataHash, uint8(serviceType))
 }
 
 func NewEspressoSGXVerifier(l1Client *ethclient.Client, addr common.Address) (*EspressoSGXVerifier, error) {

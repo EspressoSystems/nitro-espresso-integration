@@ -52,3 +52,5 @@
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
+	branch = release-tee-caff-node
+

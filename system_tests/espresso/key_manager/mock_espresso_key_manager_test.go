@@ -56,7 +56,7 @@ func ExampleNewMockEspressoKeyManager() {
 
 	{
 		// Sign SignHotShotPayload example
-		signature, err := km.SignHotShotPayload([]byte("hotshot payload"))
+		signature, err := km.SignPayload([]byte("hotshot payload"))
 		if err != nil {
 			panic(err)
 		}
