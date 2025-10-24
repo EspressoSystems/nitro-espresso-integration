@@ -114,6 +114,7 @@ type TestClient struct {
 	ConsensusNode *arbnode.Node
 	ExecNode      *gethexec.ExecutionNode
 	ClientWrapper *ClientWrapper
+	caffDB        *authdb.AuthDB
 
 	// having cleanup() field makes cleanup customizable from default cleanup methods after calling build
 	cleanup func()
@@ -539,7 +540,12 @@ func buildOnParentChain(
 	StartWatchChanErr(t, ctx, fatalErrChan, chainTestClient.ConsensusNode)
 
 	chainTestClient.ExecNode = getExecNode(t, chainTestClient.ConsensusNode)
-	chainTestClient.cleanup = func() { chainTestClient.ConsensusNode.StopAndWait() }
+	chainTestClient.cleanup = func() {
+		chainTestClient.ConsensusNode.StopAndWait()
+		if chainTestClient.Stack != nil {
+			chainTestClient.Stack.Close()
+		}
+	}
 
 	return chainTestClient
 }
@@ -685,7 +691,12 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
 	return func() { b.L2.cleanup() }
 }
 
@@ -723,6 +734,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 		Require(t, err)
 		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
 		Require(t, err)
+		b.L2.caffDB = &caffDB
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
 			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), &caffNodeTxopts)
@@ -730,6 +742,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 	} else {
 		caffDB, err := authdb.NewAuthDB(chainDb, nil)
 		Require(t, err)
+		b.L2.caffDB = &caffDB
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
 			l1Client, deployInfo, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
@@ -746,7 +759,12 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
 	b.addresses = existing.addresses
 	return func() { b.L2.cleanup() }, nil
 }
@@ -756,7 +774,28 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
-	b.L2.cleanup()
+	// Stop the consensus node first and wait for it to fully stop
+	b.L2.ConsensusNode.StopAndWait()
+	// Give extra time for all goroutines and background tasks to finish
+	time.Sleep(500 * time.Millisecond)
+	// Close caffDB explicitly to release tag freezer lock before closing stack
+	if b.L2.caffDB != nil {
+		if err := b.L2.caffDB.Close(); err != nil {
+			log.Warn("Error closing caffDB during restart", "err", err)
+		}
+		b.L2.caffDB = nil
+	}
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(500 * time.Millisecond)
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
 
@@ -769,6 +808,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	Require(t, err)
 
 	var currentNode *arbnode.Node
+	var caffDB *authdb.AuthDB
 	if withSnapshotSigner {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		teeHMAC, err := integrityattestation.GenerateHMAC()
@@ -794,7 +834,16 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.caffDB = caffDB
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if l2.caffDB != nil {
+			l2.caffDB.Close()
+		}
+		if stack != nil {
+			stack.Close()
+		}
+	}
 	l2.Stack = stack
 
 	b.L2 = l2
@@ -807,7 +856,21 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 		t.Fatalf("L2 was not created")
 	}
 	log.Info("L2 was created")
-	b.L2.cleanup()
+	// Stop the consensus node first and wait for it to fully stop
+	b.L2.ConsensusNode.StopAndWait()
+	// Give extra time for all goroutines and background tasks to finish
+	time.Sleep(500 * time.Millisecond)
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(1 * time.Second)
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
 
@@ -831,7 +894,12 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
 	l2.Stack = stack
 
 	b.L2 = l2
@@ -892,7 +960,9 @@ func build2ndNode(
 	testClient.Client, testClient.ConsensusNode =
 		Create2ndNodeWithConfig(t, ctx, firstNodeTestClient.ConsensusNode, parentChainTestClient.Stack, parentChainInfo, params.initData, params.nodeConfig, params.execConfig, params.stackConfig, valnodeConfig, params.addresses, initMessage, params.wasmCacheTag, params.useExecutionClientOnly)
 	testClient.ExecNode = getExecNode(t, testClient.ConsensusNode)
-	testClient.cleanup = func() { testClient.ConsensusNode.StopAndWait() }
+	testClient.cleanup = func() {
+		testClient.ConsensusNode.StopAndWait()
+	}
 	return testClient, func() { testClient.cleanup() }
 }
 

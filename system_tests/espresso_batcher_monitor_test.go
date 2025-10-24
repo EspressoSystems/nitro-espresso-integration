@@ -32,7 +32,7 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 
 	monitor := arbnode.NewBatcherAddrMonitor(
 		[]common.Address{},
-		authDB,
+		&authDB,
 		builder.L2.ConsensusNode.L1Reader,
 		seqInboxAddr,
 		builder.L2.ConsensusNode.DeployInfo.DeployedAt,

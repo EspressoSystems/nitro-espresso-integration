@@ -155,7 +155,7 @@ type EspressoCaffNode struct {
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
-	db            authdb.AuthDB
+	db            *authdb.AuthDB
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
@@ -177,7 +177,7 @@ func NewEspressoCaffNode(
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	db authdb.AuthDB,
+	db *authdb.AuthDB,
 	recordPerformance bool,
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
@@ -232,7 +232,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = db.AuthReadFromBlock()
+		fromBlock, err = authdb.ReadFromBlock(db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -431,7 +431,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	batch := n.db.NewBatch()
 
 	// Store hotshot block num with auth tag
-	if err := n.db.AuthWriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
+	if err := authdb.WriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
 		log.Error("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
 		return false
 	}
@@ -439,7 +439,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	// Store from block with signature if snapshot signer is configured
 	// fromBlock will only be stored when we process a delayed message
 	if fromBlock != 0 {
-		if err := n.db.AuthWriteFromBlock(batch, fromBlock); err != nil {
+		if err := authdb.WriteFromBlock(batch, fromBlock); err != nil {
 			log.Error("failed to store delayedMessageFetcherFromBlock and its auth tag", "err", err)
 			return false
 		}
@@ -519,7 +519,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	var nextHotshotBlock uint64
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, err = n.db.AuthReadNextHotshotBlockNum()
+		nextHotshotBlock, err = authdb.ReadNextHotshotBlockNum(n.db)
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}
