@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -207,4 +208,17 @@ func HashDirectory(root string) (string, error) {
 	return dirhash.Hash1(out, func(name string) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(root, filepath.FromSlash(name)))
 	})
+}
+
+func VerifySnapshot(snapshotChecksum string, l2chainDataDir string) error {
+	sha256Hash, err := HashDirectory(l2chainDataDir)
+	if err != nil {
+		return err
+	}
+	// Check if the snapshot hash matches the one in the config
+	if snapshotChecksum != sha256Hash {
+		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", snapshotChecksum, sha256Hash)
+	}
+	log.Info("Snapshot hash matches", "hash", sha256Hash)
+	return nil
 }

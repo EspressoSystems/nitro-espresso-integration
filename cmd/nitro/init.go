@@ -39,6 +39,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/pruning"
@@ -656,6 +657,18 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 			// we only want to continue if the database does not exist
 			return nil, nil, fmt.Errorf("Failed to open database: %w", err)
 		}
+	}
+
+	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config
+	if config.Node.EspressoCaffNode.UseSnapshot {
+		if config.Node.EspressoCaffNode.SnapshotChecksum == "" {
+			return nil, nil, errors.New("snapshot checksum should not be empty when UseSnapshot mode is enabled")
+		}
+		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
+		}
+		log.Info("Snapshot hash matches", "hash", config.Node.EspressoCaffNode.SnapshotChecksum)
 	}
 
 	// Check if database was misplaced in parent dir

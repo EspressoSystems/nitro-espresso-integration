@@ -999,7 +999,7 @@ func getEspressoCaffNode(
 				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
-				stack.ResolvePath("l2chaindata"),
+				stack.InstanceDir(),
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)

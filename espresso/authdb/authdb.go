@@ -612,13 +612,26 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 }
 
 // InitAuthTags initializes auth tags for all keys in the database
-func (d *AuthDB) InitAuthTagsDatabase(key [][]byte, value [][]byte) error {
-	count := 0
-	logged := time.Now()
-	startTime := time.Now()
-	for i := 0; i < len(key); i++ {
-		tag := d.computeMac(key[i], value[i])
-		if err := d.Put(genericAuthTagKey(key[i]), tag); err != nil {
+func (d *AuthDB) InitAuthTagsDatabase() error {
+	var (
+		prefix    []byte
+		start     []byte
+		startTime = time.Now()
+		logged    = time.Now()
+		count     = 0
+	)
+
+	it := d.NewIterator(prefix, start)
+	defer it.Release()
+
+	// For each key value pair in the database add an auth tag
+	for it.Next() {
+		key := it.Key()
+		value := it.Value()
+
+		// Only append the key and value if its part of a key we know from schema.go
+		tag := d.computeMac(key, value)
+		if err := d.Put(genericAuthTagKey(key), tag); err != nil {
 			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
 		}
 		count++
@@ -626,6 +639,7 @@ func (d *AuthDB) InitAuthTagsDatabase(key [][]byte, value [][]byte) error {
 			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
 			logged = time.Now()
 		}
+
 	}
 
 	return nil
@@ -674,7 +688,7 @@ func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, er
 		return nil, nil, nil, nil, err
 	}
 	log.Info("hashtablesize", "hashtablesize", hashTableSize)
-	hashData, err := d.AncientRange(rawdb.ChainFreezerHashTable, 1, hashTableSize, 0)
+	hashData, err := d.Database.AncientRange(rawdb.ChainFreezerHashTable, 0, hashTableSize, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -683,7 +697,7 @@ func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, er
 		return nil, nil, nil, nil, err
 	}
 	log.Info("bodytablesize", "bodytablesize", bodyTableSize)
-	bodyData, err := d.AncientRange(rawdb.ChainFreezerBodiesTable, 1, bodyTableSize, 0)
+	bodyData, err := d.Database.AncientRange(rawdb.ChainFreezerBodiesTable, 0, bodyTableSize, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -692,7 +706,7 @@ func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, er
 		return nil, nil, nil, nil, err
 	}
 	log.Info("receipttablesize", "receipttablesize", receiptTableSize)
-	receiptData, err := d.AncientRange(rawdb.ChainFreezerReceiptTable, 1, receiptTableSize, 0)
+	receiptData, err := d.Database.AncientRange(rawdb.ChainFreezerReceiptTable, 0, receiptTableSize, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -701,42 +715,10 @@ func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, er
 		return nil, nil, nil, nil, err
 	}
 	log.Info("headertablesize", "headertablesize", headerTableSize)
-	headerData, err := d.AncientRange(rawdb.ChainFreezerHeaderTable, 1, headerTableSize, 0)
+	headerData, err := d.Database.AncientRange(rawdb.ChainFreezerHeaderTable, 0, headerTableSize, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	return hashData, bodyData, receiptData, headerData, nil
-}
-
-func (d *AuthDB) ReadDatabase() ([][]byte, [][]byte, error) {
-	var (
-		prefix    []byte
-		start     []byte
-		startTime = time.Now()
-		logged    = time.Now()
-		count     = 0
-		keys      [][]byte
-		values    [][]byte
-	)
-
-	it := d.NewIterator(prefix, start)
-	defer it.Release()
-
-	// For each key value pair in the database add an auth tag
-	for it.Next() {
-		key := it.Key()
-		value := it.Value()
-
-		keys = append(keys, key)
-		values = append(values, value)
-
-		count++
-		if time.Since(logged) > 8*time.Second {
-			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
-			logged = time.Now()
-		}
-
-	}
-	return keys, values, nil
 }

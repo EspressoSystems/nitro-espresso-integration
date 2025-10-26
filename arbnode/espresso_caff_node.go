@@ -51,6 +51,7 @@ type EspressoCaffNodeConfig struct {
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
 	UseSnapshot             bool   `koanf:"use-snapshot"`
+	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 }
 
@@ -115,6 +116,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "Configures the type of espresso tee to use")
 	f.Bool(prefix+".use-snapshot", DefaultEspressoCaffNodeConfig.UseSnapshot, "Configures the caff node to use a snapshot of the state db")
 	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
+	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures the caff node to generate a snapshot of the state db")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -162,7 +164,7 @@ func NewEspressoCaffNode(
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
 	httpPort int,
-	databaseRootDir string,
+	databaseParentDir string,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -246,7 +248,7 @@ func NewEspressoCaffNode(
 		fatalErrChan,
 	)
 
-	snapshotHandler := NewEspressoSnapshotHandler(db, databaseRootDir, configFetcher().SnapshotChecksum)
+	snapshotHandler := NewEspressoSnapshotHandler(db, databaseParentDir, configFetcher().GenerateSnapshot)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -493,5 +495,4 @@ func (n *EspressoCaffNode) StopAndWait() {
 	n.delayedMessageFetcher.StopAndWait()
 	n.espressoStreamer.StopAndWait()
 	n.forceInclusionChecker.StopAndWait()
-	n.snapshotHandler.StopAndWait()
 }
