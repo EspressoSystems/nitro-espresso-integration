@@ -18,7 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
 type EspressoNitroTEEVerifierInterface interface {
@@ -27,14 +27,14 @@ type EspressoNitroTEEVerifierInterface interface {
 		certificate []byte,
 		parentCertHash [32]byte,
 		isCA bool,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) (common.Hash, error)
 	VerifyAttestationAndCertificates(
 		attestationBytes []byte,
 		dataPoster *dataposter.DataPoster,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) ([]byte, []byte, error)
-	IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error)
+	IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error)
 }
 
 type EspressoNitroTEEVerifier struct {
@@ -47,8 +47,15 @@ func NewEspressoNitroTEEVerifier(contract *espressogen.IEspressoNitroTEEVerifier
 	return &EspressoNitroTEEVerifier{contract: contract, l1Client: l1Client, address: nitroAddr}
 }
 
-func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
-	return e.contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash)
+func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error) {
+	switch serviceType {
+	case BatchPoster:
+		return e.contract.RegisteredBatchPosterEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
+	case CaffNode:
+		return e.contract.RegisteredCaffNodeEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
+	default:
+		return false, fmt.Errorf("Invalid service type for checking PCR0 hash registration")
+	}
 }
 
 /**
@@ -59,7 +66,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 	dataPoster *dataposter.DataPoster,
 	certificate []byte, parentCertHash [32]byte,
 	isCA bool,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) (common.Hash, error) {
 	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
@@ -162,7 +169,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	attestationBytes []byte,
 	dataPoster *dataposter.DataPoster,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) ([]byte, []byte, error) {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
@@ -189,7 +196,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	log.Info("successfully got attestation", "pcr0 hash", pcr0Hash)
 
 	// Before verifying certificates on chain, check if the pcr0 hash is registered to save gas
-	verified, err := e.IsPCR0HashRegistered(pcr0Hash)
+	verified, err := e.IsPCR0HashRegistered(pcr0Hash, BatchPoster) // Currently we only cxall this function with the batcher, this might change in the future.
 	if err != nil {
 		log.Error("failed to check if pcr0 hash is verified", "pcr0 hash", pcr0Hash)
 		return nil, nil, err
