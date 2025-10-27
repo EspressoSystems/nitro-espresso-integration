@@ -130,7 +130,7 @@ func (d *AuthDB) verifyTag(key []byte, val []byte) bool {
 		return true
 	}
 
-	return !hmac.Equal(expectedTag, tag)
+	return hmac.Equal(expectedTag, tag)
 }
 
 // verifyAncientTag reads the tag from the tag store and verifies it matches the data
