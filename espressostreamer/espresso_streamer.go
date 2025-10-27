@@ -13,6 +13,7 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -80,7 +81,7 @@ type EspressoStreamer struct {
 
 	batcherAddressesFetcher  func(l1Height uint64) []common.Address
 	isDecentralizedTimeboost bool
-	TimeboostKeyManager      *decentralizedtimeboostgen.KeyManager
+	committeeFetcher         func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error)
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -94,7 +95,7 @@ func NewEspressoStreamer(
 	batcherAddressesFetcher func(l1Height uint64) []common.Address,
 	retryTime time.Duration,
 	isDecentralizedTimeboost bool,
-	keyManager *decentralizedtimeboostgen.KeyManager,
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -112,7 +113,7 @@ func NewEspressoStreamer(
 		retryTime:                retryTime,
 		currentMessagePos:        1,
 		isDecentralizedTimeboost: isDecentralizedTimeboost,
-		TimeboostKeyManager:      keyManager,
+		committeeFetcher:         committeeFetcher,
 	}
 }
 
@@ -400,7 +401,7 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.TimeboostKeyManager)
+	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.committeeFetcher)
 	if err != nil {
 		return nil, err
 	}

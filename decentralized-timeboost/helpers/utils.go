@@ -81,7 +81,7 @@ func ParseTimeboostEspressoTransaction(
 	tx espressoTypes.Bytes,
 	l1Height uint64,
 	streamerCurrentPos uint64,
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
 ) ([]*DecentralizedTimeboostParsedMessage, error) {
 	var body decentralized_timeboost_types.Body
 	if err := cbor.Unmarshal(tx, &body); err != nil {
@@ -122,7 +122,7 @@ func ParseTimeboostEspressoTransaction(
 		}
 
 		// Validate the commitment against the committee signatures
-		committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
+		committee, err := committeeFetcher(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
 		if err != nil {
 			log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
 			continue

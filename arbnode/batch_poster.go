@@ -583,6 +583,17 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
+		var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
+		if opts.Config().IsDecentralizedTimeboost {
+			// TODO: This should read the address from sequencer inbox contract
+			decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress), opts.L1Reader.Client())
+			if err != nil {
+				return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
+			}
+		} else {
+			decentralizedTimeboostKeyManager = nil
+		}
+
 		// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
 		if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
 			hotShotClient, err := hotshotClient.NewMultipleNodesClient(hotShotUrls)
@@ -655,16 +666,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStartL1,
 			)
 
-			var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
-			if opts.Config().IsDecentralizedTimeboost {
-				// TODO: This should read the address from sequencer inbox contract
-				decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress), opts.L1Reader.Client())
-				if err != nil {
-					return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
-				}
-			} else {
-				decentralizedTimeboostKeyManager = nil
-			}
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
 				opts.ChainID,
 				opts.Config().HotShotBlock,
@@ -674,7 +675,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
 				opts.Config().IsDecentralizedTimeboost,
-				decentralizedTimeboostKeyManager,
+				decentralizedTimeboostKeyManager.GetCommitteeById,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor
@@ -752,7 +753,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		b.batchVerifier = nil
 		if opts.Config().IsDecentralizedTimeboost {
-			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(opts.Config().DecentralizedTimeboostBatchVerifier)
+			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(opts.Config().DecentralizedTimeboostBatchVerifier, decentralizedTimeboostKeyManager)
 			if err != nil {
 				return nil, err
 			}
@@ -1550,7 +1551,6 @@ func (b *BatchPoster) craftCalldata(
 	if b.config().IsDecentralizedTimeboost {
 		if useBlobs {
 			signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
-				b.espressoStreamer.TimeboostKeyManager,
 				seqNum,
 				l2MessageData,
 				new(big.Int).SetUint64(delayedMsg),
@@ -1564,7 +1564,6 @@ func (b *BatchPoster) craftCalldata(
 			}
 		} else {
 			signatures, err = b.batchVerifier.SignAndSendBatchIfLeader(
-				b.espressoStreamer.TimeboostKeyManager,
 				method.Inputs,
 				seqNum,
 				l2MessageData,
@@ -1923,18 +1922,12 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	if b.config().IsDecentralizedTimeboost {
-		id, err := b.espressoStreamer.TimeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
+		// TODO: Fallback if leader fails to post batch
+		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum)
 		if err != nil {
 			return false, err
 		}
-		committee, err := b.espressoStreamer.TimeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
-		if err != nil {
-			return false, err
-		}
-		// TODO: Fallback if leader fails to submit
-		leader := committee.Members[batchPosition.NextSeqNum%uint64(len(committee.Members))]
-		pubKey := b.batchVerifier.GetCompressedPubKey()
-		if !bytes.Equal(pubKey, leader.SigKey) {
+		if !leader {
 			return false, nil
 		}
 	}

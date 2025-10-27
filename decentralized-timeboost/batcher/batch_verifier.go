@@ -61,9 +61,10 @@ type VerifiedInfo struct {
 }
 
 type BatchVerifier struct {
-	privateKey     *ecdsa.PrivateKey
-	client         *http.Client
-	LatestVerified *VerifiedInfo
+	LatestVerified      *VerifiedInfo
+	privateKey          *ecdsa.PrivateKey
+	client              *http.Client
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager
 }
 
 type BatchVerifierConfig struct {
@@ -84,7 +85,7 @@ func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag
 	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
 }
 
-func NewBatchVerifier(config BatchVerifierConfig) (*BatchVerifier, error) {
+func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManger *decentralizedtimeboostgen.KeyManager) (*BatchVerifier, error) {
 	if len(config.PrivateKey) == 0 {
 		return nil, fmt.Errorf("decentralized timeboost private key must be set")
 	}
@@ -110,6 +111,7 @@ func NewBatchVerifier(config BatchVerifierConfig) (*BatchVerifier, error) {
 				},
 			},
 		},
+		timeboostKeyManager: timeboostKeyManger,
 	}, nil
 }
 
@@ -157,7 +159,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 	v.adjustRecoveryByte(args.Signature)
 	sigs = append(sigs, args.Signature)
 	for _, member := range members {
-		if bytes.Equal(member.SigKey, v.GetCompressedPubKey()) {
+		if bytes.Equal(member.SigKey, v.getCompressedPubKey()) {
 			// we created the batch, no need to send it to ourselves
 			continue
 		}
@@ -222,8 +224,27 @@ func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
 	}
 }
 
-func (v *BatchVerifier) GetCompressedPubKey() []byte {
+func (v *BatchVerifier) getCompressedPubKey() []byte {
 	return crypto.CompressPubkey(&v.privateKey.PublicKey)
+}
+
+func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
+	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
+	if err != nil {
+		return false, err
+	}
+	committee, err := v.timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+	if err != nil {
+		return false, err
+	}
+	// TODO: Fallback if leader fails to submit
+	leader := committee.Members[seqNum%uint64(len(committee.Members))]
+	pubKey := v.getCompressedPubKey()
+	if !bytes.Equal(pubKey, leader.SigKey) {
+		return false, nil
+	}
+
+	return true, nil
 }
 
 func (v *BatchVerifier) HashBatchData(data []byte) []byte {
@@ -416,7 +437,6 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 }
 
 func (v *BatchVerifier) SignAndSendBatchIfLeader(
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
 	arguments abi.Arguments,
 	seqNum *big.Int,
 	l2MessageData []byte,
@@ -425,11 +445,11 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 	prevMsgNum *big.Int,
 	newMsgNum *big.Int,
 ) ([]byte, error) {
-	id, err := timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
+	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return nil, err
 	}
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+	committee, err := v.timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
 	if err != nil {
 		return nil, err
 	}
@@ -462,7 +482,6 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 }
 
 func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
 	seqNum *big.Int,
 	l2MessageData []byte,
 	delayedMsg *big.Int,
@@ -471,11 +490,11 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 	newMsgNum *big.Int,
 	encodedBlobs []byte,
 ) ([]byte, error) {
-	id, err := timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
+	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return nil, err
 	}
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
+	committee, err := v.timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, id)
 	if err != nil {
 		return nil, err
 	}

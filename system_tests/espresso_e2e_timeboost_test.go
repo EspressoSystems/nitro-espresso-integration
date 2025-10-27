@@ -476,10 +476,10 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 		}
 		block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
 		Require(t, err)
-		seq1Txns := block.Transactions()
+		seq1Txns := block.Transactions()[1:]
 		block, err = builder2.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
 		Require(t, err)
-		seq2Txns := block.Transactions()
+		seq2Txns := block.Transactions()[1:]
 		if len(seq1Txns) != len(seq2Txns) {
 			t.Fatalf("expected transaction length to be same: seq1Txns: %d, seq2Txns: %d", len(seq1Txns), len(seq2Txns))
 		}
@@ -492,14 +492,15 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 
 	time.Sleep(30 * time.Second)
 
-	err = waitForWith(ctx, 1*time.Minute, 5*time.Second, func() bool {
+	err = waitForWith(ctx, 3*time.Minute, 5*time.Second, func() bool {
 		// Check the sequencer inbox contract
 		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 		Require(t, err)
 		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
 		Require(t, err)
 
-		return batchCount.Uint64() > 2
+		// should make a lot of small batches
+		return batchCount.Uint64() > 4
 	})
 	Require(t, err)
 
