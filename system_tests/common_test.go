@@ -729,7 +729,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
 	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
 
-	if existing.nodeConfig.EspressoCaffNode.UseSnapshot {
+	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		Require(t, err)
 		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, existing.nodeConfig.EspressoCaffNode.UseSnapshot)
@@ -767,7 +767,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
-func (b *NodeBuilder) RestartCaffNode(t *testing.T, withTMAC bool) {
+func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
@@ -802,7 +802,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withTMAC bool) {
 
 	var currentNode *arbnode.Node
 	var caffDB *authdb.AuthDB
-	if withTMAC {
+	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		teeHMAC, err := integrityattestation.GenerateHMAC()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())

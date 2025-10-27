@@ -490,7 +490,7 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
 	if n.configFetcher().UseSnapshot || n.configFetcher().GenerateSnapshot {
-		if n.configFetcher().EspressoTeeType == "" {
+		if n.configFetcher().EspressoTeeType == "" && n.configFetcher().UseSnapshot {
 			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
 		}
 		err := n.snapshotHandler.Start(ctx)

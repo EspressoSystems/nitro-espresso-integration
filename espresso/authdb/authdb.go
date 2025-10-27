@@ -698,6 +698,8 @@ func (d *AuthDB) InitAncientAuthTags() error {
 			return nil
 		})
 	}
+
+	log.Info("Successfully added auth tags to ancients")
 	return err
 }
 

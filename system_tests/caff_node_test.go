@@ -132,7 +132,6 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.EspressoCaffNode.FromBlock = 1
-	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
@@ -553,7 +552,7 @@ func TestEspressoCaffNodeRestart(t *testing.T) {
 	Require(t, err)
 
 	time.Sleep(1 * time.Minute)
-	builderCaffNode.RestartCaffNode(t, false)
+	builderCaffNode.RestartCaffNode(t)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
 
@@ -606,7 +605,7 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	// start the node
 	time.Sleep(1 * time.Minute)
 
-	builderCaffNode.RestartCaffNode(t, true)
+	builderCaffNode.RestartCaffNode(t)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
 
@@ -661,7 +660,7 @@ func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
 
 	// start the node
 	time.Sleep(1 * time.Minute)
-	builderCaffNode.RestartCaffNode(t, true)
+	builderCaffNode.RestartCaffNode(t)
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
 	Require(t, err)
