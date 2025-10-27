@@ -95,13 +95,9 @@ func createCaffNode(
 		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
 	}
 
-	if existing.nodeConfig.EspressoCaffNode.UseSnapshot {
-		nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
-	}
-	if existing.nodeConfig.EspressoCaffNode.GenerateSnapshot {
-		nodeConfig.EspressoCaffNode.GenerateSnapshot = true
-		nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
-	}
+	nodeConfig.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.EspressoCaffNode.EspressoTeeType
+	nodeConfig.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.EspressoCaffNode.GenerateSnapshot
+	nodeConfig.EspressoCaffNode.UseSnapshot = existing.nodeConfig.EspressoCaffNode.UseSnapshot
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
