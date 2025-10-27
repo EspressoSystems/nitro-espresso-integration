@@ -459,7 +459,6 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 			case <-headerchan:
 				err := b.Process(ctx)
 				if err != nil {
-					log.Error("failed to process", "err", err)
 					continue
 				}
 			}

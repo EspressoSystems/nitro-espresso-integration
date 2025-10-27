@@ -30,6 +30,7 @@ func createL1AndL2Node(
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 	builder.l2StackConfig.IPCPath = tmpPath(t, "test.ipc")
 	builder.useL1StackConfig = true
+	builder.useFreezer = true
 
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = true

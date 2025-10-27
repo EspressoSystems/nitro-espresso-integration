@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -18,46 +17,58 @@ type EspressoSnapshotHandler struct {
 	stopwaiter.StopWaiter
 	db               *authdb.AuthDB
 	parentChainDir   string
+	l2chainDataDir   string
+	useSnapshot      bool
 	generateSnapshot bool
 }
 
-func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, generateSnapshot bool) *EspressoSnapshotHandler {
+func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, useSnapshot bool, generateSnapshot bool) *EspressoSnapshotHandler {
 	return &EspressoSnapshotHandler{
 		db:               db,
 		parentChainDir:   parentChainDir,
+		l2chainDataDir:   l2chainDataDir,
+		useSnapshot:      useSnapshot,
 		generateSnapshot: generateSnapshot,
 	}
 }
 
 func (s *EspressoSnapshotHandler) StoreSnapshotSha256(sum string) error {
-	file, err := os.Create(filepath.Join(s.parentChainDir, "snapshot.txt"))
+	path := filepath.Join(s.parentChainDir, "snapshot.txt")
+	file, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("failed to create snapshot file: %w", err)
 	}
 	defer file.Close()
-	_, err = file.WriteString(sum + "\n")
+	_, err = file.WriteString(sum)
 	if err != nil {
 		return fmt.Errorf("failed to write snapshot file: %w", err)
 	}
-	log.Info("Stored the snapshot hash in a file", "sha256_h1", sum)
+	log.Info("Stored the snapshot hash in a file", "sha256_h1", sum, "path", path)
 	return nil
 }
 
 func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
+	if !s.useSnapshot {
+		return nil
+	}
+	// Only if snapshot mode is enabled, we re-initialize the tags
 	err := s.db.InitAuthTagsDatabase()
 	if err != nil {
-		return fmt.Errorf("failed to verify snapshot: %w", err)
+		return fmt.Errorf("failed to add auth tags to the database: %w", err)
+	}
+	err = s.db.InitAncientAuthTags()
+	if err != nil {
+		return fmt.Errorf("failed to ancient auth tags: %w", err)
 	}
 
 	return nil
 }
 
 func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
-	parentDir := filepath.Dir(s.parentChainDir)
-	l2chainDataPath := path.Join(parentDir, "l2chaindata")
-
-	sha256Hash, err := arbutil.HashDirectory(l2chainDataPath)
+	// Close the database before creating the snapshot
+	s.db.Close()
+	sha256Hash, err := arbutil.HashDirectory(s.l2chainDataDir)
 	if err != nil {
 		return err
 	}
@@ -74,12 +85,10 @@ func (s *EspressoSnapshotHandler) StopAndWait() {
 	s.StopWaiter.StopAndWait()
 	// Only generate snapshot if generateSnapshot is true
 	if s.generateSnapshot {
-		s.db.Close()
 		log.Info("Taking snapshot of the database, this may take a while")
 		err := s.CreateAndSnapshot()
 		if err != nil {
 			log.Error("Failed to create snapshot", "err", err)
-			return
 		}
 		log.Info("Snapshot taken and stored")
 	}

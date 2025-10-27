@@ -200,8 +200,6 @@ func HashDirectory(root string) (string, error) {
 			continue
 		}
 		out = append(out, f)
-		// Print out all the files names and their sizes
-		log.Info("File names is:", f)
 	}
 
 	// Hash (h1: base64(SHA-256)) of file contents
@@ -215,6 +213,7 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string) error {
 	if err != nil {
 		return err
 	}
+
 	// Check if the snapshot hash matches the one in the config
 	if snapshotChecksum != sha256Hash {
 		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", snapshotChecksum, sha256Hash)

@@ -659,18 +659,6 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 		}
 	}
 
-	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config
-	if config.Node.EspressoCaffNode.UseSnapshot {
-		if config.Node.EspressoCaffNode.SnapshotChecksum == "" {
-			return nil, nil, errors.New("snapshot checksum should not be empty when UseSnapshot mode is enabled")
-		}
-		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
-		}
-		log.Info("Snapshot hash matches", "hash", config.Node.EspressoCaffNode.SnapshotChecksum)
-	}
-
 	// Check if database was misplaced in parent dir
 	const errorFmt = "database was not found in %s, but it was found in %s (have you placed the database in the wrong directory?)"
 	parentDir := filepath.Dir(stack.InstanceDir())
@@ -703,6 +691,17 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 	}
 
 	var initDataReader statetransfer.InitDataReader = nil
+
+	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
+	if config.Node.EspressoCaffNode.UseSnapshot {
+		if config.Node.EspressoCaffNode.SnapshotChecksum == "" {
+			return nil, nil, errors.New("snapshot checksum should not be empty when UseSnapshot mode is enabled")
+		}
+		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
+		}
+	}
 
 	chainData, err := stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "l2chaindata/", false, persistentConfig.Pebble.ExtraOptions("l2chaindata"))
 	if err != nil {

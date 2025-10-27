@@ -22,6 +22,8 @@ var (
 	ErrAuthTagMissing = errors.New("authentication tag missing")
 	// ErrAuthTagMismatch is returned when a tag doesn't match the computed value
 	ErrAuthTagMismatch = errors.New("authentication tag mismatch")
+	// ErrNoAncients is returned when no ancients data is stored in the database
+	ErrNoAncients = errors.New("no ancients data is stored in the database")
 )
 
 type AuthDB struct {
@@ -641,14 +643,31 @@ func (d *AuthDB) InitAuthTagsDatabase() error {
 		}
 
 	}
-
+	log.Info("Successfully added auth tags to the database")
 	return nil
 }
 
-func (d *AuthDB) InitAncientAuthTags(hashData [][]byte, blockBodyData [][]byte, headerData [][]byte, receiptData [][]byte) error {
-	startBlock, err := d.Tail()
+func (d *AuthDB) InitAncientAuthTags() error {
+	firstBlock, err := d.Database.Tail()
 	if err != nil {
 		return err
+	}
+	// No error, this just means no ancients data is stored in the database
+	if firstBlock == 0 {
+		return nil
+	}
+	lastBlock, err := d.Database.Ancients()
+	if err != nil {
+		return err
+	}
+
+	hashData, blockBodyData, headerData, receiptData, err := d.readChainAncients(firstBlock, lastBlock)
+	if err != nil && !errors.Is(err, ErrNoAncients) {
+		return err
+	}
+
+	if errors.Is(err, ErrNoAncients) {
+		return nil
 	}
 
 	lengthOfData := len(hashData)
@@ -658,20 +677,21 @@ func (d *AuthDB) InitAncientAuthTags(hashData [][]byte, blockBodyData [][]byte, 
 		return fmt.Errorf("length of data is not the same")
 	}
 
+	// #nosec G115 -- i is guaranteed non-negative
 	for i := 0; i < lengthOfData; i++ {
 		_, err = d.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-			if err := op.AppendRaw(rawdb.ChainFreezerHashTable, startBlock+uint64(i), hashData[i]); err != nil {
+			if err := op.AppendRaw(rawdb.ChainFreezerHashTable, firstBlock+uint64(i), hashData[i]); err != nil {
 				return err
 			}
-			if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, startBlock+uint64(i), headerData[i]); err != nil {
+			if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, firstBlock+uint64(i), headerData[i]); err != nil {
 				log.Error("Failed to append header data to auth db", "err", err)
 				return err
 			}
-			if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, startBlock+uint64(i), blockBodyData[i]); err != nil {
+			if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, firstBlock+uint64(i), blockBodyData[i]); err != nil {
 				log.Error("Failed to append block body data to auth db", "err", err)
 				return err
 			}
-			if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, startBlock+uint64(i), receiptData[i]); err != nil {
+			if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, firstBlock+uint64(i), receiptData[i]); err != nil {
 				log.Error("Failed to append receipt data to auth db", "err", err)
 				return err
 			}
@@ -681,41 +701,23 @@ func (d *AuthDB) InitAncientAuthTags(hashData [][]byte, blockBodyData [][]byte, 
 	return err
 }
 
-func (d *AuthDB) ReadChainAncients() ([][]byte, [][]byte, [][]byte, [][]byte, error) {
+func (d *AuthDB) readChainAncients(firstBlock, lastBlock uint64) ([][]byte, [][]byte, [][]byte, [][]byte, error) {
 
-	hashTableSize, err := d.AncientSize(rawdb.ChainFreezerHashTable)
+	hashData, err := d.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, lastBlock, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	log.Info("hashtablesize", "hashtablesize", hashTableSize)
-	hashData, err := d.Database.AncientRange(rawdb.ChainFreezerHashTable, 0, hashTableSize, 0)
+
+	bodyData, err := d.Database.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, lastBlock, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	bodyTableSize, err := d.AncientSize(rawdb.ChainFreezerBodiesTable)
+
+	receiptData, err := d.Database.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, lastBlock, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	log.Info("bodytablesize", "bodytablesize", bodyTableSize)
-	bodyData, err := d.Database.AncientRange(rawdb.ChainFreezerBodiesTable, 0, bodyTableSize, 0)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	receiptTableSize, err := d.AncientSize(rawdb.ChainFreezerReceiptTable)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	log.Info("receipttablesize", "receipttablesize", receiptTableSize)
-	receiptData, err := d.Database.AncientRange(rawdb.ChainFreezerReceiptTable, 0, receiptTableSize, 0)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	headerTableSize, err := d.AncientSize(rawdb.ChainFreezerHeaderTable)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	log.Info("headertablesize", "headertablesize", headerTableSize)
-	headerData, err := d.Database.AncientRange(rawdb.ChainFreezerHeaderTable, 0, headerTableSize, 0)
+	headerData, err := d.Database.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, lastBlock, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

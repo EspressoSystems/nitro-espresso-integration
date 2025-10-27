@@ -1002,6 +1002,7 @@ func getEspressoCaffNode(
 				fatalErrChan,
 				stack.Config().HTTPPort,
 				stack.InstanceDir(),
+				stack.ResolvePath("l2chaindata"),
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				txOptsCaffNode,
 			)

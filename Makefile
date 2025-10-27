@@ -302,10 +302,10 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	@rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/
-	@rm -rf contracts-legacy/build contracts-legacy/cache
-	@rm -rf contracts-local/out contracts-local/forge-cache
-	@rm -f .make/*
+	rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/ contracts/out
+	rm -rf contracts-legacy/build contracts-legacy/cache contracts-legacy/out
+	rm -rf contracts-local/out contracts-local/forge-cache 
+	rm -f .make/*
 	rm -rf brotli/buildfiles
 # Ensure lib64 is a symlink to lib
 	mkdir -p $(output_root)/lib

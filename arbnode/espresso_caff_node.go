@@ -194,6 +194,7 @@ func NewEspressoCaffNode(
 	fatalErrChan chan error,
 	httpPort int,
 	databaseParentDir string,
+	l2ChainDataDir string,
 	dataPosterDB ethdb.Database,
 	txOptsCaffNode *bind.TransactOpts,
 ) (*EspressoCaffNode, error) {
@@ -342,7 +343,7 @@ func NewEspressoCaffNode(
 		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 	}
 
-	snapshotHandler := NewEspressoSnapshotHandler(db, databaseParentDir, configFetcher().GenerateSnapshot)
+	snapshotHandler := NewEspressoSnapshotHandler(db, databaseParentDir, l2ChainDataDir, configFetcher().UseSnapshot, configFetcher().GenerateSnapshot)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -488,12 +489,10 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-
-	if n.configFetcher().UseSnapshot {
+	if n.configFetcher().UseSnapshot || n.configFetcher().GenerateSnapshot {
 		if n.configFetcher().EspressoTeeType == "" {
 			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
 		}
-		log.Info("did I start the snapshot handler")
 		err := n.snapshotHandler.Start(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to start snapshot verifier: %w", err)
@@ -600,4 +599,5 @@ func (n *EspressoCaffNode) StopAndWait() {
 	n.delayedMessageFetcher.StopAndWait()
 	n.espressoStreamer.StopAndWait()
 	n.forceInclusionChecker.StopAndWait()
+	n.snapshotHandler.StopAndWait()
 }
