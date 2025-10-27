@@ -105,7 +105,7 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
-func loadPrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
+func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -129,7 +129,7 @@ func loadPrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 }
 
 func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
-	privateKey, err := loadPrivateKey(attestationsPath)
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 
 // DeriveHmac derives an HMAC from the attested private key using HKDF.
 func DeriveHmac(attestationsPath string) (hash.Hash, error) {
-	privateKey, err := loadPrivateKey(attestationsPath)
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
 	if err != nil {
 		return nil, err
 	}

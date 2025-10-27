@@ -22,8 +22,10 @@ import (
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espressotee"
 )
 
 func createCaffNode(
@@ -57,6 +59,11 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
+	nodeConfig.EspressoCaffNode.EspressoTeeType = ""
+	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
 
 	nodeConfig.EspressoCaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,
@@ -88,7 +95,7 @@ func createCaffNode(
 	}
 
 	if withSnapshotSigner {
-		nodeConfig.EspressoCaffNode.EspressoTeeType = "SGX"
+		nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
 	}
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing, withSnapshotSigner)
@@ -120,6 +127,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.EspressoCaffNode.RetryTime = time.Second * 1
 	nodeConfig.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.EspressoCaffNode.FromBlock = 1
+	nodeConfig.EspressoCaffNode.EspressoTeeType = "TEE-TEST"
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
@@ -573,7 +581,7 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 
 	// start the node
 	log.Info("Starting the caff node initially")
-	// Start the caff node with a snapshot signer
+	// Start the caff node without a snapshot signer
 	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false, true)
 	Require(t, err)
 
@@ -688,7 +696,7 @@ type mockSgxTeeVerifier struct {
 	time time.Time
 }
 
-func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
+func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, serviceType espressotee.ServiceType) (espressogen.EnclaveReport, error) {
 	if time.Since(v.time) < 1*time.Minute {
 		return espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
 	}

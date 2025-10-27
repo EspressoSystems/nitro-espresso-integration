@@ -17,6 +17,13 @@ func Require(t *testing.T, err error, printables ...any) {
 	testhelpers.RequireImpl(t, err, printables...)
 }
 
+func Assert(t *testing.T, cond bool, printables ...any) {
+	t.Helper()
+	if !cond {
+		testhelpers.FailImpl(t, printables...)
+	}
+}
+
 func RequireBench(b *testing.B, err error, printables ...any) {
 	b.Helper()
 	testhelpers.RequireImpl(b, err, printables...)

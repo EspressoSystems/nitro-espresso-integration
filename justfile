@@ -10,6 +10,7 @@ tee-tests: build
 
 authdb-tests:
     gotestsum --format standard-verbose -- -v ./cmd/util/integrityattestation/... -run TestDeriveHmac
+    rm -rf espresso/authdb/authdbancient
     gotestsum --format standard-verbose -- -v -timeout 15m -p 1 ./espresso/authdb
     rm -rf espresso/authdb/authdbancient
     rm -rf espresso/authdb/testancient
