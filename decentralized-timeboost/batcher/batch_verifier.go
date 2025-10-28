@@ -85,7 +85,7 @@ func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag
 	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
 }
 
-func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManger *decentralizedtimeboostgen.KeyManager) (*BatchVerifier, error) {
+func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManager *decentralizedtimeboostgen.KeyManager) (*BatchVerifier, error) {
 	if len(config.PrivateKey) == 0 {
 		return nil, fmt.Errorf("decentralized timeboost private key must be set")
 	}
@@ -111,7 +111,7 @@ func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManger *decentrali
 				},
 			},
 		},
-		timeboostKeyManager: timeboostKeyManger,
+		timeboostKeyManager: timeboostKeyManager,
 	}, nil
 }
 
