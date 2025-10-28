@@ -189,7 +189,7 @@ func TestAuthDBAncientSuite(t *testing.T) {
 		Require(t, err)
 		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
 
-		mac, err := integrityattestation.GenerateHMAC()
+		mac, err := integrityattestation.HmacForTest()
 		Require(t, err)
 		// Create AuthDB with only the tag tables we need
 		// NOTE: our NewAuthDB will default to a tagFreezer with all 4 tables whose internal sync

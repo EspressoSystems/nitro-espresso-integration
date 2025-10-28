@@ -725,7 +725,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 
 	b.L1Info = existing.L1Info
 
-	teeHMAC, err := integrityattestation.GenerateHMAC()
+	teeHMAC, err := integrityattestation.HmacForTest()
 	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
 	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
 
@@ -811,7 +811,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	var caffDB *authdb.AuthDB
 	if withSnapshotSigner {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
-		teeHMAC, err := integrityattestation.GenerateHMAC()
+		teeHMAC, err := integrityattestation.HmacForTest()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)
 		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)

@@ -66,7 +66,7 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 	err = WriteLastProcessedHeight(plainBatch, 789)
 	Assert(t, err != nil, "expected error when writing LastProcessedHeight to plain batch, but got nil")
 
-	hmac, err := integrityattestation.GenerateHMAC()
+	hmac, err := integrityattestation.HmacForTest()
 	Require(t, err)
 	authdb, err := NewAuthDB(plainDB, hmac)
 	Require(t, err)

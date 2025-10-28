@@ -35,7 +35,7 @@ func TestAuthDB(t *testing.T) {
 			db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 			Require(t, err)
 
-			hmac, err := integrityattestation.GenerateHMAC()
+			hmac, err := integrityattestation.HmacForTest()
 			Require(t, err)
 			authdb, err := NewAuthDB(db, hmac)
 			Require(t, err)
@@ -51,7 +51,7 @@ func BenchmarkAuthDB(b *testing.B) {
 		db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 		RequireBench(b, err)
 
-		hmac, err := integrityattestation.GenerateHMAC()
+		hmac, err := integrityattestation.HmacForTest()
 		RequireBench(b, err)
 		authdb, err := NewAuthDB(db, hmac)
 		RequireBench(b, err)
