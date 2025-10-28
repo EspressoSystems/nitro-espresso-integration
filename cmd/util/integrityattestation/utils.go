@@ -21,6 +21,10 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
+	"golang.org/x/crypto/hkdf"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 const (
@@ -124,20 +128,52 @@ func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func GenerateHMAC() (hash.Hash, error) {
-	h := sha256.New
-	// TODO: In another PR, we should store this key and encrypt it using AWS KMS
-	// TODO: use some key which can be deterministic across restarts
-	hmac := hmac.New(h, []byte("test"))
-	return hmac, nil
+func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
+	if err != nil || publicKey == nil {
+		return nil, fmt.Errorf("failed to get attested public key: %w", err)
+	}
+	publicKeyAddress := crypto.PubkeyToAddress(*publicKey)
+
+	return &publicKeyAddress, nil
 }
 
-// Safely pointer dereference
+// DeriveHmac derives an HMAC from the attested private key using HKDF.
+func DeriveHmac(attestationsPath string) (hash.Hash, error) {
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return deriveHmac(privateKey), nil
+}
+
+func deriveHmac(privateKey *ecdsa.PrivateKey) hash.Hash {
+	hash := sha256.New
+	info := []byte("HMAC key derivation")
+
+	hkdf := hkdf.New(hash, crypto.FromECDSA(privateKey), nil, info)
+	hmacKey := make([]byte, hash().Size())
+	if _, err := hkdf.Read(hmacKey); err != nil {
+		panic(fmt.Sprintf("hkdf.Read failed: %v", err))
+	}
+
+	return hmac.New(hash, hmacKey)
+}
+func HmacForTest() (hash.Hash, error) {
+	hmacKey := []byte("testHmacKey")
+	return hmac.New(sha256.New, hmacKey), nil
+}
+
 func deref[T any](p *T) T {
 	if p != nil {
 		return *p
 	}
-	// Declares a variable of type T, initialized to its zero value
 	var zero T
 	return zero
 }
