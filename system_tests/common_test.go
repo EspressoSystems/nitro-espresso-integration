@@ -732,7 +732,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, existing.nodeConfig.EspressoCaffNode.UseSnapshot)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, existing.nodeConfig.EspressoCaffNode.SnapshotChecksum != "")
 		Require(t, err)
 		b.L2.caffDB = &caffDB
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
@@ -807,7 +807,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 		teeHMAC, err := integrityattestation.GenerateHMAC()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, b.nodeConfig.EspressoCaffNode.UseSnapshot)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, b.nodeConfig.EspressoCaffNode.SnapshotChecksum != "")
 		Require(t, err)
 		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), &caffNodeTxopts)
 		Require(t, err)
@@ -1672,12 +1672,12 @@ func createNonL1BlockChainWithStackConfig(
 
 	var chainData ethdb.Database
 	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if nodeConfig != nil && nodeConfig.EspressoCaffNode.UseSnapshot {
+	if nodeConfig != nil && nodeConfig.EspressoCaffNode.SnapshotChecksum != "" {
 		log.Info("Snapshot mode enabled in Caff node")
 		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
-			Fatal(t, "snapshot checksum should not be empty when UseSnapshot mode is enabled")
+			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
 		}
-		err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"))
+		err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient))
 		Require(t, err)
 	}
 

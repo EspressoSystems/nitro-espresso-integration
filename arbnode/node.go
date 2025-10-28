@@ -1000,9 +1000,7 @@ func getEspressoCaffNode(
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
-				stack.Config().HTTPPort,
-				stack.InstanceDir(),
-				stack.ResolvePath("l2chaindata"),
+				stack,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				txOptsCaffNode,
 			)

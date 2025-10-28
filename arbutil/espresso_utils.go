@@ -15,7 +15,7 @@ import (
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
-	"github.com/rogpeppe/go-internal/dirhash"
+	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -186,7 +186,7 @@ func shouldIgnore(rel string) bool {
 	return false
 }
 
-func HashDirectory(root string) (string, error) {
+func HashDir(root string) (string, error) {
 	files, err := dirhash.DirFiles(root, "")
 
 	if err != nil {
@@ -208,8 +208,8 @@ func HashDirectory(root string) (string, error) {
 	})
 }
 
-func VerifySnapshot(snapshotChecksum string, l2chainDataDir string) error {
-	sha256Hash, err := HashDirectory(l2chainDataDir)
+func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir string) error {
+	sha256Hash, err := HashDir(l2chainDataDir)
 	if err != nil {
 		return err
 	}
@@ -219,5 +219,13 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string) error {
 		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", snapshotChecksum, sha256Hash)
 	}
 	log.Info("Snapshot hash matches", "hash", sha256Hash)
+
+	// Here we are deleting the `AuthTags` ancient store because we want to replace it with new tags
+	// from the new enclave hash. We cant just overwrite the existing tags because freezer doesnt allow
+	// you to modify the tags of an existing freezer.
+	err = os.RemoveAll(ancientDir)
+	if err != nil {
+		return fmt.Errorf("failed to delete authtag ancient store: %w", err)
+	}
 	return nil
 }

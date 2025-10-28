@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
@@ -65,7 +66,6 @@ type EspressoCaffNodeConfig struct {
 	StateChecker          StateCheckerConfig          `koanf:"state-checker"`
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
-	UseSnapshot             bool   `koanf:"use-snapshot"`
 	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 }
@@ -112,7 +112,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	QuoteFile:                     "",
 	EspressoTEEVerifierAddr:       "",
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
-	UseSnapshot:                   false,
 	SnapshotChecksum:              "",
 	GenerateSnapshot:              false,
 }
@@ -134,7 +133,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
-	f.Bool(prefix+".use-snapshot", DefaultEspressoCaffNodeConfig.UseSnapshot, "Configures the caff node to use a snapshot of the state db")
 	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures the caff node to generate a snapshot of the state db")
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
@@ -192,9 +190,7 @@ func NewEspressoCaffNode(
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
-	httpPort int,
-	databaseParentDir string,
-	l2ChainDataDir string,
+	stack *node.Node,
 	dataPosterDB ethdb.Database,
 	txOptsCaffNode *bind.TransactOpts,
 ) (*EspressoCaffNode, error) {
@@ -274,7 +270,7 @@ func NewEspressoCaffNode(
 
 	stateChecker := NewStateChecker(
 		configFetcher().StateChecker,
-		httpPort,
+		stack.Config().HTTPPort,
 		fatalErrChan,
 	)
 
@@ -343,7 +339,7 @@ func NewEspressoCaffNode(
 		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 	}
 
-	snapshotHandler := NewEspressoSnapshotHandler(db, databaseParentDir, l2ChainDataDir, configFetcher().UseSnapshot, configFetcher().GenerateSnapshot)
+	snapshotHandler := NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), configFetcher().SnapshotChecksum, configFetcher().GenerateSnapshot)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -489,8 +485,8 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	if n.configFetcher().UseSnapshot || n.configFetcher().GenerateSnapshot {
-		if n.configFetcher().EspressoTeeType == "" && n.configFetcher().UseSnapshot {
+	if n.configFetcher().SnapshotChecksum != "" || n.configFetcher().GenerateSnapshot {
+		if n.configFetcher().EspressoTeeType == "" && n.configFetcher().SnapshotChecksum != "" {
 			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
 		}
 		err := n.snapshotHandler.Start(ctx)

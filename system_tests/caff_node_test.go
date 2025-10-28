@@ -97,7 +97,7 @@ func createCaffNode(
 
 	nodeConfig.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.EspressoCaffNode.EspressoTeeType
 	nodeConfig.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.EspressoCaffNode.GenerateSnapshot
-	nodeConfig.EspressoCaffNode.UseSnapshot = existing.nodeConfig.EspressoCaffNode.UseSnapshot
+	nodeConfig.EspressoCaffNode.SnapshotChecksum = existing.nodeConfig.EspressoCaffNode.SnapshotChecksum
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
@@ -582,7 +582,7 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	// start the node
 	log.Info("Starting the caff node initially")
 	// Start the caff node without a snapshot signer
-	builderCaffNode, _, err := createCaffNode(ctx, t, builder, false)
+	builderCaffNode, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
 	Require(t, err)
 
 	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
@@ -599,8 +599,9 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	Require(t, err)
 
 	// start the node
-	time.Sleep(1 * time.Minute)
+	time.Sleep(10 * time.Second)
 
+	cleanupCaffNode()
 	builderCaffNode.RestartCaffNode(t)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
@@ -637,7 +638,25 @@ func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
 	// Start the caff node without a snapshot signer
 	builderCaffNode, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
 	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
+
+	// start the node
+	time.Sleep(10 * time.Second)
+
 	cleanupCaffNode()
+
 	// Now we need to check if it created a snapshot.txt file in the parent chain directory
 	snapshotFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name, "system_tests.test"), "snapshot.txt")
 	// Read the snapshot file and get the sha256 hash
@@ -652,22 +671,19 @@ func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
 	// verify it and re-initialize the tags with tmac
 	builderCaffNode.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
 	builderCaffNode.nodeConfig.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
-	builderCaffNode.nodeConfig.EspressoCaffNode.UseSnapshot = true
 
-	// start the node
-	time.Sleep(1 * time.Minute)
 	builderCaffNode.RestartCaffNode(t)
 
-	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
-	Require(t, err)
-	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
+
+	err = builder.L2.Client.SendTransaction(ctx, tx)
 	Require(t, err)
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
-		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
-		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
-		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
+		// Now the balance should be greater than twice the transfer amount
+		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
 	})
 	Require(t, err)
 }

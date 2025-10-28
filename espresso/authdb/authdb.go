@@ -112,25 +112,23 @@ func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) [
 	return d.mac.Sum(nil)
 }
 
-func (d *AuthDB) verifyTag(key []byte, val []byte) bool {
+func (d *AuthDB) verify(key []byte, val []byte) error {
 	if d.isAuthReadsDisabled {
 		// We return true because we don't want to fail the read operation
-		return true
+		return nil
 	}
 
 	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
 	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return false
+		return fmt.Errorf("failed to get auth tag key:%b, err:%w", key, err)
 	}
 
 	tag := d.computeMac(key, val)
-	if d.isAuthReadsDisabled {
-		// We return true because we don't want to fail the read operation
-		return true
-	}
 
-	return hmac.Equal(expectedTag, tag)
+	if !hmac.Equal(expectedTag, tag) {
+		return fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	}
+	return nil
 }
 
 // verifyAncientTag reads the tag from the tag store and verifies it matches the data
@@ -265,7 +263,6 @@ func (op *AuthAncientWriteOp) AppendRaw(kind string, number uint64, item []byte)
 		number: number,
 		tag:    tag,
 	})
-
 	return nil
 }
 
@@ -525,9 +522,8 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	if !d.verifyTag(key, val) {
-		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	if err := d.verify(key, val); err != nil {
+		return nil, fmt.Errorf("failed to authenticate: key=%v val=%d err=%w", key, val, err)
 	}
 
 	return val, nil
@@ -566,8 +562,8 @@ func (it *AuthIterator) Value() []byte {
 		return val
 	}
 
-	if !it.db.verifyTag(key, val) {
-		log.Error("failed to authenticate", "key", key, "val", val)
+	if err := it.db.verify(key, val); err != nil {
+		log.Error("failed to authenticate", "key", key, "val", val, "err", err)
 		return nil
 	}
 	return val
@@ -606,14 +602,14 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	if !b.authDB.verifyTag(key, val) {
-		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	if err := b.authDB.verify(key, val); err != nil {
+		return nil, fmt.Errorf("failed to authenticate: key=%v val=%d err=%w", key, val, err)
 	}
 	return val, nil
 }
 
 // InitAuthTags initializes auth tags for all keys in the database
+// when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
 func (d *AuthDB) InitAuthTagsDatabase() error {
 	var (
 		prefix    []byte
@@ -622,7 +618,7 @@ func (d *AuthDB) InitAuthTagsDatabase() error {
 		logged    = time.Now()
 		count     = 0
 	)
-
+	log.Info("Starting adding auth tags to the database")
 	it := d.NewIterator(prefix, start)
 	defer it.Release()
 
@@ -647,79 +643,83 @@ func (d *AuthDB) InitAuthTagsDatabase() error {
 	return nil
 }
 
+// InitAncientAuthTags initializes auth tags for all ancients in the database
+// when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
 func (d *AuthDB) InitAncientAuthTags() error {
 	firstBlock, err := d.Database.Tail()
 	if err != nil {
 		return err
 	}
-	// No error, this just means no ancients data is stored in the database
-	if firstBlock == 0 {
-		return nil
-	}
-	lastBlock, err := d.Database.Ancients()
+	numAncients, err := d.Database.Ancients()
 	if err != nil {
 		return err
 	}
 
-	hashData, blockBodyData, headerData, receiptData, err := d.readChainAncients(firstBlock, lastBlock)
-	if err != nil && !errors.Is(err, ErrNoAncients) {
-		return err
-	}
-
-	if errors.Is(err, ErrNoAncients) {
+	if numAncients == 0 {
 		return nil
 	}
 
-	lengthOfData := len(hashData)
-
-	// First verify that the length of all the data is the same
-	if lengthOfData != len(blockBodyData) || lengthOfData != len(headerData) || lengthOfData != len(receiptData) {
-		return fmt.Errorf("length of data is not the same")
+	log.Info("Starting adding ancient auth tags")
+	hashData, blockBodyData, receiptData, headerData, err := d.readChainAncients(firstBlock, numAncients)
+	if err != nil {
+		return err
 	}
 
 	// #nosec G115 -- i is guaranteed non-negative
-	for i := 0; i < lengthOfData; i++ {
-		_, err = d.ModifyAncients(func(op ethdb.AncientWriteOp) error {
-			if err := op.AppendRaw(rawdb.ChainFreezerHashTable, firstBlock+uint64(i), hashData[i]); err != nil {
-				return err
-			}
-			if err := op.AppendRaw(rawdb.ChainFreezerHeaderTable, firstBlock+uint64(i), headerData[i]); err != nil {
-				log.Error("Failed to append header data to auth db", "err", err)
-				return err
-			}
-			if err := op.AppendRaw(rawdb.ChainFreezerBodiesTable, firstBlock+uint64(i), blockBodyData[i]); err != nil {
-				log.Error("Failed to append block body data to auth db", "err", err)
-				return err
-			}
-			if err := op.AppendRaw(rawdb.ChainFreezerReceiptTable, firstBlock+uint64(i), receiptData[i]); err != nil {
-				log.Error("Failed to append receipt data to auth db", "err", err)
-				return err
-			}
-			return nil
-		})
+	n := int(numAncients)
+	if len(hashData) != n || len(blockBodyData) != n || len(receiptData) != n || len(headerData) != n {
+		return fmt.Errorf("ancients length mismatch: want=%d got hash=%d body=%d receipt=%d header=%d",
+			n, len(hashData), len(blockBodyData), len(receiptData), len(headerData))
 	}
 
-	log.Info("Successfully added auth tags to ancients")
-	return err
+	_, err = d.tagFreezer.ModifyAncients(func(tagOp ethdb.AncientWriteOp) error {
+		// #nosec G115 -- i is guaranteed non-negative
+		for i := 0; i < n; i++ {
+			num := firstBlock + uint64(i)
+
+			if err := tagOp.AppendRaw(AuthTagHashTable, num, hashData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagHeaderTable, num, headerData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagBodiesTable, num, blockBodyData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagReceiptTable, num, receiptData[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	log.Info("Successfully added auth tags to ancients",
+		"from", firstBlock, "count", numAncients)
+	return nil
 }
 
-func (d *AuthDB) readChainAncients(firstBlock, lastBlock uint64) ([][]byte, [][]byte, [][]byte, [][]byte, error) {
+func (d *AuthDB) readChainAncients(firstBlock, numAncients uint64) (hashData, bodyData, receiptData, headerData [][]byte, err error) {
 
-	hashData, err := d.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, lastBlock, 0)
+	hashData, err = d.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	bodyData, err := d.Database.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, lastBlock, 0)
+	bodyData, err = d.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	receiptData, err := d.Database.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, lastBlock, 0)
+	receiptData, err = d.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	headerData, err := d.Database.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, lastBlock, 0)
+
+	headerData, err = d.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

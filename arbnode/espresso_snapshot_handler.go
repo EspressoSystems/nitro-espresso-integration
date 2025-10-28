@@ -18,16 +18,16 @@ type EspressoSnapshotHandler struct {
 	db               *authdb.AuthDB
 	parentChainDir   string
 	l2chainDataDir   string
-	useSnapshot      bool
+	snapshotChecksum string
 	generateSnapshot bool
 }
 
-func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, useSnapshot bool, generateSnapshot bool) *EspressoSnapshotHandler {
+func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, snapshotChecksum string, generateSnapshot bool) *EspressoSnapshotHandler {
 	return &EspressoSnapshotHandler{
 		db:               db,
 		parentChainDir:   parentChainDir,
 		l2chainDataDir:   l2chainDataDir,
-		useSnapshot:      useSnapshot,
+		snapshotChecksum: snapshotChecksum,
 		generateSnapshot: generateSnapshot,
 	}
 }
@@ -49,7 +49,8 @@ func (s *EspressoSnapshotHandler) StoreSnapshotSha256(sum string) error {
 
 func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
-	if !s.useSnapshot {
+	if s.snapshotChecksum == "" {
+		log.Warn("No snapshot checksum provided, skipping re-initialization of the tags")
 		return nil
 	}
 	// Only if snapshot mode is enabled, we re-initialize the tags
@@ -59,7 +60,7 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	}
 	err = s.db.InitAncientAuthTags()
 	if err != nil {
-		return fmt.Errorf("failed to ancient auth tags: %w", err)
+		return fmt.Errorf("failed to add ancient auth tags: %w", err)
 	}
 
 	return nil
@@ -68,7 +69,8 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
 	// Close the database before creating the snapshot
 	s.db.Close()
-	sha256Hash, err := arbutil.HashDirectory(s.l2chainDataDir)
+
+	sha256Hash, err := arbutil.HashDir(s.l2chainDataDir)
 	if err != nil {
 		return err
 	}

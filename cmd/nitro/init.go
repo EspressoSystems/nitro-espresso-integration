@@ -693,11 +693,8 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 	var initDataReader statetransfer.InitDataReader = nil
 
 	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if config.Node.EspressoCaffNode.UseSnapshot {
-		if config.Node.EspressoCaffNode.SnapshotChecksum == "" {
-			return nil, nil, errors.New("snapshot checksum should not be empty when UseSnapshot mode is enabled")
-		}
-		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"))
+	if config.Node.EspressoCaffNode.SnapshotChecksum != "" {
+		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", config.Persistent.Ancient))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
 		}
