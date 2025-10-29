@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -79,7 +81,7 @@ type EspressoStreamer struct {
 
 	batcherAddressesFetcher  func(l1Height uint64) []common.Address
 	isDecentralizedTimeboost bool
-	timeboostKeyManager      *decentralizedtimeboostgen.KeyManager
+	committeeFetcher         func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error)
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -93,7 +95,7 @@ func NewEspressoStreamer(
 	batcherAddressesFetcher func(l1Height uint64) []common.Address,
 	retryTime time.Duration,
 	isDecentralizedTimeboost bool,
-	keyManager *decentralizedtimeboostgen.KeyManager,
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -111,7 +113,7 @@ func NewEspressoStreamer(
 		retryTime:                retryTime,
 		currentMessagePos:        1,
 		isDecentralizedTimeboost: isDecentralizedTimeboost,
-		timeboostKeyManager:      keyManager,
+		committeeFetcher:         committeeFetcher,
 	}
 }
 
@@ -168,7 +170,42 @@ func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos 
 	if messageIndex >= 0 {
 		return s.messageWithMetadataAndPos[messageIndex]
 	}
+	return nil
+}
 
+// Checks if we have a consecutive sequence of messages from the current position to the target.
+// This is used when verifying correctness of batch sent from another batch poster for decentralized timeboost
+// We need to be sure the batch isnt lying about the espresso confirmations so we verify against what we have in our internal state
+// Return the minimum hotshot position after the target for when we call `Reset()` on the streamer to ensure no data will be lost
+func (s *EspressoStreamer) VerifyConsecutivePositions(target uint64) *uint64 {
+	s.messageLock.Lock()
+	defer s.messageLock.Unlock()
+	expectedCount := target - s.currentMessagePos + 1
+	result := make(map[uint64]*MessageWithMetadataAndPos)
+
+	height := uint64(math.MaxUint64)
+	foundAll := false
+	// Go from current message position, and to the target, verify all positions are found
+	for _, m := range s.messageWithMetadataAndPos {
+		if m.Pos >= s.currentMessagePos && m.Pos <= target {
+			result[m.Pos] = m
+			if uint64(len(result)) == expectedCount {
+				foundAll = true
+			}
+		}
+		if m.Pos > target && m.HotshotHeight < height {
+			// it is possible a higher position was in earlier hotshot block
+			// this needs to be our min when we call `Reset()`
+			height = m.HotshotHeight
+		}
+	}
+	if foundAll {
+		// If a higher position was in earlier hotshot block, use that instead
+		if height < result[target].HotshotHeight {
+			return &height
+		}
+		return &result[target].HotshotHeight
+	}
 	return nil
 }
 
@@ -368,20 +405,27 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsg, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.timeboostKeyManager)
+	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, l1Height, s.currentMessagePos, s.committeeFetcher)
 	if err != nil {
 		return nil, err
 	}
-	if parsedMsg == nil {
-		return []*MessageWithMetadataAndPos{}, nil
+
+	var msgs []*MessageWithMetadataAndPos
+	if parsedMsgs == nil {
+		return msgs, nil
 	}
-	log.Info("added timeboost message to queue", "messagePos", parsedMsg.Pos, "currentMessagePos", s.currentMessagePos)
-	msg := &MessageWithMetadataAndPos{
-		MessageWithMeta: parsedMsg.Message,
-		Pos:             parsedMsg.Pos,
-		HotshotHeight:   s.nextHotshotBlockNum,
+
+	for _, msg := range parsedMsgs {
+		if msg.Pos%100 == 0 {
+			log.Info("added timeboost message to queue", "messagePos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+		}
+		msgs = append(msgs, &MessageWithMetadataAndPos{
+			MessageWithMeta: msg.Message,
+			Pos:             msg.Pos,
+			HotshotHeight:   s.nextHotshotBlockNum,
+		})
 	}
-	return []*MessageWithMetadataAndPos{msg}, nil
+	return msgs, nil
 }
 
 // Export this function only for testing purpose

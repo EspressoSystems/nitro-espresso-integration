@@ -22,7 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
-func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address, espressoTEEVerifier common.Address) rollup_legacy_gen.Config {
+func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner common.Address, chainConfig *params.ChainConfig, serializedChainConfig []byte, loserStakeEscrow common.Address, timeboostKeyManager common.Address) rollup_legacy_gen.Config {
 	var confirmPeriod uint64
 	if prod {
 		confirmPeriod = 45818
@@ -30,15 +30,15 @@ func GenerateLegacyRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwn
 		confirmPeriod = 20
 	}
 	return rollup_legacy_gen.Config{
-		ConfirmPeriodBlocks:      confirmPeriod,
-		ExtraChallengeTimeBlocks: 200,
-		StakeToken:               common.Address{},
-		BaseStake:                big.NewInt(params.Ether),
-		WasmModuleRoot:           wasmModuleRoot,
-		Owner:                    rollupOwner,
-		LoserStakeEscrow:         loserStakeEscrow,
-		ChainId:                  chainConfig.ChainID,
-		EspressoTEEVerifier:      espressoTEEVerifier,
+		ConfirmPeriodBlocks:              confirmPeriod,
+		ExtraChallengeTimeBlocks:         200,
+		StakeToken:                       common.Address{},
+		BaseStake:                        big.NewInt(params.Ether),
+		WasmModuleRoot:                   wasmModuleRoot,
+		Owner:                            rollupOwner,
+		LoserStakeEscrow:                 loserStakeEscrow,
+		ChainId:                          chainConfig.ChainID,
+		DecentralizedTimeboostKeyManager: timeboostKeyManager,
 		// TODO could the ChainConfig be just []byte?
 		ChainConfig: string(serializedChainConfig),
 		SequencerInboxMaxTimeVariation: rollup_legacy_gen.ISequencerInboxMaxTimeVariation{

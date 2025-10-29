@@ -1,15 +1,14 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:contract
+    image: ghcr.io/espressosystems/timeboost:contract3
     command:
       [
         "/app/timeboost",
-        "--committee-id", "0",
         "--config", "/app/node_0.toml",
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,robusta=info
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
     ports:
       - "8000:8000"
       - "8004:8004"
@@ -23,16 +22,15 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:contract
+    image: ghcr.io/espressosystems/timeboost:contract3
     command:
       [
         "/app/timeboost",
-        "--committee-id", "0",
         "--config", "/app/node_1.toml",
         "--https-only", "false"
       ]
     environment:
-      - RUST_LOG=timeboost=info,sailfish=error,cliquenet=error,rubusta=info
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
     ports:
       - "8010:8010"
       - "8014:8014"
@@ -46,7 +44,7 @@ services:
     networks:
       - nitro-timeboost
   espresso-dev-node:
-    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:20250826
+    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:20250910-patch1
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_BUILDER_PORT:$ESPRESSO_BUILDER_PORT"

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
@@ -80,67 +81,78 @@ func ParseTimeboostEspressoTransaction(
 	tx espressoTypes.Bytes,
 	l1Height uint64,
 	streamerCurrentPos uint64,
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
-) (*DecentralizedTimeboostParsedMessage, error) {
-	var block decentralized_timeboost_types.CertifiedBlock
-	if err := cbor.Unmarshal(tx, &block); err != nil {
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+) ([]*DecentralizedTimeboostParsedMessage, error) {
+	var body decentralized_timeboost_types.Body
+	if err := cbor.Unmarshal(tx, &body); err != nil {
 		log.Warn("cbor error decoding certified block", "err", err)
 		return nil, err
 	}
 
-	if block.Version != blockVersion {
-		return nil, fmt.Errorf("block version mismatch! should be version 1 got %d", block.Version)
-	}
+	var msgs []*DecentralizedTimeboostParsedMessage
+	// Dont error out if one block fails to be parsed, verified, or we see an old block
+	// There can be new block later the response body from hotshot, so erroring out may miss this
+	for _, block := range body.Blocks {
+		if block.Version != blockVersion {
+			log.Warn("block version mismatch! should be version 1", "got", block.Version)
+			continue
+		}
 
-	// We need to recalculate the `block hash` to ensure the data is the same
-	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L150-L155
-	blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
-	if err != nil {
-		return nil, err
-	}
-	if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
-		return nil, fmt.Errorf("block hash mistmatch! computed hash: 0x%x, certified hash 0x%x", blockHash, block.Cert.Data.Hash)
-	}
+		// We need to recalculate the `block hash` to ensure the data is the same
+		// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L150-L155
+		blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
+		if err != nil {
+			log.Warn("failed to get timeboost block hash", "err", err)
+			continue
+		}
+		if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
+			log.Warn("block hash mismatch!", "computed hash", "0x"+hex.EncodeToString(blockHash), "certificate hash", "0x"+hex.EncodeToString(block.Cert.Data.Hash))
+			continue
+		}
 
-	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
-	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
-	commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
-		Field("num", block.Cert.Data.CommitNum()).
-		Field("round", block.Cert.Data.Round.Commit()).
-		Field("hash", block.Cert.Data.CommitHash()).
-		Finalize()
-	if !bytes.Equal(commitment[:], block.Cert.Commitment) {
-		return nil, fmt.Errorf("block commitment mistmatch! computed commitment: 0x%x, certified commitment: 0x%x", commitment, block.Cert.Commitment)
-	}
+		// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
+		// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
+		commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
+			Field("num", block.Cert.Data.CommitNum()).
+			Field("round", block.Cert.Data.Round.Commit()).
+			Field("hash", block.Cert.Data.CommitHash()).
+			Finalize()
+		if !bytes.Equal(commitment[:], block.Cert.Commitment) {
+			log.Warn("block commitment mismatch!", "computed commitment", "0x"+hex.EncodeToString(commitment[:]), "certificate commitment", "0x"+hex.EncodeToString(block.Cert.Commitment))
+			continue
+		}
 
-	// Validate the commitment against the committee signatures
-	committee, err := timeboostKeyManager.GetCommitteeById(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
-	if err != nil {
-		log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
-		return nil, err
-	}
-	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
-		return nil, err
-	}
+		// Validate the commitment against the committee signatures
+		committee, err := committeeFetcher(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
+		if err != nil {
+			log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
+			continue
+		}
+		if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
+			log.Warn("failed to validate timeboost certificate", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
+			continue
+		}
 
-	// After validation has succeeded deserialize the payload
-	var msg decentralized_timeboost_types.MessagePayload
-	if err = cbor.Unmarshal(block.Data.Payload, &msg); err != nil {
-		log.Warn("cbor error decoding MessagePayload", "err", err)
-		return nil, err
-	}
-	var messageWithMetadata arbostypes.MessageWithMetadata
-	if err = rlp.DecodeBytes(msg.Message, &messageWithMetadata); err != nil {
-		log.Warn("rlp error decoding MessagePayload to arbostypes.MessageWithMetadata", "err", err)
-		return nil, err
-	}
+		// After validation has succeeded deserialize the payload
+		var msg decentralized_timeboost_types.MessagePayload
+		if err = cbor.Unmarshal(block.Data.Payload, &msg); err != nil {
+			log.Warn("cbor error decoding MessagePayload", "err", err)
+			continue
+		}
+		var messageWithMetadata arbostypes.MessageWithMetadata
+		if err = rlp.DecodeBytes(msg.Message, &messageWithMetadata); err != nil {
+			log.Warn("rlp error decoding MessagePayload to arbostypes.MessageWithMetadata", "err", err)
+			continue
+		}
 
-	if msg.Position < streamerCurrentPos {
-		log.Warn("timeboost message index is less than current pos, skipping", "messageIndex", streamerCurrentPos, "currentMessagePos", msg.Position)
-		return nil, nil
+		if msg.Position < streamerCurrentPos {
+			log.Warn("timeboost message index is less than current pos, skipping", "messageIndex", streamerCurrentPos, "currentMessagePos", msg.Position)
+			continue
+		}
+		msgs = append(msgs, &DecentralizedTimeboostParsedMessage{
+			Message: messageWithMetadata,
+			Pos:     msg.Position,
+		})
 	}
-	return &DecentralizedTimeboostParsedMessage{
-		Message: messageWithMetadata,
-		Pos:     msg.Position,
-	}, nil
+	return msgs, nil
 }

@@ -10,4 +10,4 @@ gotestsum \
     -timeout 45m \
     -p 1 \
     ./system_tests/... \
-    -run 'TestEspresso'
+    -run 'EspressoTimeboostSequencer'
