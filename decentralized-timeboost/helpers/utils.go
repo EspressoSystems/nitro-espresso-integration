@@ -90,7 +90,8 @@ func ParseTimeboostEspressoTransaction(
 	}
 
 	var msgs []*DecentralizedTimeboostParsedMessage
-	// Dont error out if one block fails to be parsed and verified, continue the loop and try next blocks
+	// Dont error out if one block fails to be parsed, verified, or we see an old block
+	// There can be new block later the response body from hotshot, so erroring out may miss this
 	for _, block := range body.Blocks {
 		if block.Version != blockVersion {
 			log.Warn("block version mismatch! should be version 1", "got", block.Version)

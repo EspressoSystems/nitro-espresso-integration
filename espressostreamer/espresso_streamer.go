@@ -173,6 +173,10 @@ func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos 
 	return nil
 }
 
+// Checks if we have a consecutive sequence of messages from the current position to the target.
+// This is used when verifying correctness of batch sent from another batch poster for decentralized timeboost
+// We need to be sure the batch isnt lying about the espresso confirmations so we verify against what we have in our internal state
+// Return the minimum hotshot position after the target for when we call `Reset()` on the streamer to ensure no data will be lost
 func (s *EspressoStreamer) VerifyConsecutivePositions(target uint64) *uint64 {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
