@@ -14,21 +14,23 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
 type EspressoTEEVerifierInterface interface {
-	RegisterSigner(
+	RegisterService(
 		dataPoster *dataposter.DataPoster,
 		attestation []byte,
 		data []byte,
 		teeType uint8,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		serviceType ServiceType,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) error
-	RegisteredSigners(
+	RegisteredServices(
 		signer common.Address,
 		teeType uint8,
-		registerSignerOpts EspressoRegisterSignerOpts,
+		serviceType ServiceType,
+		registerSignerOpts EspressoRegisterServiceOpts,
 	) (bool, error)
 }
 
@@ -42,12 +44,13 @@ func NewEspressoTEEVerifier(contract *espressogen.IEspressoTEEVerifier, l1Client
 	return &EspressoTEEVerifier{contract: contract, l1Client: l1Client, address: address}
 }
 
-func (e *EspressoTEEVerifier) RegisterSigner(
+func (e *EspressoTEEVerifier) RegisterService(
 	dataPoster *dataposter.DataPoster,
 	attestation []byte,
 	data []byte,
 	teeType uint8,
-	registerSignerOpts EspressoRegisterSignerOpts,
+	serviceType ServiceType,
+	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
@@ -68,8 +71,8 @@ func (e *EspressoTEEVerifier) RegisterSigner(
 		return err
 	}
 
-	// Pack the function arguments (attestation, data, teeType)
-	calldata, err := contractABI.Pack("registerSigner", attestation, data, teeType)
+	// Pack the function arguments (attestation, data, teeType, serviceType)
+	calldata, err := contractABI.Pack("registerService", attestation, data, teeType, serviceType)
 	if err != nil {
 		return err
 	}
@@ -126,12 +129,12 @@ func (e *EspressoTEEVerifier) RegisterSigner(
 	return nil
 }
 
-func (e *EspressoTEEVerifier) RegisteredSigners(address common.Address, teeType uint8, registerSignerOpts EspressoRegisterSignerOpts) (bool, error) {
+func (e *EspressoTEEVerifier) RegisteredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterServiceOpts) (bool, error) {
 	ok, err := ContractVerification(
 		registerSignerOpts.MaxRetries,
 		registerSignerOpts.RetryReadContractDelay,
 		func() (bool, error) {
-			return e.contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
+			return e.contract.RegisteredServices(&bind.CallOpts{}, address, teeType, uint8(serviceType))
 		},
 		"address not yet registered in contract",
 	)

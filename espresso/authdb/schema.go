@@ -5,41 +5,63 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 )
 
 // The fields below define which low level database schema prefixes our AuthDB will intercept in Get
 
 var (
 	// authenticated Geth
-	headerAuthTagPrefix   = []byte("headerTag-")
-	bodyAuthTagPrefix     = []byte("bodyTag-")
-	receiptsAuthTagPrefix = []byte("receiptsTag-")
+	genericAuthTagSuffix = []byte("-tag")
 
 	// caff node specific
-	fromBlockKey                  = []byte("fromBlk")
-	fromBlockAuthTagKey           = []byte("fromBlkTag")
-	nextHotshotBlockNumKey        = []byte("nextHsBlkNum")
-	nextHotshotBlockNumAuthTagKey = []byte("nextHsBlkNumTag")
-	initAddressesKey              = []byte("initAddrs")
-	initAddressesAuthTagKey       = []byte("initAddrsTag")
-	eventsKey                     = []byte("events")
-	eventsAuthTagKey              = []byte("eventsTag")
-	lastProcessedHeightKey        = []byte("lastProcessedHeight")
-	lastProcessedHeightAuthTagKey = []byte("lastProcessedHeightTag")
+	fromBlockKey           = []byte("fromBlk")
+	nextHotshotBlockNumKey = []byte("nextHsBlkNum")
+	initAddressesKey       = []byte("initAddrs")
+	eventsKey              = []byte("events")
+	lastProcessedHeightKey = []byte("lastProcessedHeight")
 )
 
-func bodyAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
-	return append(append(bodyAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
+// Tag Freezer Configuration
+// The tag freezer stores HMAC authentication tags in a separate ancient store
+// parallel to the main chain freezer. Each tag table corresponds to a main
+// ancient table and stores raw HMAC bytes indexed by the same item number.
+const (
+	// AuthTagFreezerName is the subfolder name for the tag ancient store
+	AuthTagFreezerName = "auth-tags"
+
+	// Tag table names - one per main ancient table
+	// These store raw HMAC tags corresponding to items in the main tables
+	AuthTagHashTable    = "tag-hashes"   // Tags for ChainFreezerHashTable
+	AuthTagHeaderTable  = "tag-headers"  // Tags for ChainFreezerHeaderTable
+	AuthTagBodiesTable  = "tag-bodies"   // Tags for ChainFreezerBodiesTable
+	AuthTagReceiptTable = "tag-receipts" // Tags for ChainFreezerReceiptTable
+)
+
+// Use the same size limit chain freezer (2GB)
+const tagFreezerTableSize = 2 * 1000 * 1000 * 1000
+
+// authTagTableNoSnappy configures compression for tag tables.
+// Tags are random HMAC outputs that don't compress well.
+var authTagTableNoSnappy = map[string]bool{
+	AuthTagHashTable:    true,
+	AuthTagHeaderTable:  true,
+	AuthTagBodiesTable:  true,
+	AuthTagReceiptTable: true,
 }
 
-func headerAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
-	return append(append(headerAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
+// freezerTabletoTagTable maps main ancient table names to their corresponding tag table names
+var freezerTabletoTagTable = map[string]string{
+	rawdb.ChainFreezerHashTable:    AuthTagHashTable,
+	rawdb.ChainFreezerHeaderTable:  AuthTagHeaderTable,
+	rawdb.ChainFreezerBodiesTable:  AuthTagBodiesTable,
+	rawdb.ChainFreezerReceiptTable: AuthTagReceiptTable,
 }
 
-func receiptsAuthTagKey(blockNum uint64, blockHash common.Hash) []byte {
-	return append(append(receiptsAuthTagPrefix, EncodeUint64(blockNum)...), blockHash.Bytes()...)
+// getTagTable returns the tag table name for a given main ancient table kind
+func getTagTable(kind string) (string, bool) {
+	tagTable, ok := freezerTabletoTagTable[kind]
+	return tagTable, ok
 }
 
 func EncodeUint64(number uint64) []byte {
@@ -57,21 +79,6 @@ func DecodeUint64(enc []byte) (uint64, error) {
 	return number, err
 }
 
-// helper func to parse db-key with pattern:
-// prefix + num (uint64 big endian) + hash
-func parseUint64AndHash(key []byte, prefixLen int) (uint64, common.Hash, error) {
-	var hash common.Hash
-	expectedKeyLen := prefixLen + 8 + common.HashLength
-	if len(key) != expectedKeyLen {
-		return 0, hash, fmt.Errorf("expected key len: %d, got: %d", expectedKeyLen, len(key))
-	}
-
-	number, err := DecodeUint64(key[prefixLen : prefixLen+8])
-	if err != nil {
-		log.Error("failed to parse block number from db key", "err", err)
-		return 0, hash, err
-	}
-
-	hash = common.BytesToHash(key[prefixLen+8 : prefixLen+8+common.HashLength])
-	return number, hash, nil
+func genericAuthTagKey(key []byte) []byte {
+	return append(key, genericAuthTagSuffix...)
 }

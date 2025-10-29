@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"path"
 	"path/filepath"
 	"time"
@@ -11,14 +12,20 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	flag "github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/node"
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
+	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -27,29 +34,40 @@ import (
 )
 
 type EspressoCaffNodeConfig struct {
-	Enable                  bool                    `koanf:"enable"`
-	EspressoTeeType         string                  `koanf:"espresso-tee-type"`
-	HotShotUrls             []string                `koanf:"hotshot-urls"`
-	NextHotshotBlock        uint64                  `koanf:"next-hotshot-block"`
-	FromBlock               uint64                  `koanf:"from-block"`
-	Namespace               uint64                  `koanf:"namespace"`
-	RetryTime               time.Duration           `koanf:"retry-time"`
-	HotshotPollingInterval  time.Duration           `koanf:"hotshot-polling-interval"`
-	HotshotPollingTimeout   time.Duration           `koanf:"hotshot-polling-timeout"`
-	EspressoSGXVerifierAddr string                  `koanf:"espresso-sgx-verifier-addr"`
-	BatchPosterAddr         string                  `koanf:"batch-poster-addr"`
-	RecordPerformance       bool                    `koanf:"record-performance"`
-	WaitForFinalization     bool                    `koanf:"wait-for-finalization"`
-	WaitForConfirmations    bool                    `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth      uint64                  `koanf:"required-block-depth"`
-	BlocksToRead            uint64                  `koanf:"blocks-to-read"`
-	Dangerous               DangerousCaffNodeConfig `koanf:"dangerous"`
+	Enable                        bool                                      `koanf:"enable"`
+	HotShotUrls                   []string                                  `koanf:"hotshot-urls"`
+	NextHotshotBlock              uint64                                    `koanf:"next-hotshot-block"`
+	FromBlock                     uint64                                    `koanf:"from-block"`
+	Namespace                     uint64                                    `koanf:"namespace"`
+	RetryTime                     time.Duration                             `koanf:"retry-time"`
+	HotshotPollingInterval        time.Duration                             `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout         time.Duration                             `koanf:"hotshot-polling-timeout"`
+	EspressoSGXVerifierAddr       string                                    `koanf:"espresso-sgx-verifier-addr"`
+	BatchPosterAddr               string                                    `koanf:"batch-poster-addr"`
+	RecordPerformance             bool                                      `koanf:"record-performance"`
+	WaitForFinalization           bool                                      `koanf:"wait-for-finalization"`
+	WaitForConfirmations          bool                                      `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth            uint64                                    `koanf:"required-block-depth"`
+	BlocksToRead                  uint64                                    `koanf:"blocks-to-read"`
+	Dangerous                     DangerousCaffNodeConfig                   `koanf:"dangerous"`
+	EspressoRegisterServiceConfig espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
+	EspressoTeeType               string                                    `koanf:"espresso-tee-type"`
+
+	// SGX specific config, leave empty if not using SGX
+	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
+	QuoteFile               string `koanf:"quote-file"`
+	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
+
+	// Data poster config
+	DataPoster dataposter.DataPosterConfig `koanf:"data-poster"`
 
 	// Force Inclusion Checker
 	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
 	StateChecker          StateCheckerConfig          `koanf:"state-checker"`
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
+	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
+	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -81,18 +99,21 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RecordPerformance:       false,
 	// Setting these values to the default
 	// values set by Arbitrum
-	WaitForFinalization:  false,
-	WaitForConfirmations: true,
-	RequiredBlockDepth:   20,
-	BlocksToRead:         10000,
-	Dangerous:            DefaultDangerousCaffNodeConfig,
-	FromBlock:            1,
-
-	ForceInclusionChecker: DefaultEspressoForceInclusionCheckerConfig,
-	StateChecker:          DefaultStateCheckerConfig,
-
-	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
-	EspressoTeeType:         "",
+	WaitForFinalization:           false,
+	WaitForConfirmations:          true,
+	RequiredBlockDepth:            20,
+	BlocksToRead:                  10000,
+	Dangerous:                     DefaultDangerousCaffNodeConfig,
+	FromBlock:                     1,
+	KeyPairAttestationsPath:       "caff_node_key_pair_attestations",
+	EspressoTeeType:               "SGX",
+	EspressoRegisterServiceConfig: espressotee.DefaultEspressoRegisterServiceConfig,
+	UserDataAttestationFile:       "",
+	QuoteFile:                     "",
+	EspressoTEEVerifierAddr:       "",
+	DataPoster:                    dataposter.DefaultDataPosterConfig,
+	SnapshotChecksum:              "",
+	GenerateSnapshot:              false,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -112,8 +133,15 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
 	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
-	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "Configures the type of espresso tee to use")
+	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
+	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures the caff node to generate a snapshot of the state db")
+	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
+	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
+	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
+	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
+	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
 	EspressoStateCheckerConfigAddOptions(prefix+".state-checker", f)
@@ -134,7 +162,7 @@ type EspressoCaffNode struct {
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
-	db            authdb.AuthDB
+	db            *authdb.AuthDB
 
 	delayedMessageFetcher DelayedMessageFetcherInterface
 
@@ -145,20 +173,26 @@ type EspressoCaffNode struct {
 
 	batcherAddrMonitor *BatcherAddrMonitor
 	currentBlock       *types.Block
+	snapshotHandler    *EspressoSnapshotHandler
+	keyManager         *espresso_key_manager.EspressoKeyManager
+	dataPoster         *dataposter.DataPoster
 }
 
 func NewEspressoCaffNode(
+	ctx context.Context,
 	configFetcher EspressoCaffNodeConfigFetcher,
 	teeAddress *common.Address,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	db authdb.AuthDB,
+	db *authdb.AuthDB,
 	recordPerformance bool,
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
-	httpPort int,
+	stack *node.Node,
+	dataPosterDB ethdb.Database,
+	txOptsCaffNode *bind.TransactOpts,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -167,11 +201,9 @@ func NewEspressoCaffNode(
 	if l1Reader == nil {
 		return nil, fmt.Errorf("l1 reader is nil")
 	}
-
-	if configFetcher().EspressoTeeType != "" {
-		if teeAddress == nil {
-			return nil, fmt.Errorf("snapshotSigner and snapshotPublicKey are required for espresso tee type")
-		}
+	teeType, err := espressotee.FromString(configFetcher().EspressoTeeType)
+	if err != nil {
+		return nil, fmt.Errorf("Error parsing TEE type, %w", err)
 	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
@@ -208,7 +240,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = db.AuthReadFromBlock()
+		fromBlock, err = authdb.ReadFromBlock(db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -238,9 +270,76 @@ func NewEspressoCaffNode(
 
 	stateChecker := NewStateChecker(
 		configFetcher().StateChecker,
-		httpPort,
+		stack.Config().HTTPPort,
 		fatalErrChan,
 	)
+
+	// Create a new EspressoKeyManager
+	// Get the EspressoTEEVerifier address from SequencerInbox contract
+	configAddress := configFetcher().EspressoTEEVerifierAddr
+	var espressoTEEVerifierAddress common.Address
+	// parse the espresso tee verifier address from config if it exists, otherwise read from the sequencerInbox
+	// Eventually we should only read from the SequencerInbox
+	if configAddress != "" && common.IsHexAddress(configAddress) {
+		espressoTEEVerifierAddress = common.HexToAddress(configAddress)
+	} else {
+		espressoTEEVerifierAddress, err = sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
+	}
+	espressoTEEVerifier, err := espressogen.NewIEspressoTEEVerifier(espressoTEEVerifierAddress, l1Reader.Client())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)
+	}
+	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
+
+	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
+	if teeType == espresso_key_manager.NITRO {
+		log.Info("setting up nitro verifier", "tee type", teeType)
+		nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(espressoTEEVerifier, l1Reader.Client())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var dataPoster *dataposter.DataPoster
+	var keyManager *espresso_key_manager.EspressoKeyManager
+	if teeType != espressotee.EMPTY && teeType != espressotee.TESTS {
+		if txOptsCaffNode != nil {
+			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
+		}
+
+		dataPosterConfigFetcher := func() *dataposter.DataPosterConfig {
+			dpCfg := configFetcher().DataPoster
+			return &dpCfg
+		}
+
+		chainId, err := l1Reader.Client().ChainID(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get chain id: %w", err)
+		}
+
+		dataPoster, err := dataposter.NewDataPoster(ctx,
+			&dataposter.DataPosterOpts{
+				Database:      dataPosterDB,
+				HeaderReader:  l1Reader,
+				Auth:          txOptsCaffNode,
+				Config:        dataPosterConfigFetcher,
+				ParentChainID: chainId,
+				MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
+					return nil, nil
+				},
+			})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create data poster: %w", err)
+		}
+
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+	}
+
+	snapshotHandler := NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), configFetcher().SnapshotChecksum, configFetcher().GenerateSnapshot)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -253,6 +352,9 @@ func NewEspressoCaffNode(
 		forceInclusionChecker: forceInclusionChecker,
 		stateChecker:          stateChecker,
 		batcherAddrMonitor:    batcherAddrMonitor,
+		snapshotHandler:       snapshotHandler,
+		keyManager:            keyManager,
+		dataPoster:            dataPoster,
 	}, nil
 }
 
@@ -340,7 +442,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	batch := n.db.NewBatch()
 
 	// Store hotshot block num with auth tag
-	if err := n.db.AuthWriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
+	if err := authdb.WriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
 		log.Error("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
 		return false
 	}
@@ -348,7 +450,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 	// Store from block with signature if snapshot signer is configured
 	// fromBlock will only be stored when we process a delayed message
 	if fromBlock != 0 {
-		if err := n.db.AuthWriteFromBlock(batch, fromBlock); err != nil {
+		if err := authdb.WriteFromBlock(batch, fromBlock); err != nil {
 			log.Error("failed to store delayedMessageFetcherFromBlock and its auth tag", "err", err)
 			return false
 		}
@@ -383,6 +485,25 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
+	if n.configFetcher().SnapshotChecksum != "" || n.configFetcher().GenerateSnapshot {
+		if n.configFetcher().EspressoTeeType == "" && n.configFetcher().SnapshotChecksum != "" {
+			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
+		}
+		err := n.snapshotHandler.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to start snapshot verifier: %w", err)
+		}
+	}
+
+	if n.keyManager != nil {
+		registered := n.keyManager.HasRegistered()
+		if !registered {
+			if err := n.keyManager.RegisterService(); err != nil {
+				return err
+			}
+		}
+	}
+
 	err := n.espressoStreamer.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
@@ -418,7 +539,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	var nextHotshotBlock uint64
 
 	if !n.configFetcher().Dangerous.IgnoreDatabaseHotshotBlock {
-		nextHotshotBlock, err = n.db.AuthReadNextHotshotBlockNum()
+		nextHotshotBlock, err = authdb.ReadNextHotshotBlockNum(n.db)
 		if err != nil {
 			return fmt.Errorf("failed to read next hotshot block: %w", err)
 		}
@@ -474,4 +595,5 @@ func (n *EspressoCaffNode) StopAndWait() {
 	n.delayedMessageFetcher.StopAndWait()
 	n.espressoStreamer.StopAndWait()
 	n.forceInclusionChecker.StopAndWait()
+	n.snapshotHandler.StopAndWait()
 }

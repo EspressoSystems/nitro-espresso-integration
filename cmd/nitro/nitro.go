@@ -255,17 +255,30 @@ func mainImpl() int {
 
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
+	var caffNodetxOpts *bind.TransactOpts
+
 	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		teeAddress, err = integrityattestation.ReadEnclaveAddress(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		var key *ecdsa.PrivateKey
+		key, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
-		teeHMAC, err = integrityattestation.GenerateHMAC()
+		teeHMAC, err = integrityattestation.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
+		}
+		privHex := hex.EncodeToString(key.D.Bytes())
+		// This will be used by the hyperlane validator
+		os.Setenv("VALIDATOR_KEY", privHex)
+		if nodeConfig.ParentChain.ID != 0 {
+			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+			if err != nil {
+				flag.Usage()
+				log.Crit("error creating caff node txOpts", "err", err)
+			}
 		}
 	}
 
@@ -478,9 +491,10 @@ func mainImpl() int {
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var err error
 		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC)
+			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "")
 		} else {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, nil)
+			// Outside the tee, we need to remove tmac and also disable auth reads
+			authCaffDB, err = authdb.NewAuthDB(chainDb, nil, true)
 		}
 
 		if err != nil {
@@ -488,6 +502,7 @@ func mainImpl() int {
 			return 1
 		}
 	}
+
 	arbDb, err := stack.OpenDatabaseWithExtraOptions("arbitrumdata", 0, 0, "arbitrumdata/", false, nodeConfig.Persistent.Pebble.ExtraOptions("arbitrumdata"))
 	deferFuncs = append(deferFuncs, func() { closeDb(arbDb, "arbDb") })
 	if err != nil {
@@ -605,6 +620,7 @@ func mainImpl() int {
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,
 		wasmModuleRoot,
+		caffNodetxOpts,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)

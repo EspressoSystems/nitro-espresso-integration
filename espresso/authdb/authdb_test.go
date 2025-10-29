@@ -17,6 +17,13 @@ func Require(t *testing.T, err error, printables ...any) {
 	testhelpers.RequireImpl(t, err, printables...)
 }
 
+func Assert(t *testing.T, cond bool, printables ...any) {
+	t.Helper()
+	if !cond {
+		testhelpers.FailImpl(t, printables...)
+	}
+}
+
 func RequireBench(b *testing.B, err error, printables ...any) {
 	b.Helper()
 	testhelpers.RequireImpl(b, err, printables...)
@@ -28,9 +35,9 @@ func TestAuthDB(t *testing.T) {
 			db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 			Require(t, err)
 
-			hmac, err := integrityattestation.GenerateHMAC()
+			hmac, err := integrityattestation.HmacForTest()
 			Require(t, err)
-			authdb, err := NewAuthDB(db, hmac)
+			authdb, err := NewAuthDB(db, hmac, false)
 			Require(t, err)
 
 			return &authdb
@@ -44,9 +51,9 @@ func BenchmarkAuthDB(b *testing.B) {
 		db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 		RequireBench(b, err)
 
-		hmac, err := integrityattestation.GenerateHMAC()
+		hmac, err := integrityattestation.HmacForTest()
 		RequireBench(b, err)
-		authdb, err := NewAuthDB(db, hmac)
+		authdb, err := NewAuthDB(db, hmac, false)
 		RequireBench(b, err)
 
 		return &authdb

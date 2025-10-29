@@ -61,7 +61,7 @@ type BatcherAddrMonitor struct {
 	cachedAddresses []common.Address
 
 	updates []BatcherAddrUpdate
-	db      authdb.AuthDB
+	db      *authdb.AuthDB
 
 	// Init addresses are the addresses that were set as batcher when the rollup was deployed.
 	initAddresses []common.Address
@@ -75,7 +75,7 @@ type BatcherAddrMonitor struct {
 
 func NewBatcherAddrMonitor(
 	initAddresses []common.Address,
-	db authdb.AuthDB,
+	db *authdb.AuthDB,
 	l1Reader *headerreader.HeaderReader,
 	seqInboxAddr common.Address,
 	deployAt uint64,
@@ -261,17 +261,17 @@ func (b *BatcherAddrMonitor) Store() error {
 		return fmt.Errorf("failed to encode events: %w", err)
 	}
 
-	err = b.db.AuthWriteInitAddresses(newBatch, b.initAddresses)
+	err = authdb.WriteInitAddresses(newBatch, b.initAddresses)
 	if err != nil {
 		return fmt.Errorf("failed to put init addresses: %w", err)
 	}
 
-	err = b.db.AuthWriteEvents(newBatch, eventsBytes)
+	err = authdb.WriteEvents(newBatch, eventsBytes)
 	if err != nil {
 		return fmt.Errorf("failed to put events: %w", err)
 	}
 
-	err = b.db.AuthWriteLastProcessedHeight(newBatch, b.lastProcessedParentHeight)
+	err = authdb.WriteLastProcessedHeight(newBatch, b.lastProcessedParentHeight)
 	if err != nil {
 		return fmt.Errorf("failed to put last processed height: %w", err)
 	}
@@ -281,7 +281,7 @@ func (b *BatcherAddrMonitor) Store() error {
 
 func (b *BatcherAddrMonitor) Restore() error {
 
-	initAddresses, err := b.db.AuthReadInitAddresses()
+	initAddresses, err := authdb.ReadInitAddresses(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get init addresses: %w, init addresses: %v", err, initAddresses)
 	}
@@ -289,13 +289,13 @@ func (b *BatcherAddrMonitor) Restore() error {
 		b.initAddresses = initAddresses
 	}
 
-	lastProcessedHeight, err := b.db.AuthReadLastProcessedHeight()
+	lastProcessedHeight, err := authdb.ReadLastProcessedHeight(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get last processed height: %w", err)
 	}
 	b.lastProcessedParentHeight = lastProcessedHeight
 
-	eventsBytes, err := b.db.AuthReadEvents()
+	eventsBytes, err := authdb.ReadEvents(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
@@ -421,7 +421,7 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 	if len(events) == 0 {
 		// If no events are found, we still need to update the last processed height
 		batch := b.db.NewBatch()
-		err = b.db.AuthWriteLastProcessedHeight(batch, newHeight)
+		err = authdb.WriteLastProcessedHeight(batch, newHeight)
 		if err != nil {
 			return fmt.Errorf("failed to store last processed height: %w", err)
 		}
@@ -459,7 +459,6 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 			case <-headerchan:
 				err := b.Process(ctx)
 				if err != nil {
-					log.Error("failed to process", "err", err)
 					continue
 				}
 			}

@@ -68,11 +68,11 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/localgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -114,6 +114,7 @@ type TestClient struct {
 	ConsensusNode *arbnode.Node
 	ExecNode      *gethexec.ExecutionNode
 	ClientWrapper *ClientWrapper
+	caffDB        *authdb.AuthDB
 
 	// having cleanup() field makes cleanup customizable from default cleanup methods after calling build
 	cleanup func()
@@ -494,7 +495,7 @@ func buildOnParentChain(
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	_, chainTestClient.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, chainInfo, dataDir, chainConfig, arbOSInit, initMessage, stackConfig, execConfig, wasmCacheTag, useFreezer)
+		t, chainInfo, dataDir, chainConfig, arbOSInit, initMessage, stackConfig, execConfig, nil, wasmCacheTag, useFreezer)
 
 	var sequencerTxOptsPtr *bind.TransactOpts
 	var dataSigner signature.DataSignerFunc
@@ -528,7 +529,7 @@ func buildOnParentChain(
 	Require(t, err)
 	chainTestClient.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 		ctx, chainTestClient.Stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainTestClient.Client,
-		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot())
+		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, nil, fatalErrChan, parentChainId, nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	err = chainTestClient.ConsensusNode.Start(ctx)
@@ -539,7 +540,12 @@ func buildOnParentChain(
 	StartWatchChanErr(t, ctx, fatalErrChan, chainTestClient.ConsensusNode)
 
 	chainTestClient.ExecNode = getExecNode(t, chainTestClient.ConsensusNode)
-	chainTestClient.cleanup = func() { chainTestClient.ConsensusNode.StopAndWait() }
+	chainTestClient.cleanup = func() {
+		chainTestClient.ConsensusNode.StopAndWait()
+		if chainTestClient.Stack != nil {
+			chainTestClient.Stack.Close()
+		}
+	}
 
 	return chainTestClient
 }
@@ -643,7 +649,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, nil, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
+		t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, nil, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -656,7 +662,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	Require(t, err)
 	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		nil, nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	// Give the node an init message
@@ -685,11 +691,16 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
 	return func() { b.L2.cleanup() }
 }
 
-func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder, withSnapshotSigner bool) (func(), error) {
+func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder) (func(), error) {
 	b.L2 = NewTestClient(b.ctx)
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
@@ -714,49 +725,72 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder,
 
 	b.L1Info = existing.L1Info
 
-	teeHMAC, err := integrityattestation.GenerateHMAC()
-	Require(t, err)
-	if withSnapshotSigner {
+	teeHMAC, err := integrityattestation.HmacForTest()
+	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
+	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
+
+	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		snapshotSignerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, existing.nodeConfig.EspressoCaffNode.SnapshotChecksum != "")
 		Require(t, err)
+		b.L2.caffDB = &caffDB
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+			l1Client, deployInfo, nil, nil, nil, &snapshotSignerAddress, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), &caffNodeTxopts)
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, nil)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil, true)
 		Require(t, err)
+		b.L2.caffDB = &caffDB
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+			l1Client, deployInfo, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 		Require(t, err)
 	}
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	b.L2.Client = ClientForStack(t, b.L2.Stack)
 
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
 	b.addresses = existing.addresses
-	return func() { b.L2.cleanup() }, nil
+	return func() { b.L2.cleanup() }, err
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
-func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
+func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
-	b.L2.cleanup()
+	// Close caffDB explicitly to release tag freezer lock before closing stack
+	if b.L2.caffDB != nil {
+		if err := b.L2.caffDB.Close(); err != nil {
+			log.Warn("Error closing caffDB during restart", "err", err)
+		}
+		b.L2.caffDB = nil
+	}
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(500 * time.Millisecond)
 
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.nodeConfig, b.wasmCacheTag, b.useFreezer)
 
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
 	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
@@ -767,18 +801,20 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	Require(t, err)
 
 	var currentNode *arbnode.Node
-	if withSnapshotSigner {
+	var caffDB *authdb.AuthDB
+	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		signerAddress := b.L1Info.GetInfoWithPrivKey("Sequencer").Address
-		teeHMAC, err := integrityattestation.GenerateHMAC()
+		teeHMAC, err := integrityattestation.HmacForTest()
+		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)
-		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC)
+		caffDB, err := authdb.NewAuthDB(chainDb, teeHMAC, b.nodeConfig.EspressoCaffNode.SnapshotChecksum != "")
 		Require(t, err)
-		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, &signerAddress, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), &caffNodeTxopts)
 		Require(t, err)
 	} else {
-		caffDB, err := authdb.NewAuthDB(chainDb, nil)
+		caffDB, err := authdb.NewAuthDB(chainDb, nil, true)
 		Require(t, err)
-		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, &caffDB, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 		Require(t, err)
 	}
 
@@ -791,7 +827,16 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T, withSnapshotSigner bool) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.caffDB = caffDB
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if l2.caffDB != nil {
+			l2.caffDB.Close()
+		}
+		if stack != nil {
+			stack.Close()
+		}
+	}
 	l2.Stack = stack
 
 	b.L2 = l2
@@ -804,9 +849,23 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 		t.Fatalf("L2 was not created")
 	}
 	log.Info("L2 was created")
-	b.L2.cleanup()
+	// Stop the consensus node first and wait for it to fully stop
+	b.L2.ConsensusNode.StopAndWait()
+	// Give extra time for all goroutines and background tasks to finish
+	time.Sleep(500 * time.Millisecond)
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(1 * time.Second)
 
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
 
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
 	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
@@ -816,7 +875,7 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
 
-	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -828,7 +887,12 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
 	l2.Stack = stack
 
 	b.L2 = l2
@@ -889,7 +953,9 @@ func build2ndNode(
 	testClient.Client, testClient.ConsensusNode =
 		Create2ndNodeWithConfig(t, ctx, firstNodeTestClient.ConsensusNode, parentChainTestClient.Stack, parentChainInfo, params.initData, params.nodeConfig, params.execConfig, params.stackConfig, valnodeConfig, params.addresses, initMessage, params.wasmCacheTag, params.useExecutionClientOnly)
 	testClient.ExecNode = getExecNode(t, testClient.ConsensusNode)
-	testClient.cleanup = func() { testClient.ConsensusNode.StopAndWait() }
+	testClient.cleanup = func() {
+		testClient.ConsensusNode.StopAndWait()
+	}
 	return testClient, func() { testClient.cleanup() }
 }
 
@@ -1588,7 +1654,7 @@ func deployOnParentChain(
 }
 
 func createNonL1BlockChainWithStackConfig(
-	t *testing.T, info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, arbOSInit *params.ArbOSInit, initMessage *arbostypes.ParsedInitMessage, stackConfig *node.Config, execConfig *gethexec.Config, wasmCacheTag uint32, useFreezer bool,
+	t *testing.T, info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, arbOSInit *params.ArbOSInit, initMessage *arbostypes.ParsedInitMessage, stackConfig *node.Config, execConfig *gethexec.Config, nodeConfig *arbnode.Config, wasmCacheTag uint32, useFreezer bool,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
 	if info == nil {
 		info = NewArbTestInfo(t, chainConfig.ChainID)
@@ -1605,6 +1671,16 @@ func createNonL1BlockChainWithStackConfig(
 	Require(t, err)
 
 	var chainData ethdb.Database
+	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
+	if nodeConfig != nil && nodeConfig.EspressoCaffNode.SnapshotChecksum != "" {
+		log.Info("Snapshot mode enabled in Caff node")
+		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
+			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
+		}
+		err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient))
+		Require(t, err)
+	}
+
 	if useFreezer {
 		chainData, err = stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", 0, 0, "", "l2chaindata/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
 	} else {
@@ -1745,9 +1821,9 @@ func Create2ndNodeWithConfig(
 	Require(t, err)
 
 	if useExecutionClientOnly {
-		currentNode, err = arbnode.CreateNodeExecutionClient(ctx, chainStack, currentExec, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeExecutionClient(ctx, chainStack, currentExec, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	} else {
-		currentNode, err = arbnode.CreateNodeFullExecutionClient(ctx, chainStack, currentExec, currentExec, currentExec, currentExec, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot())
+		currentNode, err = arbnode.CreateNodeFullExecutionClient(ctx, chainStack, currentExec, currentExec, currentExec, currentExec, arbDb, nil, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	}
 
 	Require(t, err)
@@ -2072,7 +2148,7 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...et
 func createL2BlockChain(
 	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, nodeConf *node.Config, execConfig *gethexec.Config, wasmCacheTag uint32, useFreezer bool,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
-	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, nodeConf, execConfig, wasmCacheTag, useFreezer)
+	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, nodeConf, execConfig, nil, wasmCacheTag, useFreezer)
 }
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
