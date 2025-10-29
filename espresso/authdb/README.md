@@ -29,6 +29,46 @@ Application Layer
 - **`AuthIterator`** - Iterator that skips internal tag entries and validates data
 - **`AuthAncientWriteOp`** - Handles freezer (ancient) data with authentication
 
+## Operating Modes
+
+AuthDB supports three operational modes controlled via `isAuthReadsDisabled` parameter in `NewAuthDB()`:
+
+### 1. Full Authentication Mode (default)
+- **When**: `mac != nil` and `isAuthReadsDisabled = false`
+- **Behavior**: All reads and writes are authenticated with HMAC tags
+- **Use Case**: Production TEE environments with active integrity guarantees
+
+### 2. Write-Only Authentication Mode (bootstrap)
+- **When**: `mac != nil` and `isAuthReadsDisabled = true`
+- **Behavior**: Writes generate tags, reads skip verification
+- **Use Case**: TEE snapshot mode - node migrating from different enclave hash or non-TEE source
+- **Purpose**: Allows reading untrusted snapshot data while re-initializing authentication tags with new HMAC key
+
+### 3. No Authentication Mode
+- **When**: `mac = nil`
+- **Behavior**: No tags generated or verified
+- **Use Case**: Non-TEE environments (batch poster, testing) where authentication overhead is unnecessary
+
+## Snapshot and Bootstrap Flow
+
+The snapshot system enables secure state migration between TEE enclave hashes:
+
+### Snapshot Generation (`--node.espresso-caff-node.generate-snapshot`)
+1. Caff node runs normally with authentication enabled
+2. On shutdown, generates SHA-256 checksum of entire `l2chaindata` directory
+3. Stores checksum in `<datadir>/snapshot.txt`
+4. Snapshot includes all data but **excludes** lock files, logs, and manifests (see `arbutil.HashDir()`)
+
+### Snapshot Bootstrap (`--node.espresso-caff-node.snapshot-checksum <hash>`)
+1. Node verifies snapshot checksum against `l2chaindata` before opening database
+2. Deletes existing `auth-tags` ancient store (contains old HMAC tags from previous enclave)
+3. Opens database in **Write-Only Authentication Mode** (`isAuthReadsDisabled = true`)
+4. Calls `InitAuthTagsDatabase()` - iterates all key-value pairs, computes new HMAC tags with TEE's HMAC key
+5. Calls `InitAncientAuthTags()` - re-generates tags for all ancient chain data (headers, bodies, receipts, hashes)
+6. Node can now operate in Full Authentication Mode with new enclave's integrity guarantees
+
+**Security Property**: Bootstrap mode prevents chicken-and-egg problem - allows reading unverified data while establishing authentication layer with new key.
+
 ## Authentication Schemes
 
 ### 1. Key-Value Store Authentication
