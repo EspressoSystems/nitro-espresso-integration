@@ -354,7 +354,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "SGX",
+	EspressoTeeType:                  "",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit:     900 * 1024,
@@ -406,7 +406,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:               "",
 	ResubmitEspressoTxDeadline:       10 * time.Second,
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "SGX",
+	EspressoTeeType:                  "",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 

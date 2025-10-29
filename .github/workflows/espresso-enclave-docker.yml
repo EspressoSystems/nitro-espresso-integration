@@ -86,7 +86,7 @@ jobs:
           make nitro-cli
           sudo cp build/nitro_cli/release/nitro-cli /usr/bin
           sudo mkdir -p /usr/share/nitro_enclaves/blobs
-          sudo cp blobs/x86_64 /usr/share/nitro_enclaves/blobs
+          sudo cp -r blobs/x86_64 /usr/share/nitro_enclaves/blobs
           cd ..
           rm -rf aws-nitro-enclaves-cli
           docker system prune -f
