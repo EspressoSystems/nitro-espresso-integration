@@ -491,9 +491,10 @@ func mainImpl() int {
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var err error
 		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC)
+			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "")
 		} else {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, nil)
+			// Outside the tee, we need to remove tmac and also disable auth reads
+			authCaffDB, err = authdb.NewAuthDB(chainDb, nil, true)
 		}
 
 		if err != nil {
@@ -501,6 +502,7 @@ func mainImpl() int {
 			return 1
 		}
 	}
+
 	arbDb, err := stack.OpenDatabaseWithExtraOptions("arbitrumdata", 0, 0, "arbitrumdata/", false, nodeConfig.Persistent.Pebble.ExtraOptions("arbitrumdata"))
 	deferFuncs = append(deferFuncs, func() { closeDb(arbDb, "arbDb") })
 	if err != nil {

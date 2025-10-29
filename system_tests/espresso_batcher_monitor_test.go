@@ -27,7 +27,7 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 
 	seqInboxAddr := builder.addresses.SequencerInbox
 
-	authDB, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil)
+	authDB, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, true)
 	Require(t, err)
 
 	monitor := arbnode.NewBatcherAddrMonitor(

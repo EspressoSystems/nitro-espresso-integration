@@ -37,7 +37,7 @@ func TestAuthDB(t *testing.T) {
 
 			hmac, err := integrityattestation.HmacForTest()
 			Require(t, err)
-			authdb, err := NewAuthDB(db, hmac)
+			authdb, err := NewAuthDB(db, hmac, false)
 			Require(t, err)
 
 			return &authdb
@@ -53,7 +53,7 @@ func BenchmarkAuthDB(b *testing.B) {
 
 		hmac, err := integrityattestation.HmacForTest()
 		RequireBench(b, err)
-		authdb, err := NewAuthDB(db, hmac)
+		authdb, err := NewAuthDB(db, hmac, false)
 		RequireBench(b, err)
 
 		return &authdb

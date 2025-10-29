@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"hash"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -20,6 +22,8 @@ var (
 	ErrAuthTagMissing = errors.New("authentication tag missing")
 	// ErrAuthTagMismatch is returned when a tag doesn't match the computed value
 	ErrAuthTagMismatch = errors.New("authentication tag mismatch")
+	// ErrNoAncients is returned when no ancients data is stored in the database
+	ErrNoAncients = errors.New("no ancients data is stored in the database")
 )
 
 type AuthDB struct {
@@ -28,20 +32,26 @@ type AuthDB struct {
 
 	// Tag freezer stores authentication tags in separate ancient store
 	tagFreezer *rawdb.Freezer
+
+	// isAuthReadsDisabled is a flag to disable auth reads
+	// Its used during initial bootstrapping to avoid reading auth tags so that we can
+	// add new tags using the new tmac key from a different enclave code
+	isAuthReadsDisabled bool
 }
 
-func NewAuthDB(db ethdb.Database, mac hash.Hash) (AuthDB, error) {
-	return newAuthDBWithFreezerTables(db, mac, authTagTableNoSnappy)
+func NewAuthDB(db ethdb.Database, mac hash.Hash, isAuthReadsDisabled bool) (AuthDB, error) {
+	return newAuthDBWithFreezerTables(db, mac, authTagTableNoSnappy, isAuthReadsDisabled)
 }
 
-func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[string]bool) (AuthDB, error) {
+func newAuthDBWithFreezerTables(db ethdb.Database, mac hash.Hash, tagTables map[string]bool, isAuthReadsDisabled bool) (AuthDB, error) {
 	if db == nil {
 		return AuthDB{}, errors.New("db is nil during authdb creation")
 	}
 
 	authDB := AuthDB{
-		Database: db,
-		mac:      mac,
+		Database:            db,
+		mac:                 mac,
+		isAuthReadsDisabled: isAuthReadsDisabled,
 	}
 
 	if mac == nil {
@@ -102,8 +112,31 @@ func (d *AuthDB) computeMacForAncient(kind string, number uint64, data []byte) [
 	return d.mac.Sum(nil)
 }
 
+func (d *AuthDB) verify(key []byte, val []byte) error {
+	if d.isAuthReadsDisabled {
+		// We return true because we don't want to fail the read operation
+		return nil
+	}
+
+	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
+	if err != nil {
+		return fmt.Errorf("failed to get auth tag key:%b, err:%w", key, err)
+	}
+
+	tag := d.computeMac(key, val)
+
+	if !hmac.Equal(expectedTag, tag) {
+		return fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	}
+	return nil
+}
+
 // verifyAncientTag reads the tag from the tag store and verifies it matches the data
 func (d *AuthDB) verifyAncientTag(kind string, number uint64, data []byte) error {
+	if d.isAuthReadsDisabled {
+		// We return true because we don't want to fail the read operation
+		return nil
+	}
 	// Get the corresponding tag table name
 	tagTable, ok := getTagTable(kind)
 	if !ok {
@@ -230,7 +263,6 @@ func (op *AuthAncientWriteOp) AppendRaw(kind string, number uint64, item []byte)
 		number: number,
 		tag:    tag,
 	})
-
 	return nil
 }
 
@@ -490,17 +522,8 @@ func (d *AuthDB) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := d.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil, err
-	}
-
-	tag := d.computeMac(key, val)
-
-	if !hmac.Equal(tag, expectedTag) {
-		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	if err := d.verify(key, val); err != nil {
+		return nil, fmt.Errorf("failed to authenticate: key=%v val=%d err=%w", key, val, err)
 	}
 
 	return val, nil
@@ -539,16 +562,8 @@ func (it *AuthIterator) Value() []byte {
 		return val
 	}
 
-	expectedTag, err := it.db.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil
-	}
-
-	tag := it.db.computeMac(key, val)
-
-	if !hmac.Equal(tag, expectedTag) {
-		log.Error("failed to authenticate", "key", key, "val", val)
+	if err := it.db.verify(key, val); err != nil {
+		log.Error("failed to authenticate", "key", key, "val", val, "err", err)
 		return nil
 	}
 	return val
@@ -587,16 +602,127 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 		return val, nil
 	}
 
-	expectedTag, err := b.authDB.Database.Get(genericAuthTagKey(key))
-	if err != nil {
-		log.Error("Failed to get auth tag", "dbkey", key, "err", err)
-		return nil, err
-	}
-
-	tag := b.authDB.computeMac(key, val)
-	if !hmac.Equal(tag, expectedTag) {
-		log.Error("failed to authenticate", "key", key, "val", val)
-		return nil, fmt.Errorf("%w: key=%v val=%d", ErrAuthTagMismatch, key, val)
+	if err := b.authDB.verify(key, val); err != nil {
+		return nil, fmt.Errorf("failed to authenticate: key=%v val=%d err=%w", key, val, err)
 	}
 	return val, nil
+}
+
+// InitAuthTags initializes auth tags for all keys in the database
+// when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
+func (d *AuthDB) InitAuthTagsDatabase() error {
+	var (
+		prefix    []byte
+		start     []byte
+		startTime = time.Now()
+		logged    = time.Now()
+		count     = 0
+	)
+	log.Info("Starting adding auth tags to the database")
+	it := d.NewIterator(prefix, start)
+	defer it.Release()
+
+	// For each key value pair in the database add an auth tag
+	for it.Next() {
+		key := it.Key()
+		value := it.Value()
+
+		// Only append the key and value if its part of a key we know from schema.go
+		tag := d.computeMac(key, value)
+		if err := d.Put(genericAuthTagKey(key), tag); err != nil {
+			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
+		}
+		count++
+		if time.Since(logged) > 8*time.Second {
+			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			logged = time.Now()
+		}
+
+	}
+	log.Info("Successfully added auth tags to the database")
+	return nil
+}
+
+// InitAncientAuthTags initializes auth tags for all ancients in the database
+// when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
+func (d *AuthDB) InitAncientAuthTags() error {
+	firstBlock, err := d.Database.Tail()
+	if err != nil {
+		return err
+	}
+	numAncients, err := d.Database.Ancients()
+	if err != nil {
+		return err
+	}
+
+	if numAncients == 0 {
+		return nil
+	}
+
+	log.Info("Starting adding ancient auth tags")
+	hashData, blockBodyData, receiptData, headerData, err := d.readChainAncients(firstBlock, numAncients)
+	if err != nil {
+		return err
+	}
+
+	// #nosec G115 -- i is guaranteed non-negative
+	n := int(numAncients)
+	if len(hashData) != n || len(blockBodyData) != n || len(receiptData) != n || len(headerData) != n {
+		return fmt.Errorf("ancients length mismatch: want=%d got hash=%d body=%d receipt=%d header=%d",
+			n, len(hashData), len(blockBodyData), len(receiptData), len(headerData))
+	}
+
+	_, err = d.tagFreezer.ModifyAncients(func(tagOp ethdb.AncientWriteOp) error {
+		// #nosec G115 -- i is guaranteed non-negative
+		for i := 0; i < n; i++ {
+			num := firstBlock + uint64(i)
+
+			if err := tagOp.AppendRaw(AuthTagHashTable, num, hashData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagHeaderTable, num, headerData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagBodiesTable, num, blockBodyData[i]); err != nil {
+				return err
+			}
+			if err := tagOp.AppendRaw(AuthTagReceiptTable, num, receiptData[i]); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	log.Info("Successfully added auth tags to ancients",
+		"from", firstBlock, "count", numAncients)
+	return nil
+}
+
+func (d *AuthDB) readChainAncients(firstBlock, numAncients uint64) (hashData, bodyData, receiptData, headerData [][]byte, err error) {
+
+	hashData, err = d.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, numAncients, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	bodyData, err = d.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, numAncients, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	receiptData, err = d.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, numAncients, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	headerData, err = d.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, numAncients, 0)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	return hashData, bodyData, receiptData, headerData, nil
 }

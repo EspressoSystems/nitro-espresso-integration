@@ -102,7 +102,7 @@ func (d *DelayedMessageFetcher) startWatchDelayedMessages(ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				log.Error("context done in delayed message fetcher", "err", ctx.Err())
+				log.Warn("context done in delayed message fetcher", "err", ctx.Err())
 				unsubscribe()
 				return
 

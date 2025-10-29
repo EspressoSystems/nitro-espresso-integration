@@ -622,7 +622,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				initAddresses = []common.Address{addr}
 			}
 
-			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil)
+			// We dont need auth reads here because batch poster is not reliant on the
+			// database for determining which messages to post, it gets the messages
+			// from Espresso directly
+			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, true)
 			if err != nil {
 				return nil, err
 			}

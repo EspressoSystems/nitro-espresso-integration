@@ -1000,7 +1000,7 @@ func getEspressoCaffNode(
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
-				stack.Config().HTTPPort,
+				stack,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				txOptsCaffNode,
 			)
@@ -1598,9 +1598,6 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
-	if n.EspressoCaffNode != nil {
-		n.EspressoCaffNode.StopAndWait()
-	}
 
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
@@ -1626,9 +1623,7 @@ func (n *Node) StopAndWait() {
 		// Just stops the redis client (most other stuff was stopped earlier)
 		n.SeqCoordinator.StopAndWait()
 	}
-	if n.EspressoCaffNode != nil {
-		n.EspressoCaffNode.StopAndWait()
-	}
+
 	if n.SyncMonitor != nil {
 		n.SyncMonitor.StopAndWait()
 	}
@@ -1638,9 +1633,13 @@ func (n *Node) StopAndWait() {
 	if n.ExecutionClient != nil {
 		n.ExecutionClient.StopAndWait()
 	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
 	if err := n.Stack.Close(); err != nil {
 		log.Error("error on stack close", "err", err)
 	}
+
 }
 
 func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) containers.PromiseInterface[execution.InboxBatch] {
