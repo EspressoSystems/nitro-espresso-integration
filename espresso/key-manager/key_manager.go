@@ -177,6 +177,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 			attestationBytes,
 			k.dataPoster,
 			k.registerSignerOpts,
+			k.serviceType,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)

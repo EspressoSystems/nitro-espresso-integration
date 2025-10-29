@@ -33,6 +33,7 @@ type EspressoNitroTEEVerifierInterface interface {
 		attestationBytes []byte,
 		dataPoster *dataposter.DataPoster,
 		registerSignerOpts EspressoRegisterServiceOpts,
+		serviceType ServiceType,
 	) ([]byte, []byte, error)
 	IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error)
 }
@@ -170,6 +171,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	attestationBytes []byte,
 	dataPoster *dataposter.DataPoster,
 	registerSignerOpts EspressoRegisterServiceOpts,
+	serviceType ServiceType,
 ) ([]byte, []byte, error) {
 	// First check base fee is low enough
 	err := BaseFeeCheck(
@@ -196,7 +198,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	log.Info("successfully got attestation", "pcr0 hash", pcr0Hash)
 
 	// Before verifying certificates on chain, check if the pcr0 hash is registered to save gas
-	verified, err := e.IsPCR0HashRegistered(pcr0Hash, BatchPoster) // Currently we only cxall this function with the batcher, this might change in the future.
+	verified, err := e.IsPCR0HashRegistered(pcr0Hash, serviceType) // Currently we only cxall this function with the batcher, this might change in the future.
 	if err != nil {
 		log.Error("failed to check if pcr0 hash is verified", "pcr0 hash", pcr0Hash)
 		return nil, nil, err
