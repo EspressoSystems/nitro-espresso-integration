@@ -1,7 +1,6 @@
 package integrityattestation
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"fmt"
@@ -9,87 +8,38 @@ import (
 	"path"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/nsm"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-
-	"github.com/offchainlabs/nitro/util/signature"
 )
 
 const (
 	// Attestation document with the KMS Key ID
 	// in UserData attestation doc field.
-	KMSKeyIDFile = "kms_key_id.coses1"
+	kmsKeyIDFile = "kms_key_id.coses1"
 	// Attestation document with the encrypted
 	// private key in UserData attestation doc field.
-	PrivateKeyFile = "private_key.coses1"
+	privateKeyFile = "private_key.coses1"
 	// Attestation document with the public key in
 	// UserData and PublicKey attestation doc fields.
-	PublicKeyFile = "public_key.coses1"
+	publicKeyFile = "public_key.coses1"
 	// Attestation document with the Ethereum
 	// address in UserData attestation doc field.
-	AddressFile = "address.coses1"
+	addressFile = "address.coses1"
 )
 
-func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, signature.DataSignerFunc, error) {
-	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
-		return nil, nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
-	}
-
-	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load AWS config: %w", err)
-	}
-
-	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
-	}
-
-	privateKey, err := GetAttestedPrivateKey(awsConfig, kmsKeyID, attestationsPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested private key: %w", err)
-	}
-
-	publicKey, err := GetAttestedPublicKey(privateKey, attestationsPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested public key: %w", err)
-	}
-
-	if _, err = GetAttestedAddress(publicKey, attestationsPath); err != nil {
-		return nil, nil, fmt.Errorf("failed to get attested address: %w", err)
-	}
-
-	return privateKey, signature.DataSignerFromPrivateKey(privateKey), nil
-}
-
 func GetAttestedKMSKeyID(cfg aws.Config, attestationsPath string) (string, error) {
-	kmsKeyIDPath := path.Join(attestationsPath, KMSKeyIDFile)
-
-	_, pcr0Actual, err := nsm.DescribePCR(0)
-	if err != nil {
-		return "", fmt.Errorf("failed to get PCR0: %w", err)
-	}
+	kmsKeyIDPath := path.Join(attestationsPath, kmsKeyIDFile)
 
 	kmsKeyIDAttestationDocRaw, err := os.ReadFile(kmsKeyIDPath)
 	// if attestation document exist just read KMS Key ID
 	if err == nil {
-		kmsKeyIDAttestationDoc, err := attestation.ParseNSMAttestationDoc(kmsKeyIDAttestationDocRaw)
+		kmsKeyIDAttestationDoc, err := parseAndVerifyAttestationDocument(kmsKeyIDAttestationDocRaw)
 		if err != nil {
 			return "", fmt.Errorf("failed to parse %s: %w", kmsKeyIDPath, err)
-		}
-
-		if err = kmsKeyIDAttestationDoc.Verify(); err != nil {
-			return "", fmt.Errorf("%s have invalid signature: %w", kmsKeyIDPath, err)
-		}
-
-		if pcr0Stored, ok := kmsKeyIDAttestationDoc.PCRs[0]; !ok || !bytes.Equal(pcr0Stored, pcr0Actual) {
-			return "", fmt.Errorf("PCR0 from %s mismatch with actual PCR0 value", kmsKeyIDPath)
 		}
 
 		return string(kmsKeyIDAttestationDoc.UserData), nil
@@ -108,6 +58,11 @@ func GetAttestedKMSKeyID(cfg aws.Config, attestationsPath string) (string, error
 	kmsEnclaveClient, err := GetKMSEnclaveClient(cfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to get kms enclave client: %w", err)
+	}
+
+	_, pcr0Actual, err := nsm.DescribePCR(0)
+	if err != nil {
+		return "", fmt.Errorf("failed to get PCR0: %w", err)
 	}
 
 	kmsKeyPolicy := DefaultPolicies(rootArn, principalArn, map[int][]byte{0: pcr0Actual})
@@ -141,26 +96,13 @@ func GetAttestedPrivateKey(cfg aws.Config, kmsKeyID string, attestationsPath str
 		return nil, fmt.Errorf("failed to get kms enclave client: %w", err)
 	}
 
-	privateKeyPath := path.Join(attestationsPath, PrivateKeyFile)
+	privateKeyPath := path.Join(attestationsPath, privateKeyFile)
 	privateKeyAttestationDocRaw, err := os.ReadFile(privateKeyPath)
 	// if attestation document exist just read and decrypt private key
 	if err == nil {
-		privateKeyAttestationDoc, err := attestation.ParseNSMAttestationDoc(privateKeyAttestationDocRaw)
+		privateKeyAttestationDoc, err := parseAndVerifyAttestationDocument(privateKeyAttestationDocRaw)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse %s: %w", privateKeyPath, err)
-		}
-
-		if err = privateKeyAttestationDoc.Verify(); err != nil {
-			return nil, fmt.Errorf("%s have invalid signature: %w", privateKeyPath, err)
-		}
-
-		_, pcr0Actual, err := nsm.DescribePCR(0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get PCR0: %w", err)
-		}
-
-		if pcr0Stored, ok := privateKeyAttestationDoc.PCRs[0]; !ok || !bytes.Equal(pcr0Stored, pcr0Actual) {
-			return nil, fmt.Errorf("PCR0 from %s mismatch with actual PCR0 value", privateKeyPath)
 		}
 
 		decryptResp, err := kmsEnclaveClient.Decrypt(context.Background(), &kms.DecryptInput{
@@ -211,7 +153,7 @@ func GetAttestedPrivateKey(cfg aws.Config, kmsKeyID string, attestationsPath str
 }
 
 func GetAttestedPublicKey(privateKey *ecdsa.PrivateKey, attestationsPath string) (*ecdsa.PublicKey, error) {
-	publicKeyPath := path.Join(attestationsPath, PublicKeyFile)
+	publicKeyPath := path.Join(attestationsPath, publicKeyFile)
 
 	// if attestation document exist just read public key
 	_, err := os.ReadFile(publicKeyPath)
@@ -241,28 +183,11 @@ func GetAttestedPublicKey(privateKey *ecdsa.PrivateKey, attestationsPath string)
 func GetAttestedAddress(publicKey *ecdsa.PublicKey, attestationsPath string) (common.Address, error) {
 	address := crypto.PubkeyToAddress(*publicKey)
 
-	addressPath := path.Join(attestationsPath, AddressFile)
+	addressPath := path.Join(attestationsPath, addressFile)
 
 	// if attestation document exist just read address
-	addressAttestationDocRaw, err := os.ReadFile(addressPath)
+	_, err := os.ReadFile(addressPath)
 	if err == nil {
-		addressAttestationDoc, err := attestation.ParseNSMAttestationDoc(addressAttestationDocRaw)
-		if err != nil {
-			return address, fmt.Errorf("failed to parse %s: %w", addressPath, err)
-		}
-		if err = addressAttestationDoc.Verify(); err != nil {
-			return address, fmt.Errorf("%s have invalid signature: %w", addressPath, err)
-		}
-
-		_, pcr0Actual, err := nsm.DescribePCR(0)
-		if err != nil {
-			return address, fmt.Errorf("failed to get PCR0: %w", err)
-		}
-
-		if pcr0Stored, ok := addressAttestationDoc.PCRs[0]; !ok || !bytes.Equal(pcr0Stored, pcr0Actual) {
-			return address, fmt.Errorf("PCR0 from %s mismatch with actual PCR0 value", addressPath)
-		}
-
 		return address, nil
 	}
 
@@ -272,7 +197,7 @@ func GetAttestedAddress(publicKey *ecdsa.PublicKey, attestationsPath string) (co
 	}
 
 	// Save address
-	addressAttestationDocRaw, err = nsm.GetAttestationDoc(address[:], nil, nil)
+	addressAttestationDocRaw, err := nsm.GetAttestationDoc(address[:], nil, nil)
 	if err != nil {
 		return address, fmt.Errorf("failed to get attestation doc for %s: %w", addressPath, err)
 	}

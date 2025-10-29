@@ -1,6 +1,7 @@
 package integrityattestation
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/hmac"
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
 	"golang.org/x/crypto/hkdf"
@@ -188,4 +190,26 @@ func parsePKCS8ECPrivateKey(pcks8PrivateKey []byte) (*ecdsa.PrivateKey, error) {
 	}
 
 	return privateKey, nil
+}
+
+func parseAndVerifyAttestationDocument(rawDocument []byte) (*attestation.NSMAttestationDoc, error) {
+	attestationDoc, err := attestation.ParseNSMAttestationDoc(rawDocument)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse attestation document: %w", err)
+	}
+
+	if err = attestationDoc.Verify(); err != nil {
+		return nil, fmt.Errorf("attestation document have invalid signature: %w", err)
+	}
+
+	_, pcr0Actual, err := nsm.DescribePCR(0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PCR0: %w", err)
+	}
+
+	if pcr0Stored, ok := attestationDoc.PCRs[0]; !ok || !bytes.Equal(pcr0Stored, pcr0Actual) {
+		return nil, fmt.Errorf("PCR0 from attestation document mismatch with actual PCR0 value")
+	}
+
+	return attestationDoc, nil
 }
