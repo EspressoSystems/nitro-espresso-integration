@@ -125,6 +125,7 @@ func NewEspressoKeyManager(
 		},
 		userDataAttestationFile: userDataAttestationFile,
 		quoteFile:               quoteFile,
+		serviceType:             serviceType,
 	}
 }
 
