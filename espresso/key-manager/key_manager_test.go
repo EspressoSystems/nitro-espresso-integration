@@ -43,7 +43,7 @@ func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPos
 }
 
 func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, opts espressotee.EspressoRegisterServiceOpts, serviceType espressotee.ServiceType) ([]byte, []byte, error) {
-	args := m.Called(attestationBytes, dataPoster, opts)
+	args := m.Called(attestationBytes, dataPoster, opts, serviceType)
 	return nil, nil, args.Error(0)
 }
 
