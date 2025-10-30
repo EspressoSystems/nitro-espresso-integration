@@ -20,12 +20,14 @@ type ArbAggregator struct {
 var ErrNotOwner = errors.New("must be called by chain owner")
 
 // GetPreferredAggregator returns the preferred aggregator address.
+//
 // Deprecated: Do not use this method.
 func (con ArbAggregator) GetPreferredAggregator(c ctx, evm mech, address addr) (prefAgg addr, isDefault bool, err error) {
 	return l1pricing.BatchPosterAddress, true, err
 }
 
 // GetDefaultAggregator returns the default aggregator address.
+//
 // Deprecated: Do not use this method.
 func (con ArbAggregator) GetDefaultAggregator(c ctx, evm mech) (addr, error) {
 	return l1pricing.BatchPosterAddress, nil
@@ -91,6 +93,7 @@ func (con ArbAggregator) SetFeeCollector(c ctx, evm mech, batchPoster addr, newF
 }
 
 // GetTxBaseFee gets an aggregator's current fixed fee to submit a tx
+//
 // Deprecated: always returns zero
 func (con ArbAggregator) GetTxBaseFee(c ctx, evm mech, aggregator addr) (huge, error) {
 	// This is deprecated and now always returns zero.

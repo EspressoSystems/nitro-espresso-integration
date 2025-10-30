@@ -165,7 +165,8 @@ func TestAddressSetAllMembers(t *testing.T) {
 
 	for i := 0; i < 512; i++ {
 		rem := rand.Intn(2) == 1
-		addr := possibleAddresses[rand.Intn(len(possibleAddresses))]
+		addrLen := len(possibleAddresses)
+		addr := possibleAddresses[rand.Intn(addrLen)]
 		if rem {
 			fmt.Printf("removing %v\n", addr)
 			Require(t, aset.Remove(addr, version))

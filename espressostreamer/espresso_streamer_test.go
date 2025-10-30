@@ -256,7 +256,7 @@ func TestEspressoStreamer(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(messages), "Expected to process two messages")
-		if len(messages) == 2 {
+		if len(messages) == 2 && len(tx1) > 0 && len(tx3) > 0 {
 			assert.Equal(t, uint64(tx1[0]), messages[0].Pos)
 			assert.Equal(t, uint64(tx3[0]), messages[1].Pos)
 		}
