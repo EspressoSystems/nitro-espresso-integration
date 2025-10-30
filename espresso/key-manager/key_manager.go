@@ -183,9 +183,10 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		}
 		return attestation, data, nil
 	case TESTS:
-		data := crypto.FromECDSAPub(k.pubKey)
-		signature, err := k.noOpSignerFunc(data)
-		return signature, data, err
+		signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+		addr := signerAddr.Bytes()
+		signature, err := k.noOpSignerFunc(addr)
+		return signature, addr, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
