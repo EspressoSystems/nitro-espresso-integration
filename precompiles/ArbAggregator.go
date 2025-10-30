@@ -101,6 +101,7 @@ func (con ArbAggregator) GetTxBaseFee(c ctx, evm mech, aggregator addr) (huge, e
 }
 
 // SetTxBaseFee sets an aggregator's fixed fee (caller must be the aggregator, its fee collector, or an owner)
+//
 // Deprecated: no-op
 func (con ArbAggregator) SetTxBaseFee(c ctx, evm mech, aggregator addr, feeInL1Gas huge) error {
 	// This is deprecated and is now a no-op.
