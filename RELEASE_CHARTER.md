@@ -53,6 +53,6 @@ Deliver new code features systematically with clear documentation and validation
   - [ ] Tier 2 - 1 week successfully
 - [ ] Latest documentation updated
   - [ ] Update release documentation if needed
-  - [ ] Describe tier'ed devnet testing results
+  - [ ] Describe tiered devnet testing results
   - [ ] Include security assessment if we conducted an audit
 - [ ] Team agrees to making it production ready
