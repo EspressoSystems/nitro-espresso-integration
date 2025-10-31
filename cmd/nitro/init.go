@@ -39,7 +39,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/pruning"
@@ -600,15 +599,6 @@ func rebuildLocalWasm(ctx context.Context, config *gethexec.Config, l2BlockChain
 }
 
 func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeConfig, chainId *big.Int, cacheConfig *core.CacheConfig, targetConfig *gethexec.StylusTargetConfig, tracer *tracing.Hooks, persistentConfig *conf.PersistentConfig, l1Client *ethclient.Client, rollupAddrs chaininfo.RollupAddresses) (ethdb.Database, *core.BlockChain, error) {
-	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if config.Node.EspressoCaffNode.SnapshotChecksum != "" {
-		log.Info("Verifying the snapshot", "snapshot checksum", config.Node.EspressoCaffNode.SnapshotChecksum)
-		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", config.Persistent.Ancient))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
-		}
-	}
-
 	if !config.Init.Force {
 		if readOnlyDb, err := stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", 0, 0, config.Persistent.Ancient, "l2chaindata/", true, persistentConfig.Pebble.ExtraOptions("l2chaindata")); err == nil {
 			if chainConfig := gethexec.TryReadStoredChainConfig(readOnlyDb); chainConfig != nil {

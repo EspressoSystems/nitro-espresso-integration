@@ -474,6 +474,15 @@ func mainImpl() int {
 		log.Info("enabling custom tracer", "name", traceConfig.TracerName)
 	}
 
+	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
+	if nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+		err := arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient))
+		if err != nil {
+			log.Error("failed to verify snapshot", "err", err)
+			return 1
+		}
+	}
+
 	chainDb, l2BlockChain, err := openInitializeChainDb(ctx, stack, nodeConfig, new(big.Int).SetUint64(nodeConfig.Chain.ID), gethexec.DefaultCacheConfigFor(stack, &nodeConfig.Execution.Caching), &nodeConfig.Execution.StylusTarget, tracer, &nodeConfig.Persistent, l1Client, rollupAddrs)
 	if l2BlockChain != nil {
 		deferFuncs = append(deferFuncs, func() { l2BlockChain.Stop() })
