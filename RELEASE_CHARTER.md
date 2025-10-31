@@ -48,7 +48,7 @@ Deliver new code features systematically with clear documentation and validation
 **Pre-release becomes Release when:**
 
 - [ ] Regression testing on new release went through successfully
-- [ ] Managed to produced high load on the devnet for:
+- [ ] Managed to produce high load on the devnet for:
   - [ ] Tier 1 - 3 days successfully
   - [ ] Tier 2 - 1 week successfully
 - [ ] Latest documentation updated
