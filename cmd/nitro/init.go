@@ -39,7 +39,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/pruning"
@@ -687,14 +686,6 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 	if initFile != "" {
 		if err := extractSnapshot(initFile, stack.InstanceDir(), config.Init.ImportWasm); err != nil {
 			return nil, nil, err
-		}
-		// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
-		if config.Node.EspressoCaffNode.SnapshotChecksum != "" {
-			log.Info("Verifying the snapshot", "snapshot checksum", config.Node.EspressoCaffNode.SnapshotChecksum)
-			err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", config.Persistent.Ancient))
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
-			}
 		}
 	}
 
