@@ -155,48 +155,57 @@ func (v *BatchVerifier) sendBatchForVerification(
 	}
 
 	var sigs [][]byte
-	// append our signature
 	v.adjustRecoveryByte(args.Signature)
-	sigs = append(sigs, args.Signature)
+	// Note: We append empty signatures on any error because if we still receive a quorum of signatures,
+	// we will still try to post the batch and timeboost contracts checks signatures in order in respect to member ordering in contract
 	for _, member := range members {
 		if bytes.Equal(member.SigKey, v.getCompressedPubKey()) {
-			// we created the batch, no need to send it to ourselves
+			// we created the batch, no need to send it to ourselves, append our signature
+			sigs = append(sigs, args.Signature)
 			continue
 		}
 		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
-			return nil, fmt.Errorf("http request failed: %w", err)
+			log.Error("http request failed", "err", err, "to", member.SigKey)
+			sigs = append(sigs, []byte{})
+			continue
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
 			log.Error("server returned returned error", "error code", resp.StatusCode)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			log.Error("failed to read response body", "err", err, "url", member.BatchPosterAddress)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 		var rpcResponse BatchRpcResponse
 		if err := json.Unmarshal(body, &rpcResponse); err != nil {
 			log.Error("failed to unmarshal json response", "err", err, "url", member.BatchPosterAddress)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 		if rpcResponse.Error != nil {
 			log.Error("got error from request", "err", rpcResponse.Error.Message, "url", member.BatchPosterAddress)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 
 		pubKey, err := crypto.SigToPub(args.Hash, rpcResponse.Result)
 		if err != nil {
 			log.Error("failed to recover public key", "err", err, "url", member.BatchPosterAddress)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 
 		if !bytes.Equal(crypto.CompressPubkey(pubKey), member.SigKey) {
 			log.Error("failed to validate signature in the committee", "url", member.BatchPosterAddress)
+			sigs = append(sigs, []byte{})
 			continue
 		}
 		v.adjustRecoveryByte(rpcResponse.Result)
@@ -205,7 +214,20 @@ func (v *BatchVerifier) sendBatchForVerification(
 	if len(sigs) < requiredQuorum {
 		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, len(sigs))
 	}
-	return bytes.Join(sigs, nil), nil
+	bytesType, err := abi.NewType("bytes[]", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes array type: %w", err)
+	}
+	arguments := abi.Arguments{
+		{
+			Type: bytesType,
+		},
+	}
+	encodedSigs, err := arguments.Pack(sigs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ABI encode signatures: %w", err)
+	}
+	return encodedSigs, nil
 }
 
 func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
