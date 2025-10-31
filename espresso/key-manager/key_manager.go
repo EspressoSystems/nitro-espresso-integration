@@ -68,19 +68,33 @@ func NewEspressoKeyManager(
 	teeType espressotee.TEE,
 	serviceType espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterServiceConfig,
+	servicePersistentPrivateKey *ecdsa.PrivateKey,
 	userDataAttestationFile string,
 	quoteFile string,
 ) *EspressoKeyManager {
-	// ephemeral key
-	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
-	if err != nil {
-		panic(err)
+	var pubKey *ecdsa.PublicKey
+	var err error
+	var privKey *ecdsa.PrivateKey
+	var ok bool
+
+	// If the node supports persistent private key, we use that one otherwise we generate a
+	// new ephemeral key. Currently only the cafff node supports persistent private key.
+	if servicePersistentPrivateKey == nil {
+		// ephemeral key
+		privKey, err = ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+		if err != nil {
+			panic(err)
+		}
+
+		pubKey, ok = privKey.Public().(*ecdsa.PublicKey)
+		if !ok {
+			panic("failed to get public key")
+		}
+	} else {
+		privKey = servicePersistentPrivateKey
+		pubKey = &servicePersistentPrivateKey.PublicKey
 	}
 
-	pubKey, ok := privKey.Public().(*ecdsa.PublicKey)
-	if !ok {
-		panic("failed to get public key")
-	}
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
 	// and if it is we can safely ignore a nil data signer.
 	if signerFunc == nil && serviceType != espressotee.CaffNode {

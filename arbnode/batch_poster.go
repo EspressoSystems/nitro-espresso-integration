@@ -703,8 +703,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			}
 			submitterOptions = append(
 				submitterOptions,
+				// TODO: pass the persistent private key to the key manager in future
 				submitter.WithKeyManager(
-					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
 				),
 			)
 
