@@ -19,8 +19,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-
-	"github.com/offchainlabs/nitro/espresso/authdb"
 )
 
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
@@ -225,7 +223,7 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir s
 	// Here we are deleting the `AuthTags` ancient store because we want to replace it with new tags
 	// from the new enclave hash. We cant just overwrite the existing tags because freezer doesnt allow
 	// you to modify the tags of an existing freezer.
-	tagFreezerDir := filepath.Join(ancientDir, authdb.AuthTagFreezerName)
+	tagFreezerDir := filepath.Join(ancientDir, "auth-tags")
 	err = os.RemoveAll(tagFreezerDir)
 	if err != nil {
 		return fmt.Errorf("failed to delete authtag ancient store: %w", err)
