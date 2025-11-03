@@ -256,10 +256,10 @@ func mainImpl() int {
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
 	var caffNodetxOpts *bind.TransactOpts
+	var caffNodePrivateKey *ecdsa.PrivateKey
 
 	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		var key *ecdsa.PrivateKey
-		key, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		caffNodePrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
@@ -270,15 +270,19 @@ func mainImpl() int {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
 		}
-		privHex := hex.EncodeToString(key.D.Bytes())
+		privHex := hex.EncodeToString(caffNodePrivateKey.D.Bytes())
+
+		//
 		// This will be used by the hyperlane validator
 		os.Setenv("VALIDATOR_KEY", privHex)
-		if nodeConfig.ParentChain.ID != 0 {
-			caffNodetxOpts, err = bind.NewKeyedTransactorWithChainID(key, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
-			if err != nil {
-				flag.Usage()
-				log.Crit("error creating caff node txOpts", "err", err)
-			}
+
+		caffNodetxOpts, dataSigner, err = util.OpenWallet("l1-espresso-caff-node", &nodeConfig.Node.EspressoCaffNode.ParentChainWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+		if err != nil {
+			flag.Usage()
+			log.Crit("error opening Batch poster parent chain wallet", "path", nodeConfig.Node.EspressoCaffNode.ParentChainWallet.Pathname, "account", nodeConfig.Node.EspressoCaffNode.ParentChainWallet.Account, "err", err)
+		}
+		if nodeConfig.Node.EspressoCaffNode.ParentChainWallet.OnlyCreateKey {
+			return 0
 		}
 	}
 
@@ -476,6 +480,16 @@ func mainImpl() int {
 		log.Info("enabling custom tracer", "name", traceConfig.TracerName)
 	}
 
+	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
+	if nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
+		err := arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient))
+		if err != nil {
+			log.Error("failed to verify snapshot", "err", err)
+			return 1
+		}
+	}
+
 	chainDb, l2BlockChain, err := openInitializeChainDb(ctx, stack, nodeConfig, new(big.Int).SetUint64(nodeConfig.Chain.ID), gethexec.DefaultCacheConfigFor(stack, &nodeConfig.Execution.Caching), &nodeConfig.Execution.StylusTarget, tracer, &nodeConfig.Persistent, l1Client, rollupAddrs)
 	if l2BlockChain != nil {
 		deferFuncs = append(deferFuncs, func() { l2BlockChain.Stop() })
@@ -621,6 +635,7 @@ func mainImpl() int {
 		blobReader,
 		wasmModuleRoot,
 		caffNodetxOpts,
+		caffNodePrivateKey,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)

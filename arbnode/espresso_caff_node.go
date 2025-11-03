@@ -2,6 +2,7 @@ package arbnode
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -23,6 +24,7 @@ import (
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbos"
+	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
@@ -59,7 +61,8 @@ type EspressoCaffNodeConfig struct {
 	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
 
 	// Data poster config
-	DataPoster dataposter.DataPosterConfig `koanf:"data-poster"`
+	DataPoster        dataposter.DataPosterConfig `koanf:"data-poster"`
+	ParentChainWallet genericconf.WalletConfig    `koanf:"parent-chain-wallet"`
 
 	// Force Inclusion Checker
 	ForceInclusionChecker ForceInclusionCheckerConfig `koanf:"force-inclusion-checker"`
@@ -114,6 +117,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:              "",
 	GenerateSnapshot:              false,
+	ParentChainWallet:             DefaultBatchPosterL1WalletConfig,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -138,9 +142,10 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
+	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
-	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -176,6 +181,7 @@ type EspressoCaffNode struct {
 	snapshotHandler    *EspressoSnapshotHandler
 	keyManager         *espresso_key_manager.EspressoKeyManager
 	dataPoster         *dataposter.DataPoster
+	caffNodePrivateKey *ecdsa.PrivateKey
 }
 
 func NewEspressoCaffNode(
@@ -193,6 +199,7 @@ func NewEspressoCaffNode(
 	stack *node.Node,
 	dataPosterDB ethdb.Database,
 	txOptsCaffNode *bind.TransactOpts,
+	caffNodePrivateKey *ecdsa.PrivateKey,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -307,7 +314,7 @@ func NewEspressoCaffNode(
 	var dataPoster *dataposter.DataPoster
 	var keyManager *espresso_key_manager.EspressoKeyManager
 	if teeType != espressotee.EMPTY && teeType != espressotee.TESTS {
-		if txOptsCaffNode != nil {
+		if txOptsCaffNode == nil {
 			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
 		}
 
@@ -336,7 +343,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 	}
 
 	snapshotHandler := NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), configFetcher().SnapshotChecksum, configFetcher().GenerateSnapshot)
@@ -355,6 +362,7 @@ func NewEspressoCaffNode(
 		snapshotHandler:       snapshotHandler,
 		keyManager:            keyManager,
 		dataPoster:            dataPoster,
+		caffNodePrivateKey:    caffNodePrivateKey,
 	}, nil
 }
 

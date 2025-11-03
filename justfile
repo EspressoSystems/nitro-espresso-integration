@@ -6,6 +6,7 @@ espresso-tests: build
     gotestsum --format standard-verbose --packages="\$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoE2E'
 
 tee-tests: build
+    gotestsum --format standard-verbose --packages="\$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoCaffNodeSnapshotTEE'
     gotestsum --format standard-verbose --packages="\$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoCaffNodeRestartWithTeeType'
 
 authdb-tests:
