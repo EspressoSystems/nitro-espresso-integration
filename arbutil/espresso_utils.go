@@ -216,7 +216,7 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir s
 
 	// Check if the snapshot hash matches the one in the config
 	if snapshotChecksum != sha256Hash {
-		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", snapshotChecksum, sha256Hash)
+		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
 	}
 	log.Info("Snapshot hash matches", "hash", sha256Hash)
 
