@@ -276,12 +276,19 @@ func mainImpl() int {
 		// This will be used by the hyperlane validator
 		os.Setenv("VALIDATOR_KEY", privHex)
 
-		caffNodetxOpts, dataSigner, err = util.OpenWallet("l1-espresso-caff-node", &nodeConfig.Node.EspressoCaffNode.ParentChainWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+		// Use top-level wallet config, with env variable as fallback
+		caffNodeWallet := nodeConfig.EspressoCaffNodeWallet
+		if envPrivateKey := os.Getenv("ESPRESSO_CAFF_NODE_WALLET_PRIVATE_KEY"); envPrivateKey != "" {
+			caffNodeWallet.PrivateKey = envPrivateKey
+			log.Info("Using Espresso Caff Node private key from environment variable")
+		}
+
+		caffNodetxOpts, dataSigner, err = util.OpenWallet("l1-espresso-caff-node", &caffNodeWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 		if err != nil {
 			flag.Usage()
-			log.Crit("error opening Batch poster parent chain wallet", "path", nodeConfig.Node.EspressoCaffNode.ParentChainWallet.Pathname, "account", nodeConfig.Node.EspressoCaffNode.ParentChainWallet.Account, "err", err)
+			log.Crit("error opening Espresso Caff Node parent chain wallet", "path", caffNodeWallet.Pathname, "account", caffNodeWallet.Account, "err", err)
 		}
-		if nodeConfig.Node.EspressoCaffNode.ParentChainWallet.OnlyCreateKey {
+		if caffNodeWallet.OnlyCreateKey {
 			return 0
 		}
 	}
@@ -835,6 +842,7 @@ type NodeConfig struct {
 	Rpc                    genericconf.RpcConfig           `koanf:"rpc"`
 	BlocksReExecutor       blocksreexecutor.Config         `koanf:"blocks-reexecutor"`
 	EnsureRollupDeployment bool                            `koanf:"ensure-rollup-deployment" reload:"hot"`
+	EspressoCaffNodeWallet genericconf.WalletConfig        `koanf:"espresso-caff-node-wallet"`
 }
 
 var NodeConfigDefault = NodeConfig{
@@ -861,6 +869,7 @@ var NodeConfigDefault = NodeConfig{
 	PprofCfg:               genericconf.PProfDefault,
 	BlocksReExecutor:       blocksreexecutor.DefaultConfig,
 	EnsureRollupDeployment: true,
+	EspressoCaffNodeWallet: genericconf.WalletConfigDefault,
 }
 
 func NodeConfigAddOptions(f *flag.FlagSet) {
@@ -888,6 +897,7 @@ func NodeConfigAddOptions(f *flag.FlagSet) {
 	genericconf.RpcConfigAddOptions("rpc", f)
 	blocksreexecutor.ConfigAddOptions("blocks-reexecutor", f)
 	f.Bool("ensure-rollup-deployment", NodeConfigDefault.EnsureRollupDeployment, "before starting the node, wait until the transaction that deployed rollup is finalized")
+	genericconf.WalletConfigAddOptions("espresso-caff-node-wallet", f, "")
 }
 
 func (c *NodeConfig) ResolveDirectoryNames() error {
@@ -896,6 +906,7 @@ func (c *NodeConfig) ResolveDirectoryNames() error {
 		return err
 	}
 	c.Chain.ResolveDirectoryNames(c.Persistent.Chain)
+	c.EspressoCaffNodeWallet.ResolveDirectoryNames(c.Persistent.Chain)
 
 	return nil
 }
