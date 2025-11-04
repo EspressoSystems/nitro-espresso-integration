@@ -23,7 +23,6 @@ import (
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
-	"github.com/tendermint/tendermint/light/provider"
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -109,12 +108,8 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 }
 
 func loadInstanceProfileConfig(ctx context.Context) (aws.Config, error) {
-	// IMDS client (talks to the instance metadata service)
-	imdsClient := imds.New(imds.Options{
-		// Optional: tweak timeouts if your IMDS hop is slow
-	})
+	imdsClient := imds.New(imds.Options{})
 
-	// Provider that fetches temporary credentials for the attached instance profile
 	roleProvider := ec2rolecreds.New(func(o *ec2rolecreds.Options) {
 		o.Client = imdsClient
 	})
@@ -126,7 +121,6 @@ func loadInstanceProfileConfig(ctx context.Context) (aws.Config, error) {
 		return aws.Config{}, fmt.Errorf("could not determine region from IMDS: %w", err)
 	}
 
-	// Build config that ONLY uses the instance-profile creds
 	return awsconfig.LoadDefaultConfig(
 		ctx,
 		awsconfig.WithRegion(region),
