@@ -17,10 +17,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/arn"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/distributed-lab/enclave-extras/attestation"
 	"github.com/distributed-lab/enclave-extras/attestedkms"
 	"github.com/distributed-lab/enclave-extras/nsm"
+	"github.com/tendermint/tendermint/light/provider"
 	"golang.org/x/crypto/hkdf"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -105,12 +108,37 @@ func GetKMSEnclaveClient(cfg aws.Config) (*attestedkms.KMSEnclaveClient, error) 
 	return attestedkms.NewFromConfig(cfg, attestationDoc, privateKey), nil
 }
 
+func loadInstanceProfileConfig(ctx context.Context) (aws.Config, error) {
+	// IMDS client (talks to the instance metadata service)
+	imdsClient := imds.New(imds.Options{
+		// Optional: tweak timeouts if your IMDS hop is slow
+	})
+
+	// Provider that fetches temporary credentials for the attached instance profile
+	roleProvider := ec2rolecreds.New(func(o *ec2rolecreds.Options) {
+		o.Client = imdsClient
+	})
+
+	var region string
+	if r, err := imdsClient.GetRegion(ctx, &imds.GetRegionInput{}); err == nil {
+		region = r.Region
+	} else {
+		return aws.Config{}, fmt.Errorf("could not determine region from IMDS: %w", err)
+	}
+
+	// Build config that ONLY uses the instance-profile creds
+	return awsconfig.LoadDefaultConfig(
+		ctx,
+		awsconfig.WithRegion(region),
+		awsconfig.WithCredentialsProvider(aws.NewCredentialsCache(roleProvider)),
+	)
+}
 func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
 
-	awsConfig, err := awsconfig.LoadDefaultConfig(context.Background())
+	awsConfig, err := loadInstanceProfileConfig(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
