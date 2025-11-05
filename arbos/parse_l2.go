@@ -179,12 +179,7 @@ func parseL2Message(rd io.Reader, poster common.Address, timestamp uint64, reque
 	case L2MessageKind_SignedCompressedTx:
 		return nil, errors.New("L2 message kind SignedCompressedTx is unimplemented")
 	default:
-		// ignore invalid message kind
-		var kind uint8
-		if len(l2KindBuf) > 0 {
-			kind = l2KindBuf[0]
-		}
-		return nil, fmt.Errorf("unknown L2 message kind %v", kind)
+		return nil, fmt.Errorf("unknown L2 message kind %v", l2KindBuf[0])
 	}
 }
 
