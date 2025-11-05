@@ -1651,7 +1651,20 @@ func (b *BatchPoster) createCalldataEspresso(
 			}
 		}
 	}
-	return signature, nil
+	bytesType, err := abi.NewType("bytes[]", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes array type: %w", err)
+	}
+	args := abi.Arguments{
+		{
+			Type: bytesType,
+		},
+	}
+	sig, err := args.Pack([][]byte{signature})
+	if err != nil {
+		return nil, fmt.Errorf("failed to ABI encode signatures: %w", err)
+	}
+	return sig, nil
 }
 
 // Generates the transaction calldata for posting batches to the sequencer inbox.

@@ -95,11 +95,16 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	filePathsDecentralizedTimeboostMocks, err := filepath.Glob(filepath.Join(parent, "contracts", "build", "contracts", "timeboost-contracts", "mocks", "*", "*.json"))
+	if err != nil {
+		log.Fatal(err)
+	}
 	filePaths = append(filePaths, filePathsInternal...)
 	filePaths = append(filePaths, filePathsSafeSmartAccount...)
 	filePaths = append(filePaths, filePathsSafeSmartAccountOuter...)
 	filePaths = append(filePaths, filePathsEspressoTeeContracts...)
 	filePaths = append(filePaths, filePathsDecentralizedTimeboostContracts...)
+	filePaths = append(filePaths, filePathsDecentralizedTimeboostMocks...)
 
 	modules := make(map[string]*moduleInfo)
 
