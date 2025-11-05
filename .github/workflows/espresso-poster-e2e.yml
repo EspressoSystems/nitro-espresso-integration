@@ -1,4 +1,4 @@
-name: Espresso E2E test CI
+name: Espresso E2E Batch Poster test CI
 
 on:
   workflow_dispatch:
