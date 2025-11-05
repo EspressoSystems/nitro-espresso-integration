@@ -216,14 +216,15 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir s
 
 	// Check if the snapshot hash matches the one in the config
 	if snapshotChecksum != sha256Hash {
-		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", snapshotChecksum, sha256Hash)
+		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
 	}
 	log.Info("Snapshot hash matches", "hash", sha256Hash)
 
 	// Here we are deleting the `AuthTags` ancient store because we want to replace it with new tags
 	// from the new enclave hash. We cant just overwrite the existing tags because freezer doesnt allow
 	// you to modify the tags of an existing freezer.
-	err = os.RemoveAll(ancientDir)
+	tagFreezerDir := filepath.Join(ancientDir, "auth-tags")
+	err = os.RemoveAll(tagFreezerDir)
 	if err != nil {
 		return fmt.Errorf("failed to delete authtag ancient store: %w", err)
 	}

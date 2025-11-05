@@ -39,7 +39,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
-	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/pruning"
@@ -691,14 +690,6 @@ func openInitializeChainDb(ctx context.Context, stack *node.Node, config *NodeCo
 	}
 
 	var initDataReader statetransfer.InitDataReader = nil
-
-	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if config.Node.EspressoCaffNode.SnapshotChecksum != "" {
-		err := arbutil.VerifySnapshot(config.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", config.Persistent.Ancient))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to verify snapshot: %w", err)
-		}
-	}
 
 	chainData, err := stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", config.Execution.Caching.DatabaseCache, config.Persistent.Handles, config.Persistent.Ancient, "l2chaindata/", false, persistentConfig.Pebble.ExtraOptions("l2chaindata"))
 	if err != nil {

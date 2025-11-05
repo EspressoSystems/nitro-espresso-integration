@@ -68,19 +68,33 @@ func NewEspressoKeyManager(
 	teeType espressotee.TEE,
 	serviceType espressotee.ServiceType,
 	registerSignerConfig espressotee.EspressoRegisterServiceConfig,
+	servicePersistentPrivateKey *ecdsa.PrivateKey,
 	userDataAttestationFile string,
 	quoteFile string,
 ) *EspressoKeyManager {
-	// ephemeral key
-	privKey, err := ecdsa.GenerateKey(crypto.S256(), rand.Reader)
-	if err != nil {
-		panic(err)
+	var pubKey *ecdsa.PublicKey
+	var err error
+	var privKey *ecdsa.PrivateKey
+	var ok bool
+
+	// If the node supports persistent private key, we use that one otherwise we generate a
+	// new ephemeral key. Currently only the cafff node supports persistent private key.
+	if servicePersistentPrivateKey == nil {
+		// ephemeral key
+		privKey, err = ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+		if err != nil {
+			panic(err)
+		}
+
+		pubKey, ok = privKey.Public().(*ecdsa.PublicKey)
+		if !ok {
+			panic("failed to get public key")
+		}
+	} else {
+		privKey = servicePersistentPrivateKey
+		pubKey = &servicePersistentPrivateKey.PublicKey
 	}
 
-	pubKey, ok := privKey.Public().(*ecdsa.PublicKey)
-	if !ok {
-		panic("failed to get public key")
-	}
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
 	// and if it is we can safely ignore a nil data signer.
 	if signerFunc == nil && serviceType != espressotee.CaffNode {
@@ -125,6 +139,7 @@ func NewEspressoKeyManager(
 		},
 		userDataAttestationFile: userDataAttestationFile,
 		quoteFile:               quoteFile,
+		serviceType:             serviceType,
 	}
 }
 
@@ -141,7 +156,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), espressotee.BatchPoster, k.registerSignerOpts)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
 	if err != nil {
 		return false, err
 	}
@@ -177,6 +192,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 			attestationBytes,
 			k.dataPoster,
 			k.registerSignerOpts,
+			k.serviceType,
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
@@ -202,6 +218,17 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return nil
 	}
 
+	// Check on-chain if we have already registered
+	hasRegistered, err := k.VerifyRegistered()
+	if err != nil {
+		return err
+	}
+	if hasRegistered {
+		k.hasRegistered = true
+		log.Info("Signer already registered on-chain")
+		return nil
+	}
+
 	// Get the attestation and data needed to register the signer
 	attestation, data, err := k.PrepareRegisterService(getAttestationFunc)
 	if err != nil {
@@ -217,7 +244,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
-	hasRegistered, err := k.VerifyRegistered()
+	hasRegistered, err = k.VerifyRegistered()
 	if err != nil {
 		return err
 	}
