@@ -2,6 +2,7 @@
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 
 //go:build !wasm
+// +build !wasm
 
 package wavmio
 

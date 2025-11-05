@@ -63,11 +63,7 @@ func testProgramRecursiveCall(t *testing.T, builder *NodeBuilder, slotVals map[s
 		// send event from caller on sload
 		args[5] = args[5] | 0x8
 	}
-	recurseLen := len(recurse)
-	if recurseLen == 0 {
-		t.Fatal("recurse must not be empty")
-	}
-	multiCaller, err := localgen.NewMultiCallTest(builder.L2Info.GetAddress(recurse[recurseLen-1].Name), builder.L2.Client)
+	multiCaller, err := localgen.NewMultiCallTest(builder.L2Info.GetAddress(recurse[len(recurse)-1].Name), builder.L2.Client)
 	Require(t, err)
 	ownerTransact := builder.L2Info.GetDefaultTransactOpts("Owner", ctx)
 	ownerTransact.GasLimit = 10000000

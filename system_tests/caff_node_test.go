@@ -836,7 +836,7 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 
 }
 
-func TestEspressoForceInclusionChecker(t *testing.T) {
+func TestEspressoCaffNodeForceInclusionChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

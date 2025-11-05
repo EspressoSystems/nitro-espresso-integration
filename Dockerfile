@@ -399,25 +399,5 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
 
 USER user
 
-FROM ghcr.io/espressosystems/nitro-espresso-integration/socat:v1.7.4.4 AS socat-export
-
-FROM nitro-node AS nitro-node-enclave
-USER root
-COPY --from=socat-export /socat /usr/local/bin/
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y \
-    iproute2 \
-    nfs-common \
-    xxd \
-    supervisor &&\
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/* /usr/share/doc/* /var/cache/ldconfig/aux-cache /usr/lib/python3.9/__pycache__/ /usr/lib/python3.9/*/__pycache__/ /var/log/*
-COPY ./supervisord.conf /etc/supervisor/supervisord.conf
-WORKDIR /home/user/
-COPY ./runeif.sh .
-RUN chmod 700 runeif.sh
-ENTRYPOINT [ "/home/user/runeif.sh" ]
-
 FROM nitro-node AS nitro-node-default
 # Just to ensure nitro-node-dist is default

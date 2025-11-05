@@ -354,7 +354,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "",
+	EspressoTeeType:                  "NITRO",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit:     900 * 1024,
@@ -406,7 +406,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:               "",
 	ResubmitEspressoTxDeadline:       10 * time.Second,
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "",
+	EspressoTeeType:                  "TESTS",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
@@ -683,7 +683,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return nil, err
 			}
 			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
-
+			log.Info("espresso tee verifier type", "type", cfg.EspressoTeeType)
 			teeType, err := espressotee.FromString(cfg.EspressoTeeType)
 			if err != nil {
 				return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)
