@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
 	"github.com/fxamacker/cbor/v2"
 	flag "github.com/spf13/pflag"
@@ -27,9 +28,11 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
+	decentralized_timeboost_helpers "github.com/offchainlabs/nitro/decentralized-timeboost/helpers"
 	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/interfaces"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/execution"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -40,6 +43,13 @@ type TransactionType uint8
 const (
 	Normal TransactionType = iota
 	Delayed
+)
+
+type sequencerState int
+
+const (
+	CatchUp sequencerState = iota
+	Running
 )
 
 type timeboostTransactionQueueItem struct {
@@ -144,6 +154,9 @@ type DecentralizedTimeboostSequencer struct {
 	delayedSequencer       decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
 	blockHeaderCache       *blockHeaderCache
 	inclusionListsReceived uint64
+	hotshotClient          *hotshotClient.MultipleNodesClient
+	state                  sequencerState
+	timeboostKeyManger     *decentralizedtimeboostgen.KeyManager
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -152,27 +165,31 @@ type DecentralizedTimeboostSequencerConfig struct {
 	Enable             bool          `koanf:"enable"`
 	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize                      int                                `koanf:"max-tx-data-size"`
-	NonceCacheSize                     int                                `koanf:"nonce-cache-size"`
-	MaxRevertGasReject                 uint64                             `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime        time.Duration                      `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta        time.Duration                      `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling                    bool                               `koanf:"enable-profiling"`
-	DecentralizedTimeboostBridgeConfig DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
-	MetricTimeForBlockCreation         time.Duration                      `koanf:"metric-time-for-block-creation"`
+	MaxTxDataSize                              int                                `koanf:"max-tx-data-size"`
+	NonceCacheSize                             int                                `koanf:"nonce-cache-size"`
+	MaxRevertGasReject                         uint64                             `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime                time.Duration                      `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta                time.Duration                      `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling                            bool                               `koanf:"enable-profiling"`
+	DecentralizedTimeboostBridgeConfig         DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
+	MetricTimeForBlockCreation                 time.Duration                      `koanf:"metric-time-for-block-creation"`
+	HotshotUrls                                []string                           `koanf:"hotshot-urls"`
+	DecentralizedTimeboostKeyManagementAddress string                             `koanf:"decentralized-timeboost-key-management-address"`
 }
 
 var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
-	Enable:                             false,
-	BlockRetryDuration:                 time.Millisecond * 5,
-	MaxTxDataSize:                      95000,
-	NonceCacheSize:                     1024,
-	MaxRevertGasReject:                 0,
-	ParentChainFinalizationTime:        64 * time.Second,
-	MaxAcceptableTimestampDelta:        time.Hour,
-	EnableProfiling:                    false,
-	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
-	MetricTimeForBlockCreation:         time.Second * 5,
+	Enable:                                     false,
+	BlockRetryDuration:                         time.Millisecond * 5,
+	MaxTxDataSize:                              95000,
+	NonceCacheSize:                             1024,
+	MaxRevertGasReject:                         0,
+	ParentChainFinalizationTime:                64 * time.Second,
+	MaxAcceptableTimestampDelta:                time.Hour,
+	EnableProfiling:                            false,
+	DecentralizedTimeboostBridgeConfig:         DefaultDecentralizedTimeboostBridgeConfig,
+	MetricTimeForBlockCreation:                 time.Second * 5,
+	HotshotUrls:                                []string{},
+	DecentralizedTimeboostKeyManagementAddress: "",
 }
 
 func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -185,6 +202,8 @@ func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.Flag
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultDecentralizedTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultDecentralizedTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 	f.Duration(prefix+".metric-time-for-block-creation", DefaultDecentralizedTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
+	f.StringArray(prefix+".hotshot-urls", DefaultDecentralizedTimeboostSequencerConfig.HotshotUrls, "hotshot urls to query")
+	f.String(prefix+".decentralized-timeboost-key-management-address", DefaultDecentralizedTimeboostSequencerConfig.DecentralizedTimeboostKeyManagementAddress, "timeboost keymanager contract address")
 	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
@@ -192,7 +211,16 @@ func NewDecentralizedTimeboostSequencer(
 	execEngine *ExecutionEngine,
 	l1Reader *headerreader.HeaderReader,
 	delayedSequencer decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface,
-	configFetcher DecentralizedTimeboostSequencerConfigFetcher) (*DecentralizedTimeboostSequencer, error) {
+	configFetcher DecentralizedTimeboostSequencerConfigFetcher,
+) (*DecentralizedTimeboostSequencer, error) {
+	client, err := hotshotClient.NewMultipleNodesClient(configFetcher().HotshotUrls)
+	if err != nil {
+		return nil, err
+	}
+	timeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(configFetcher().DecentralizedTimeboostKeyManagementAddress), l1Reader.Client())
+	if err != nil {
+		return nil, err
+	}
 	return &DecentralizedTimeboostSequencer{
 		config:     configFetcher,
 		execEngine: execEngine,
@@ -210,6 +238,8 @@ func NewDecentralizedTimeboostSequencer(
 			maxSize:    512,
 		},
 		inclusionListsReceived: 0,
+		hotshotClient:          client,
+		timeboostKeyManger:     timeboostKeyManager,
 	}, nil
 }
 
@@ -657,6 +687,54 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 	}, nil
 }
 
+func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) error {
+	height, err := s.hotshotClient.FetchLatestBlockHeight(ctx)
+	if err != nil {
+		return err
+	}
+	blocks := make(map[uint64]uint64)
+	for {
+		txns, err := s.hotshotClient.FetchTransactionsInBlock(ctx, height, s.execEngine.bc.Config().ChainID.Uint64())
+		if err != nil {
+			log.Debug("error getting hotshot block", "err", err, "height", height)
+			continue
+		}
+		for _, tx := range txns.Transactions {
+			var body decentralized_timeboost_types.Body
+			if err := cbor.Unmarshal(tx, &body); err != nil {
+				log.Warn("cbor error decoding certified block", "err", err)
+				continue
+			}
+
+			for _, block := range body.Blocks {
+				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManger.GetCommitteeById); err != nil {
+					log.Warn("catchup error verifying timeboost block", "err", err)
+					continue
+				}
+				blocks[block.Data.Number] = block.Data.Round
+			}
+			if s.execEngine != nil && s.execEngine.latestBlock != nil {
+				current := s.execEngine.latestBlock.NumberU64()
+				txn := s.txQueue.Peek()
+				if currentRound, exists := blocks[current]; exists && txn != nil && currentRound > txn.roundId {
+					for {
+						log.Info("local block is up to date with hotshot block", "hotshot certified block round", currentRound, "queued txn round", txn.roundId, "l2 block", current)
+						txn := s.txQueue.Peek()
+						if txn != nil && currentRound >= txn.roundId {
+							tx := s.txQueue.dequeue()
+							log.Info("dequeing old round id", "queued txn round", tx.roundId, "hotshot certified block round", currentRound, "l2 block", current)
+						} else if txn != nil {
+							log.Info("we are done with catchup", "next round id", txn.roundId, "hotshot certified block round", currentRound, "l2 block", current)
+							return nil
+						}
+					}
+				}
+			}
+		}
+		height += 1
+	}
+}
+
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	if s.inclusionListsReceived%200 == 0 {
 		log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
@@ -712,9 +790,31 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Check our database to see if we restarted
+	if s.execEngine.recorder != nil && s.execEngine.recorder.execEngine != nil {
+		lastHeader, err := s.execEngine.recorder.execEngine.getCurrentHeader()
+		if err == nil && lastHeader.Number.Uint64() > 0 {
+			log.Warn("Detected sequencer was shutdown, entering catchup protocol")
+			s.state = CatchUp
+		} else {
+			s.state = Running
+		}
+	}
+
 	if err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		if s.createBlock(ctx) {
+		switch s.state {
+		case CatchUp:
+			err := s.waitForCatchup(ctx)
+			if err != nil {
+				log.Warn("error during catchup", "err", err)
+				return 0
+			}
+			s.state = Running
 			return 0
+		case Running:
+			if s.createBlock(ctx) {
+				return 0
+			}
 		}
 		return s.config().BlockRetryDuration
 	}); err != nil {
@@ -745,6 +845,7 @@ func (s *DecentralizedTimeboostSequencer) storeHeader(header *types.Header) {
 }
 
 func (s *DecentralizedTimeboostSequencer) StopAndWait() {
+	s.timeboostBridge.StopAndWait()
 	s.StopWaiter.StopAndWait()
 
 	if s.txRetryQueue.Len() == 0 &&
