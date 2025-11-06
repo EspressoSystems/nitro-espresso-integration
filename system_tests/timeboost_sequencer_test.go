@@ -84,6 +84,8 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
+	builder.nodeConfig.DecentralizedTimeboostSequencer.HotshotUrls = []string{hotShotUrl, hotShotUrl}
+	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
 	if nodeBuilder != nil {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"
