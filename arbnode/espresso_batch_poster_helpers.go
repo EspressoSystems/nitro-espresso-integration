@@ -14,7 +14,6 @@ import (
 // messages from hotshot based on the source of truth on the parent chain
 func (b *BatchPoster) resetStreamerToParentChainOrConfigHotshotBlock(messageCount arbutil.MessageIndex, ctx context.Context) {
 	hotshotBlock := b.fetchHotshotBlockFromLastCheckpoint(ctx)
-	log.Info("fetchHotshotBlockFromLastCheckpoint returned", "hotshotBlock", hotshotBlock, "configHotShotBlock", b.config().HotShotBlock)
 	if hotshotBlock == 0 {
 		// if there hasn't been a batch posted, or we encountered an error, start reading from the configured hotshot block number.
 		hotshotBlock = b.config().HotShotBlock
