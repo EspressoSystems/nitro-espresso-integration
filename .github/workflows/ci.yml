@@ -20,7 +20,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: ubuntu-24.04-8core
+    runs-on: ubuntu-latest
 
     # Creates a redis container for redis tests
     services:
