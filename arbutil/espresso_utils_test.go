@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	"github.com/fxamacker/cbor/v2"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -36,7 +37,8 @@ func TestParsePayload(t *testing.T) {
 	}
 
 	// Parse the signed payload
-	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload)
+	header := ParseHotshotPayloadForHeader(signedPayload)
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, header)
 	if err != nil {
 		t.Fatalf("failed to parse payload: %v", err)
 	}
@@ -63,6 +65,136 @@ func TestParsePayload(t *testing.T) {
 		[]byte("message24"),
 		[]byte("message100"),
 	}
+	for i, message := range messages {
+		if !bytes.Equal(message, expectedMessages[i]) {
+			t.Errorf("expected message %s, got %s", expectedMessages[i], message)
+		}
+	}
+}
+
+type EspressoHeaderNew struct {
+	// Transaction type to parse payload
+	TransactionType TransactionType `cbor:"0,keyasint"`
+	// The payload length, excluding the header
+	PayloadLength uint64 `cbor:"1,keyasint"`
+	SomeNewField  uint8  `cbor:"2,keyasint,omitempty"`
+}
+
+func TestParseEspressoHeader(t *testing.T) {
+
+	h := EspressoHeader{
+		TransactionType: 0,
+		PayloadLength:   5,
+	}
+	encoded, err := cbor.Marshal(h)
+	if err != nil {
+		t.Fatalf("cbor encoding failed: %v", err)
+	}
+
+	// Parse a new header in case we ever need to make changes
+	var h2 EspressoHeaderNew
+	err = cbor.Unmarshal(encoded, &h2)
+	if err != nil {
+		t.Fatalf("cbor decoding failed: %v", err)
+	}
+
+	if h2.TransactionType != h.TransactionType {
+		t.Fatalf("expected transaction types to match! got %d, wanted %d", h2.TransactionType, h.TransactionType)
+	}
+
+	if h2.PayloadLength != h.PayloadLength {
+		t.Fatalf("expected payload lengths to match! got %d, wanted %d", h2.PayloadLength, h.PayloadLength)
+	}
+
+	// this should be set to default value which is 0
+	if h2.SomeNewField != 0 {
+		t.Fatalf("expected new field to be set to default of 0! got %d, wanted %d", h2.SomeNewField, 0)
+	}
+
+}
+
+func TestParsePayloadWithAndWithoutHeader(t *testing.T) {
+	msgPositions := []MessageIndex{1, 2, 10, 24, 100}
+
+	rawPayload, cnt := BuildRawHotShotPayload(msgPositions, mockMsgFetcher, 200*1024)
+	if cnt != len(msgPositions) {
+		t.Fatal("exceed transactions")
+	}
+
+	mockSignature := []byte("fake_signature")
+	fakeSigner := func(payload []byte) ([]byte, error) {
+		return mockSignature, nil
+	}
+	signedPayload, err := SignHotShotPayload(rawPayload, fakeSigner)
+	if err != nil {
+		t.Fatalf("failed to sign payload: %v", err)
+	}
+
+	// Parse the signed payload
+	header := ParseHotshotPayloadForHeader(signedPayload)
+	if header == nil {
+		t.Fatalf("expected there to be a header")
+	}
+	signature, userDataHash, indices, messages, err := ParseHotShotPayload(signedPayload, header)
+	if err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+
+	if !slices.Equal(userDataHash, crypto.Keccak256(rawPayload)) {
+		t.Fatalf("User data hash is not for the correct payload")
+	}
+
+	// Validate parsed data
+	if !bytes.Equal(signature, mockSignature) {
+		t.Errorf("expected signature 'fake_signature', got %v", mockSignature)
+	}
+
+	for i, index := range indices {
+		if MessageIndex(index) != msgPositions[i] {
+			t.Errorf("expected index %d, got %d", msgPositions[i], index)
+		}
+	}
+
+	expectedMessages := [][]byte{
+		[]byte("message1"),
+		[]byte("message2"),
+		[]byte("message10"),
+		[]byte("message24"),
+		[]byte("message100"),
+	}
+	for i, message := range messages {
+		if !bytes.Equal(message, expectedMessages[i]) {
+			t.Errorf("expected message %s, got %s", expectedMessages[i], message)
+		}
+	}
+
+	// Remove header from payload
+	offset := uint64(len(signedPayload)) - header.PayloadLength
+	signedPayload = signedPayload[offset:]
+	header = ParseHotshotPayloadForHeader(signedPayload)
+	if header != nil {
+		t.Fatalf("no header should be parsed")
+	}
+	signature, userDataHash, indices, messages, err = ParseHotShotPayload(signedPayload, header)
+	if err != nil {
+		t.Fatalf("failed to parse payload: %v", err)
+	}
+
+	if !slices.Equal(userDataHash, crypto.Keccak256(rawPayload)) {
+		t.Fatalf("User data hash is not for the correct payload")
+	}
+
+	// Validate parsed data
+	if !bytes.Equal(signature, mockSignature) {
+		t.Errorf("expected signature 'fake_signature', got %v", mockSignature)
+	}
+
+	for i, index := range indices {
+		if MessageIndex(index) != msgPositions[i] {
+			t.Errorf("expected index %d, got %d", msgPositions[i], index)
+		}
+	}
+
 	for i, message := range messages {
 		if !bytes.Equal(message, expectedMessages[i]) {
 			t.Errorf("expected message %s, got %s", expectedMessages[i], message)
@@ -123,7 +255,7 @@ func TestParsePayloadInvalidCases(t *testing.T) {
 
 	for _, tc := range invalidPayloads {
 		t.Run(tc.description, func(t *testing.T) {
-			_, _, _, _, err := ParseHotShotPayload(tc.payload)
+			_, _, _, _, err := ParseHotShotPayload(tc.payload, nil)
 			if err == nil {
 				t.Errorf("expected error for case '%s', but got none", tc.description)
 			}

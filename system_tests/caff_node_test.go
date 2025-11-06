@@ -638,7 +638,9 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 
 	espressoStreamer.SetSGXVerifier(NewMockSgxTeeVerifier())
 	// Set this will cause the caff node to use the sgx verifier
-	espressoStreamer.SetBatcherAddressesFetcher(func(l1Height uint64) []common.Address { return []common.Address{{}} })
+	espressoStreamer.SetBatcherAddressesFetcher(func(l1Height uint64) []common.Address {
+		return []common.Address{common.HexToAddress("0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23")}
+	})
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builder2.L2.GetBalance(t, builder.L2Info.GetAddress("User16"))

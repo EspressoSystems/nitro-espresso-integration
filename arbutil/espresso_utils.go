@@ -8,6 +8,7 @@ import (
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/fxamacker/cbor/v2"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -16,6 +17,7 @@ import (
 const MAX_ATTESTATION_QUOTE_SIZE int = 4 * 1024
 const LEN_SIZE int = 8
 const INDEX_SIZE int = 8
+const HEADER_LEN int = 8
 
 type SubmittedEspressoTx struct {
 	Hash        string
@@ -23,6 +25,20 @@ type SubmittedEspressoTx struct {
 	Payload     []byte
 	SubmittedAt time.Time `rlp:"optional"`
 }
+
+type EspressoHeader struct {
+	// Transaction type to parse payload
+	TransactionType TransactionType `cbor:"0,keyasint"`
+	// The payload length, excluding the header
+	PayloadLength uint64 `cbor:"1,keyasint"`
+}
+
+type TransactionType uint8
+
+const (
+	BatchPosterSignedTxn   TransactionType = 0
+	DecentralizedTimeboost TransactionType = 1
+)
 
 func BuildRawHotShotPayload(
 	msgPositions []MessageIndex,
@@ -74,6 +90,22 @@ func SignHotShotPayload(
 	result = append(result, quote...)
 	result = append(result, unsigned...)
 
+	// Prepare the header
+	header := EspressoHeader{
+		TransactionType: BatchPosterSignedTxn,
+		PayloadLength:   uint64(len(result)),
+	}
+
+	encoded, err := cbor.Marshal(header)
+	if err != nil {
+		return nil, err
+	}
+	// Put the header at the beginning of the payload
+	headerBuf := make([]byte, HEADER_LEN)
+	binary.BigEndian.PutUint64(headerBuf, uint64(len(encoded)))
+	headerBuf = append(headerBuf, encoded...)
+	result = append(headerBuf, result...)
+
 	return result, nil
 }
 
@@ -88,7 +120,41 @@ func ValidateIfPayloadIsInBlock(p []byte, payloads []espressoTypes.Bytes) bool {
 	return validated
 }
 
-func ParseHotShotPayload(payload []byte) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+func ParseHotshotPayloadForHeader(tx []byte) *EspressoHeader {
+	if len(tx) < HEADER_LEN {
+		log.Warn("hotshot transaction is too small for a header")
+		return nil
+	}
+	headerLength := uint64(HEADER_LEN)
+	// Try and see if there is a header
+	headerSize := binary.BigEndian.Uint64(tx[:headerLength])
+	offset := headerLength + headerSize
+	encoded := tx[headerLength:offset]
+	var header EspressoHeader
+	err := cbor.Unmarshal(encoded, &header)
+	if err != nil {
+		log.Warn("failed to decode header", "err", err)
+		return nil
+	}
+	strippedTx := tx[offset:]
+	// if the set header payload length matches the total rest of payload length it must be a header
+	if uint64(len(strippedTx)) == header.PayloadLength {
+		switch header.TransactionType {
+		case BatchPosterSignedTxn, DecentralizedTimeboost:
+			return &header
+		default:
+			return nil
+		}
+	}
+	return nil
+}
+
+func ParseHotShotPayload(payload []byte, header *EspressoHeader) (signature []byte, userDataHash []byte, indices []uint64, messages [][]byte, err error) {
+	if header != nil {
+		// parse the payload with no header
+		offset := uint64(len(payload)) - header.PayloadLength
+		payload = payload[offset:]
+	}
 	if len(payload) < LEN_SIZE {
 		return nil, nil, nil, nil, errors.New("payload too short to parse signature size")
 	}
