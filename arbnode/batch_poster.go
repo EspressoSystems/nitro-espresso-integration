@@ -102,6 +102,7 @@ type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
 	DelayedMessageCount uint64
 	NextSeqNum          uint64
+	HotShotBlockNumber  uint64
 }
 
 type BatchPoster struct {
@@ -1928,7 +1929,12 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			if batchPosition.HotShotBlockNumber > 0 {
+				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else {
+				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
+				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			}
 			if b.espressoRestarting {
 				cnt, err := b.streamer.GetMessageCount()
 				if err != nil {
@@ -2123,7 +2129,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Next(ctx)
+			espressoMsg := b.espressoStreamer.Peek(ctx)
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -2211,6 +2217,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
+		if b.espressoStreamer != nil {
+			b.espressoStreamer.Advance()
+		}
 	}
 
 	firstUsefulMsgTime := time.Now()
@@ -2398,10 +2407,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	var HotShotBlockNumber uint64
+	if b.espressoStreamer != nil {
+		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	}
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,
 		NextSeqNum:          batchPosition.NextSeqNum + 1,
+		HotShotBlockNumber:  HotShotBlockNumber,
 	})
 	if err != nil {
 		return false, err
