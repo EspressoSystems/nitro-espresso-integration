@@ -240,6 +240,7 @@ func NewDecentralizedTimeboostSequencer(
 		inclusionListsReceived: 0,
 		hotshotClient:          client,
 		timeboostKeyManger:     timeboostKeyManager,
+		state:                  Running,
 	}, nil
 }
 
@@ -796,8 +797,6 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		if err == nil && lastHeader.Number.Uint64() > 0 {
 			log.Warn("Detected sequencer was shutdown, entering catchup protocol")
 			s.state = CatchUp
-		} else {
-			s.state = Running
 		}
 	}
 
