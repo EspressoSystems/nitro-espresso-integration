@@ -1641,6 +1641,9 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 			}
 		}
 		teeType = keyManager.TeeType()
+		if teeType == espresso_key_manager.TESTS {
+			teeType = espresso_key_manager.SGX
+		}
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)
