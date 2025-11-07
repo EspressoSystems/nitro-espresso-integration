@@ -109,7 +109,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	Dangerous:                     DefaultDangerousCaffNodeConfig,
 	FromBlock:                     1,
 	KeyPairAttestationsPath:       "caff_node_key_pair_attestations",
-	EspressoTeeType:               "SGX",
+	EspressoTeeType:               "",
 	EspressoRegisterServiceConfig: espressotee.DefaultEspressoRegisterServiceConfig,
 	UserDataAttestationFile:       "",
 	QuoteFile:                     "",

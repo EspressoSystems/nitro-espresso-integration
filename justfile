@@ -2,6 +2,11 @@ build:
     make build
     make build-replay-env
 
+# force rebuild contracts and re-generate bindings
+build-contracts:
+    rm -f .make/solgen .make/solidity .make/espresso-gen
+    make contracts
+
 espresso-tests: build
     gotestsum --format standard-verbose --packages="\$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoE2E'
 

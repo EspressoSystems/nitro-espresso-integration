@@ -354,7 +354,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "SGX",
+	EspressoTeeType:                  "NITRO",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit:     900 * 1024,
@@ -406,7 +406,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:               "",
 	ResubmitEspressoTxDeadline:       10 * time.Second,
 	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "SGX",
+	EspressoTeeType:                  "TESTS",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
@@ -683,7 +683,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return nil, err
 			}
 			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
-
 			teeType, err := espressotee.FromString(cfg.EspressoTeeType)
 			if err != nil {
 				return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)
@@ -1515,6 +1514,10 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 			}
 		}
 		teeType = keyManager.TeeType()
+		// Sequencer Inbox doesnt accept TESTS tee type, map it to SGX
+		if teeType == espresso_key_manager.TESTS {
+			teeType = espresso_key_manager.SGX
+		}
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)
@@ -1638,6 +1641,9 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 			}
 		}
 		teeType = keyManager.TeeType()
+		if teeType == espresso_key_manager.TESTS {
+			teeType = espresso_key_manager.SGX
+		}
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)

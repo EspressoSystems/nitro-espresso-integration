@@ -547,7 +547,7 @@ func TestEspressoCaffNodeRestart(t *testing.T) {
 	})
 	Require(t, err)
 
-	time.Sleep(1 * time.Minute)
+	time.Sleep(10 * time.Second)
 	builderCaffNode.RestartCaffNode(t)
 
 	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
@@ -836,7 +836,7 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 
 }
 
-func TestEspressoForceInclusionChecker(t *testing.T) {
+func TestEspressoCaffNodeForceInclusionChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

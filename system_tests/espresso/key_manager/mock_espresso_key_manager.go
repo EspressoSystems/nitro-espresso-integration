@@ -113,6 +113,8 @@ func (m *MockEspressoKeyManager) RegisterService() error {
 		return m.Register(m.getData)
 	case espressotee.NITRO:
 		return m.Register(m.getData)
+	case espressotee.TESTS:
+		return m.Register(m.getData)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}

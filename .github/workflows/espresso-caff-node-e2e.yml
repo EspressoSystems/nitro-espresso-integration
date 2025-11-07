@@ -1,4 +1,4 @@
-name: Espresso E2E test CI
+name: Espresso E2E Caff Node test CI
 
 on:
   workflow_dispatch:
@@ -154,4 +154,4 @@ jobs:
 
       - name: Run Espresso tests
         run: |
-          scripts/run-espresso-ci-job
+          bash scripts/run-espresso-caff-node-ci-tests
