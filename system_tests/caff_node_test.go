@@ -96,7 +96,6 @@ func createCaffNode(
 	}
 
 	nodeConfig.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.EspressoCaffNode.EspressoTeeType
-	nodeConfig.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.EspressoCaffNode.GenerateSnapshot
 	nodeConfig.EspressoCaffNode.SnapshotChecksum = existing.nodeConfig.EspressoCaffNode.SnapshotChecksum
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
@@ -618,7 +617,7 @@ func TestEspressoCaffNodeRestartWithTeeType(t *testing.T) {
 	Require(t, err)
 }
 
-func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
+func TestEspressoCaffNodeSnapshotWithoutTEEGenerated(t *testing.T) {
 	// First we will run the caff node in generate snapshot mode
 	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
 	defer cancel()
@@ -630,8 +629,6 @@ func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
 	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
-	builder.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
-	builder.nodeConfig.EspressoCaffNode.GenerateSnapshot = true
 
 	// start the node
 	log.Info("Starting the caff node initially")
@@ -669,7 +666,74 @@ func TestEspressoCaffNodeSnapshotTEE(t *testing.T) {
 
 	// now we need to restart the caff node in Snapshot mode such and it will use this snapshot,
 	// verify it and re-initialize the tags with tmac
-	builderCaffNode.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
+	builderCaffNode.nodeConfig.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
+	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
+
+	builderCaffNode.RestartCaffNode(t)
+
+	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
+
+	err = builder.L2.Client.SendTransaction(ctx, tx)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
+		// Now the balance should be greater than twice the transfer amount
+		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
+	})
+	Require(t, err)
+}
+func TestEspressoCaffNodeSnapshotTEEGenerated(t *testing.T) {
+	// First we will run the caff node in generate snapshot mode
+	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
+
+	// Set caff node config variables
+	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
+	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
+
+	// start the node
+	log.Info("Starting the caff node initially")
+	// Start the caff node without a snapshot signer
+	builderCaffNode, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
+
+	// start the node
+	time.Sleep(10 * time.Second)
+
+	cleanupCaffNode()
+
+	// Now we need to check if it created a snapshot.txt file in the parent chain directory
+	snapshotFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name, "system_tests.test"), "snapshot.txt")
+	// Read the snapshot file and get the sha256 hash
+	snapshotFileContent, err := os.ReadFile(snapshotFile)
+	Require(t, err)
+
+	// Convert to base64 to string
+	base64SnapshotFileContent := strings.TrimSpace(string(snapshotFileContent))
+	log.Info("sha256Hash read from snapshot.txt", "sha256Hash", base64SnapshotFileContent)
+
+	// now we need to restart the caff node in Snapshot mode such and it will use this snapshot,
+	// verify it and re-initialize the tags with tmac
 	builderCaffNode.nodeConfig.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
 
 	builderCaffNode.RestartCaffNode(t)

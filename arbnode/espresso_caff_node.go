@@ -69,7 +69,6 @@ type EspressoCaffNodeConfig struct {
 	StateChecker          StateCheckerConfig          `koanf:"state-checker"`
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
-	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 }
 
@@ -116,7 +115,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	EspressoTEEVerifierAddr:       "",
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:              "",
-	GenerateSnapshot:              false,
 	ParentChainWallet:             DefaultBatchPosterL1WalletConfig,
 }
 
@@ -138,7 +136,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
 	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
-	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures the caff node to generate a snapshot of the state db")
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
@@ -200,6 +197,7 @@ func NewEspressoCaffNode(
 	dataPosterDB ethdb.Database,
 	txOptsCaffNode *bind.TransactOpts,
 	caffNodePrivateKey *ecdsa.PrivateKey,
+	initializeTags bool,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -313,7 +311,8 @@ func NewEspressoCaffNode(
 
 	var dataPoster *dataposter.DataPoster
 	var keyManager *espresso_key_manager.EspressoKeyManager
-	if teeType != espressotee.EMPTY && teeType != espressotee.TESTS {
+	var snapshotHandler *EspressoSnapshotHandler
+	if teeType != espressotee.EMPTY {
 		if txOptsCaffNode == nil {
 			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
 		}
@@ -344,9 +343,10 @@ func NewEspressoCaffNode(
 		}
 
 		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+
 	}
 
-	snapshotHandler := NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), configFetcher().SnapshotChecksum, configFetcher().GenerateSnapshot)
+	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -493,14 +493,14 @@ func (n *EspressoCaffNode) GetEspressoStreamer() espressostreamer.EspressoStream
 
 func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	n.StopWaiter.Start(ctx, n)
-	if n.configFetcher().SnapshotChecksum != "" || n.configFetcher().GenerateSnapshot {
-		if n.configFetcher().EspressoTeeType == "" && n.configFetcher().SnapshotChecksum != "" {
-			return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
-		}
-		err := n.snapshotHandler.Start(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to start snapshot verifier: %w", err)
-		}
+
+	if n.configFetcher().EspressoTeeType == "" && n.configFetcher().SnapshotChecksum != "" {
+		return fmt.Errorf("espresso tee type is required when trying to verify a snapshot checksum")
+	}
+
+	err := n.snapshotHandler.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start snapshot verifier: %w", err)
 	}
 
 	if n.keyManager != nil {
@@ -512,7 +512,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		}
 	}
 
-	err := n.espressoStreamer.Start(ctx)
+	err = n.espressoStreamer.Start(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to start espresso streamer: %w", err)
 	}

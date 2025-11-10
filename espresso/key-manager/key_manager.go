@@ -19,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -37,7 +38,7 @@ type EspressoKeyManagerInterface interface {
 	RegisterService() error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignPayload(message []byte) ([]byte, error)
-	SignBatch(message []byte) ([]byte, error)
+	SignMessage(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
 }
 
@@ -269,9 +270,13 @@ func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 	return k.signer(crypto.Keccak256Hash(message).Bytes())
 }
 
-func (k *EspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
-	hash := crypto.Keccak256Hash(message)
-	return crypto.Sign(hash.Bytes(), k.privKey)
+// SignMessage uses the ephemeral/persistent private key which is generated inside the TEE to sign the given message
+func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
+	return arbutil.SignMessage(message, k.privKey)
+}
+
+func (k *EspressoKeyManager) VerifyMessage(message []byte, signature []byte) error {
+	return arbutil.VerifyMessage(message, signature, k.pubKey)
 }
 
 func (k *EspressoKeyManager) RegisterService() error {

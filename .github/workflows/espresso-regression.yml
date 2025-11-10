@@ -27,7 +27,7 @@ concurrency:
 jobs:
   test:
     name: Espresso Regression test
-    runs-on: ubuntu-24.04-8core
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - name: Skip if it is triggered by workflow run but not a tag creation
         if: github.event_name == 'workflow_run' && !startsWith(github.event.workflow_run.ref, 'refs/tags/v')

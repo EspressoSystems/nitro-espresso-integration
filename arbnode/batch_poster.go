@@ -1495,7 +1495,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	teeType := espresso_key_manager.SGX
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
-		signature, err = keyManager.SignBatch(calldata)
+		signature, err = keyManager.SignMessage(calldata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 		}
@@ -1622,7 +1622,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	teeType := espresso_key_manager.SGX
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
-		signature, err = keyManager.SignBatch(calldata)
+		signature, err = keyManager.SignMessage(calldata)
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 		}

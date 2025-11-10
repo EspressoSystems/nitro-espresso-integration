@@ -89,8 +89,8 @@ func (m *MockEspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byt
 	return nil
 }
 
-// SignBatch implements key_manager.EspressoKeyManagerInterface.
-func (m *MockEspressoKeyManager) SignBatch(message []byte) ([]byte, error) {
+// SignMessage implements key_manager.EspressoKeyManagerInterface.
+func (m *MockEspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 	hash := crypto.Keccak256Hash(message)
 	return crypto.Sign(hash.Bytes(), m.Key)
 }

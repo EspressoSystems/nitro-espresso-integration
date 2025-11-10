@@ -2,6 +2,7 @@ package arbutil
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -208,15 +209,29 @@ func HashDir(root string) (string, error) {
 	})
 }
 
-func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir string) error {
+// VerifySnapshot verifies the snapshot by first trying to verify the stored snapshot checksum
+// using the key manager public key. If that fails, it falls back to verifying the snapshot
+// checksum against the provided snapshotChecksum in the config. If the snapshot is verified using the
+// config snapshot checksum, it deletes the existing AuthTags ancient store to prepare for
+// new tags from the new enclave hash. It returns true if the auth tags needs to be
+// re-initialized, false otherwise which is true only when the config snapshot checksum is used and there is no valid
+// snapshot.txt file.
+func VerifySnapshot(snapshotChecksum string, parentChainDir string, l2chainDataDir string, ancientDir string, pubKey *ecdsa.PublicKey) (bool, error) {
+	err := VerifyStoredSnapshotChecksum(parentChainDir, pubKey)
+	log.Info("Error while verifying snapshot", "err", err)
+	if err == nil {
+		log.Info("Verified the stored snapshot checksum using the key manager")
+		return false, nil
+	}
+	log.Warn("Failed to verify the stored snapshot checksum, falling back to config snapshot checksum verification")
 	sha256Hash, err := HashDir(l2chainDataDir)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Check if the snapshot hash matches the one in the config
 	if snapshotChecksum != sha256Hash {
-		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
+		return false, fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
 	}
 	log.Info("Snapshot hash matches", "hash", sha256Hash)
 
@@ -226,7 +241,63 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir s
 	tagFreezerDir := filepath.Join(ancientDir, "auth-tags")
 	err = os.RemoveAll(tagFreezerDir)
 	if err != nil {
-		return fmt.Errorf("failed to delete authtag ancient store: %w", err)
+		return false, fmt.Errorf("failed to delete authtag ancient store: %w", err)
 	}
+	return true, nil
+}
+
+func SignMessage(message []byte, privKey *ecdsa.PrivateKey) ([]byte, error) {
+	hash := crypto.Keccak256Hash(message)
+	return crypto.Sign(hash.Bytes(), privKey)
+}
+
+func VerifyMessage(message []byte, signature []byte, pubKey *ecdsa.PublicKey) error {
+	if pubKey == nil {
+		return errors.New("public key is nil")
+	}
+	hash := crypto.Keccak256Hash(message)
+	sigPublicKey, err := crypto.SigToPub(hash.Bytes(), signature)
+	if err != nil {
+		return fmt.Errorf("failed to recover public key from signature: %w", err)
+	}
+	sigAddress := crypto.PubkeyToAddress(*sigPublicKey)
+	expectedAddress := crypto.PubkeyToAddress(*pubKey)
+	if sigAddress != expectedAddress {
+		return fmt.Errorf("signature verification failed: expected address %s, got %s", expectedAddress.Hex(), sigAddress.Hex())
+	}
+	return nil
+}
+
+// verifyStoredSnapshotChecksum verifies that the snapshot.txt file has an expected signature
+// using the ECDSA key that was generated using the given PCR0 value.
+func VerifyStoredSnapshotChecksum(parentChainDir string, pubKey *ecdsa.PublicKey) error {
+	if pubKey == nil {
+		return errors.New("public key is nil")
+	}
+	// Check if snapshot.txt file exists along with a valid snapshot_signature.txt
+	path := filepath.Join(parentChainDir, "snapshot.txt")
+	snapshotFileContent, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read snapshot file: %w", err)
+	}
+
+	// Convert to base64 to string
+	base64SnapshotFileContent := strings.TrimSpace(string(snapshotFileContent))
+	log.Info("sha256Hash read from snapshot.txt", "sha256Hash", base64SnapshotFileContent)
+
+	// Check if the signature file exists
+	signaturePath := filepath.Join(parentChainDir, "snapshot_signature.txt")
+	signatureFileContent, err := os.ReadFile(signaturePath)
+	if err != nil {
+		return fmt.Errorf("failed to read snapshot signature file: %w", err)
+	}
+
+	// Verify the signature
+	err = VerifyMessage([]byte(base64SnapshotFileContent), signatureFileContent, pubKey)
+	if err != nil {
+		return fmt.Errorf("failed to verify snapshot signature: %w", err)
+	}
+	log.Info("Verified the snapshot signature using the key manager")
+
 	return nil
 }
