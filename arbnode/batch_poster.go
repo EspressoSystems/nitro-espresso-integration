@@ -1993,6 +1993,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
 			} else {
+				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
 			}
@@ -2011,6 +2012,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 					if err != nil {
 						return false, err
 					}
+					log.Info("submitted pending transactions after restart", "from", batchPosition.MessageCount, "count", len(queue))
 				}
 				b.espressoRestarting = false
 			}
@@ -2142,6 +2144,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			forcePostBatch = true
 			b.building.haveUsefulMessage = true
 		}
+		log.Info("reach max empty batch delay",
+			"firstDelayedMsgTimestamp", b.building.firstDelayedMsg.Message.Header.Timestamp,
+			"timeSinceMsg", timeSinceMsg,
+			"maxEmptyBatchDelay", config.MaxEmptyBatchDelay,
+		)
 	}
 
 	for b.building.msgCount < msgCount {

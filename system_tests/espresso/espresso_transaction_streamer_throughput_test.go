@@ -13,6 +13,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
+	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/system_tests/espresso/chain"
 	execution_engine "github.com/offchainlabs/nitro/system_tests/espresso/execution_engine"
 	generate "github.com/offchainlabs/nitro/system_tests/espresso/generate"
@@ -43,6 +44,12 @@ func RunChains(ctx context.Context, t *testing.T, mockEspressoChain *chain.MockE
 	go (func() {
 		_ = generate.SendMessageToWriter(ctx, streamer, messagesInChannel)
 	})()
+}
+
+func WithWorkerQueueSubmitter() transaction_streamer.MockTransactionStreamerEnvironmentOption {
+	return transaction_streamer.WithEspressoTransactionStreamerOptions(
+		arbnode.WithSubmitterCreator(submitter.NewMultiWorkerQueueEspressoSubmitter),
+	)
 }
 
 // numeric is a type constraint that allows any numeric type, including
@@ -115,7 +122,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 		//
 		// Expect the throughput to roughly be 4 messages/s and 12KiB/s
 		{
-			name:    "MoltenStandardThroughputIdealizedBuilder",
+			name:    "MoltenStandardThroughputIdealizedBuilderPollingSubmitter",
 			samples: 500,
 			behaviors: []generate.GenerationBehavior{
 				generate.GenerateStandardMoltenMessages(500),
@@ -141,7 +148,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 		//
 		// Expect the throughput to roughly be 4 messages/s and 12KiB/s
 		{
-			name:    "MoltenStandardThroughput1MiBBuilder",
+			name:    "MoltenStandardThroughput1MiBBuilderPollingSubmitter",
 			samples: 500,
 			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
 				transaction_streamer.AddChainOptions(
@@ -183,7 +190,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 		// Took 7.576660458s for 1,000 messages. A Throughput of 131.98 messages/s
 		// and 305,442.56 bytes/s.
 		{
-			name:    "MoltenPreloadBacklogIdealizedBuilder",
+			name:    "MoltenPreloadBacklogIdealizedBuilderPollingSubmitter",
 			samples: 1_000,
 			behaviors: []generate.GenerationBehavior{
 				generate.PreloadMoltenMessages(1_000),
@@ -219,7 +226,7 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 		// Took 4m12.588955167s for 1,000 messages. A throughput of 90.09 messages/s
 		// and 276,756.48 bytes/s.
 		{
-			name:    "MoltenPreloadBacklog1MiBBuilder",
+			name:    "MoltenPreloadBacklog1MiBBuilderPollingSubmitter",
 			samples: 1_000,
 			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
 				transaction_streamer.AddChainOptions(
@@ -240,6 +247,149 @@ func TestEspressoTransactionStreamerToEspressoThroughput(t *testing.T) {
 			},
 			sizeThroughput: expected[float64]{
 				value:   32 * generate.DefaultMoltenMessageSize, // 32 messages/s * 3KiB per message
+				epsilon: 128,                                    // 128 bytes tolerance
+			},
+		},
+
+		// Molten scenario
+		// Generate 500 messages as 4 message/s each sized as 3KiB
+		// Idealized Builder
+		//
+		// Expect the throughput to roughly be 4 messages/s and 12KiB/s
+		{
+			name:    "MoltenStandardThroughputIdealizedBuilderWorkersSubmitter",
+			samples: 500,
+			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
+				WithWorkerQueueSubmitter(),
+			},
+			behaviors: []generate.GenerationBehavior{
+				generate.GenerateStandardMoltenMessages(500),
+			},
+
+			duration: expected[time.Duration]{
+				value:   2*time.Minute + 30*time.Second, // 2m30s
+				epsilon: 30 * time.Second,               // 30s tolerance
+			},
+			messageThroughput: expected[float64]{
+				value:   4,   // 4 messages/s
+				epsilon: 0.2, // 0.2 message/s tolerance
+			},
+			sizeThroughput: expected[float64]{
+				value:   4 * generate.DefaultMoltenMessageSize, // 4 messages/s * 3KiB per message
+				epsilon: 512,                                   // 512 bytes tolerance
+			},
+		},
+
+		// Molten scenario
+		// Generate 500 messages as 4 message/s each sized as 3KiB
+		// Builder with Max Size of 1MiB
+		//
+		// Expect the throughput to roughly be 4 messages/s and 12KiB/s
+		{
+			name:    "MoltenStandardThroughput1MiBBuilderWorkersSubmitter",
+			samples: 500,
+			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
+				WithWorkerQueueSubmitter(),
+				transaction_streamer.AddChainOptions(
+					// 1MiB
+					chain.WithBuilder(chain.NewMaxSizeRestrictedBuilder(1024 * 1024)),
+				),
+			},
+
+			behaviors: []generate.GenerationBehavior{
+				generate.GenerateStandardMoltenMessages(500),
+			},
+
+			duration: expected[time.Duration]{
+				value:   2*time.Minute + 30*time.Second, // 6m30s
+				epsilon: 30 * time.Second,               // 30s tolerance
+			},
+			messageThroughput: expected[float64]{
+				value:   4,   // 4 messages/s
+				epsilon: 0.2, // 0.2 message/s tolerance
+			},
+			sizeThroughput: expected[float64]{
+				value:   4 * generate.DefaultMoltenMessageSize, // 4 messages/s * 3KiB per message
+				epsilon: 512,                                   // 512 bytes tolerance
+			},
+		},
+
+		// Molten Scenario
+		// Backlog generate 1_000 messages as quickly as possible each sized as 3KiB
+		// Idealized Builder
+		//
+		// Expect the throughput to allow us to catch up at a significant rate.
+		// We expect to be able to process at at least 8x the rate of the
+		// standard throughput, so we expect to see 32 messages/s and 96KiB/s
+		// throughput.
+		//
+		// NOTE: current observed throughput depends on hardware.  But on
+		// a 2023 Macbook Pro with an M3 Pro we observe a throughput of the
+		// following:
+		// Took 7.576660458s for 1,000 messages. A Throughput of 131.98 messages/s
+		// and 305,442.56 bytes/s.
+		{
+			name:    "MoltenPreloadBacklogIdealizedBuilderWorkersSubmitter",
+			samples: 1_000,
+			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
+				WithWorkerQueueSubmitter(),
+			},
+			behaviors: []generate.GenerationBehavior{
+				generate.PreloadMoltenMessages(1_000),
+			},
+			duration: expected[time.Duration]{
+				value:   4 * time.Second, // 4s
+				epsilon: 1 * time.Second, // 1s tolerance
+			},
+			messageThroughput: expected[float64]{
+				value:   100,  // 100 messages/s
+				epsilon: 0.05, // 0.05 message/s tolerance
+			},
+			sizeThroughput: expected[float64]{
+				value:   100 * generate.DefaultMoltenMessageSize, // 100 messages/s * 3KiB per message
+				epsilon: 128,                                     // 128 bytes tolerance
+			},
+		},
+
+		// Molten Scenario
+		// Backlog generate 1_000 messages as quickly as possible each sized as 3KiB
+		// Builder with Max Size of 1MiB
+		// Expect the throughput to allow us to catch up at a significant rate.
+		//
+		// We expect to be able to process at at least 8x the rate of the
+		// standard throughput, so we expect to see 32 messages/s and 96KiB/s
+		// throughput.
+		// This is because the Builder is able to handle the backlog of messages
+		// without being restricted by the size of the Builder.
+		//
+		// NOTE: current observed throughput depends on hardware.  But on
+		// a 2023 Macbook Pro with an M3 Pro we observe a throughput
+		// of the following:
+		// Took 4m12.588955167s for 1,000 messages. A throughput of 90.09 messages/s
+		// and 276,756.48 bytes/s.
+		{
+			name:    "MoltenPreloadBacklog1MiBBuilderWorkersSubmitter",
+			samples: 1_000,
+			streamerOptions: []transaction_streamer.MockTransactionStreamerEnvironmentOption{
+				WithWorkerQueueSubmitter(),
+				transaction_streamer.AddChainOptions(
+					// 1MiB
+					chain.WithBuilder(chain.NewMaxSizeRestrictedBuilder(1024 * 1024)),
+				),
+			},
+			behaviors: []generate.GenerationBehavior{
+				generate.PreloadMoltenMessages(1_000),
+			},
+			duration: expected[time.Duration]{
+				value:   10 * time.Second, // 10s
+				epsilon: 1 * time.Second,  // 1s tolerance
+			},
+			messageThroughput: expected[float64]{
+				value:   80,   // 80 messages/s
+				epsilon: 0.05, // 0.05 message/s tolerance
+			},
+			sizeThroughput: expected[float64]{
+				value:   80 * generate.DefaultMoltenMessageSize, // 80 messages/s * 3KiB per message
 				epsilon: 128,                                    // 128 bytes tolerance
 			},
 		},
