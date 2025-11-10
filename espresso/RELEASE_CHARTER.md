@@ -56,3 +56,8 @@ Deliver new code features systematically with clear documentation and validation
   - [ ] Describe tiered devnet testing results
   - [ ] Include security assessment if we conducted an audit
 - [ ] Team agrees to making it production ready
+
+### 6. Archive Non-Qualifying Pre-releases
+
+- [ ] If pre-release does not meet release criteria, archive the release
+- [ ] Document reasons why promotion was not possible
