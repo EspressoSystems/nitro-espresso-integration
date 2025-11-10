@@ -511,7 +511,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 	retryRate := s.espressoTxnsResubmissionInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
-		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
+		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry", "err", err)
 		return retryRate
 	}
 
@@ -524,7 +524,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 				log.Warn("failed to resubmit espresso transactions", "err", err)
 				return retryRate
 			}
-			log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
+			log.Info("trying to resubmit transaction succeeded", "hash", txHash.String())
 		}
 		// Reset the last submit failure time because we successfully resubmitted the transactions
 		s.lastSubmitFailureAt = nil
@@ -567,7 +567,7 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 
 	submittedTxHash, err := tagged_base64.Parse(hash)
 	if err != nil || submittedTxHash == nil {
-		log.Error("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
+		log.Error("invalid hotshot tx hash, failed to parse hash", "hash", hash, "err", err)
 		return false
 	}
 
@@ -580,12 +580,12 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	if s.lastSubmitFailureAt == nil {
 		now := time.Now()
 		s.lastSubmitFailureAt = &now
-		log.Warn("will wait for resubmission deadline before resubmitting transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		log.Warn("will wait for resubmission deadline before resubmitting transaction, will retry again", "hash", submittedTxHash.String(), "err", err)
 		return false
 	}
 	duration := time.Since(*s.lastSubmitFailureAt)
 	if duration < s.resubmitEspressoTxDeadline {
-		log.Warn("resubmission deadline not reached (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		log.Warn("resubmission deadline not reached, will retry again", "hash", submittedTxHash.String(), "err", err)
 		return false
 	}
 
