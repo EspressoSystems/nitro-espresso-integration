@@ -74,13 +74,13 @@ type BatchVerifier struct {
 type BatchVerifierConfig struct {
 	RpcTimeout         time.Duration `koanf:"rpc-timeout"`
 	RpcKeepalive       time.Duration `koanf:"rpc-keepalive"`
-	WaitForLeaderDelay time.Duration `koanf:"rpc-keepalive"`
+	WaitForLeaderDelay time.Duration `koanf:"wait-for-leader-delay"`
 }
 
 var DefaultBatchVerifierConfig = BatchVerifierConfig{
 	RpcTimeout:         time.Second * 10,
 	RpcKeepalive:       time.Second * 30,
-	WaitForLeaderDelay: time.Second * 120,
+	WaitForLeaderDelay: time.Minute * 5,
 }
 
 func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag.FlagSet) {
