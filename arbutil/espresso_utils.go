@@ -213,12 +213,12 @@ func HashDir(root string) (string, error) {
 // using the key manager public key. If that fails, it falls back to verifying the snapshot
 // checksum against the provided snapshotChecksum in the config. If the snapshot is verified using the
 // config snapshot checksum, it deletes the existing AuthTags ancient store to prepare for
-// new tags from the new enclave hash. It returns true if the auth tags needs to be
-// re-initialized, false otherwise which is true only when the config snapshot checksum is used and there is no valid
-// snapshot.txt file.
+// new tags from the new enclave hash.
+// It returns true if the auth tags need to be re-initialized (which occurs when
+// the config snapshot checksum is used and there is no valid snapshot.txt file),
+// false otherwise.
 func VerifySnapshot(snapshotChecksum string, parentChainDir string, l2chainDataDir string, ancientDir string, pubKey *ecdsa.PublicKey) (bool, error) {
 	err := VerifyStoredSnapshotChecksum(parentChainDir, pubKey)
-	log.Info("Error while verifying snapshot", "err", err)
 	if err == nil {
 		log.Info("Verified the stored snapshot checksum using the key manager")
 		return false, nil
@@ -268,7 +268,7 @@ func VerifyMessage(message []byte, signature []byte, pubKey *ecdsa.PublicKey) er
 	return nil
 }
 
-// verifyStoredSnapshotChecksum verifies that the snapshot.txt file has an expected signature
+// VerifyStoredSnapshotChecksum verifies that the snapshot.txt file has an expected signature
 // using the ECDSA key that was generated using the given PCR0 value.
 func VerifyStoredSnapshotChecksum(parentChainDir string, pubKey *ecdsa.PublicKey) error {
 	if pubKey == nil {

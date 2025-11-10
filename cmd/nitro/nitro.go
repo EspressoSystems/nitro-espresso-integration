@@ -489,7 +489,7 @@ func mainImpl() int {
 
 	var initializeCaffNodeTags bool
 	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
-	if nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
 		// Check that TEE is enabled
 		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType == "" {
 			log.Error("snapshot verification requires TEE, but no TEE type was specified")

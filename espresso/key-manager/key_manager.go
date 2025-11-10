@@ -275,10 +275,6 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 	return arbutil.SignMessage(message, k.privKey)
 }
 
-func (k *EspressoKeyManager) VerifyMessage(message []byte, signature []byte) error {
-	return arbutil.VerifyMessage(message, signature, k.pubKey)
-}
-
 func (k *EspressoKeyManager) RegisterService() error {
 	teeType := k.TeeType()
 	switch teeType {

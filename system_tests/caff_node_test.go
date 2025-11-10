@@ -684,6 +684,7 @@ func TestEspressoCaffNodeSnapshotWithoutTEEGenerated(t *testing.T) {
 	})
 	Require(t, err)
 }
+
 func TestEspressoCaffNodeSnapshotTEEGenerated(t *testing.T) {
 	// First we will run the caff node in generate snapshot mode
 	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
