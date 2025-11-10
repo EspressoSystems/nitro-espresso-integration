@@ -176,6 +176,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 
 	var sigs [][]byte
 	v.adjustRecoveryByte(args.Signature)
+	sigCount := 0
 	// Note: We append empty signatures on any error because if we still receive a quorum of signatures,
 	// we will still try to post the batch and timeboost contracts checks signatures in order in respect to member ordering in contract
 	for _, member := range members {
@@ -230,8 +231,9 @@ func (v *BatchVerifier) sendBatchForVerification(
 		}
 		v.adjustRecoveryByte(rpcResponse.Result)
 		sigs = append(sigs, rpcResponse.Result)
+		sigCount += 1
 	}
-	if len(sigs) < requiredQuorum {
+	if int(sigCount) < requiredQuorum {
 		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, len(sigs))
 	}
 	bytesType, err := abi.NewType("bytes[]", "", nil)
