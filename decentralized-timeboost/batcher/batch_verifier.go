@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/btcsuite/btcutil/base58"
 	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -24,6 +23,7 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
+	"github.com/offchainlabs/nitro/util/signature"
 )
 
 type BatchPosterArgs struct {
@@ -61,44 +61,60 @@ type VerifiedInfo struct {
 }
 
 type BatchVerifier struct {
-	LatestVerified      *VerifiedInfo
-	privateKey          *ecdsa.PrivateKey
-	client              *http.Client
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager
+	LatestVerified       *VerifiedInfo
+	publicKey            *ecdsa.PublicKey
+	client               *http.Client
+	timeboostKeyManager  *decentralizedtimeboostgen.KeyManager
+	currentBatch         uint64
+	lastBatchUpdatedTime time.Time
+	leaderTimeouts       uint64
+	signer               signature.DataSignerFunc
 }
 
 type BatchVerifierConfig struct {
-	PrivateKey   string        `koanf:"private-key"`
-	RpcTimeout   time.Duration `koanf:"rpc-timeout"`
-	RpcKeepalive time.Duration `koanf:"rpc-keepalive"`
+	RpcTimeout         time.Duration `koanf:"rpc-timeout"`
+	RpcKeepalive       time.Duration `koanf:"rpc-keepalive"`
+	WaitForLeaderDelay time.Duration `koanf:"rpc-keepalive"`
 }
 
 var DefaultBatchVerifierConfig = BatchVerifierConfig{
-	PrivateKey:   "",
-	RpcTimeout:   time.Second * 10,
-	RpcKeepalive: time.Second * 30,
+	RpcTimeout:         time.Second * 10,
+	RpcKeepalive:       time.Second * 30,
+	WaitForLeaderDelay: time.Second * 120,
 }
 
 func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag.FlagSet) {
-	f.String(prefix+".private-key", DefaultBatchVerifierConfig.PrivateKey, "batch verifier private key")
 	f.Duration(prefix+".rpc-timeout", DefaultBatchVerifierConfig.RpcTimeout, "timeout for http client")
 	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
+	f.Duration(prefix+".wait-for-leader-delay", DefaultBatchVerifierConfig.WaitForLeaderDelay, "how long we should wait for a leader to send batch, before trying constructing our own")
 }
 
-func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManager *decentralizedtimeboostgen.KeyManager) (*BatchVerifier, error) {
-	if len(config.PrivateKey) == 0 {
-		return nil, fmt.Errorf("decentralized timeboost private key must be set")
-	}
-	decoded := base58.Decode(config.PrivateKey)
-	privateKey, err := crypto.ToECDSA(decoded)
+func NewBatchVerifier(
+	config BatchVerifierConfig,
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+	privKey string,
+) (*BatchVerifier, error) {
+	privKeyBytes, err := hex.DecodeString(privKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode decentralized timeboost private key: %w", err)
+		return nil, err
 	}
-	if privateKey == nil {
-		return nil, fmt.Errorf("decentralized timeboost private key cannot be nil")
+	privateKey, err := crypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ECDSA private key: %w", err)
+	}
+	signer := signature.DataSignerFromPrivateKey(privateKey)
+	message := make([]byte, 32)
+	signature, err := signer(message)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey, err := crypto.SigToPub(message, signature)
+	if err != nil {
+		return nil, err
 	}
 	return &BatchVerifier{
-		privateKey: privateKey,
+		publicKey: publicKey,
 		client: &http.Client{
 			Timeout: config.RpcTimeout,
 			Transport: &http.Transport{
@@ -111,7 +127,11 @@ func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManager *decentral
 				},
 			},
 		},
-		timeboostKeyManager: timeboostKeyManager,
+		timeboostKeyManager:  timeboostKeyManager,
+		currentBatch:         0,
+		lastBatchUpdatedTime: time.Now(),
+		leaderTimeouts:       0,
+		signer:               signer,
 	}, nil
 }
 
@@ -247,10 +267,15 @@ func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
 }
 
 func (v *BatchVerifier) getCompressedPubKey() []byte {
-	return crypto.CompressPubkey(&v.privateKey.PublicKey)
+	return crypto.CompressPubkey(v.publicKey)
 }
 
 func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
+	if seqNum != v.currentBatch {
+		v.currentBatch = seqNum
+		v.lastBatchUpdatedTime = time.Now()
+		v.leaderTimeouts = 0
+	}
 	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return false, err
@@ -259,11 +284,24 @@ func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// TODO: Fallback if leader fails to submit
-	leader := committee.Members[seqNum%uint64(len(committee.Members))]
+	leader := committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
 	pubKey := v.getCompressedPubKey()
 	if !bytes.Equal(pubKey, leader.SigKey) {
-		return false, nil
+		if time.Since(v.lastBatchUpdatedTime) <= 90*time.Second {
+			return false, nil
+		}
+		v.lastBatchUpdatedTime = time.Now()
+		v.leaderTimeouts += 1
+		leader = committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
+		if !bytes.Equal(pubKey, leader.SigKey) {
+			return false, nil
+		}
+		log.Warn(
+			"time expired waiting for batch to be posted from leader, trying to construct own batch",
+			"leader timeouts", v.leaderTimeouts,
+			"batch", seqNum,
+			"pub key", "0x"+hex.EncodeToString(pubKey),
+		)
 	}
 
 	return true, nil
@@ -277,7 +315,7 @@ func (v *BatchVerifier) HashAndSignBatchData(
 	signingData []byte,
 ) (*BatchPosterArgs, error) {
 	hash := v.HashBatchData(signingData)
-	signature, err := crypto.Sign(hash, v.privateKey)
+	signature, err := v.signer(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign data: %w", err)
 	}
@@ -285,7 +323,7 @@ func (v *BatchVerifier) HashAndSignBatchData(
 		SignedData: signingData,
 		Signature:  signature,
 		Hash:       hash,
-		PubKey:     crypto.CompressPubkey(&v.privateKey.PublicKey),
+		PubKey:     crypto.CompressPubkey(v.publicKey),
 	}
 	return args, nil
 }

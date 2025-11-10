@@ -753,7 +753,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		b.batchVerifier = nil
 		if opts.Config().IsDecentralizedTimeboost {
-			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(opts.Config().DecentralizedTimeboostBatchVerifier, decentralizedTimeboostKeyManager)
+			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(
+				opts.Config().DecentralizedTimeboostBatchVerifier,
+				decentralizedTimeboostKeyManager,
+				opts.Config().ParentChainWallet.PrivateKey,
+			)
 			if err != nil {
 				return nil, err
 			}

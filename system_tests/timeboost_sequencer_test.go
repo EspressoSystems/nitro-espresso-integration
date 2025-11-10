@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
+	"github.com/btcsuite/btcutil/base58"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -55,7 +57,9 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 30 * time.Second
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = batchPoster
-	builder.nodeConfig.BatchPoster.DecentralizedTimeboostBatchVerifier.PrivateKey = privKey
+	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = true
+	priv := hex.EncodeToString(base58.Decode(privKey))
+	builder.nodeConfig.BatchPoster.ParentChainWallet.PrivateKey = priv
 	builder.nodeConfig.BatchPoster.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
 
 	// validator config
