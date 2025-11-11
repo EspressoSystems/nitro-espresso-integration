@@ -14,7 +14,7 @@ on:
 jobs:
   changes:
     name: Detect file changes
-    runs-on: ubuntu-4
+    runs-on: ubuntu-latest
     outputs:
       arbitrator_changed: ${{ steps.changed.outputs.arbitrator_any_changed }}
       bold_legacy_changed: ${{ steps.changed.outputs.bold_legacy_any_changed }}

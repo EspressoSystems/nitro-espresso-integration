@@ -6,7 +6,7 @@ on:
 jobs:
   go-tests:
     name: Full Go tests (matrix)
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
