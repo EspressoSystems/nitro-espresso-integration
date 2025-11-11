@@ -180,6 +180,12 @@ func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos 
 func (s *EspressoStreamer) VerifyConsecutivePositions(target uint64) *uint64 {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
+	// if we are already greater than the target no need to do anything
+	if s.currentMessagePos >= target {
+		hotshotHeight := s.GetCurrentEarliestHotShotBlockNumber()
+		return &hotshotHeight
+	}
+
 	expectedCount := target - s.currentMessagePos + 1
 	result := make(map[uint64]*MessageWithMetadataAndPos)
 

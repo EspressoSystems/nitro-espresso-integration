@@ -69,6 +69,7 @@ type BatchVerifier struct {
 	lastBatchUpdatedTime time.Time
 	leaderTimeouts       uint64
 	signer               signature.DataSignerFunc
+	waitForLeaderDelay   time.Duration
 }
 
 type BatchVerifierConfig struct {
@@ -132,6 +133,7 @@ func NewBatchVerifier(
 		lastBatchUpdatedTime: time.Now(),
 		leaderTimeouts:       0,
 		signer:               signer,
+		waitForLeaderDelay:   config.WaitForLeaderDelay,
 	}, nil
 }
 
@@ -290,7 +292,7 @@ func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
 	leader := committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
 	pubKey := v.getCompressedPubKey()
 	if !bytes.Equal(pubKey, leader.SigKey) {
-		if time.Since(v.lastBatchUpdatedTime) <= 90*time.Second {
+		if time.Since(v.lastBatchUpdatedTime) <= v.waitForLeaderDelay {
 			return false, nil
 		}
 		v.lastBatchUpdatedTime = time.Now()
