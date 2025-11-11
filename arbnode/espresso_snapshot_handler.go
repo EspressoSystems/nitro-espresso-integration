@@ -86,9 +86,6 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 }
 
 func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
-	// Close the database before creating the snapshot
-	s.db.Close()
-
 	sha256Hash, err := arbutil.HashDir(s.l2chainDataDir)
 	if err != nil {
 		return err
@@ -116,6 +113,8 @@ func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
 
 func (s *EspressoSnapshotHandler) StopAndWait() {
 	s.StopWaiter.StopAndWait()
+	// Close the database before creating the snapshot
+	s.db.Close()
 	if !s.generateSnapshot {
 		log.Info("Snapshot generation is disabled, skipping")
 		return

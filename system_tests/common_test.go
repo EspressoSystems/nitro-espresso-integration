@@ -1704,7 +1704,7 @@ func createNonL1BlockChainWithStackConfig(
 		if err != nil {
 			Fatal(t, "Invalid CAFF_NODE_PRIV_KEY format")
 		}
-
+		t.Setenv("INITIALIZE_TAGS", "")
 		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
 		Require(t, err)
 		if initializeTags {

@@ -535,7 +535,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	Require(t, err)
 }
 
-func TestEspressoCaffNodeSnapshotWithoutTEEGenerated(t *testing.T) {
+func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	// First we will run the caff node in generate snapshot mode
 	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
 	defer cancel()
@@ -589,32 +589,26 @@ func TestEspressoCaffNodeSnapshotWithoutTEEGenerated(t *testing.T) {
 	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
 	builder.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
 
-	builderCaffNode.RestartCaffNode(t)
-
-	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
-
-	err = builder.L2.Client.SendTransaction(ctx, tx)
-	Require(t, err)
-
-	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
-		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
-		// Now the balance should be greater than twice the transfer amount
-		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
-	})
-
-	// Now check if it created "snapshot_verified.txt" file in the parent chain directory
-	snapshotVerifiedFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name, "system_tests.test"), "snapshot_verified.txt")
-	_, err = os.Stat(snapshotVerifiedFile)
-	Require(t, err)
-
 	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
 	_ = logHandler
 
+	time.Sleep(10 * time.Second)
 	builderCaffNode.RestartCaffNode(t)
 
 	// This time check if it printed the log about snapshot already verified
-	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
+		return logHandler.WasLogged("Snapshot hash matches")
+	})
+	Require(t, err)
+
+	// Now restart the caff node again, and it should print that the snapshot has already been verified previously
+	builderCaffNode.L2.cleanup()
+
+	time.Sleep(10 * time.Second)
+	builderCaffNode.RestartCaffNode(t)
+
+	// This time check if it printed the log about snapshot already verified
+	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
 		return logHandler.WasLogged("Snapshot has already been verified previously")
 	})
 

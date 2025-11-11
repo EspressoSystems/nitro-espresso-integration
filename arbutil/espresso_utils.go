@@ -223,7 +223,6 @@ func VerifySnapshot(snapshotChecksum string, parentChainDir string, l2chainDataD
 	// Check if snapshot.txt file exists along with a valid snapshot_signature.txt
 	path := filepath.Join(parentChainDir, "snapshot_verified.txt")
 	snapshotVerifiedSignature, err := os.ReadFile(path)
-	log.Info("Verifying snapshot using snapshot_verified.txt", "path", path, "err", err, "snapshotverifiedsiglen", len(snapshotVerifiedSignature))
 	if err == nil {
 		// Verify the signature
 		err = VerifyMessage([]byte("snapshot verified"), snapshotVerifiedSignature, pubKey)
