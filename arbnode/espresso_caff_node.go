@@ -70,6 +70,7 @@ type EspressoCaffNodeConfig struct {
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
+	AddressMonitorStep      uint64 `koanf:"address-monitor-step"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -116,6 +117,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:              "",
 	ParentChainWallet:             DefaultBatchPosterL1WalletConfig,
+	AddressMonitorStep:            100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -225,23 +227,6 @@ func NewEspressoCaffNode(
 		return nil, fmt.Errorf("failed to create hotshot client: %w", err)
 	}
 
-	batcherAddrMonitor := NewBatcherAddrMonitor(
-		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
-		db,
-		l1Reader,
-		sequencerInbox.address,
-		delayedBridge.fromBlock,
-		configFetcher().FromBlock,
-	)
-	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
-		configFetcher().NextHotshotBlock,
-		sgxVerifier,
-		client,
-		recordPerformance,
-		batcherAddrMonitor.GetValidAddresses,
-		configFetcher().RetryTime,
-	)
-
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
@@ -256,6 +241,24 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("fromBlock is 0, please provide a valid block number")
 		}
 	}
+
+	batcherAddrMonitor := NewBatcherAddrMonitor(
+		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
+		db,
+		l1Reader,
+		sequencerInbox.address,
+		delayedBridge.fromBlock,
+		fromBlock,
+		configFetcher().AddressMonitorStep,
+	)
+	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
+		configFetcher().NextHotshotBlock,
+		sgxVerifier,
+		client,
+		recordPerformance,
+		batcherAddrMonitor.GetValidAddresses,
+		configFetcher().RetryTime,
+	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox, fatalErrChan)
