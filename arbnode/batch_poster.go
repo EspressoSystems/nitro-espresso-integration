@@ -224,9 +224,10 @@ type BatchPosterConfig struct {
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses []common.Address `koanf:"init-batcher-addresses"`
+	InitBatcherAddresses  []common.Address `koanf:"init-batcher-addresses"`
+	AddressMonitorStartL1 uint64           `koanf:"address-monitor-start-l1"`
+	AddressMonitorStep    uint64           `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -301,6 +302,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
+	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
+	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -365,6 +368,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []common.Address{},
 	EspressoEventPollingStep: 100,
+	AddressMonitorStep:       100,
+	AddressMonitorStartL1:    1,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -413,6 +418,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []common.Address{},
+	AddressMonitorStartL1:    1,
+	AddressMonitorStep:       100,
 	EspressoEventPollingStep: 100,
 }
 
@@ -636,6 +643,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
 				opts.Config().AddressMonitorStartL1,
+				opts.Config().AddressMonitorStep,
 			)
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
