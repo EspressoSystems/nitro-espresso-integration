@@ -71,6 +71,7 @@ type EspressoCaffNodeConfig struct {
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 	AddressMonitorStep      uint64 `koanf:"address-monitor-step"`
+	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -118,6 +119,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	SnapshotChecksum:              "",
 	ParentChainWallet:             DefaultBatchPosterL1WalletConfig,
 	AddressMonitorStep:            100,
+	GenerateSnapshot:              false,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -145,6 +147,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
+	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -349,7 +352,7 @@ func NewEspressoCaffNode(
 
 	}
 
-	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager)
+	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager, configFetcher().GenerateSnapshot)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,

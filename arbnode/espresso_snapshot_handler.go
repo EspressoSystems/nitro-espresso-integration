@@ -16,20 +16,22 @@ import (
 
 type EspressoSnapshotHandler struct {
 	stopwaiter.StopWaiter
-	db             *authdb.AuthDB
-	parentChainDir string
-	l2chainDataDir string
-	initializeTags bool
-	keyManager     *espresso_key_manager.EspressoKeyManager
+	db               *authdb.AuthDB
+	parentChainDir   string
+	l2chainDataDir   string
+	initializeTags   bool
+	generateSnapshot bool
+	keyManager       *espresso_key_manager.EspressoKeyManager
 }
 
-func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, initializeTags bool, keyManager *espresso_key_manager.EspressoKeyManager) *EspressoSnapshotHandler {
+func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, initializeTags bool, keyManager *espresso_key_manager.EspressoKeyManager, generateSnapshot bool) *EspressoSnapshotHandler {
 	return &EspressoSnapshotHandler{
-		db:             db,
-		parentChainDir: parentChainDir,
-		l2chainDataDir: l2chainDataDir,
-		initializeTags: initializeTags,
-		keyManager:     keyManager,
+		db:               db,
+		parentChainDir:   parentChainDir,
+		l2chainDataDir:   l2chainDataDir,
+		initializeTags:   initializeTags,
+		keyManager:       keyManager,
+		generateSnapshot: generateSnapshot,
 	}
 }
 
@@ -114,6 +116,10 @@ func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
 
 func (s *EspressoSnapshotHandler) StopAndWait() {
 	s.StopWaiter.StopAndWait()
+	if !s.generateSnapshot {
+		log.Info("Snapshot generation is disabled, skipping")
+		return
+	}
 	log.Info("Taking snapshot of the database, this may take a while")
 	err := s.CreateAndSnapshot()
 	if err != nil {

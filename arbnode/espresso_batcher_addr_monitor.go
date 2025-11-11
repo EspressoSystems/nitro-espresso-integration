@@ -288,30 +288,23 @@ func (b *BatcherAddrMonitor) Restore() error {
 	if err != nil {
 		return fmt.Errorf("failed to get init addresses: %w, init addresses: %v", err, initAddresses)
 	}
-	log.Info("InitAddresses in the database", "initAddresses", initAddresses)
 	if initAddresses != nil {
 		b.initAddresses = initAddresses
-		log.Info("Restored init addresses", "initAddresses", initAddresses)
 	}
 
 	lastProcessedHeight, err := authdb.ReadLastProcessedHeight(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get last processed height: %w", err)
 	}
-	log.Info("Last processed height in the database", "lastProcessedHeight", lastProcessedHeight)
 
 	if lastProcessedHeight != 0 {
 		b.lastProcessedParentHeight = lastProcessedHeight
-		log.Info("Restored last processed height", "lastProcessedHeight", lastProcessedHeight)
-
 	}
 
 	eventsBytes, err := authdb.ReadEvents(b.db)
 	if err != nil {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
-
-	log.Info("Events in the database", "eventsBytes", eventsBytes)
 
 	if eventsBytes != nil {
 		var events []BatcherAddrUpdate
@@ -324,7 +317,6 @@ func (b *BatcherAddrMonitor) Restore() error {
 		b.cachedAddresses = []common.Address{}
 		if len(events) > 0 {
 			b.lastEventL1Height = events[len(events)-1].L1Height
-			log.Info("Length of events is greater than 0, assigning lastEventL1Height", "events", events, "lastEventL1Height", b.lastEventL1Height)
 		}
 	} else {
 		b.updates = []BatcherAddrUpdate{}
@@ -332,7 +324,6 @@ func (b *BatcherAddrMonitor) Restore() error {
 		b.cachedAddresses = []common.Address{}
 		b.lastEventL1Height = 0
 	}
-	log.Info("final values after restore", "initAddresses", b.initAddresses, "lastProcessedParentHeight", b.lastProcessedParentHeight, "updates", b.updates, "cached", b.cached, "cachedAddresses", b.cachedAddresses, "lastEventL1Height", b.lastEventL1Height)
 	return nil
 }
 
@@ -341,12 +332,9 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to get latest parent height: %w", err)
 	}
-	log.Info("LatestParentHeader in backfill", "latestparentheader", latestParentHeader)
 	lastProcessedHeight := b.GetLastProcessedParentHeight()
 
-	log.Info("last processed height in backfill", "lastProcessedHeight", lastProcessedHeight)
 	if lastProcessedHeight <= b.deployAt {
-		log.Info("initializing batcher addr monitor at deploy height", "deployAt", b.deployAt)
 		// Verify init addresses are batchers
 		for _, addr := range b.initAddresses {
 			isBatcher, err := b.seqInboxInterface.IsBatchPoster(&bind.CallOpts{}, addr)
@@ -360,7 +348,6 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 
 		lastProcessedHeight = b.deployAt
 		b.lastProcessedParentHeight = lastProcessedHeight
-		log.Info("After initializing at deploy at", "lastProcessedHeight", lastProcessedHeight, "lastProcessedParentHeight", b.lastProcessedParentHeight)
 	}
 
 	blocksToRead := b.step
@@ -369,13 +356,11 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 	latestParentHeight := latestParentHeader.Number.Uint64()
 	log.Info("batcher addr monitor backfilling")
 	for retry < allowedRetry {
-		log.Info("Retry and AllowedRetry", "retry", retry, "allowedRetry", allowedRetry)
 		if lastProcessedHeight >= latestParentHeight {
 			// Already backfilled to the current known latest height.
 			// However, the latest height might actually be a bit behind,
 			// so update it to match lastProcessedHeight before exiting.
 			latestParentHeight = lastProcessedHeight
-			log.Info("hitting the condition lastProcessedHeight >= latestParentHeight", "lastProcessedHeight", lastProcessedHeight, "latestParentHeight", latestParentHeight)
 			break
 		}
 
@@ -400,7 +385,6 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			continue
 		}
 		latestParentHeight = latestParentHeader.Number.Uint64()
-		log.Info("values during backfilling", "events", events, "lastProcessedHeight", lastProcessedHeight, "latestParentHeight", latestParentHeight)
 	}
 	b.lastProcessedParentHeight = latestParentHeight
 	b.lastProcessedL1Height = latestParentHeight

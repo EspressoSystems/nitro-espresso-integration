@@ -496,7 +496,7 @@ func mainImpl() int {
 			return 1
 		}
 		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
-		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), &caffNodePrivateKey.PublicKey)
+		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), caffNodePrivateKey)
 		if err != nil {
 			log.Error("failed to verify snapshot", "err", err)
 			return 1

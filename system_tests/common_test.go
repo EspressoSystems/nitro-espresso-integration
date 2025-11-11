@@ -711,9 +711,9 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 
-	caffNodePublicKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey.PublicKey
-	pubKeyBytes := crypto.FromECDSAPub(&caffNodePublicKey)
-	t.Setenv("CAFF_NODE_PUB_KEY", common.Bytes2Hex(pubKeyBytes))
+	privKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
+
+	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(privKey)))
 	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
 		t, b.L2Info, b.dataDir, b.chainConfig, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.useFreezer)
 
@@ -801,10 +801,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
-	// Get ecdsa public key from private key and encode it as hex
-	caffNodePublicKey := &caffNodePrivateKey.PublicKey
-	pubKeyBytes := crypto.FromECDSAPub(caffNodePublicKey)
-	t.Setenv("CAFF_NODE_PUB_KEY", common.Bytes2Hex(pubKeyBytes))
+	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(caffNodePrivateKey)))
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.nodeConfig, b.wasmCacheTag, b.useFreezer)
 
@@ -1698,13 +1695,17 @@ func createNonL1BlockChainWithStackConfig(
 		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
 			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
 		}
-		pubKeyString := os.Getenv("CAFF_NODE_PUB_KEY")
-		if pubKeyString == "" {
-			Fatal(t, "CAFF_NODE_PUB_KEY environment variable is not set")
+		privKey := os.Getenv("CAFF_NODE_PRIV_KEY")
+		if privKey == "" {
+			Fatal(t, "CAFF_NODE_PRIV_KEY environment variable is not set")
 		}
-		ecdsaPubKey, err := crypto.UnmarshalPubkey(common.FromHex(pubKeyString))
-		Require(t, err)
-		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), ecdsaPubKey)
+		// Use the private key from the environment variable as needed
+		caffPrivKey, err := crypto.HexToECDSA(privKey)
+		if err != nil {
+			Fatal(t, "Invalid CAFF_NODE_PRIV_KEY format")
+		}
+
+		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
 		Require(t, err)
 		if initializeTags {
 			t.Setenv("INITIALIZE_TAGS", "true")
