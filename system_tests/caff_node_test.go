@@ -236,7 +236,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, arbnode.TestBatchPosterConfig.DisableDapFallbackStoreDataOnChain)
 	Require(t, err)
 	builderCaffNode := builder.L2
-	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User14"))
@@ -253,23 +252,6 @@ func TestEspressoCaffNode(t *testing.T) {
 			log.Info("Balance has entered account", "balance", balance, "account", newAccount)
 		}
 		return balance.Cmp(transferAmount) >= 0
-	})
-	Require(t, err)
-
-	// Test restarting caff node
-	time.Sleep(10 * time.Second)
-	builder.RestartCaffNode(t)
-
-	tx := builder.L2Info.PrepareTx("Faucet", "User14", 3e7, transferAmount, nil)
-
-	err = builder.L2.Client.SendTransaction(ctx, tx)
-	Require(t, err)
-
-	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builder.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
-		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account")
-		// Now the balance should be greater than twice the transfer amount
-		return balance1.Cmp(transferAmount.Mul(transferAmount, big.NewInt(2))) > 0
 	})
 	Require(t, err)
 
@@ -350,6 +332,21 @@ func TestEspressoCaffNode(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("did not receive error from fatalErrChan within timeout")
 	}
+
+	// Test restarting caff node
+	time.Sleep(10 * time.Second)
+	cleanupCaffNode()
+	builder.RestartCaffNode(t)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User17", builder.L2Info)
+	Require(t, err)
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builder.L2.GetBalance(t, builder.L2Info.GetAddress("User17"))
+		log.Info("waiting for balance", "account", "User17", "balance", balance1, "account")
+		// Now the balance should be greater than twice the transfer amount
+		return balance1.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
 
 }
 
