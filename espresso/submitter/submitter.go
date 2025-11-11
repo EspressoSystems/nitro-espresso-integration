@@ -13,6 +13,7 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
+	"github.com/offchainlabs/nitro/util"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -56,6 +57,20 @@ type EspressoSubmitterConfig struct {
 	KeyManager        espresso_key_manager.EspressoKeyManagerInterface
 	MessageGetter     MessageGetter
 	Db                ethdb.Database
+
+	// These are specific to the Multi Worker Queue Espresso Submitter
+	// and governs how many workers / buffering is used for the
+	// Espresso Submitter.
+
+	NumberOfSubmitTransactionWorkers   uint64
+	NumberOfTransactionIncludedWorkers uint64
+	MessageIndexQueueSize              uint64
+	SubmitTransactionsQueueSize        uint64
+	TransactionIncludedQueueSize       uint64
+	SubmissionFailureDelayPenalty      time.Duration
+	VerificationFailureDelayPenalty    time.Duration
+	InitialNitroMessageAvailable       arbutil.MessageIndex
+	InitialNitroMessageToSubmit        arbutil.MessageIndex
 }
 
 // DefaultEspressoSubmitterConfig provides a default configuration for the
@@ -79,6 +94,13 @@ var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
 	InitialFinalizedSequencerMessageCount: big.NewInt(0),
+	NumberOfSubmitTransactionWorkers:      util.GetNumCPUs() * 2,
+	NumberOfTransactionIncludedWorkers:    util.GetNumCPUs() * 2,
+	SubmissionFailureDelayPenalty:         100 * time.Millisecond,
+	VerificationFailureDelayPenalty:       100 * time.Millisecond,
+	MessageIndexQueueSize:                 1024,
+	SubmitTransactionsQueueSize:           1024,
+	TransactionIncludedQueueSize:          1024,
 }
 
 // EspressoSubmitterConfigOption is a function type that takes a pointer to
@@ -217,6 +239,117 @@ func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitter
 func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.ResubmitEspressoTxDeadline = deadline
+	}
+}
+
+// WithNumberOfSubmitTransactionWorkers is an [EspressoSubmitterConfigOption]
+// that sets the number of workers for submitting transactions in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithNumberOfSubmitTransactionWorkers(numWorkers uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.NumberOfSubmitTransactionWorkers = numWorkers
+	}
+}
+
+// WithNumberOfTransactionIncludedWorkers is an [EspressoSubmitterConfigOption]
+// that sets the number of workers for transaction inclusion in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithNumberOfTransactionIncludedWorkers(numWorkers uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.NumberOfTransactionIncludedWorkers = numWorkers
+	}
+}
+
+// WithMessageIndexQueueSize is an [EspressoSubmitterConfigOption] that sets the
+// size of the message index queue in the [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithMessageIndexQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.MessageIndexQueueSize = size
+	}
+}
+
+// WithSubmitTransactionsQueueSize is an [EspressoSubmitterConfigOption] that
+// sets the size of the submit transactions queue in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithSubmitTransactionsQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.SubmitTransactionsQueueSize = size
+	}
+}
+
+// WithTransactionIncludedQueueSize is an [EspressoSubmitterConfigOption] that
+// sets the size of the transaction included queue in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: This is specific to the Multi Worker Queue Espresso Submitter.
+func WithTransactionIncludedQueueSize(size uint64) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.TransactionIncludedQueueSize = size
+	}
+}
+
+// WithSubmissionFailureDelayPenalty is an [EspressoSubmitterConfigOption] that
+// sets the delay penalty for submission failures in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithSubmissionFailureDelayPenalty(penalty time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.SubmissionFailureDelayPenalty = penalty
+	}
+}
+
+// WithVerificationFailureDelayPenalty is an [EspressoSubmitterConfigOption]
+// that sets the delay penalty for verification failures in the
+// [EspressoSubmitterConfig].
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithVerificationFailureDelayPenalty(penalty time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.VerificationFailureDelayPenalty = penalty
+	}
+}
+
+// WithInitialNitroMessageAvailable is an [EspressoSubmitterConfigOption] that
+// sets the initial position, up to which the total number of nitro messages
+// should currently be available to process.
+//
+// This pre-configures the submitter with some indication of which message
+// indices are already available to be submitted to Espresso.
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithInitialNitroMessageAvailable(pos arbutil.MessageIndex) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.InitialNitroMessageAvailable = pos
+	}
+}
+
+// WithInitialNitroMessageToSubmit is an [EspressoSubmitterConfigOption] that
+// sets the position of the first nitro message we're looking to submit to
+// Espresso. This implies that every message prior to this index has already
+// been processed and confirmed in Espresso.
+//
+// This pre-configures the submitter with some indication of which message
+// indices are already pending submission to Espresso. This effectively
+// indicates the position at which the submitter should start attempting
+// to submit new transactions.
+//
+// NOTE: this is currently specific to the Multi Worker Queue Espresso
+// Submitter.
+func WithInitialNitroMessageToSubmit(pos arbutil.MessageIndex) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.InitialNitroMessageToSubmit = pos
 	}
 }
 

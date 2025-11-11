@@ -140,6 +140,29 @@ func WithInitialFinalizedSequencerMessageCount(count *big.Int) TransactionStream
 	}
 }
 
+// WithSubmitterCreator is a functional option that allows for setting a custom
+// submitter creator function in the TransactionStreamerEspressoConfig. This
+// function is responsible for creating an EspressoSubmitter instance with the
+// provided configuration options.
+func WithSubmitterCreator(
+	creator func(options ...submitter.EspressoSubmitterConfigOption) (submitter.EspressoSubmitter, error),
+) TransactionStreamerEspressoOption {
+	return func(config *TransactionStreamerEspressoConfig) {
+		config.SubmitterCreator = creator
+	}
+}
+
+// AddSubmitterConfigurationOptions is a functional option that allows for
+// adding multiple EspressoSubmitterConfigOptions to the
+// TransactionStreamerEspressoConfig.
+func AddSubmitterConfigurationOptions(
+	options ...submitter.EspressoSubmitterConfigOption,
+) TransactionStreamerEspressoOption {
+	return func(config *TransactionStreamerEspressoConfig) {
+		config.SubmitterConfiguration = append(config.SubmitterConfiguration, options...)
+	}
+}
+
 // WithMultipleEspressoOptions is a functional option that allows for multiple
 // TransactionStreamerEspressoOptions to be applied at once. This is useful for
 // configuring the TransactionStreamer with multiple options in a single call.
