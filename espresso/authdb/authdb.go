@@ -620,10 +620,6 @@ func (d *AuthDB) InitAuthTagsDatabase(batchSize int) error {
 	)
 	log.Info("Starting adding auth tags to the database")
 
-	estimatedTotal, err := d.Database.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to get database stats: %w", err)
-	}
 	// Use the raw database iterator to avoid per-key auth verification during initialization
 	it := d.Database.NewIterator(prefix, start)
 	defer it.Release()
@@ -654,12 +650,11 @@ func (d *AuthDB) InitAuthTagsDatabase(batchSize int) error {
 				batch.Reset()
 				return fmt.Errorf("failed to write auth tag batch: %w", err)
 			}
-			log.Info("Wrote auth tag batch", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)), "estimated_total", estimatedTotal)
 			batch.Reset()
 		}
-		// if 8 seconds have passed still log
-		if time.Since(loggedTime) > 8*time.Second {
-			log.Info("Progress adding auth tags", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)), "estimated_total", estimatedTotal)
+		// if 5 minuetes have passed still log
+		if time.Since(loggedTime) > 5*time.Minute {
+			log.Info("Progress adding auth tags", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
 			loggedTime = time.Now()
 		}
 	}
