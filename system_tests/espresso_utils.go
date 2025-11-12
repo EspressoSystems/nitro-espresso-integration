@@ -1,40 +1,44 @@
 package arbtest
 
 import (
-	"math/big"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
+
+	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/offchainlabs/nitro/espresso/test-utils"
 )
 
+func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic string, idx uint) error {
+	if b.Accounts[name] != nil {
+		b.T.Fatal("account already exists")
+	}
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	if err != nil {
+		return err
+	}
+	path := hdwallet.MustParseDerivationPath(fmt.Sprintf("m/44'/60'/0'/0/%d", idx))
+	account, err := wallet.Derive(path, false)
+	if err != nil {
+		return err
+	}
+	privateKey, err := wallet.PrivateKey(account)
+	if err != nil {
+		return err
+	}
+
+	b.Accounts[name] = &AccountInfo{
+		Address:    account.Address,
+		PrivateKey: privateKey,
+		Nonce:      atomic.Uint64{},
+	}
+	log.Info("New Key ", "name", name, "Address", b.Accounts[name].Address)
+	return nil
+}
+
 func createDummyEspressoMetadata(t *testing.T) []byte {
-	hotshotHeight := new(big.Int).SetUint64(1)
-	signature := make([]byte, 32)
-	teeType := uint8(0)
-
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		t.Fatal("failed to create uint256 type")
-	}
-
-	bytesType, err := abi.NewType("bytes", "", nil)
-	if err != nil {
-		t.Fatal("failed to create bytes type")
-	}
-
-	uint8Type, err := abi.NewType("uint8", "", nil)
-	if err != nil {
-		t.Fatal("failed to create uint8 type")
-	}
-
-	espressoMetadata, err := abi.Arguments{
-		{Type: uint256Type},
-		{Type: bytesType},
-		{Type: uint8Type},
-	}.Pack(hotshotHeight, signature, teeType)
-	if err != nil {
-		t.Fatal("failed to pack hotshot height and signature")
-	}
-
-	return espressoMetadata
+	return testutils.CreateDummyEspressoMetadata(t)
 }

@@ -10,8 +10,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 )
 
 func TestEspressoBatcherMonitor(t *testing.T) {

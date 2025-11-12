@@ -31,6 +31,26 @@ func (e ErrorExecutionClientUnimplementedMethod) Error() string {
 // implementing all methods of the interface.
 type UnimplementedExecutionClient struct{}
 
+// MaintenanceStatus implements execution.ExecutionClient.
+func (u UnimplementedExecutionClient) MaintenanceStatus() containers.PromiseInterface[*execution.MaintenanceStatus] {
+	panic("unimplemented")
+}
+
+// SetConsensusSyncData implements execution.ExecutionClient.
+func (u UnimplementedExecutionClient) SetConsensusSyncData(ctx context.Context, syncData *execution.ConsensusSyncData) containers.PromiseInterface[struct{}] {
+	panic("unimplemented")
+}
+
+// ShouldTriggerMaintenance implements execution.ExecutionClient.
+func (u UnimplementedExecutionClient) ShouldTriggerMaintenance() containers.PromiseInterface[bool] {
+	panic("unimplemented")
+}
+
+// TriggerMaintenance implements execution.ExecutionClient.
+func (u UnimplementedExecutionClient) TriggerMaintenance() containers.PromiseInterface[struct{}] {
+	panic("unimplemented")
+}
+
 // Compile time check to ensure that UnimplementedExecutionClient implements
 // the execution.ExecutionClient interface.
 var _ execution.ExecutionClient = UnimplementedExecutionClient{}
