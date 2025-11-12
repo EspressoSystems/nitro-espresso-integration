@@ -628,11 +628,11 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 					continue
 				}
 				// TODO send the error back to the user
-				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash().Hex())
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash().Hex())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
@@ -689,6 +689,9 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 }
 
 func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) error {
+	if s.execEngine == nil || s.execEngine.bc == nil {
+		return fmt.Errorf("engine not ready")
+	}
 	height, err := s.hotshotClient.FetchLatestBlockHeight(ctx)
 	if err != nil {
 		return err
@@ -714,21 +717,30 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 				}
 				blocks[block.Data.Number] = block.Data.Round
 			}
-			if s.execEngine != nil && s.execEngine.latestBlock != nil {
-				current := s.execEngine.latestBlock.NumberU64()
-				txn := s.txQueue.Peek()
-				if currentRound, exists := blocks[current]; exists && txn != nil && currentRound > txn.roundId {
-					for {
-						log.Info("local block is up to date with hotshot block", "hotshot certified block round", currentRound, "queued txn round", txn.roundId, "l2 block", current)
-						txn := s.txQueue.Peek()
-						if txn != nil && currentRound >= txn.roundId {
-							tx := s.txQueue.dequeue()
-							log.Info("dequeing old round id", "queued txn round", tx.roundId, "hotshot certified block round", currentRound, "l2 block", current)
-						} else if txn != nil {
-							log.Info("we are done with catchup", "next round id", txn.roundId, "hotshot certified block round", currentRound, "l2 block", current)
-							return nil
-						}
+
+			currentBlock := s.execEngine.bc.CurrentBlock()
+			if currentBlock == nil {
+				continue
+			}
+			executedBlock := currentBlock.Number.Uint64()
+			txn := s.txQueue.Peek()
+			if txn == nil {
+				continue
+			}
+			if currentRound, exists := blocks[executedBlock]; exists && currentRound > txn.roundId {
+				log.Info("local block is up to date with hotshot block", "certified block round", currentRound, "queued txn round", txn.roundId, "l2 block", executedBlock)
+				for {
+					txn = s.txQueue.Peek()
+					if txn == nil {
+						log.Info("catchup complete: queue empty", "l2Block", executedBlock, "certified block round", currentRound)
+						return nil
 					}
+					if currentRound <= txn.roundId {
+						log.Info("catchup complete: queue caught up", "next round", txn.roundId, "certified block round", currentRound, "l2 block", executedBlock)
+						return nil
+					}
+					discarded := s.txQueue.dequeue()
+					log.Info("discarded obsolete txn", "discarded round", discarded.roundId, "certified block round", currentRound, "l2 block", executedBlock)
 				}
 			}
 		}
