@@ -338,11 +338,11 @@ func TestEspressoCaffNode(t *testing.T) {
 	cleanupCaffNode()
 	builder.RestartCaffNode(t)
 
-	err = checkTransferTxOnL2(t, ctx, builder.L2, "User17", builder.L2Info)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User20", builder.L2Info)
 	Require(t, err)
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builder.L2.GetBalance(t, builder.L2Info.GetAddress("User17"))
-		log.Info("waiting for balance", "account", "User17", "balance", balance1, "account")
+		balance1 := builder.L2.GetBalance(t, builder.L2Info.GetAddress("User20"))
+		log.Info("waiting for balance", "account", "User20", "balance", balance1, "account")
 		// Now the balance should be greater than twice the transfer amount
 		return balance1.Cmp(transferAmount) > 0
 	})
