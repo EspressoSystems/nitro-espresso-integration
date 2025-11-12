@@ -19,6 +19,7 @@ import (
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -28,7 +29,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/util"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -249,7 +249,7 @@ func (s *PollingEspressoSubmitter) resubmitTransactionIfPastDelay(ctx context.Co
 func (s *PollingEspressoSubmitter) getEspressoSubmittedTxns() ([]arbutil.SubmittedEspressoTx, error) {
 	posBytes, err := s.db.Get(espressoSubmittedTxns)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -265,7 +265,7 @@ func (s *PollingEspressoSubmitter) getEspressoSubmittedTxns() ([]arbutil.Submitt
 func (s *PollingEspressoSubmitter) getEspressoPendingTxnsPos() ([]arbutil.MessageIndex, error) {
 	pendingTxnsBytes, err := s.db.Get(espressoPendingTxnsPositions)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
