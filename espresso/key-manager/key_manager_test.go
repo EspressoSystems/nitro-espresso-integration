@@ -123,13 +123,13 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test Sign
-	t.Run("SGX SignBatch with the ephemeral key", func(t *testing.T) {
+	t.Run("SGX SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignBatch(message)
+		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
@@ -194,13 +194,13 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test Sign
-	t.Run("Nitro SignBatch with the ephemeral key", func(t *testing.T) {
+	t.Run("Nitro SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignBatch(message)
+		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 

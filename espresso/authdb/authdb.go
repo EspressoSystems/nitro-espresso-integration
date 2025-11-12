@@ -610,34 +610,59 @@ func (b *AuthBatch) Get(key []byte) ([]byte, error) {
 
 // InitAuthTags initializes auth tags for all keys in the database
 // when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
-func (d *AuthDB) InitAuthTagsDatabase() error {
+func (d *AuthDB) InitAuthTagsDatabase(batchSize int) error {
 	var (
-		prefix    []byte
-		start     []byte
-		startTime = time.Now()
-		logged    = time.Now()
-		count     = 0
+		prefix     []byte
+		start      []byte
+		startTime  = time.Now()
+		loggedTime = time.Now()
+		count      = 0
 	)
 	log.Info("Starting adding auth tags to the database")
-	it := d.NewIterator(prefix, start)
+
+	// Use the raw database iterator to avoid per-key auth verification during initialization
+	it := d.Database.NewIterator(prefix, start)
 	defer it.Release()
+
+	// Buffer writes in a raw batch to reduce I/O and avoid writing tags-for-tags
+	batch := d.Database.NewBatch()
 
 	// For each key value pair in the database add an auth tag
 	for it.Next() {
 		key := it.Key()
+		// Skip keys that are themselves tag entries
+		if bytes.HasSuffix(key, genericAuthTagSuffix) {
+			continue
+		}
 		value := it.Value()
 
-		// Only append the key and value if its part of a key we know from schema.go
+		// Compute and write the tag in the raw batch
 		tag := d.computeMac(key, value)
-		if err := d.Put(genericAuthTagKey(key), tag); err != nil {
+		if err := batch.Put(genericAuthTagKey(key), tag); err != nil {
+			batch.Reset()
 			return fmt.Errorf("failed to put auth tag for key %v: %w", key, err)
 		}
 		count++
-		if time.Since(logged) > 8*time.Second {
-			log.Info("Added auth tags to the database", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
-			logged = time.Now()
-		}
 
+		// Periodically flush to avoid huge batches and reduce fsync overhead
+		if count%batchSize == 0 {
+			if err := batch.Write(); err != nil {
+				batch.Reset()
+				return fmt.Errorf("failed to write auth tag batch: %w", err)
+			}
+			batch.Reset()
+		}
+		// if 5 minuetes have passed still log
+		if time.Since(loggedTime) > 5*time.Minute {
+			log.Info("Progress adding auth tags", "count", count, "elapsed", common.PrettyDuration(time.Since(startTime)))
+			loggedTime = time.Now()
+		}
+	}
+
+	// Flush any remaining buffered tags
+	if err := batch.Write(); err != nil {
+		batch.Reset()
+		return fmt.Errorf("failed to write final auth tag batch: %w", err)
 	}
 	log.Info("Successfully added auth tags to the database")
 	return nil

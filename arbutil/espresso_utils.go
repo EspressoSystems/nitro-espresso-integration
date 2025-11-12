@@ -2,6 +2,8 @@ package arbutil
 
 import (
 	"bytes"
+	"crypto/ecdsa"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -10,11 +12,15 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/minio/sha256-simd"
 	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -186,37 +192,145 @@ func shouldIgnore(rel string) bool {
 	return false
 }
 
-func HashDir(root string) (string, error) {
+func HashDirParallel(root string) (string, error) {
 	files, err := dirhash.DirFiles(root, "")
 
 	if err != nil {
 		return "", err
 	}
 
-	// Exclude LOCK and FLOCK files
-	out := make([]string, 0, len(files))
+	// Ignore all files like logs which we dont want to hash
+	filesList := make([]string, 0, len(files))
 	for _, f := range files {
 		if shouldIgnore(f) {
 			continue
 		}
-		out = append(out, f)
+		if strings.Contains(f, "\n") {
+			return "", errors.New("dirhash: filenames with newlines are not supported")
+		}
+		filesList = append(filesList, f)
 	}
 
-	// Hash (h1: base64(SHA-256)) of file contents
-	return dirhash.Hash1(out, func(name string) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, filepath.FromSlash(name)))
-	})
+	// Sort for deterministic ordering
+	sort.Strings(filesList)
+
+	filesLength := len(filesList)
+
+	hashes := make([][32]byte, filesLength)
+
+	// Number of CPUs determine the number of workers for our files
+	workers := runtime.NumCPU()
+
+	// create a channel for each file
+	filesToProcessJobs := make(chan int, filesLength)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errorProcessingFile error
+
+	// Each worker should call processFile to process files from the channel
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go processFileForHashing(filesToProcessJobs, filesList, root, hashes, &wg, &mu, &errorProcessingFile)
+	}
+
+	for i := 0; i < filesLength; i++ {
+		filesToProcessJobs <- i
+	}
+
+	// After the last sent value is returned, close all the channels
+	close(filesToProcessJobs)
+	// wait for all workers to finish
+	wg.Wait()
+
+	// if any worker encountered an error, return it
+	if errorProcessingFile != nil {
+		return "", errorProcessingFile
+	}
+
+	h := sha256.New()
+	for i, file := range filesList {
+		fmt.Fprintf(h, "%x  %s\n", hashes[i], file)
+	}
+
+	return "h1:" + base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
 }
 
-func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir string) error {
-	sha256Hash, err := HashDir(l2chainDataDir)
+func processFileForHashing(filesToProcessJobs chan int, filesList []string, root string, hashes [][32]byte, wg *sync.WaitGroup, mu *sync.Mutex, errorProcessingFile *error) {
+	defer wg.Done()
+	fileBuffer := make([]byte, 512*1024) // 512 KB buffer
+
+	for fileIndex := range filesToProcessJobs {
+		fileName := filesList[fileIndex]
+		f, err := os.Open(filepath.Join(root, filepath.FromSlash(fileName)))
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			return
+		}
+
+		hasher := sha256.New()
+		_, err = io.CopyBuffer(hasher, f, fileBuffer)
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			f.Close()
+			return
+		}
+		err = f.Close()
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			return
+		}
+
+		var hashArr [32]byte
+		copy(hashArr[:], hasher.Sum(nil))
+		hashes[fileIndex] = hashArr
+	}
+}
+
+// VerifySnapshot verifies the snapshot by first trying to verify the stored snapshot checksum
+// using the key manager public key. If that fails, it falls back to verifying the snapshot
+// checksum against the provided snapshotChecksum in the config. If the snapshot is verified using the
+// config snapshot checksum, it deletes the existing AuthTags ancient store to prepare for
+// new tags from the new enclave hash.
+// It returns true if the auth tags need to be re-initialized (which occurs when
+// the config snapshot checksum is used and there is no valid snapshot.txt file),
+// false otherwise.
+func VerifySnapshot(snapshotChecksum string, parentChainDir string, l2chainDataDir string, ancientDir string, privateKey *ecdsa.PrivateKey) (bool, error) {
+	pubKey := &privateKey.PublicKey
+	// Check if snapshot verification is required or not
+	// Check if snapshot.txt file exists along with a valid snapshot_signature.txt
+	path := filepath.Join(parentChainDir, "snapshot_verified.txt")
+	snapshotVerifiedSignature, err := os.ReadFile(path)
+	if err == nil {
+		// Verify the signature
+		err = VerifyMessage([]byte("snapshot verified"), snapshotVerifiedSignature, pubKey)
+		if err != nil {
+			return false, fmt.Errorf("failed to verify snapshot verified signature: %w", err)
+		}
+		log.Info("Snapshot has already been verified previously")
+		return false, nil
+	}
+
+	sha256Hash, err := HashDirParallel(l2chainDataDir)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Check if the snapshot hash matches the one in the config
 	if snapshotChecksum != sha256Hash {
-		return fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
+		return false, fmt.Errorf("snapshot hash mismatch, want: %s, got: %s", sha256Hash, snapshotChecksum)
 	}
 	log.Info("Snapshot hash matches", "hash", sha256Hash)
 
@@ -226,7 +340,56 @@ func VerifySnapshot(snapshotChecksum string, l2chainDataDir string, ancientDir s
 	tagFreezerDir := filepath.Join(ancientDir, "auth-tags")
 	err = os.RemoveAll(tagFreezerDir)
 	if err != nil {
-		return fmt.Errorf("failed to delete authtag ancient store: %w", err)
+		return false, fmt.Errorf("failed to delete authtag ancient store: %w", err)
+	}
+
+	err = StoreSnapshotVerified(parentChainDir, privateKey)
+	if err != nil {
+		return false, fmt.Errorf("failed to store snapshot verified signature: %w", err)
+	}
+
+	return true, nil
+}
+
+func StoreSnapshotVerified(parentChainDir string, privKey *ecdsa.PrivateKey) error {
+	// Store the signature in snapshot_verified.txt to avoid re-verifying in future
+	signature, err := SignMessage([]byte("snapshot verified"), privKey)
+	if err != nil {
+		return fmt.Errorf("failed to sign snapshot verified message: %w", err)
+	}
+	path := filepath.Join(parentChainDir, "snapshot_verified.txt")
+
+	file, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("failed to create snapshot verified file: %w", err)
+	}
+	defer file.Close()
+	_, err = file.Write(signature)
+	if err != nil {
+		return fmt.Errorf("failed to write snapshot verified file: %w", err)
+	}
+	log.Info("Stored the snapshot verified signature in a file", "path", path)
+	return nil
+}
+
+func SignMessage(message []byte, privKey *ecdsa.PrivateKey) ([]byte, error) {
+	hash := crypto.Keccak256Hash(message)
+	return crypto.Sign(hash.Bytes(), privKey)
+}
+
+func VerifyMessage(message []byte, signature []byte, pubKey *ecdsa.PublicKey) error {
+	if pubKey == nil {
+		return errors.New("public key is nil")
+	}
+	hash := crypto.Keccak256Hash(message)
+	sigPublicKey, err := crypto.SigToPub(hash.Bytes(), signature)
+	if err != nil {
+		return fmt.Errorf("failed to recover public key from signature: %w", err)
+	}
+	sigAddress := crypto.PubkeyToAddress(*sigPublicKey)
+	expectedAddress := crypto.PubkeyToAddress(*pubKey)
+	if sigAddress != expectedAddress {
+		return fmt.Errorf("signature verification failed: expected address %s, got %s", expectedAddress.Hex(), sigAddress.Hex())
 	}
 	return nil
 }

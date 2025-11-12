@@ -487,10 +487,16 @@ func mainImpl() int {
 		log.Info("enabling custom tracer", "name", traceConfig.TracerName)
 	}
 
+	var initializeCaffNodeTags bool
 	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
-	if nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+		// Check that TEE is enabled
+		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType == "" {
+			log.Error("snapshot verification requires TEE, but no TEE type was specified")
+			return 1
+		}
 		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
-		err := arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient))
+		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), caffNodePrivateKey)
 		if err != nil {
 			log.Error("failed to verify snapshot", "err", err)
 			return 1
@@ -512,7 +518,8 @@ func mainImpl() int {
 	if nodeConfig.Node.EspressoCaffNode.Enable {
 		var err error
 		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "")
+			// if we need to initialize caff node tags, then we will disable auth reads
+			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, initializeCaffNodeTags)
 		} else {
 			// Outside the tee, we need to remove tmac and also disable auth reads
 			authCaffDB, err = authdb.NewAuthDB(chainDb, nil, true)
@@ -643,6 +650,7 @@ func mainImpl() int {
 		wasmModuleRoot,
 		caffNodetxOpts,
 		caffNodePrivateKey,
+		initializeCaffNodeTags,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)

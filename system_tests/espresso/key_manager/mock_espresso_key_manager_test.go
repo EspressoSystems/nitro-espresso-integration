@@ -66,7 +66,7 @@ func ExampleNewMockEspressoKeyManager() {
 
 	{
 		// Sign Batch Example
-		signature, err := km.SignBatch([]byte("test message"))
+		signature, err := km.SignMessage([]byte("test message"))
 		if err != nil {
 			panic(err)
 		}
