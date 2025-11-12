@@ -3,6 +3,7 @@ package arbutil
 import (
 	"bytes"
 	"crypto/ecdsa"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -11,11 +12,15 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/minio/sha256-simd"
 	"golang.org/x/mod/sumdb/dirhash"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -187,26 +192,111 @@ func shouldIgnore(rel string) bool {
 	return false
 }
 
-func HashDir(root string) (string, error) {
+func HashDirParallel(root string) (string, error) {
 	files, err := dirhash.DirFiles(root, "")
 
 	if err != nil {
 		return "", err
 	}
 
-	// Exclude LOCK and FLOCK files
-	out := make([]string, 0, len(files))
+	// Ignore all files like logs which we dont want to hash
+	filesList := make([]string, 0, len(files))
 	for _, f := range files {
 		if shouldIgnore(f) {
 			continue
 		}
-		out = append(out, f)
+		if strings.Contains(f, "\n") {
+			return "", errors.New("dirhash: filenames with newlines are not supported")
+		}
+		filesList = append(filesList, f)
 	}
 
-	// Hash (h1: base64(SHA-256)) of file contents
-	return dirhash.Hash1(out, func(name string) (io.ReadCloser, error) {
-		return os.Open(filepath.Join(root, filepath.FromSlash(name)))
-	})
+	// Sort for deterministic ordering
+	sort.Strings(filesList)
+
+	filesLength := len(filesList)
+
+	hashes := make([][32]byte, filesLength)
+
+	// Number of CPUs determine the number of workers for our files
+	workers := runtime.NumCPU()
+
+	// create a channel for each file
+	filesToProcessJobs := make(chan int, filesLength)
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var errorProcessingFile error
+
+	// Each worker should call processFile to process files from the channel
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go processFileForHashing(filesToProcessJobs, filesList, root, hashes, &wg, &mu, &errorProcessingFile)
+	}
+
+	for i := 0; i < filesLength; i++ {
+		filesToProcessJobs <- i
+	}
+
+	// After the last sent value is returned, close all the channels
+	close(filesToProcessJobs)
+	// wait for all workers to finish
+	wg.Wait()
+
+	// if any worker encountered an error, return it
+	if errorProcessingFile != nil {
+		return "", errorProcessingFile
+	}
+
+	h := sha256.New()
+	for i, file := range filesList {
+		fmt.Fprintf(h, "%x  %s\n", hashes[i], file)
+	}
+
+	return "h1:" + base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
+}
+
+func processFileForHashing(filesToProcessJobs chan int, filesList []string, root string, hashes [][32]byte, wg *sync.WaitGroup, mu *sync.Mutex, errorProcessingFile *error) {
+	defer wg.Done()
+	fileBuffer := make([]byte, 512*1024) // 512 KB buffer
+
+	for fileIndex := range filesToProcessJobs {
+		fileName := filesList[fileIndex]
+		f, err := os.Open(filepath.Join(root, filepath.FromSlash(fileName)))
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			return
+		}
+
+		hasher := sha256.New()
+		_, err = io.CopyBuffer(hasher, f, fileBuffer)
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			f.Close()
+			return
+		}
+		err = f.Close()
+		if err != nil {
+			mu.Lock()
+			if *errorProcessingFile == nil {
+				*errorProcessingFile = err
+			}
+			mu.Unlock()
+			return
+		}
+
+		var hashArr [32]byte
+		copy(hashArr[:], hasher.Sum(nil))
+		hashes[fileIndex] = hashArr
+	}
 }
 
 // VerifySnapshot verifies the snapshot by first trying to verify the stored snapshot checksum
@@ -233,7 +323,7 @@ func VerifySnapshot(snapshotChecksum string, parentChainDir string, l2chainDataD
 		return false, nil
 	}
 
-	sha256Hash, err := HashDir(l2chainDataDir)
+	sha256Hash, err := HashDirParallel(l2chainDataDir)
 	if err != nil {
 		return false, err
 	}

@@ -72,6 +72,7 @@ type EspressoCaffNodeConfig struct {
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
 	AddressMonitorStep      uint64 `koanf:"address-monitor-step"`
 	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
+	AuthDBBatchSize         int    `koanf:"auth-db-batch-size"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -120,6 +121,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	ParentChainWallet:             DefaultBatchPosterL1WalletConfig,
 	AddressMonitorStep:            100,
 	GenerateSnapshot:              false,
+	AuthDBBatchSize:               10000,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -148,6 +150,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
+	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -352,7 +355,7 @@ func NewEspressoCaffNode(
 
 	}
 
-	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager, configFetcher().GenerateSnapshot)
+	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager, configFetcher().GenerateSnapshot, configFetcher().AuthDBBatchSize)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -588,6 +591,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	log.Info("started delayed message fetcher")
+	log.Info("Caff Node successfully started")
 
 	err = n.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		madeBlock := n.createBlock(ctx)

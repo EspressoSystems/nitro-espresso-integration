@@ -22,9 +22,10 @@ type EspressoSnapshotHandler struct {
 	initializeTags   bool
 	generateSnapshot bool
 	keyManager       *espresso_key_manager.EspressoKeyManager
+	batchSize        int
 }
 
-func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, initializeTags bool, keyManager *espresso_key_manager.EspressoKeyManager, generateSnapshot bool) *EspressoSnapshotHandler {
+func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chainDataDir string, initializeTags bool, keyManager *espresso_key_manager.EspressoKeyManager, generateSnapshot bool, batchSize int) *EspressoSnapshotHandler {
 	return &EspressoSnapshotHandler{
 		db:               db,
 		parentChainDir:   parentChainDir,
@@ -32,6 +33,7 @@ func NewEspressoSnapshotHandler(db *authdb.AuthDB, parentChainDir string, l2chai
 		initializeTags:   initializeTags,
 		keyManager:       keyManager,
 		generateSnapshot: generateSnapshot,
+		batchSize:        batchSize,
 	}
 }
 
@@ -73,7 +75,7 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	}
 
 	// Only if snapshot mode is enabled, we re-initialize the tags
-	err := s.db.InitAuthTagsDatabase()
+	err := s.db.InitAuthTagsDatabase(s.batchSize)
 	if err != nil {
 		return fmt.Errorf("failed to add auth tags to the database: %w", err)
 	}
@@ -86,7 +88,7 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 }
 
 func (s *EspressoSnapshotHandler) CreateAndSnapshot() error {
-	sha256Hash, err := arbutil.HashDir(s.l2chainDataDir)
+	sha256Hash, err := arbutil.HashDirParallel(s.l2chainDataDir)
 	if err != nil {
 		return err
 	}

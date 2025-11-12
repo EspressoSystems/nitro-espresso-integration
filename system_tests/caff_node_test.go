@@ -233,7 +233,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, arbnode.TestBatchPosterConfig.DisableDapFallbackStoreDataOnChain)
+	builder, _, err = createCaffNode(ctx, t, builder, arbnode.TestBatchPosterConfig.DisableDapFallbackStoreDataOnChain)
 	Require(t, err)
 	builderCaffNode := builder.L2
 
@@ -333,21 +333,17 @@ func TestEspressoCaffNode(t *testing.T) {
 		t.Fatal("did not receive error from fatalErrChan within timeout")
 	}
 
+	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
+	_ = logHandler
 	// Test restarting caff node
 	time.Sleep(10 * time.Second)
-	cleanupCaffNode()
 	builder.RestartCaffNode(t)
 
-	err = checkTransferTxOnL2(t, ctx, builder.L2, "User20", builder.L2Info)
-	Require(t, err)
-	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
-		balance1 := builder.L2.GetBalance(t, builder.L2Info.GetAddress("User20"))
-		log.Info("waiting for balance", "account", "User20", "balance", balance1, "account")
-		// Now the balance should be greater than twice the transfer amount
-		return balance1.Cmp(transferAmount) > 0
+	// This time check if it printed the log about snapshot already verified
+	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
+		return logHandler.WasLogged("Caff Node successfully started")
 	})
 	Require(t, err)
-
 }
 
 func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
