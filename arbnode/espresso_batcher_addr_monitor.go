@@ -12,14 +12,14 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/util/dbutil"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -297,7 +297,7 @@ func (b *BatcherAddrMonitor) Store() error {
 
 func (b *BatcherAddrMonitor) Restore() error {
 	initAddressesBytes, err := b.db.Get([]byte(initAddressesKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return fmt.Errorf("failed to get init addresses: %w", err)
 	}
 
@@ -309,7 +309,7 @@ func (b *BatcherAddrMonitor) Restore() error {
 	}
 
 	lastProcessedHeightBytes, err := b.db.Get([]byte(lastProcessedHeightKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return fmt.Errorf("failed to get last processed height: %w", err)
 	}
 	if lastProcessedHeightBytes != nil {
@@ -317,7 +317,7 @@ func (b *BatcherAddrMonitor) Restore() error {
 	}
 
 	eventsBytes, err := b.db.Get([]byte(eventKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return fmt.Errorf("failed to get events: %w", err)
 	}
 
@@ -460,7 +460,7 @@ func (b *BatcherAddrMonitor) Start(ctx context.Context) error {
 	b.StopWaiter.Start(ctx, b)
 
 	err := b.Restore()
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return fmt.Errorf("failed to restore batcher address monitor: %w", err)
 	}
 

@@ -6,13 +6,13 @@ import (
 	"math/big"
 	"sort"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
 	"github.com/offchainlabs/nitro/espressostreamer"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -212,7 +212,7 @@ Reads the "current from" block from the database.
 func readCurrentFromBlockFromDb(db ethdb.Database) (uint64, error) {
 	var blockNumber uint64
 	blockNumberBytes, err := db.Get([]byte(DelayedFetcherCurrentFromBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
 	}
 	if blockNumberBytes != nil {

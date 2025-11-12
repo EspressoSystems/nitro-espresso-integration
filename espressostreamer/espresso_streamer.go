@@ -13,6 +13,7 @@ import (
 	"github.com/ccoveille/go-safecast"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -22,7 +23,6 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
@@ -308,7 +308,7 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
 	var nextHotshotBlock uint64
 	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
+	if err != nil && !rawdb.IsDbErrNotFound(err) {
 		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
 	}
 	if nextHotshotBytes != nil {

@@ -14,11 +14,11 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/execution/gethexec"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
@@ -298,7 +298,9 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		statedb,
 		n.executionEngine.Bc(),
 		false,
-		core.MessageReplayMode)
+		core.NewMessageReplayContext(),
+		false,
+	)
 
 	if err != nil || block == nil {
 		log.Error("Failed to produce block", "err", err)
