@@ -1556,12 +1556,15 @@ func deployOnParentChain(
 
 	// Only the caff node in tee uses the latest version of the espresso tee verifier contracts
 	if os.Getenv("CAFF_NODE_TEE_TEST") == "true" {
+		log.Info("Setting up the latest espresso tee verifier mock contract")
 		espressoTEEVerifierAddress, tx, _, err = espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 		Require(t, err)
 
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
+		os.Setenv("CAFF_NODE_TEE_TEST", "false")
 	} else {
+		log.Info("Setting up the legacy espresso tee verifier mock contract")
 		//  Deploy a espressoTEEVerifierMock contract
 		espressoTEEVerifierAddress, tx, _, err = legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 		Require(t, err)
