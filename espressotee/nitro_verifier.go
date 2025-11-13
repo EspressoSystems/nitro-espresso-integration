@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
@@ -28,6 +29,7 @@ type EspressoNitroTEEVerifierInterface interface {
 		parentCertHash [32]byte,
 		isCA bool,
 		registerSignerOpts EspressoRegisterServiceOpts,
+		serviceType ServiceType,
 	) (common.Hash, error)
 	VerifyAttestationAndCertificates(
 		attestationBytes []byte,
@@ -39,24 +41,39 @@ type EspressoNitroTEEVerifierInterface interface {
 }
 
 type EspressoNitroTEEVerifier struct {
-	contract *espressogen.IEspressoNitroTEEVerifier
 	l1Client *ethclient.Client
 	address  common.Address
 }
 
-func NewEspressoNitroTEEVerifier(contract *espressogen.IEspressoNitroTEEVerifier, l1Client *ethclient.Client, nitroAddr common.Address) *EspressoNitroTEEVerifier {
-	return &EspressoNitroTEEVerifier{contract: contract, l1Client: l1Client, address: nitroAddr}
+func NewEspressoNitroTEEVerifier(l1Client *ethclient.Client, nitroAddr common.Address) *EspressoNitroTEEVerifier {
+	return &EspressoNitroTEEVerifier{l1Client: l1Client, address: nitroAddr}
 }
 
 func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error) {
 	switch serviceType {
 	case BatchPoster:
-		return e.contract.RegisteredBatchPosterEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
+		return e.isPCR0HashRegisteredLegacy(pcr0Hash)
 	case CaffNode:
-		return e.contract.RegisteredCaffNodeEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
+		return e.isPCR0HashRegistered(pcr0Hash)
 	default:
 		return false, fmt.Errorf("Invalid service type for checking PCR0 hash registration")
 	}
+}
+
+func (e *EspressoNitroTEEVerifier) isPCR0HashRegisteredLegacy(pcr0Hash [32]byte) (bool, error) {
+	contract, err := legacy_espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
+	if err != nil {
+		return false, err
+	}
+	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash)
+}
+
+func (e *EspressoNitroTEEVerifier) isPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
+	contract, err := espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
+	if err != nil {
+		return false, err
+	}
+	return contract.RegisteredCaffNodeEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
 }
 
 /**
@@ -68,6 +85,7 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 	certificate []byte, parentCertHash [32]byte,
 	isCA bool,
 	registerSignerOpts EspressoRegisterServiceOpts,
+	serviceType ServiceType,
 ) (common.Hash, error) {
 	// Get certificate hash
 	certHash := crypto.Keccak256Hash(certificate)
@@ -140,18 +158,44 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 		return certHash, errors.New("cert transaction failed")
 	}
 
-	// Make sure certificate is verified, after tx succeeded this should always be the case
-	// Add retries in case of delay on chain
-	verified, err := ContractVerification(
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryReadContractDelay,
-		func() (bool, error) {
-			return e.contract.CertVerified(&bind.CallOpts{}, certHash)
-		},
-		"attestation certificate is not yet verified",
-	)
-	if err != nil {
-		return certHash, err
+	var verified bool
+
+	if serviceType == CaffNode {
+		contract, err := espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
+		if err != nil {
+			return certHash, err
+		}
+		// Make sure certificate is verified, after tx succeeded this should always be the case
+		// Add retries in case of delay on chain
+		verified, err = ContractVerification(
+			registerSignerOpts.MaxRetries,
+			registerSignerOpts.RetryReadContractDelay,
+			func() (bool, error) {
+				return contract.CertVerified(&bind.CallOpts{}, certHash)
+			},
+			"attestation certificate is not yet verified",
+		)
+		if err != nil {
+			return certHash, err
+		}
+	} else {
+		contract, err := legacy_espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
+		if err != nil {
+			return certHash, err
+		}
+		// Make sure certificate is verified, after tx succeeded this should always be the case
+		// Add retries in case of delay on chain
+		verified, err = ContractVerification(
+			registerSignerOpts.MaxRetries,
+			registerSignerOpts.RetryReadContractDelay,
+			func() (bool, error) {
+				return contract.CertVerified(&bind.CallOpts{}, certHash)
+			},
+			"attestation certificate is not yet verified",
+		)
+		if err != nil {
+			return certHash, err
+		}
 	}
 	if verified {
 		log.Info("cert verified", "cert hash", certHash, "isCA", isCA)
@@ -218,7 +262,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	for i := 0; i < len(res.Document.CABundle); i++ {
 		cert := res.Document.CABundle[i]
 		// Verify current certificate against parent hash in NitroEspressoTEEVerifier contracts
-		certHash, err := e.VerifyCert(dataPoster, cert, parentCertHash, true, registerSignerOpts)
+		certHash, err := e.VerifyCert(dataPoster, cert, parentCertHash, true, registerSignerOpts, serviceType)
 		if err != nil {
 			log.Error("failed to get CA cert verified", "index", i, "err", err)
 			return nil, nil, err
@@ -229,7 +273,7 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 	}
 
 	// Verify client certificate
-	_, err = e.VerifyCert(dataPoster, res.Document.Certificate, parentCertHash, false, registerSignerOpts)
+	_, err = e.VerifyCert(dataPoster, res.Document.Certificate, parentCertHash, false, registerSignerOpts, serviceType)
 	if err != nil {
 		log.Error("failed to get client cert verified", "err", err)
 		return nil, nil, err

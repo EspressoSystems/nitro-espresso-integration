@@ -37,8 +37,8 @@ type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterServiceOpts) (common.Hash, error) {
-	args := m.Called(dataPoster, certificate, parentCertHash, isCA, opts)
+func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterServiceOpts, serviceType espressotee.ServiceType) (common.Hash, error) {
+	args := m.Called(dataPoster, certificate, parentCertHash, isCA, opts, serviceType)
 	return common.Hash{}, args.Error(0)
 }
 

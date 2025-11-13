@@ -55,6 +55,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+
 	// reuse the caff node settings so we can set them outside this function.
 	nodeConfig.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.EspressoCaffNode.WaitForFinalization
 	nodeConfig.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.EspressoCaffNode.WaitForConfirmations
@@ -99,6 +100,7 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.EspressoCaffNode.EspressoTeeType
 	nodeConfig.EspressoCaffNode.SnapshotChecksum = existing.nodeConfig.EspressoCaffNode.SnapshotChecksum
 	nodeConfig.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.EspressoCaffNode.GenerateSnapshot
+	nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = existing.nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
@@ -529,7 +531,6 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 }
 
 func TestEspressoCaffNodeSnapshot(t *testing.T) {
-	t.Setenv("CAFF_NODE_TEE_TEST", "true")
 	// First we will run the caff node in generate snapshot mode
 	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
 	defer cancel()
@@ -581,7 +582,12 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	// verify it and re-initialize the tags with tmac
 	builderCaffNode.nodeConfig.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
 	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
-	builder.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
+	builderCaffNode.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
+
+	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
+	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
+	Require(t, err)
+	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
 	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
 	_ = logHandler

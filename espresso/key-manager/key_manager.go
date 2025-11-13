@@ -372,20 +372,14 @@ func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
 	return payload, nil
 }
 
-func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {
+func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, serviceType espressotee.ServiceType) (espressotee.EspressoNitroTEEVerifierInterface, error) {
 	// Setup nitro contract interface
 	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
 	}
 	log.Info("successfully retrieved nitro contract verifier address", "address", nitroAddr)
+	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(l1Client, nitroAddr)
 
-	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
-		nitroAddr,
-		l1Client)
-	if err != nil {
-		return nil, err
-	}
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client, nitroAddr)
 	return nitroVerifier, nil
 }

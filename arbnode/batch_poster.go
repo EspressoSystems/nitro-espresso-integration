@@ -709,7 +709,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 			if teeType == espresso_key_manager.NITRO {
 				log.Info("setting up nitro verifier", "tee type", teeType)
-				nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(teeVerifier, opts.L1Reader.Client())
+				nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(teeVerifier, opts.L1Reader.Client(), espressotee.BatchPoster)
 				if err != nil {
 					return nil, err
 				}

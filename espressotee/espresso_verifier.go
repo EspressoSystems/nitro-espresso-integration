@@ -180,7 +180,7 @@ func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType
 		func() (bool, error) {
 			return contract.RegisteredServices(&bind.CallOpts{}, address, teeType, uint8(serviceType))
 		},
-		"address not yet registered in contract",
+		"register services - address not yet registered in contract",
 	)
 	if err != nil {
 		return false, err
@@ -283,7 +283,7 @@ func (e *EspressoTEEVerifier) registeredSigners(address common.Address, teeType 
 		func() (bool, error) {
 			return contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
 		},
-		"address not yet registered in contract",
+		"register signers - address not yet registered in contract",
 	)
 	if err != nil {
 		return false, err

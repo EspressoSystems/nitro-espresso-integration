@@ -312,7 +312,7 @@ func NewEspressoCaffNode(
 	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 	if teeType == espresso_key_manager.NITRO {
 		log.Info("setting up nitro verifier", "tee type", teeType)
-		nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(espressoTEEVerifier, l1Reader.Client())
+		nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(espressoTEEVerifier, l1Reader.Client(), espressotee.CaffNode)
 		if err != nil {
 			return nil, err
 		}
