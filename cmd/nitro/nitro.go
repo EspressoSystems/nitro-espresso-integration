@@ -259,13 +259,13 @@ func mainImpl() int {
 	var caffNodePrivateKey *ecdsa.PrivateKey
 
 	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		caffNodePrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		caffNodePrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
-		teeHMAC, err = integrityattestation.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath)
+		teeHMAC, err = integrityattestation.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
