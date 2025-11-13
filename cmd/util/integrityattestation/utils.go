@@ -127,7 +127,7 @@ func loadInstanceProfileConfig(ctx context.Context) (aws.Config, error) {
 		awsconfig.WithCredentialsProvider(aws.NewCredentialsCache(roleProvider)),
 	)
 }
-func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
+func ReadEnclavePrivateKey(attestationsPath string, chainID uint64) (*ecdsa.PrivateKey, error) {
 	if err := os.MkdirAll(attestationsPath, os.ModePerm); err != nil {
 		return nil, fmt.Errorf("failed to create attestations path directory %s with error: %w", attestationsPath, err)
 	}
@@ -137,7 +137,7 @@ func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 		return nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath)
+	kmsKeyID, err := GetAttestedKMSKeyID(awsConfig, attestationsPath, chainID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attested KMS Key ID: %w", err)
 	}
@@ -150,8 +150,8 @@ func ReadEnclavePrivateKey(attestationsPath string) (*ecdsa.PrivateKey, error) {
 	return privateKey, nil
 }
 
-func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
-	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
+func ReadEnclaveAddress(attestationsPath string, chainID uint64) (*common.Address, error) {
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath, chainID)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +166,8 @@ func ReadEnclaveAddress(attestationsPath string) (*common.Address, error) {
 }
 
 // DeriveHmac derives an HMAC from the attested private key using HKDF.
-func DeriveHmac(attestationsPath string) (hash.Hash, error) {
-	privateKey, err := ReadEnclavePrivateKey(attestationsPath)
+func DeriveHmac(attestationsPath string, chainID uint64) (hash.Hash, error) {
+	privateKey, err := ReadEnclavePrivateKey(attestationsPath, chainID)
 	if err != nil {
 		return nil, err
 	}
