@@ -55,3 +55,6 @@
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
 	branch = release-tee-caff-node
 
+[submodule "espresso-tee-contracts-legacy"]
+	path = espresso-tee-contracts-legacy
+	url = git@github.com:EspressoSystems/espresso-tee-contracts.git

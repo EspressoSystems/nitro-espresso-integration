@@ -700,7 +700,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			if err != nil {
 				return nil, err
 			}
-			verifier := espressotee.NewEspressoTEEVerifier(teeVerifier, opts.L1Reader.Client(), espresssoTEEVerifierAddress)
+			verifier := espressotee.NewEspressoTEEVerifier(espresssoTEEVerifierAddress.Hex(), opts.L1Reader.Client(), espresssoTEEVerifierAddress)
 			teeType, err := espressotee.FromString(cfg.EspressoTeeType)
 			if err != nil {
 				return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)

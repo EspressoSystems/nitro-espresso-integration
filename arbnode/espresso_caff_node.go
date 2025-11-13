@@ -307,7 +307,7 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)
 	}
-	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifier, l1Reader.Client(), espressoTEEVerifierAddress)
+	verifier := espressotee.NewEspressoTEEVerifier(espressoTEEVerifierAddress.Hex(), l1Reader.Client(), espressoTEEVerifierAddress)
 
 	var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
 	if teeType == espresso_key_manager.NITRO {

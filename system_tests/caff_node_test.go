@@ -529,6 +529,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 }
 
 func TestEspressoCaffNodeSnapshot(t *testing.T) {
+	t.Setenv("CAFF_NODE_TEE_TEST", "true")
 	// First we will run the caff node in generate snapshot mode
 	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
 	defer cancel()

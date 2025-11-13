@@ -68,6 +68,7 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
+	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -1549,11 +1550,24 @@ func deployOnParentChain(
 
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
-	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-	Require(t, err)
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-	Require(t, err)
+
+	var espressoTEEVerifierAddress common.Address
+	var tx *types.Transaction
+
+	// Only the caff node in tee uses the latest version of the espresso tee verifier contracts
+	if os.Getenv("CAFF_NODE_TEE_TEST") == "true" {
+		espressoTEEVerifierAddress, tx, _, err = espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+		Require(t, err)
+
+		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+		Require(t, err)
+	} else {
+		//  Deploy a espressoTEEVerifierMock contract
+		espressoTEEVerifierAddress, tx, _, err = legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+		Require(t, err)
+		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
+		Require(t, err)
+	}
 
 	rollupSequencerManagerAddress, tx, _, err := espressogen.DeployEspressoRollupSequencerManager(&parentChainTransactionOpts, parentChainClient, []common.Address{
 		parentChainInfo.GetAddress("Sequencer"),
