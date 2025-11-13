@@ -103,6 +103,7 @@ type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
 	DelayedMessageCount uint64
 	NextSeqNum          uint64
+	HotShotBlockNumber  uint64
 }
 
 type BatchPoster struct {
@@ -146,6 +147,7 @@ type BatchPoster struct {
 
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	espressoRestarting         bool
 }
 
 type l1BlockBound int
@@ -520,6 +522,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
+
+		espressoRestarting: true,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -1952,7 +1956,32 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			if batchPosition.HotShotBlockNumber > 0 {
+				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else {
+				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
+				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
+				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			}
+			if b.espressoRestarting {
+				cnt, err := b.streamer.GetMessageCount()
+				if err != nil {
+					return false, err
+				}
+				// Submit transactions that were already in tx streamer
+				if cnt > batchPosition.MessageCount {
+					queue := []arbutil.MessageIndex{}
+					for i := batchPosition.MessageCount; i < cnt; i++ {
+						queue = append(queue, arbutil.MessageIndex(i))
+					}
+					err = b.streamer.espressoSubmitter.EnqueuePendingTransaction(queue)
+					if err != nil {
+						return false, err
+					}
+					log.Info("submitted pending transactions after restart", "from", batchPosition.MessageCount, "count", len(queue))
+				}
+				b.espressoRestarting = false
+			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
@@ -2129,7 +2158,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Next(ctx)
+			espressoMsg := b.espressoStreamer.Peek(ctx)
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -2144,6 +2173,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			forcePostBatch = true
 			b.building.haveUsefulMessage = true
 		}
+		log.Info("reach max empty batch delay",
+			"firstDelayedMsgTimestamp", b.building.firstDelayedMsg.Message.Header.Timestamp,
+			"timeSinceMsg", timeSinceMsg,
+			"maxEmptyBatchDelay", config.MaxEmptyBatchDelay,
+		)
 	}
 
 	for b.building.msgCount < msgCount {
@@ -2217,6 +2251,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
+		if b.espressoStreamer != nil {
+			b.espressoStreamer.Advance()
+		}
 	}
 
 	firstUsefulMsgTime := time.Now()
@@ -2404,10 +2441,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	var HotShotBlockNumber uint64
+	if b.espressoStreamer != nil {
+		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	}
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,
 		NextSeqNum:          batchPosition.NextSeqNum + 1,
+		HotShotBlockNumber:  HotShotBlockNumber,
 	})
 	if err != nil {
 		return false, err

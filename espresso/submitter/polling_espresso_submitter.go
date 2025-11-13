@@ -105,7 +105,7 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 	}, nil
 }
 
-func (s *PollingEspressoSubmitter) enqueuePendingTransaction(pos []arbutil.MessageIndex) error {
+func (s *PollingEspressoSubmitter) EnqueuePendingTransaction(pos []arbutil.MessageIndex) error {
 	// Store the pos in the database to be used later to submit the message
 	// to hotshot for finalization.
 	err := s.SubmitEspressoTransactionPos(pos)
@@ -152,7 +152,6 @@ func (s *PollingEspressoSubmitter) checkSubmittedTransactionForFinality(ctx cont
 			} else {
 				newSubmittedTxns = append(newSubmittedTxns, submittedTx)
 			}
-			log.Info("encountered an error trying to check espresso for a submitted txn", "err", err)
 			continue
 		}
 		log.Info("transaction checked", "hash", hash, "data", blockHeight)
@@ -499,7 +498,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 	retryRate := s.espressoTxnsResubmissionInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
-		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry: %w", err)
+		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry", "err", err)
 		return retryRate
 	}
 
@@ -512,7 +511,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 				log.Warn("failed to resubmit espresso transactions", "err", err)
 				return retryRate
 			}
-			log.Info(fmt.Sprintf("trying to resubmit transaction succeeded: (hash: %s)", txHash.String()))
+			log.Info("trying to resubmit transaction succeeded", "hash", txHash.String())
 		}
 		// Reset the last submit failure time because we successfully resubmitted the transactions
 		s.lastSubmitFailureAt = nil
@@ -555,7 +554,7 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 
 	submittedTxHash, err := tagged_base64.Parse(hash)
 	if err != nil || submittedTxHash == nil {
-		log.Error("invalid hotshot tx hash, failed to parse hash %s: %w", hash, err)
+		log.Error("invalid hotshot tx hash, failed to parse hash", "hash", hash, "err", err)
 		return false
 	}
 
@@ -568,12 +567,12 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	if s.lastSubmitFailureAt == nil {
 		now := time.Now()
 		s.lastSubmitFailureAt = &now
-		log.Warn("will wait for resubmission deadline before resubmitting transaction (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		log.Warn("will wait for resubmission deadline before resubmitting transaction, will retry again", "hash", submittedTxHash.String(), "err", err)
 		return false
 	}
 	duration := time.Since(*s.lastSubmitFailureAt)
 	if duration < s.resubmitEspressoTxDeadline {
-		log.Warn("resubmission deadline not reached (hash: %s): %w, will retry again", submittedTxHash.String(), err)
+		log.Warn("resubmission deadline not reached, will retry again", "hash", submittedTxHash.String(), "err", err)
 		return false
 	}
 
@@ -627,7 +626,7 @@ func (s *PollingEspressoSubmitter) NotifyNewPendingMessages(firstMsgIdx arbutil.
 	}
 
 	if len(messagesToEnqueue) > 0 {
-		err := s.enqueuePendingTransaction(messagesToEnqueue)
+		err := s.EnqueuePendingTransaction(messagesToEnqueue)
 		if err != nil {
 			log.Error("unable to enqueue a transaction to the pending list to be submitted to espresso.", "err", err, "messages", messagesToEnqueue)
 			return err
