@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -31,7 +32,7 @@ const (
 	addressFile = "address.coses1"
 )
 
-func GetAttestedKMSKeyID(cfg aws.Config, attestationsPath string) (string, error) {
+func GetAttestedKMSKeyID(cfg aws.Config, attestationsPath string, chainID uint64) (string, error) {
 	kmsKeyIDPath := path.Join(attestationsPath, kmsKeyIDFile)
 
 	kmsKeyIDAttestationDocRaw, err := os.ReadFile(kmsKeyIDPath)
@@ -66,10 +67,12 @@ func GetAttestedKMSKeyID(cfg aws.Config, attestationsPath string) (string, error
 	}
 
 	kmsKeyPolicy := DefaultPolicies(rootArn, principalArn, map[int][]byte{0: pcr0Actual})
+	time := time.Now()
+	descriptionString := fmt.Sprintf("Nitro Enclave Key, Chain: %v, Date: %v", chainID, time.String())
 	createKeyOutput, err := kmsEnclaveClient.CreateKey(context.Background(), &kms.CreateKeyInput{
 		// DANGER: The key may become unmanageable
 		BypassPolicyLockoutSafetyCheck: true,
-		Description:                    aws.String("Nitro Enclave Key"),
+		Description:                    &descriptionString,
 		Policy:                         aws.String(kmsKeyPolicy),
 	})
 	if err != nil {
