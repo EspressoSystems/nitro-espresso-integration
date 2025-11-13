@@ -186,6 +186,8 @@ var ConfigDefault = Config{
 	Maintenance:              DefaultMaintenanceConfig,
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
+
+	EspressoCaffNode: DefaultEspressoCaffNodeConfig,
 }
 
 func ConfigDefaultL1Test() *Config {

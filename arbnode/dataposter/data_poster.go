@@ -497,7 +497,7 @@ func (p *DataPoster) GetNextNonceAndMeta(ctx context.Context) (uint64, []byte, e
 	if err != nil {
 		return 0, nil, err
 	}
-	if !hasMeta {
+	if !hasMeta || meta == nil || len(meta) == 0 {
 		meta, err = p.metadataRetriever(ctx, p.lastBlock)
 	}
 	return nonce, meta, err

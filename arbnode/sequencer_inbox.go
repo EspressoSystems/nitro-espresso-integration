@@ -24,7 +24,6 @@ import (
 
 var sequencerBridgeABI *abi.ABI
 var batchDeliveredID common.Hash
-var addSequencerL2BatchFromOriginCallABI abi.Method
 var sequencerBatchDataABI abi.Event
 
 const sequencerBatchDataEvent = "SequencerBatchData"
@@ -46,7 +45,6 @@ func init() {
 	}
 	batchDeliveredID = sequencerBridgeABI.Events["SequencerBatchDelivered"].ID
 	sequencerBatchDataABI = sequencerBridgeABI.Events[sequencerBatchDataEvent]
-	addSequencerL2BatchFromOriginCallABI = sequencerBridgeABI.Methods["addSequencerL2BatchFromOrigin0"]
 }
 
 type SequencerInbox struct {
@@ -119,8 +117,12 @@ func (m *SequencerInboxBatch) getSequencerData(ctx context.Context, client *ethc
 		if err != nil {
 			return nil, err
 		}
+		method, err := sequencerBridgeABI.MethodById(data[:4])
+		if err != nil {
+			return nil, err
+		}
 		args := make(map[string]interface{})
-		err = addSequencerL2BatchFromOriginCallABI.Inputs.UnpackIntoMap(args, data[4:])
+		err = method.Inputs.UnpackIntoMap(args, data[4:])
 		if err != nil {
 			return nil, err
 		}

@@ -74,6 +74,9 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	BlocksToRead:         10000,
 	Dangerous:            DefaultDangerousCaffNodeConfig,
 	FromBlock:            1,
+
+	StateChecker:          DefaultStateCheckerConfig,
+	ForceInclusionChecker: DefaultEspressoForceInclusionCheckerConfig,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {

@@ -65,15 +65,18 @@ func getSequencerBatchData(
 	txIndex uint,
 	receiptFetcher ReceiptFetcher,
 ) ([]byte, error) {
-	addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin0"]
 	switch batch.DataLocation {
 	case mel.BatchDataTxInput:
 		data := tx.Data()
 		if len(data) < 4 {
 			return nil, errors.New("transaction data too short")
 		}
+		method, err := seqInboxABI.MethodById(data[:4])
+		if err != nil {
+			return nil, err
+		}
 		args := make(map[string]interface{})
-		if err := addSequencerL2BatchFromOriginCallABI.Inputs.UnpackIntoMap(args, data[4:]); err != nil {
+		if err := method.Inputs.UnpackIntoMap(args, data[4:]); err != nil {
 			return nil, err
 		}
 		dataBytes, ok := args["data"].([]byte)
