@@ -141,12 +141,10 @@ func (c *blockHeaderCache) Get(blockNumber uint64) *types.Header {
 
 type DecentralizedTimeboostSequencer struct {
 	stopwaiter.StopWaiter
-	config DecentralizedTimeboostSequencerConfigFetcher
-	// TODO: we should read this from the storage
-	txQueue    synchronizedTimeboostTransactionQueue
-	execEngine *ExecutionEngine
-	l1Reader   *headerreader.HeaderReader
-	// TODO: We should probably also store the txRetryQueue in storage
+	config                 DecentralizedTimeboostSequencerConfigFetcher
+	txQueue                synchronizedTimeboostTransactionQueue
+	execEngine             *ExecutionEngine
+	l1Reader               *headerreader.HeaderReader
 	txRetryQueue           synchronizedTimeboostTransactionQueue
 	nonceCache             *nonceCache
 	timeboostBridge        *DecentralizedTimeboostBridge

@@ -752,7 +752,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			opts.Streamer.espressoSubmitter = submitter
 		}
 
-		b.batchVerifier = nil
 		if opts.Config().IsDecentralizedTimeboost {
 			verifier, err := decentralized_timeboost_batch_verifier.NewBatchVerifier(
 				opts.Config().DecentralizedTimeboostBatchVerifier,
@@ -1580,6 +1579,10 @@ func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 	if err != nil {
 		return nil, err
 	}
+	b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
+		HotshotHeight: b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(),
+		MessageCount:  newMsgNum,
+	}
 	log.Info("decentralized timeboost received enough signatures. attempting to post batch", "prev msg", prevMsgNum, "new msg num", newMsgNum)
 	return signatures, nil
 }
@@ -1997,6 +2000,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.espressoStreamer != nil {
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else if b.batchVerifier != nil && b.batchVerifier.LatestVerified != nil {
+				log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
+				b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.MessageCount))
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
