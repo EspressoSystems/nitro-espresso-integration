@@ -86,10 +86,6 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 
-	if serviceType == BatchPoster {
-
-	}
-
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err

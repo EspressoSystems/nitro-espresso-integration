@@ -122,10 +122,6 @@ func (m *MockDelayedMessageFetcher) StopAndWait() {
 	return
 }
 
-func (m *MockDelayedMessageFetcher) getDelayedMessageLatestIndex(ethdb.Database) (uint64, error) {
-	return 1, nil
-}
-
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 
 	caffNode := EspressoCaffNode{}
