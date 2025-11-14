@@ -76,6 +76,8 @@ type EspressoStreamer struct {
 	PerfRecorder *PerfRecorder
 
 	batcherAddressesFetcher func(l1Height uint64) []common.Address
+
+	dangerousMinimumHotshotBlockNum uint64
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -88,6 +90,7 @@ func NewEspressoStreamer(
 	recordPerformance bool,
 	batcherAddressesFetcher func(l1Height uint64) []common.Address,
 	retryTime time.Duration,
+	dangerousMinimumHotshotBlockNum uint64,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -96,14 +99,15 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:          espressoClient,
-		nextHotshotBlockNum:     nextHotshotBlockNum,
-		namespace:               namespace,
-		espressoSGXVerifier:     espressoSGXVerifier,
-		PerfRecorder:            PerfRecorder,
-		batcherAddressesFetcher: batcherAddressesFetcher,
-		retryTime:               retryTime,
-		currentMessagePos:       1,
+		espressoClient:                  espressoClient,
+		nextHotshotBlockNum:             nextHotshotBlockNum,
+		namespace:                       namespace,
+		espressoSGXVerifier:             espressoSGXVerifier,
+		PerfRecorder:                    PerfRecorder,
+		batcherAddressesFetcher:         batcherAddressesFetcher,
+		retryTime:                       retryTime,
+		currentMessagePos:               1,
+		dangerousMinimumHotshotBlockNum: dangerousMinimumHotshotBlockNum,
 	}
 }
 
@@ -124,8 +128,13 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 
+	hotshotBlockNum := currentHostshotBlock
+	if currentHostshotBlock < s.dangerousMinimumHotshotBlockNum {
+		hotshotBlockNum = s.dangerousMinimumHotshotBlockNum
+	}
+
 	s.currentMessagePos = currentMessagePos
-	s.nextHotshotBlockNum = currentHostshotBlock
+	s.nextHotshotBlockNum = hotshotBlockNum
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
 
