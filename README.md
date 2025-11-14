@@ -48,14 +48,14 @@ Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on
 The repository currently maintains two active development branches:
 
 - **integration**: Primary branch for general features and updates
-- **celestia-integration**: Branch for Celestia DA integration (v3.6.7 and earlier)
+- **celestia-integration**: Branch for Celestia DA integration
 
 Legacy branches for previous versions (v3.5.6) are maintained separately:
 
 - celestia-v3.5.6
 - integration-v3.5.6
 
-When Nitro v3.8.0 is merged into the main integration branch, the celestia-integration branch will be deprecated. At that point, v3.6.7 will be branched off as **integration-v3.6.7** for maintenance, and Celestia integration will be included in the main integration branch going forward.
+When Nitro v3.8.0 is merged into the main integration branch, v3.6.7 will be branched off as **integration-v3.6.7** for maintenance. Both integration and celestia-integration branches will continue to be maintained going forward.
 
 ### Forked Submodules
 
