@@ -48,12 +48,15 @@ type EspressoCaffNodeConfig struct {
 }
 
 type DangerousCaffNodeConfig struct {
-	IgnoreDatabaseHotshotBlock bool `koanf:"ignore-database-hotshot-block"`
-	IgnoreDatabaseFromBlock    bool `koanf:"ignore-database-from-block"`
+	IgnoreDatabaseHotshotBlock bool   `koanf:"ignore-database-hotshot-block"`
+	IgnoreDatabaseFromBlock    bool   `koanf:"ignore-database-from-block"`
+	MinimumHotshotBlockNum     uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 	IgnoreDatabaseHotshotBlock: false,
+	IgnoreDatabaseFromBlock:    false,
+	MinimumHotshotBlockNum:     0,
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -193,6 +196,7 @@ func NewEspressoCaffNode(
 		recordPerformance,
 		batcherAddrMonitor.GetValidAddresses,
 		configFetcher().RetryTime,
+		configFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
