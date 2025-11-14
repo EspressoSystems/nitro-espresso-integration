@@ -700,6 +700,7 @@ func deployContractsOnly(
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
+		common.Address{},
 		challenge_testing.WithLayerZeroHeights(&protocol.LayerZeroHeights{
 			BlockChallengeHeight:     protocol.Height(blockChallengeLeafHeight),
 			BigStepChallengeHeight:   protocol.Height(bigStepChallengeLeafHeight),

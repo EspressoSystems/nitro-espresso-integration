@@ -33,6 +33,7 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/challengeV2gen"
 	"github.com/offchainlabs/nitro/solgen/go/contractsgen"
+	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/proxiesgen"
@@ -300,6 +301,11 @@ func ChainsWithEdgeChallengeManager(opts ...Opt) (*ChainSetup, error) {
 		}
 		accs[0].TxOpts.Value = big.NewInt(0)
 	}
+	//  Deploy a espressoTEEVerifierMock contract
+	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend)
+	if err != nil {
+		return nil, err
+	}
 
 	prod := false
 	wasmModuleRoot := common.Hash{}
@@ -394,6 +400,7 @@ func ChainsWithEdgeChallengeManager(opts ...Opt) (*ChainSetup, error) {
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
+		espressoTEEVerifierAddress,
 		setp.challengeTestingOpts...,
 	)
 	addresses, err := DeployFullRollupStack(
