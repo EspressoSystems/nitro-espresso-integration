@@ -42,3 +42,4 @@ go.work
 go.work.sum
 
 !system_tests/espresso-e2e/.env
+/.pre-commit-config.yaml
