@@ -4,13 +4,18 @@
     <img src="https://arbitrum.io/assets/arbitrum/logo_color.png" alt="Logo" width="80" height="80">
   </a>
 
-  <h3 align="center">Arbitrum Nitro</h3>
+  <h3 align="center">Arbitrum Nitro - Espresso Integration</h3>
 
   <p align="center">
     <a href="https://developer.arbitrum.io/"><strong>Next Generation Ethereum L2 Technology »</strong></a>
     <br />
+    <em>A fork of <a href="https://github.com/OffchainLabs/nitro">Arbitrum Nitro</a> managed by <a href="https://www.espressosys.com/">Espresso Systems</a></em>
   </p>
 </p>
+
+## About This Repository
+
+This is a fork of [Arbitrum Nitro](https://github.com/OffchainLabs/nitro) maintained by Espresso Systems, extending the Nitro stack. For detailed integration documentation, see the [Espresso integration guides](https://docs.espressosys.com/network/guides/rollup-developers/nitro) and [Nitro Chain Integration](https://docs.espressosys.com/network/concepts/rollup-developers/integrating-an-optimistic-rollup/nitro).
 
 ## About Arbitrum Nitro
 
