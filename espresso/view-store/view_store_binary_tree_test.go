@@ -82,16 +82,16 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 		root := MakeInitialTree(t)
 
 		// Now insert a view which has the same view number but lower builder commitment
-		root = Insert(root, 5, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_", mkHash("4"))
+		root = Insert(root, 5, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcg0_", mkHash("4"))
 
 		viewStoreFor2ViewNumber := Search(root, 2, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_")
 
-		// Check that the lower builder commitment view store 5 exists on the left side of view store 7
+		// Check that the lower builder commitment view store 5 exists on the right side of view store 2
 		if viewStoreFor2ViewNumber.Right.View.viewNumber != 5 {
 			t.Errorf("Expected right side of view store for view number 2 to have view number 5, got %d", viewStoreFor2ViewNumber.Left.View.viewNumber)
 		}
-		if viewStoreFor2ViewNumber.Right.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_" {
-			t.Errorf("Expected right side of view store for view number 2 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_, got %s", viewStoreFor2ViewNumber.Left.View.builderCommitment)
+		if viewStoreFor2ViewNumber.Right.View.builderCommitment != "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcg0_" {
+			t.Errorf("Expected right side of view store for view number 2 to have builder commitment BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcg0_, got %s", viewStoreFor2ViewNumber.Left.View.builderCommitment)
 		}
 	})
 
