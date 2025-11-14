@@ -116,8 +116,9 @@ type RpcConfig struct {
 }
 
 var DefaultRpcConfig = RpcConfig{
-	MaxBatchResponseSize:             10_000_000, // 10MB
-	BatchRequestLimit:                node.DefaultConfig.BatchRequestLimit,
+	MaxBatchResponseSize: 10_000_000, // 10MB
+	BatchRequestLimit:    node.DefaultConfig.BatchRequestLimit,
+
 	EnableTeeIntegrityAttestation:    false,
 	IntegrityKeyPairAttestationsPath: "integrity_key_pair_attestations",
 }

@@ -638,8 +638,6 @@ func createTestNodeOnL1ForBoldProtocol(
 		nil, // Blob reader.
 		locator.LatestWasmModuleRoot(),
 		nil,
-		nil,
-		false,
 	)
 	Require(t, err)
 

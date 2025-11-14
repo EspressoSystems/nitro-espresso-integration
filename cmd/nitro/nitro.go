@@ -55,10 +55,9 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/cmd/util"
 	"github.com/offchainlabs/nitro/cmd/util/confighelpers"
-	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/daprovider/das"
-	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -255,17 +254,16 @@ func mainImpl() int {
 
 	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
-	var caffNodetxOpts *bind.TransactOpts
-	var caffNodePrivateKey *ecdsa.PrivateKey
+	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
 
 	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		caffNodePrivateKey, err = integrityattestation.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+		caffNodePrivateKey, err := espresso_tee_utils.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
-		teeHMAC, err = integrityattestation.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+		teeHMAC, err = espresso_tee_utils.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
@@ -283,13 +281,19 @@ func mainImpl() int {
 			log.Info("Using Espresso Caff Node private key from environment variable")
 		}
 
-		caffNodetxOpts, dataSigner, err = util.OpenWallet("l1-espresso-caff-node", &caffNodeWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+		caffNodetxOpts, _, err := util.OpenWallet("l1-espresso-caff-node", &caffNodeWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
 		if err != nil {
 			flag.Usage()
 			log.Crit("error opening Espresso Caff Node parent chain wallet", "path", caffNodeWallet.Pathname, "account", caffNodeWallet.Account, "err", err)
 		}
 		if caffNodeWallet.OnlyCreateKey {
 			return 0
+		}
+		espressoCaffNodeInitArgs = &arbnode.EspressoCaffNodeInitArgs{
+			InitializeCaffNodeTags: false,
+			CaffNodePrivateKey:     caffNodePrivateKey,
+			CaffNodetxOpts:         caffNodetxOpts,
+			TeeHMAC:                teeHMAC,
 		}
 	}
 
@@ -496,11 +500,12 @@ func mainImpl() int {
 			return 1
 		}
 		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
-		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), caffNodePrivateKey)
+		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), espressoCaffNodeInitArgs.CaffNodePrivateKey)
 		if err != nil {
 			log.Error("failed to verify snapshot", "err", err)
 			return 1
 		}
+		espressoCaffNodeInitArgs.InitializeCaffNodeTags = initializeCaffNodeTags
 	}
 
 	chainDb, l2BlockChain, err := openInitializeChainDb(ctx, stack, nodeConfig, new(big.Int).SetUint64(nodeConfig.Chain.ID), gethexec.DefaultCacheConfigFor(stack, &nodeConfig.Execution.Caching), &nodeConfig.Execution.StylusTarget, tracer, &nodeConfig.Persistent, l1Client, rollupAddrs)
@@ -512,23 +517,6 @@ func mainImpl() int {
 		flag.Usage()
 		log.Error("error initializing database", "err", err)
 		return 1
-	}
-
-	var authCaffDB authdb.AuthDB
-	if nodeConfig.Node.EspressoCaffNode.Enable {
-		var err error
-		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-			// if we need to initialize caff node tags, then we will disable auth reads
-			authCaffDB, err = authdb.NewAuthDB(chainDb, teeHMAC, initializeCaffNodeTags)
-		} else {
-			// Outside the tee, we need to remove tmac and also disable auth reads
-			authCaffDB, err = authdb.NewAuthDB(chainDb, nil, true)
-		}
-
-		if err != nil {
-			log.Error("failed to create auth db", "err", err)
-			return 1
-		}
 	}
 
 	arbDb, err := stack.OpenDatabaseWithExtraOptions("arbitrumdata", 0, 0, "arbitrumdata/", false, nodeConfig.Persistent.Pebble.ExtraOptions("arbitrumdata"))
@@ -635,7 +623,7 @@ func mainImpl() int {
 		execNode,
 		execNode,
 		arbDb,
-		&authCaffDB,
+		chainDb,
 		&NodeConfigFetcher{liveNodeConfig},
 		l2BlockChain.Config(),
 		l1Client,
@@ -648,9 +636,7 @@ func mainImpl() int {
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,
 		wasmModuleRoot,
-		caffNodetxOpts,
-		caffNodePrivateKey,
-		initializeCaffNodeTags,
+		espressoCaffNodeInitArgs,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)

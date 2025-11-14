@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"hash"
 	"math/big"
 	"path"
 	"path/filepath"
@@ -34,6 +35,13 @@ import (
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
+
+type EspressoCaffNodeInitArgs struct {
+	InitializeCaffNodeTags bool
+	CaffNodePrivateKey     *ecdsa.PrivateKey
+	CaffNodetxOpts         *bind.TransactOpts
+	TeeHMAC                hash.Hash
+}
 
 type EspressoCaffNodeConfig struct {
 	Enable                        bool                                      `koanf:"enable"`
@@ -168,7 +176,6 @@ type EspressoCaffNode struct {
 	stopwaiter.StopWaiter
 
 	executionEngine  *gethexec.ExecutionEngine
-	teeAddress       *common.Address
 	espressoStreamer espressostreamer.EspressoStreamerInterface
 
 	configFetcher EspressoCaffNodeConfigFetcher
@@ -192,20 +199,17 @@ type EspressoCaffNode struct {
 func NewEspressoCaffNode(
 	ctx context.Context,
 	configFetcher EspressoCaffNodeConfigFetcher,
-	teeAddress *common.Address,
+	chainDb ethdb.Database,
 	execEngine *gethexec.ExecutionEngine,
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	db *authdb.AuthDB,
 	recordPerformance bool,
 	blocksToRead uint64,
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
 	stack *node.Node,
 	dataPosterDB ethdb.Database,
-	txOptsCaffNode *bind.TransactOpts,
-	caffNodePrivateKey *ecdsa.PrivateKey,
-	initializeTags bool,
+	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -217,6 +221,20 @@ func NewEspressoCaffNode(
 	teeType, err := espressotee.FromString(configFetcher().EspressoTeeType)
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing TEE type, %w", err)
+	}
+
+	var db authdb.AuthDB
+	if configFetcher().EspressoTeeType != "" {
+		log.Info("initialiing auth db with", "i", caffNodeInitArgs.InitializeCaffNodeTags)
+		// if we need to initialize caff node tags, then we will disable auth reads
+		db, err = authdb.NewAuthDB(chainDb, caffNodeInitArgs.TeeHMAC, caffNodeInitArgs.InitializeCaffNodeTags)
+	} else {
+		// Outside the tee, we need to remove tmac and also disable auth reads
+		db, err = authdb.NewAuthDB(chainDb, nil, true)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create auth db: %w", err)
 	}
 
 	// For backward compatibility, the espresso streamer should be able to verify legacy where we signed
@@ -236,7 +254,7 @@ func NewEspressoCaffNode(
 	fromBlock := configFetcher().FromBlock
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = authdb.ReadFromBlock(db)
+		fromBlock, err = authdb.ReadFromBlock(&db)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read l1 block from db: %w", err)
 		}
@@ -250,7 +268,7 @@ func NewEspressoCaffNode(
 
 	batcherAddrMonitor := NewBatcherAddrMonitor(
 		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
-		db,
+		&db,
 		l1Reader,
 		sequencerInbox.address,
 		delayedBridge.fromBlock,
@@ -322,7 +340,7 @@ func NewEspressoCaffNode(
 	var keyManager *espresso_key_manager.EspressoKeyManager
 	var snapshotHandler *EspressoSnapshotHandler
 	if teeType != espressotee.EMPTY {
-		if txOptsCaffNode == nil {
+		if caffNodeInitArgs.CaffNodetxOpts == nil {
 			return nil, fmt.Errorf("non nil txOpts are required to run the Caff Node in a TEE")
 		}
 
@@ -340,7 +358,7 @@ func NewEspressoCaffNode(
 			&dataposter.DataPosterOpts{
 				Database:      dataPosterDB,
 				HeaderReader:  l1Reader,
-				Auth:          txOptsCaffNode,
+				Auth:          caffNodeInitArgs.CaffNodetxOpts,
 				Config:        dataPosterConfigFetcher,
 				ParentChainID: chainId,
 				MetadataRetriever: func(ctx context.Context, blockNum *big.Int) ([]byte, error) {
@@ -351,19 +369,18 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 
 	}
 
-	snapshotHandler = NewEspressoSnapshotHandler(db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeTags, keyManager, configFetcher().GenerateSnapshot, configFetcher().AuthDBBatchSize)
+	snapshotHandler = NewEspressoSnapshotHandler(&db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), caffNodeInitArgs.InitializeCaffNodeTags, keyManager, configFetcher().GenerateSnapshot, configFetcher().AuthDBBatchSize)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
 		executionEngine:       execEngine,
-		teeAddress:            teeAddress,
 		delayedMessageFetcher: delayedMessageFetcher,
 		espressoStreamer:      espressoStreamer,
-		db:                    db,
+		db:                    &db,
 		l1Reader:              l1Reader,
 		forceInclusionChecker: forceInclusionChecker,
 		stateChecker:          stateChecker,
@@ -371,7 +388,7 @@ func NewEspressoCaffNode(
 		snapshotHandler:       snapshotHandler,
 		keyManager:            keyManager,
 		dataPoster:            dataPoster,
-		caffNodePrivateKey:    caffNodePrivateKey,
+		caffNodePrivateKey:    caffNodeInitArgs.CaffNodePrivateKey,
 	}, nil
 }
 
@@ -460,7 +477,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	// Store hotshot block num with auth tag
 	if err := authdb.WriteNextHotshotBlockNum(batch, hotshotBlockNumber); err != nil {
-		log.Error("Failed to store NextHotshotBlockNum and its auth tag: %w", err)
+		log.Error("failed to store NextHotshotBlockNum and its auth tag", "err", err)
 		return false
 	}
 

@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb/dbtest"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 
-	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
 
@@ -35,7 +35,7 @@ func TestAuthDB(t *testing.T) {
 			db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 			Require(t, err)
 
-			hmac, err := integrityattestation.HmacForTest()
+			hmac, err := espresso_tee_utils.HmacForTest()
 			Require(t, err)
 			authdb, err := NewAuthDB(db, hmac, false)
 			Require(t, err)
@@ -51,7 +51,7 @@ func BenchmarkAuthDB(b *testing.B) {
 		db, err := rawdb.NewDatabaseWithFreezer(memorydb.New(), "authdbancient", "authdbtest", false)
 		RequireBench(b, err)
 
-		hmac, err := integrityattestation.HmacForTest()
+		hmac, err := espresso_tee_utils.HmacForTest()
 		RequireBench(b, err)
 		authdb, err := NewAuthDB(db, hmac, false)
 		RequireBench(b, err)

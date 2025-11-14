@@ -8,8 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb/ancienttest"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
-
-	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 )
 
 var whitelistedKinds = []string{
@@ -189,7 +188,7 @@ func TestAuthDBAncientSuite(t *testing.T) {
 		Require(t, err)
 		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
 
-		mac, err := integrityattestation.HmacForTest()
+		mac, err := espresso_tee_utils.HmacForTest()
 		Require(t, err)
 		// Create AuthDB with only the tag tables we need
 		// NOTE: our NewAuthDB will default to a tagFreezer with all 4 tables whose internal sync

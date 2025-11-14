@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 
-	"github.com/offchainlabs/nitro/cmd/util/integrityattestation"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 )
 
 // make sure that CaffNode-specific operations that require authenticated DBs fail when given a plain reader/writer
@@ -66,7 +66,7 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 	err = WriteLastProcessedHeight(plainBatch, 789)
 	Assert(t, err != nil, "expected error when writing LastProcessedHeight to plain batch, but got nil")
 
-	hmac, err := integrityattestation.HmacForTest()
+	hmac, err := espresso_tee_utils.HmacForTest()
 	Require(t, err)
 	authdb, err := NewAuthDB(plainDB, hmac, false)
 	Require(t, err)

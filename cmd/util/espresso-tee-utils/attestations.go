@@ -1,4 +1,4 @@
-package integrityattestation
+package espresso_tee_utils
 
 import (
 	"context"

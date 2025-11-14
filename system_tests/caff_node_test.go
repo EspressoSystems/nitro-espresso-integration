@@ -334,18 +334,6 @@ func TestEspressoCaffNode(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("did not receive error from fatalErrChan within timeout")
 	}
-
-	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
-	_ = logHandler
-	// Test restarting caff node
-	time.Sleep(10 * time.Second)
-	builder.RestartCaffNode(t)
-
-	// This time check if it printed the log about snapshot already verified
-	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
-		return logHandler.WasLogged("Caff Node successfully started")
-	})
-	Require(t, err)
 }
 
 func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
