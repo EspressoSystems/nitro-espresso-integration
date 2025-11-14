@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb/ancienttest"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
+
 	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 )
 
