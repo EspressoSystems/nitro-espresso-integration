@@ -41,39 +41,85 @@ compiled to WASM.
 
 Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on 8/31/22. (See [state migration](https://developer.arbitrum.io/migration/state-migration) and [dapp migration](https://developer.arbitrum.io/migration/dapp_migration) for more info).
 
+## Upstream Fork Management
+
+### Active Branches
+
+The repository currently maintains two active development branches:
+
+- **integration**: Primary branch for general features and updates
+- **celestia-integration**: Branch for Celestia DA integration (v3.6.7 and earlier)
+
+Legacy branches for previous versions (v3.5.6) are maintained separately:
+
+- celestia-v3.5.6
+- integration-v3.5.6
+
+When Nitro v3.8.0 is merged into the main integration branch, the celestia-integration branch will be deprecated. At that point, v3.6.7 will be branched off as **integration-v3.6.7** for maintenance, and Celestia integration will be included in the main integration branch going forward.
+
+### Forked Submodules
+
+The following submodules have been forked for this integration:
+
+- nitro-contracts
+- bold
+- testnode
+
+Note: `go-ethereum` is used as an upstream dependency without modification.
+
 ## Running E2E Tests
 
 ### Prerequisites
+
 - Nix package manager
 - Docker daemon running
 
 ### Build Steps
 
 0. Clone repository
+
 ```bash
 git clone --recurse-submodules git@github.com:EspressoSystems/nitro-espresso-integration.git 
 ```
 
 1. For MacOS Users Only:
+
 ```bash
 bash ./scripts/build-wasm-on-macos-with-nix
 ```
+
 2. Enter development environment:
+
 ```bash
 nix develop
 ```
 
 3. Build environment:
+
 ```bash
 make build
 make build-replay-env
 ```
+
 4. Run E2E tests (ensure Docker is running):
+
+**Option A: Clean output**
+
 ```bash
-gotestsum --format standard-verbose --packages="$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoE2E'
+gotestsum --format=testname --packages="./system_tests/..." -- -v -timeout 15m -p 1 -count=1 -run 'TestEspressoE2E' 2>&1 | sed '/ld: warning/d; /object file/d; /^$/d'
+```
+This filters out Rust linker warnings in real-time, showing only test output and errors.
+
+**Option B: Full output (for debugging)**
+
+```bash
+gotestsum --format=testname --packages="./system_tests/..." -- -v -timeout 15m -p 1 -count=1 -run 'TestEspressoE2E'
 ```
 
+Shows all output including linker warnings.
+
 Alternatively to steps 3 and 4 you can run:
+
 ```bash
 just espresso-tests
 ```
