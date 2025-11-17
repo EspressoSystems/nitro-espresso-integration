@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     name: Espresso E2E
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
@@ -92,7 +92,7 @@ jobs:
         run: cargo install cbindgen
 
       - name: Cache Build Products
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         with:
           path: |
             ~/go/pkg/mod
@@ -101,7 +101,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Cache Rust Build Products
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/registry/
@@ -114,7 +114,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
-        uses: buildjet/cache@v3
+        uses: actions/cache@v3
         id: cache-cbrotli
         with:
           path: |
