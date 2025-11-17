@@ -731,6 +731,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	b.L1Info = existing.L1Info
 
 	teeHMAC, err := espresso_tee_utils.HmacForTest()
+	Require(t, err)
 	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
 	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
 	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
