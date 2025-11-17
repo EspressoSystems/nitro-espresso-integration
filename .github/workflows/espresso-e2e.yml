@@ -77,7 +77,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.4.1
+          version: v1.0.0
           cache: false
 
       - name: Install rust nightly
@@ -92,7 +92,7 @@ jobs:
         run: cargo install cbindgen
 
       - name: Cache Build Products
-        uses: buildjet/cache@v4
+        uses: actions/cache@v4
         with:
           path: |
             ~/go/pkg/mod
@@ -101,7 +101,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Cache Rust Build Products
-        uses: buildjet/cache@v4
+        uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry/
@@ -114,7 +114,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
-        uses: buildjet/cache@v4
+        uses: actions/cache@v4
         id: cache-cbrotli
         with:
           path: |
