@@ -23,8 +23,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
-	"github.com/offchainlabs/nitro/espressotee"
+	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 )
 
 func TestEspressoStreamer(t *testing.T) {
@@ -118,7 +117,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
 		// Simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
-		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
+		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 		// create a new streamer object
 		streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, 0)
 		streamer.Reset(735805, 1)
@@ -305,8 +304,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, serviceType espressotee.ServiceType) (espressogen.EnclaveReport, error) {
-	return espressogen.EnclaveReport{}, nil
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
+	return legacy_espressogen.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {
