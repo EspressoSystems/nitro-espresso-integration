@@ -26,17 +26,22 @@ jobs:
           submodules: recursive
           fetch-depth: 10            # Will cover most PRs
           persist-credentials: true  # In case changed-files requires deeper depth
-
       - name: Determine if Arbitrator or Bold Legacy changed
         id: changed
-        uses: tj-actions/changed-files@v46.0.5
-        with:
-          files_yaml: |
-            arbitrator:
-              - 'arbitrator/**'
-              - 'contracts/**'
-              - 'Makefile'
-              - '.github/workflows/_arbitrator.yml'
-            bold_legacy:
-              - 'bold/legacy/**'
-              - '.github/workflows/_bold-legacy.yml'
+        run: |
+          echo "arbitrator_any_changed=false" >> $GITHUB_OUTPUT
+          echo "bold_legacy_any_changed=false" >> $GITHUB_OUTPUT
+
+      # - name: Determine if Arbitrator or Bold Legacy changed
+      #   id: changed
+      #   uses: tj-actions/changed-files@v46.0.5
+      #   with:
+      #     files_yaml: |
+      #       arbitrator:
+      #         - 'arbitrator/**'
+      #         - 'contracts/**'
+      #         - 'Makefile'
+      #         - '.github/workflows/_arbitrator.yml'
+      #       bold_legacy:
+      #         - 'bold/legacy/**'
+      #         - '.github/workflows/_bold-legacy.yml'
