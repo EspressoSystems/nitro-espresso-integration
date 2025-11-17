@@ -1,7 +1,6 @@
 package light_client_test
 
 import (
-	"errors"
 	"testing"
 
 	light_client "github.com/offchainlabs/nitro/system_tests/espresso/light_client"
@@ -16,8 +15,8 @@ func TestMockAlwaysLiveLightClientReader(t *testing.T) {
 	client := light_client.NewMockAlwaysLiveLightClientReader()
 
 	isLive, err := client.IsHotShotLive(0)
-	if have, want := err, (error)(nil); errors.Is(have, want) {
-		t.Fatalf("isHotShotLive is not expected to ever return an error:\nhave:\n\t%v\nwant:\n\t%v", have, want)
+	if err != nil {
+		t.Fatalf("isHotShotLive is not expected to ever return an error:have:\n\t%v", err)
 	}
 
 	if have, want := isLive, true; have != want {
