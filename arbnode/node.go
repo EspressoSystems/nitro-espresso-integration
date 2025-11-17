@@ -1006,6 +1006,7 @@ func getEspressoCaffNode(
 	config *Config,
 	configFetcher ConfigFetcher,
 	arbDb ethdb.Database,
+	chainDb ethdb.Database,
 	exec execution.ExecutionClient,
 	l1Reader *headerreader.HeaderReader,
 	txStreamer *TransactionStreamer,
@@ -1017,24 +1018,32 @@ func getEspressoCaffNode(
 	stack *node.Node,
 	sequencerInbox *SequencerInbox,
 	fatalErrChan chan error,
+	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	if config.EspressoCaffNode.Enable {
+
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
+			espressoCaffNode, err := NewEspressoCaffNode(
+				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				chainDb,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
-				stack.Config().HTTPPort,
+				stack,
+				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
+				caffNodeInitArgs,
 			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)
+			}
 
 			return &Node{
-				ArbDB:                   arbDb,
+				ArbDB:                   nil,
 				Stack:                   stack,
 				ExecutionClient:         exec,
 				L1Reader:                nil,
@@ -1154,6 +1163,7 @@ func createNodeImpl(
 	executionRecorder execution.ExecutionRecorder,
 	executionBatchPoster execution.ExecutionBatchPoster,
 	arbDb ethdb.Database,
+	chainDb ethdb.Database,
 	configFetcher ConfigFetcher,
 	l2Config *params.ChainConfig,
 	l1client *ethclient.Client,
@@ -1165,6 +1175,7 @@ func createNodeImpl(
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
 	latestWasmModuleRoot common.Hash,
+	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	config := configFetcher.Get()
 
@@ -1229,7 +1240,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan)
+	caffNode, err := getEspressoCaffNode(ctx, config, configFetcher, arbDb, chainDb, executionClient, l1Reader, txStreamer, blobReader, broadcastServer, broadcastClients, delayedBridge, maintenanceRunner, stack, sequencerInbox, fatalErrChan, caffNodeInitArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1384,6 +1395,7 @@ func CreateNodeExecutionClient(
 	stack *node.Node,
 	executionClient execution.ExecutionClient,
 	arbDb ethdb.Database,
+	chainDb ethdb.Database,
 	configFetcher ConfigFetcher,
 	l2Config *params.ChainConfig,
 	l1client *ethclient.Client,
@@ -1395,11 +1407,12 @@ func CreateNodeExecutionClient(
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
 	latestWasmModuleRoot common.Hash,
+	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	if executionClient == nil {
 		return nil, errors.New("execution client must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, nil, nil, nil, arbDb, chainDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, caffNodeInitArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1415,6 +1428,7 @@ func CreateNodeFullExecutionClient(
 	executionRecorder execution.ExecutionRecorder,
 	executionBatchPoster execution.ExecutionBatchPoster,
 	arbDb ethdb.Database,
+	chainDb ethdb.Database,
 	configFetcher ConfigFetcher,
 	l2Config *params.ChainConfig,
 	l1client *ethclient.Client,
@@ -1426,11 +1440,12 @@ func CreateNodeFullExecutionClient(
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
 	latestWasmModuleRoot common.Hash,
+	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	if (executionClient == nil) || (executionSequencer == nil) || (executionRecorder == nil) || (executionBatchPoster == nil) {
 		return nil, errors.New("execution client, sequencer, recorder, and batch poster must be non-nil")
 	}
-	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot)
+	currentNode, err := createNodeImpl(ctx, stack, executionClient, executionSequencer, executionRecorder, executionBatchPoster, arbDb, chainDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, latestWasmModuleRoot, caffNodeInitArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1619,6 +1634,7 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
+
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
 	}
@@ -1643,9 +1659,7 @@ func (n *Node) StopAndWait() {
 		// Just stops the redis client (most other stuff was stopped earlier)
 		n.SeqCoordinator.StopAndWait()
 	}
-	if n.EspressoCaffNode != nil {
-		n.EspressoCaffNode.StopAndWait()
-	}
+
 	if n.SyncMonitor != nil {
 		n.SyncMonitor.StopAndWait()
 	}
@@ -1655,9 +1669,13 @@ func (n *Node) StopAndWait() {
 	if n.ExecutionClient != nil {
 		n.ExecutionClient.StopAndWait()
 	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
 	if err := n.Stack.Close(); err != nil {
 		log.Error("error on stack close", "err", err)
 	}
+
 }
 
 func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) containers.PromiseInterface[execution.InboxBatch] {
