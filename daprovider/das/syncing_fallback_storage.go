@@ -33,7 +33,6 @@ import (
 
 var sequencerInboxABI *abi.ABI
 var BatchDeliveredID common.Hash
-var addSequencerL2BatchFromOriginCallABI abi.Method
 var sequencerBatchDataABI abi.Event
 
 const sequencerBatchDataEvent = "SequencerBatchData"
@@ -55,7 +54,6 @@ func init() {
 	}
 	BatchDeliveredID = sequencerInboxABI.Events[sequencerBatchDeliveredEvent].ID
 	sequencerBatchDataABI = sequencerInboxABI.Events[sequencerBatchDataEvent]
-	addSequencerL2BatchFromOriginCallABI = sequencerInboxABI.Methods["addSequencerL2BatchFromOrigin0"]
 }
 
 type SyncToStorageConfig struct {
@@ -273,8 +271,12 @@ func FindDASDataFromLog(
 		if err != nil {
 			return nil, err
 		}
+		method, err := sequencerInboxABI.MethodById(txData[:4])
+		if err != nil {
+			return nil, err
+		}
 		args := make(map[string]interface{})
-		err = addSequencerL2BatchFromOriginCallABI.Inputs.UnpackIntoMap(args, txData[4:])
+		err = method.Inputs.UnpackIntoMap(args, txData[4:])
 		if err != nil {
 			return nil, err
 		}
