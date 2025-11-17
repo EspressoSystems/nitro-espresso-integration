@@ -500,3 +500,12 @@ func checkTransferTxOnL2(
 		return false
 	})
 }
+
+// system_tests/espresso_e2e_test.go:24:2: "github.com/offchainlabs/nitro/espresso/submitter" imported and not used (typecheck)
+//
+//	"github.com/offchainlabs/nitro/espresso/submitter"
+//	^
+func UnusedSubmitter() submitter.EspressoSubmitter {
+	var a submitter.EspressoSubmitter
+	return a
+}
