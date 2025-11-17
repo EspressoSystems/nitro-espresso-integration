@@ -444,6 +444,7 @@ func createNodeImpl(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
+	espressoCaffNodeInitArgs *espresso_tee_utils.EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	config := configFetcher.Get()
 
@@ -596,6 +597,7 @@ func createNodeImpl(
 				sequencerInbox,
 				fatalErrChan,
 				stack.Config().HTTPPort,
+				espressoCaffNodeInitArgs,
 			)
 
 			return &Node{
@@ -943,8 +945,9 @@ func CreateNode(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
+	espressoCaffNodeInitArgs *espresso_tee_utils.EspressoCaffNodeInitArgs,
 ) (*Node, error) {
-	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader)
+	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, espressoCaffNodeInitArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1154,6 +1157,7 @@ func (n *Node) StopAndWait() {
 	if n.BlockValidator != nil && n.BlockValidator.Started() {
 		n.BlockValidator.StopAndWait()
 	}
+
 	if n.Staker != nil {
 		n.Staker.StopAndWait()
 	}
@@ -1185,9 +1189,13 @@ func (n *Node) StopAndWait() {
 	if n.Execution != nil {
 		n.Execution.StopAndWait()
 	}
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
 	if err := n.Stack.Close(); err != nil {
 		log.Error("error on stack close", "err", err)
 	}
+
 }
 
 func (n *Node) FindInboxBatchContainingMessage(message arbutil.MessageIndex) (uint64, bool, error) {

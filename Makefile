@@ -591,19 +591,32 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen .make/espresso-legacy-gen $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
 	go run solgen/gen.go
+	@touch $@
+
+.make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+	mkdir -p espresso-tee-contracts/espressogen/
+	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
+	@touch $@
+
+.make/espresso-legacy-gen: $(DEP_PREDICATE) espresso-tee-contracts-legacy/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+	mkdir -p espresso-tee-contracts-legacy/espressogen/
+	go run -modfile ./espresso-tee-contracts-legacy/bindings/go.mod ./espresso-tee-contracts-legacy/bindings/gen.go
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account build
 	yarn --cwd contracts build:all
+	cd espresso-tee-contracts-legacy && forge build && cd ..
+	cd espresso-tee-contracts && forge build && cd ..
 	@touch $@
 
 .make/yarndeps: $(DEP_PREDICATE) contracts/package.json contracts/yarn.lock $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account install
 	yarn --cwd contracts install
+
 	@touch $@
 
 .make/cbrotli-lib: $(DEP_PREDICATE) $(ORDER_ONLY_PREDICATE) .make

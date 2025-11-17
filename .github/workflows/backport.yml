@@ -30,8 +30,18 @@ jobs:
             const failedTargets = byTarget.filter(([label, ok]) => ok === 'false').map(([label]) => label);
             const successfulTargets = byTarget.filter(([label, ok]) => ok === 'true').map(([label]) => label);
 
+            if (failedTargets.length === 0) {
+              // nothing failed — don't create an issue
+              return;
+            }
+
             const title = `Backport failed for PR #${pr.number} to: ${failedTargets.join(', ')}`;
-            const body = `\nBackport action failed for PR #${pr.number}.\n\n- **Original PR:** #${pr.number} (${pr.title})\n- **Failed targets:** ${failedTargets.length ? failedTargets.map(t => \\`\\${t}\\\`).join(', ') : 'None'}\n- **Successful targets:** ${successfulTargets.length ? successfulTargets.map(t => \\`\\${t}\\\`).join(', ') : 'None'}\n\nPlease manually backport to the failed targets above.\n            `;
+            const body = `
+            Backport action failed for PR #${pr.number}.
+            - **Original PR:** #${pr.number} (${pr.title})
+            - **Failed targets:** ${failedTargets.length ? failedTargets.map(t => \`\\\`${t}\\\`\`).join(', ') : 'None'}
+            - **Successful targets:** ${successfulTargets.length ? successfulTargets.map(t => \`\\\`${t}\\\`\`).join(', ') : 'None'}
+            `;
 
             await github.rest.issues.create({
               owner: context.repo.owner,

@@ -2,16 +2,12 @@ package arbnode
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espressotee"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 )
 
 // Reads state from external sources and resets the espresso streamer to start producing
@@ -74,22 +70,4 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 
 	log.Warn("No logs found for Hotshot block")
 	return 0
-}
-
-func setupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client) (espressotee.EspressoNitroTEEVerifierInterface, error) {
-	// Setup nitro contract interface
-	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
-	}
-	log.Info("successfully retrieved nitro contract verifier address", "address", nitroAddr)
-
-	nitroVerifierBindings, err := espressogen.NewIEspressoNitroTEEVerifier(
-		nitroAddr,
-		l1Client)
-	if err != nil {
-		return nil, err
-	}
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(nitroVerifierBindings, l1Client, nitroAddr)
-	return nitroVerifier, nil
 }
