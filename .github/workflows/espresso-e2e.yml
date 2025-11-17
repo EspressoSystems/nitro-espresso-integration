@@ -77,7 +77,7 @@ jobs:
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.0.0
+          version: v1.4.1
           cache: false
 
       - name: Install rust nightly
