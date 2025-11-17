@@ -1392,7 +1392,6 @@ func CreateNodeFullExecutionClient(
 	txOptsValidator *bind.TransactOpts,
 	txOptsBatchPoster *bind.TransactOpts,
 	dataSigner signature.DataSignerFunc,
-	teeAddress *common.Address,
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,

@@ -230,7 +230,6 @@ func mainImpl() int {
 	}
 
 	var dataSigner signature.DataSignerFunc
-	var teeAddress *common.Address
 	var teeHMAC hash.Hash
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
@@ -631,7 +630,6 @@ func mainImpl() int {
 		l1TransactionOptsValidator,
 		l1TransactionOptsBatchPoster,
 		dataSigner,
-		teeAddress,
 		fatalErrChan,
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,

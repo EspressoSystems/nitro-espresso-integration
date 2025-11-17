@@ -13,7 +13,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = git@github.com:EspressoSystems/nitro-contracts.git
-	branch = v3.6.7-merge
+	branch = v3.1.1
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
@@ -53,7 +53,8 @@
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
+	branch = release-tee-caff-node
 [submodule "espresso-tee-contracts-legacy"]
 	path = espresso-tee-contracts-legacy
-	url = git@github.com:EspressoSystems/espresso-tee-contracts.git
+	url = https://github.com/EspressoSystems/espresso-tee-contracts.git
 
