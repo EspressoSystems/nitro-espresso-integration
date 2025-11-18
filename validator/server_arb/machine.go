@@ -46,6 +46,7 @@ type MachineInterface interface {
 	Hash() common.Hash
 	GetGlobalState() validator.GoGlobalState
 	ProveNextStep() []byte
+	GetNextOpcode() uint16
 	Freeze()
 	Destroy()
 }
@@ -313,6 +314,14 @@ func (m *ArbitratorMachine) ProveNextStep() []byte {
 	proofBytes := C.GoBytes(unsafe.Pointer(output.ptr), C.int(output.len))
 
 	return proofBytes
+}
+
+func (m *ArbitratorMachine) GetNextOpcode() uint16 {
+	defer runtime.KeepAlive(m)
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	return uint16(C.arbitrator_get_opcode(m.ptr))
 }
 
 func (m *ArbitratorMachine) SerializeState(path string) error {

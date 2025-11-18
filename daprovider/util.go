@@ -10,7 +10,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
-
 	"github.com/offchainlabs/nitro/arbutil"
 )
 
@@ -72,6 +71,10 @@ const ZeroheavyMessageHeaderFlag byte = 0x20
 // BlobHashesHeaderFlag indicates that this message contains EIP 4844 versioned hashes of the commitments calculated over the blob data for the batch data.
 const BlobHashesHeaderFlag byte = L1AuthenticatedMessageHeaderFlag | 0x10 // 0x50
 
+// CelestiaMessageHeaderFlag indicates that this data is a Blob Pointer
+// which will be used to retrieve data from Celestia
+const CelestiaMessageHeaderFlag byte = 0x63
+
 // BrotliMessageHeaderByte indicates that the message is brotli-compressed.
 const BrotliMessageHeaderByte byte = 0
 
@@ -80,7 +83,7 @@ const BrotliMessageHeaderByte byte = 0
 const DACertificateMessageHeaderFlag byte = 0x01
 
 // KnownHeaderBits is all header bits with known meaning to this nitro version
-const KnownHeaderBits byte = DASMessageHeaderFlag | TreeDASMessageHeaderFlag | L1AuthenticatedMessageHeaderFlag | ZeroheavyMessageHeaderFlag | BlobHashesHeaderFlag | BrotliMessageHeaderByte
+const KnownHeaderBits byte = DASMessageHeaderFlag | TreeDASMessageHeaderFlag | CelestiaMessageHeaderFlag | L1AuthenticatedMessageHeaderFlag | ZeroheavyMessageHeaderFlag | BlobHashesHeaderFlag | BrotliMessageHeaderByte
 
 var DefaultDASRetentionPeriod time.Duration = time.Hour * 24 * 15
 
@@ -111,6 +114,10 @@ func IsBlobHashesHeaderByte(header byte) bool {
 
 func IsDACertificateMessageHeaderByte(header byte) bool {
 	return header == DACertificateMessageHeaderFlag
+}
+
+func IsCelestiaMessageHeaderByte(header byte) bool {
+	return hasBits(header, CelestiaMessageHeaderFlag)
 }
 
 func IsBrotliMessageHeaderByte(b uint8) bool {

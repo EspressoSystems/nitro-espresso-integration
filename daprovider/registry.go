@@ -66,6 +66,11 @@ func (r *ReaderRegistry) SetupDASReader(reader Reader) error {
 	return r.Register(DASMessageHeaderFlag|TreeDASMessageHeaderFlag, reader)
 }
 
+// Temporary workaround to register Celestia reader for replay binary
+func (r *ReaderRegistry) SetupCelestiaReader(reader Reader) error {
+	return r.Register(CelestiaMessageHeaderFlag, reader)
+}
+
 // SetupBlobReader registers a blob reader for the blob header byte
 func (r *ReaderRegistry) SetupBlobReader(reader Reader) error {
 	return r.Register(BlobHashesHeaderFlag, reader)

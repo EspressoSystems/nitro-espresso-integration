@@ -103,6 +103,8 @@ func ParseSequencerMessage(ctx context.Context, batchNum uint64, batchBlockHash 
 			// No reader found for this header byte - check if it's a known type
 			if daprovider.IsDASMessageHeaderByte(payload[0]) {
 				return nil, fmt.Errorf("no DAS reader configured for DAS message (header byte 0x%02x)", payload[0])
+			} else if daprovider.IsCelestiaMessageHeaderByte(payload[0]) {
+				return nil, fmt.Errorf("no Celestia reader configured for Celestia message (header byte 0x%02x)", payload[0])
 			} else if daprovider.IsBlobHashesHeaderByte(payload[0]) {
 				return nil, daprovider.ErrNoBlobReader
 			} else if daprovider.IsDACertificateMessageHeaderByte(payload[0]) {

@@ -487,3 +487,11 @@ pub unsafe extern "C" fn arbitrator_module_root(mach: *mut Machine) -> Bytes32 {
 pub unsafe extern "C" fn arbitrator_gen_proof(mach: *mut Machine, out: *mut RustBytes) {
     (*out).write((*mach).serialize_proof());
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn arbitrator_get_opcode(mach: *mut Machine) -> u16 {
+    match (*mach).get_next_instruction() {
+        Some(instruction) => return instruction.opcode.repr(),
+        None => panic!("Failed to get next opcode for Machine"),
+    }
+}

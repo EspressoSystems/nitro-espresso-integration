@@ -303,8 +303,16 @@ func (v *StatelessBlockValidator) ExecutionSpawners() []validator.ExecutionSpawn
 	return v.execSpawners
 }
 
+func (v *StatelessBlockValidator) InboxReader() InboxReaderInterface {
+	return v.inboxReader
+}
+
 func (v *StatelessBlockValidator) BOLDExecutionSpawners() []validator.BOLDExecutionSpawner {
 	return v.boldExecSpawners
+}
+
+func (v *StatelessBlockValidator) DapReaders() *daprovider.ReaderRegistry {
+	return v.dapReaders
 }
 
 func (v *StatelessBlockValidator) readFullBatch(ctx context.Context, batchNum uint64) (bool, *FullBatchInfo, error) {

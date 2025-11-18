@@ -143,3 +143,10 @@ func (m *BoldMachine) ProveNextStep() []byte {
 	}
 	return m.inner.ProveNextStep()
 }
+
+func (m *BoldMachine) GetNextOpcode() uint16 {
+	if !m.hasStepped {
+		return m.zeroMachine.GetNextOpcode()
+	}
+	return m.inner.GetNextOpcode()
+}

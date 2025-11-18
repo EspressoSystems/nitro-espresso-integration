@@ -503,12 +503,6 @@ func mainImpl() int {
 		return 1
 	}
 
-	if l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee != nodeConfig.Node.DataAvailability.Enable {
-		pflag.Usage()
-		log.Error(fmt.Sprintf("data availability service usage for this chain is set to %v but --node.data-availability.enable is set to %v", l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee, nodeConfig.Node.DataAvailability.Enable))
-		return 1
-	}
-
 	var valNode *valnode.ValidationNode
 	if sameProcessValidationNodeEnabled {
 		valNode, err = valnode.CreateValidationNode(
@@ -587,9 +581,9 @@ func mainImpl() int {
 			return 1
 		}
 	}
-	// If batchPoster is enabled, validate MaxSize to be at least 10kB below the sequencer inbox’s maxDataSize if the data availability service is not enabled.
+	// If batchPoster is enabled, validate MaxSize to be at least 10kB below the sequencer inbox’s maxDataSize if the data availability service and celestia DA are not enabled.
 	// The 10kB gap is because its possible for the batch poster to exceed its MaxSize limit and produce batches of slightly larger size.
-	if nodeConfig.Node.BatchPoster.Enable && !nodeConfig.Node.DataAvailability.Enable {
+	if nodeConfig.Node.BatchPoster.Enable && (!nodeConfig.Node.DataAvailability.Enable && !nodeConfig.Node.DAProvider.Enable) {
 		if nodeConfig.Node.BatchPoster.MaxSize > seqInboxMaxDataSize-10000 {
 			log.Error("batchPoster's MaxSize is too large")
 			return 1
