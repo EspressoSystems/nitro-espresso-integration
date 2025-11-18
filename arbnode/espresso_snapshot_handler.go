@@ -79,7 +79,8 @@ func (s *EspressoSnapshotHandler) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to add auth tags to the database: %w", err)
 	}
-	err = s.db.InitAncientAuthTags()
+	// #nosec G115 -- i is guaranteed non-negative
+	err = s.db.InitAncientAuthTags(uint64(s.batchSize))
 	if err != nil {
 		return fmt.Errorf("failed to add ancient auth tags: %w", err)
 	}
