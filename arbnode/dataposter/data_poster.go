@@ -96,7 +96,8 @@ type DataPoster struct {
 	queue      QueueStorage
 	errorCount map[uint64]int // number of consecutive intermittent errors rbf-ing or sending, per nonce
 
-	maxFeeCapExpression *govaluate.EvaluableExpression
+	maxFeeCapExpression      *govaluate.EvaluableExpression
+	isDecentralizedTimeboost bool
 }
 
 // signerFn is a signer function callback when a contract requires a method to
@@ -105,15 +106,16 @@ type DataPoster struct {
 type signerFn func(context.Context, common.Address, *types.Transaction) (*types.Transaction, error)
 
 type DataPosterOpts struct {
-	Database          ethdb.Database
-	HeaderReader      *headerreader.HeaderReader
-	Auth              *bind.TransactOpts
-	RedisClient       redis.UniversalClient
-	Config            ConfigFetcher
-	MetadataRetriever func(ctx context.Context, blockNum *big.Int) ([]byte, error)
-	ExtraBacklog      func() uint64
-	RedisKey          string // Redis storage key
-	ParentChainID     *big.Int
+	Database                 ethdb.Database
+	HeaderReader             *headerreader.HeaderReader
+	Auth                     *bind.TransactOpts
+	RedisClient              redis.UniversalClient
+	Config                   ConfigFetcher
+	MetadataRetriever        func(ctx context.Context, blockNum *big.Int) ([]byte, error)
+	ExtraBacklog             func() uint64
+	RedisKey                 string // Redis storage key
+	ParentChainID            *big.Int
+	IsDecentralizedTimeboost bool
 }
 
 func NewDataPoster(ctx context.Context, opts *DataPosterOpts) (*DataPoster, error) {
@@ -161,15 +163,16 @@ func NewDataPoster(ctx context.Context, opts *DataPosterOpts) (*DataPoster, erro
 		signer: func(_ context.Context, addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
 			return opts.Auth.Signer(addr, tx)
 		},
-		config:              opts.Config,
-		usingNoOpStorage:    useNoOpStorage,
-		metadataRetriever:   opts.MetadataRetriever,
-		queue:               queue,
-		errorCount:          make(map[uint64]int),
-		maxFeeCapExpression: expression,
-		extraBacklog:        opts.ExtraBacklog,
-		parentChainID:       opts.ParentChainID,
-		parentChain:         &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.HeaderReader},
+		config:                   opts.Config,
+		usingNoOpStorage:         useNoOpStorage,
+		metadataRetriever:        opts.MetadataRetriever,
+		queue:                    queue,
+		errorCount:               make(map[uint64]int),
+		maxFeeCapExpression:      expression,
+		extraBacklog:             opts.ExtraBacklog,
+		parentChainID:            opts.ParentChainID,
+		parentChain:              &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.HeaderReader},
+		isDecentralizedTimeboost: opts.IsDecentralizedTimeboost,
 	}
 	var overflow bool
 	dp.parentChainID256, overflow = uint256.FromBig(opts.ParentChainID)
@@ -450,8 +453,7 @@ func (p *DataPoster) getNextNonceAndMaybeMeta(ctx context.Context, thisWeight ui
 		if err := p.canPostWithNonce(ctx, nextNonce, thisWeight); err != nil {
 			return 0, nil, false, 0, err
 		}
-		// TODO: what the fuck value := len(lastQueueItem.Meta) > 0
-		return nextNonce, lastQueueItem.Meta, false, lastQueueItem.CumulativeWeight(), nil
+		return nextNonce, lastQueueItem.Meta, len(lastQueueItem.Meta) > 0, lastQueueItem.CumulativeWeight(), nil
 	}
 
 	if err := p.updateNonce(ctx); err != nil {
@@ -481,7 +483,8 @@ func (p *DataPoster) GetNextNonceAndMeta(ctx context.Context) (uint64, []byte, e
 	if err != nil {
 		return 0, nil, err
 	}
-	if !hasMeta {
+	// For timeboost, always fetch the metadata
+	if !hasMeta || p.isDecentralizedTimeboost {
 		meta, err = p.metadataRetriever(ctx, p.lastBlock)
 	}
 	return nonce, meta, err

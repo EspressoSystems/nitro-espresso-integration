@@ -544,15 +544,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 	b.dataPoster, err = dataposter.NewDataPoster(ctx,
 		&dataposter.DataPosterOpts{
-			Database:          opts.DataPosterDB,
-			HeaderReader:      opts.L1Reader,
-			Auth:              opts.TransactOpts,
-			RedisClient:       redisClient,
-			Config:            dataPosterConfigFetcher,
-			MetadataRetriever: b.getBatchPosterPosition,
-			ExtraBacklog:      b.GetBacklogEstimate,
-			RedisKey:          "data-poster.queue",
-			ParentChainID:     opts.ParentChainID,
+			Database:                 opts.DataPosterDB,
+			HeaderReader:             opts.L1Reader,
+			Auth:                     opts.TransactOpts,
+			RedisClient:              redisClient,
+			Config:                   dataPosterConfigFetcher,
+			MetadataRetriever:        b.getBatchPosterPosition,
+			ExtraBacklog:             b.GetBacklogEstimate,
+			RedisKey:                 "data-poster.queue",
+			ParentChainID:            opts.ParentChainID,
+			IsDecentralizedTimeboost: opts.Config().IsDecentralizedTimeboost,
 		})
 	if err != nil {
 		return nil, err
@@ -1200,15 +1201,11 @@ func (b *BatchPoster) getBatchPosterPosition(ctx context.Context, blockNum *big.
 			return nil, fmt.Errorf("error getting latest batch metadata: %w", err)
 		}
 	}
-	hotshotHeight := uint64(0)
-	if b.config().IsDecentralizedTimeboost && b.batchVerifier.LatestVerified != nil && b.batchVerifier.LatestVerified.MessageCount == prevBatchMeta.MessageCount {
-		hotshotHeight = b.batchVerifier.LatestVerified.HotshotHeight
-	}
+
 	return rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        prevBatchMeta.MessageCount,
 		DelayedMessageCount: prevBatchMeta.DelayedMessageCount,
 		NextSeqNum:          inboxBatchCount,
-		HotShotBlockNumber:  hotshotHeight,
 	})
 }
 
@@ -2001,8 +1998,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
 			} else if b.batchVerifier != nil && b.batchVerifier.LatestVerified != nil {
+				// TODO: This should be removed and we should be signing the hotshot block height
 				log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
-				b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.MessageCount))
+				b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
