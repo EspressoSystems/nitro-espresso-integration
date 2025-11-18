@@ -668,7 +668,10 @@ func (d *AuthDB) InitAuthTagsDatabase(batchSize int) error {
 
 // InitAncientAuthTags initializes auth tags for all ancients in the database
 // when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
-func (d *AuthDB) InitAncientAuthTags() error {
+func (d *AuthDB) InitAncientAuthTags(batchSize uint64) error {
+	if batchSize == 0 {
+		return fmt.Errorf("batchSize must be greater than 0")
+	}
 	firstBlock, err := d.Database.Tail()
 	if err != nil {
 		return err
@@ -683,41 +686,46 @@ func (d *AuthDB) InitAncientAuthTags() error {
 	}
 
 	log.Info("Starting adding ancient auth tags")
-	hashData, blockBodyData, receiptData, headerData, err := d.readChainAncients(firstBlock, numAncients)
-	if err != nil {
-		return err
-	}
 
-	// #nosec G115 -- i is guaranteed non-negative
-	n := int(numAncients)
-	if len(hashData) != n || len(blockBodyData) != n || len(receiptData) != n || len(headerData) != n {
-		return fmt.Errorf("ancients length mismatch: want=%d got hash=%d body=%d receipt=%d header=%d",
-			n, len(hashData), len(blockBodyData), len(receiptData), len(headerData))
-	}
+	for offset := uint64(0); offset < numAncients; offset += batchSize {
+		count := batchSize
 
-	_, err = d.tagFreezer.ModifyAncients(func(tagOp ethdb.AncientWriteOp) error {
-		// #nosec G115 -- i is guaranteed non-negative
-		for i := 0; i < n; i++ {
-			num := firstBlock + uint64(i)
-
-			if err := tagOp.AppendRaw(AuthTagHashTable, num, hashData[i]); err != nil {
-				return err
-			}
-			if err := tagOp.AppendRaw(AuthTagHeaderTable, num, headerData[i]); err != nil {
-				return err
-			}
-			if err := tagOp.AppendRaw(AuthTagBodiesTable, num, blockBodyData[i]); err != nil {
-				return err
-			}
-			if err := tagOp.AppendRaw(AuthTagReceiptTable, num, receiptData[i]); err != nil {
-				return err
-			}
+		if offset+batchSize > numAncients {
+			count = numAncients - offset
 		}
-		return nil
-	})
 
-	if err != nil {
-		return err
+		currentBlock := firstBlock + offset
+
+		hashData, blockBodyData, receiptData, headerData, err := d.readChainAncients(currentBlock, count)
+		if err != nil {
+			return err
+		}
+
+		_, err = d.tagFreezer.ModifyAncients(func(tagOp ethdb.AncientWriteOp) error {
+			for i := uint64(0); i < count; i++ {
+				num := currentBlock + uint64(i)
+
+				if err := tagOp.AppendRaw(AuthTagHashTable, num, hashData[i]); err != nil {
+					return err
+				}
+				if err := tagOp.AppendRaw(AuthTagHeaderTable, num, headerData[i]); err != nil {
+					return err
+				}
+				if err := tagOp.AppendRaw(AuthTagBodiesTable, num, blockBodyData[i]); err != nil {
+					return err
+				}
+				if err := tagOp.AppendRaw(AuthTagReceiptTable, num, receiptData[i]); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			return err
+		}
+
+		log.Info("Processed batch", "from", currentBlock, "count", count, "num_ancients", numAncients)
 	}
 
 	log.Info("Successfully added auth tags to ancients",
@@ -727,22 +735,22 @@ func (d *AuthDB) InitAncientAuthTags() error {
 
 func (d *AuthDB) readChainAncients(firstBlock, numAncients uint64) (hashData, bodyData, receiptData, headerData [][]byte, err error) {
 
-	hashData, err = d.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, numAncients, 0)
+	hashData, err = d.Database.AncientRange(rawdb.ChainFreezerHashTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	bodyData, err = d.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, numAncients, 0)
+	bodyData, err = d.Database.AncientRange(rawdb.ChainFreezerBodiesTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	receiptData, err = d.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, numAncients, 0)
+	receiptData, err = d.Database.AncientRange(rawdb.ChainFreezerReceiptTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
-	headerData, err = d.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, numAncients, 0)
+	headerData, err = d.Database.AncientRange(rawdb.ChainFreezerHeaderTable, firstBlock, numAncients, 0)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
