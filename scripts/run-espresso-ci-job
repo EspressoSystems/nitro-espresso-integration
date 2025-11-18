@@ -10,4 +10,5 @@ gotestsum \
     -v \
     -timeout 45m \
     -p 1 \
+    -parallel 1 \
     -run 'TestEspresso'

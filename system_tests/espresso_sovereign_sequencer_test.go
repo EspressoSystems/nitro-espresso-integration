@@ -70,12 +70,19 @@ func createL1AndL2Node(
 
 	}
 
-	cleanup := builder.Build(t)
+	c := builder.Build(t)
 
 	mnemonic := "indoor dish desk flag debris potato excuse depart ticket judge file exit"
 	err := builder.L1Info.GenerateAccountWithMnemonic("CommitmentTask", mnemonic, 5)
 	Require(t, err)
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
+	cleanup := func() {
+		c()
+		waitForPortRelease(8545)
+		waitForPortRelease(8546)
+		waitForPortRelease(8945)
+		waitForPortRelease(arbValidationPort)
+	}
 
 	return builder, cleanup
 }

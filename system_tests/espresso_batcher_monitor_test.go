@@ -49,8 +49,8 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	Require(t, err)
 	log.Info("tx receipt", "receipt", receipt.BlockNumber)
 
-	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
-	time.Sleep(time.Second * 5)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 35)
+	time.Sleep(time.Second * 15)
 
 	events := monitor.GetEvents()
 	if len(events) != 1 {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"net"
 	"net/http"
 	"os/exec"
 	"testing"
@@ -39,6 +40,21 @@ var (
 	arbValidationPort = 54321
 )
 
+// waitForPortRelease waits for a port to be released (max 10 seconds)
+func waitForPortRelease(port int) {
+	maxRetries := 50 // 50 * 200ms = 10 seconds
+	for i := 0; i < maxRetries; i++ {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+		if err != nil {
+			// Port is free
+			return
+		}
+		conn.Close()
+		time.Sleep(200 * time.Millisecond)
+	}
+	log.Warn("Port may still be in use", "port", port)
+}
+
 func runEspresso() func() {
 	shutdown := func() {
 		p := exec.Command("docker", "compose", "down", "--volumes")
@@ -47,6 +63,8 @@ func runEspresso() func() {
 		if err != nil {
 			panic(err)
 		}
+		// Wait for HotShot port to be released
+		waitForPortRelease(41000)
 	}
 
 	shutdown()
@@ -107,6 +125,8 @@ func createValidationNode(ctx context.Context, t *testing.T, jit bool) func() {
 	return func() {
 		node.GetExec().Stop()
 		stack.Close()
+		// Wait for port to be fully released before next test
+		waitForPortRelease(port)
 	}
 
 }
