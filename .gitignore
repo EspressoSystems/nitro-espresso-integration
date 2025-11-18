@@ -26,3 +26,4 @@ system_tests/testdata/*
 arbos/testdata/*
 
 /.pre-commit-config.yaml
+.direnv
