@@ -47,8 +47,6 @@ runs:
       uses: actions/setup-node@v5
       with:
         node-version: "24"
-        cache: yarn
-        cache-dependency-path: "**/yarn.lock"
 
     - name: Setup Go
       uses: actions/setup-go@v6
