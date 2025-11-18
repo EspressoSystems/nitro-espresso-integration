@@ -671,6 +671,9 @@ func (d *AuthDB) InitAuthTagsDatabase(batchSize int) error {
 // InitAncientAuthTags initializes auth tags for all ancients in the database
 // when the node is started in the snapshot mode (which means when its initially provided a snapshot from another TEE code hash/non-tee node)
 func (d *AuthDB) InitAncientAuthTags(batchSize uint64) error {
+	if batchSize == 0 {
+		return fmt.Errorf("batchSize must be greater than 0")
+	}
 	firstBlock, err := d.Database.Tail()
 	if err != nil {
 		return err
@@ -724,7 +727,6 @@ func (d *AuthDB) InitAncientAuthTags(batchSize uint64) error {
 			return err
 		}
 
-		// Data can be garbage collected after each batch
 		log.Info("Processed batch", "from", currentBlock, "count", count, "num_ancients", numAncients)
 	}
 
