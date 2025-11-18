@@ -132,7 +132,6 @@ jobs:
         uses: foundry-rs/foundry-toolchain@v1
         with:
           cache: false
-        with:
           version: nightly
 
       - name: Cache cbrotli
