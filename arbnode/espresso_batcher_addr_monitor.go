@@ -232,8 +232,8 @@ func (b *BatcherAddrMonitor) logsToBatcherAddrEvents(ctx context.Context, logs [
 		}
 		if !bytes.Equal(data[:4], seqInboxABI.Methods["setIsBatchPoster"].ID) {
 			if bytes.Equal(data[:4], []byte{0xbc, 0xa8, 0xc7, 0xb5}) {
-				// SKip this case for now. `0xbca8c7b5` is `executeCall(address,bytes)`
-				return nil, nil
+				// skip this case for now. `0xbca8c7b5` is `executeCall(address,bytes)`
+				continue
 			} else {
 				// Encountering an unknown method, caff node needs to update
 				// Note: if the method id is `0x27f28813`, it is the create rollup method.
