@@ -1999,8 +1999,23 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
 			} else if b.batchVerifier != nil && b.batchVerifier.LatestVerified != nil {
 				// TODO: This should be removed and we should be signing the hotshot block height
-				log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
-				b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
+				found := false
+				if b.batchVerifier.LatestVerified.MessageCount == b.building.startMsgCount {
+					for {
+						msg := b.espressoStreamer.Next(ctx)
+						if msg == nil {
+							break
+						}
+						if msg.Pos == uint64(b.building.startMsgCount-1) {
+							found = true
+							log.Info("found next position in espresso streamer. no need for reset")
+						}
+					}
+				}
+				if !found {
+					log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
+					b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
+				}
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
