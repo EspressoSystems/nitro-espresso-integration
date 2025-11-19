@@ -2006,7 +2006,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 						if msg == nil {
 							break
 						}
-						if msg.Pos == uint64(b.building.startMsgCount-1) {
+						if msg.Pos == uint64(batchPosition.MessageCount-1) {
 							found = true
 							log.Info("found next position in espresso streamer. no need for reset")
 						}
