@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net"
 	"net/http"
@@ -446,13 +447,15 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	}
 
 	// We need to verify we have indeed received the transactions from espresso
-	hotshotHeight := streamer.VerifyConsecutivePositions(uint64(signedData.NewMessageCount - 1))
+	hotshotHeight := streamer.VerifyConsecutivePositions(uint64(signedData.PreviousMessageCount), uint64(signedData.NewMessageCount-1))
 	if hotshotHeight == nil {
 		return fmt.Errorf("failed to match new message data vs whats in streamer. wanted: %d", signedData.NewMessageCount)
 	}
-	v.LatestVerified = &VerifiedInfo{
-		MessageCount:  signedData.NewMessageCount,
-		HotshotHeight: *hotshotHeight,
+	if *hotshotHeight != uint64(math.MaxUint64) {
+		v.LatestVerified = &VerifiedInfo{
+			MessageCount:  signedData.NewMessageCount,
+			HotshotHeight: *hotshotHeight,
+		}
 	}
 
 	var calldata []byte

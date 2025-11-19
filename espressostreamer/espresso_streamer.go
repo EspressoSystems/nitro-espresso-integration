@@ -177,23 +177,22 @@ func (s *EspressoStreamer) Peek(ctx context.Context) *MessageWithMetadataAndPos 
 // This is used when verifying correctness of batch sent from another batch poster for decentralized timeboost
 // We need to be sure the batch isnt lying about the espresso confirmations so we verify against what we have in our internal state
 // Return the minimum hotshot position after the target for when we call `Reset()` on the streamer to ensure no data will be lost
-func (s *EspressoStreamer) VerifyConsecutivePositions(target uint64) *uint64 {
+func (s *EspressoStreamer) VerifyConsecutivePositions(start uint64, target uint64) *uint64 {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 	// if we are already greater than the target no need to do anything
+	height := uint64(math.MaxUint64)
 	if s.currentMessagePos >= target {
-		hotshotHeight := s.GetCurrentEarliestHotShotBlockNumber()
-		return &hotshotHeight
+		return &height
 	}
 
-	expectedCount := target - s.currentMessagePos + 1
+	expectedCount := target - start + 1
 	result := make(map[uint64]*MessageWithMetadataAndPos)
 
-	height := uint64(math.MaxUint64)
 	foundAll := false
 	// Go from current message position, and to the target, verify all positions are found
 	for _, m := range s.messageWithMetadataAndPos {
-		if m.Pos >= s.currentMessagePos && m.Pos <= target {
+		if m.Pos >= start && m.Pos <= target {
 			result[m.Pos] = m
 			if uint64(len(result)) == expectedCount {
 				foundAll = true

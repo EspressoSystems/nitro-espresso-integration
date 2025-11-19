@@ -588,7 +588,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
 		if opts.Config().IsDecentralizedTimeboost {
 			// TODO: This should read the address from sequencer inbox contract
-			decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress), opts.L1Reader.Client())
+			decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(
+				common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress),
+				opts.L1Reader.Client(),
+			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
 			}
@@ -668,9 +671,25 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStartL1,
 			)
 
+			hotshotBlock := opts.Config().HotShotBlock
+			if opts.Config().IsDecentralizedTimeboost {
+				height, err := hotShotClient.FetchLatestBlockHeight(ctx)
+				if err != nil {
+					log.Warn("timeboost error getting height defaulting to config height", "height", hotshotBlock, "err", err)
+				} else {
+					lookback := uint64(100)
+					if height >= lookback {
+						hotshotBlock = height - lookback
+						log.Warn("batch poster starting from hotshot block", "height", hotshotBlock)
+					} else {
+						hotshotBlock = 0
+					}
+				}
+			}
+
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
 				opts.ChainID,
-				opts.Config().HotShotBlock,
+				hotshotBlock,
 				nil,
 				hotShotClient,
 				false,
@@ -1997,25 +2016,40 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		if b.espressoStreamer != nil {
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
-			} else if b.batchVerifier != nil && b.batchVerifier.LatestVerified != nil {
-				// TODO: This should be removed and we should be signing the hotshot block height
-				found := false
-				if b.batchVerifier.LatestVerified.MessageCount == batchPosition.MessageCount {
-					for {
-						msg := b.espressoStreamer.Next(ctx)
-						if msg == nil {
-							break
-						}
-						if msg.Pos == uint64(batchPosition.MessageCount-1) {
-							log.Info("found next position in espresso streamer. no need for reset")
-							found = true
-							break
+			} else if b.config().IsDecentralizedTimeboost {
+				// If we havent verified a batch, this might mean we were restarted or are new to the protocol.
+				// Wait for the espresso streamer to catch up and verify a batch before we try constructing our own
+				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
+				// Also ensure this isnt the chains first batch
+				if b.batchVerifier.LatestVerified == nil {
+					// TODO: This only works for newly deployed chains
+					if batchPosition.MessageCount > 1 {
+						log.Warn("batch poster is yet to verify a batch. Waiting for batch verification before continuing", "messageCount", batchPosition.MessageCount)
+						return false, nil
+					}
+				} else {
+					// Look in the espresso streamer first to see if we need to reset or not
+					// For timeboost to help speed things up, resetting may not be necessary
+					// If a node has verified the previous batch go through the espresso streamer to the start message
+					// This will also increase streamer current position, in the case that they were non-leader batch posters they should do so now
+					found := false
+					if b.batchVerifier.LatestVerified.MessageCount == batchPosition.MessageCount {
+						for {
+							msg := b.espressoStreamer.Next(ctx)
+							if msg == nil {
+								break
+							}
+							if msg.Pos == uint64(batchPosition.MessageCount-1) {
+								log.Info("found next position in espresso streamer. no need for reset", "messageCount", batchPosition.MessageCount)
+								found = true
+								break
+							}
 						}
 					}
-				}
-				if !found {
-					log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
-					b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
+					if !found {
+						log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
+						b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
+					}
 				}
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
