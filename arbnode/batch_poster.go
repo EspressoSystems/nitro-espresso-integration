@@ -2000,7 +2000,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			} else if b.batchVerifier != nil && b.batchVerifier.LatestVerified != nil {
 				// TODO: This should be removed and we should be signing the hotshot block height
 				found := false
-				if b.batchVerifier.LatestVerified.MessageCount == b.building.startMsgCount {
+				if b.batchVerifier.LatestVerified.MessageCount == batchPosition.MessageCount {
 					for {
 						msg := b.espressoStreamer.Next(ctx)
 						if msg == nil {
