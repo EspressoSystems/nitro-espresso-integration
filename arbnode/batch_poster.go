@@ -2789,6 +2789,8 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 		}
 
 		if !msg.Message.Equals(muxBackend.allMsgs[index].Message) {
+			log.Warn("message mismatch between what leader sent and what is in batch", "received l2 msg", msg.Message.L2msg, "l2 msg in db", muxBackend.allMsgs[index].Message.L2msg)
+			log.Warn("message mismatch between what leader sent and what is in batch", "received header", msg.Message.Header, "header in db", muxBackend.allMsgs[index].Message.Header)
 			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 		}
 	}

@@ -311,7 +311,8 @@ outer:
 				s.state = Running
 				log.Info("enqueuing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
 				s.timeboostBridge.EnqueueBlocksToTimeboost(protoBlocks)
-				return true
+				madeBlock = true
+				return madeBlock
 			default:
 				log.Warn("unexpected tx type, discarding", "type", tx.txType)
 				s.txQueue.dequeue()
@@ -389,7 +390,8 @@ outer:
 	if len(queueItems) == 0 {
 		// If we are in waiting state, we want to retry immediately
 		if s.state == WaitingForBlockProducion {
-			return true
+			madeBlock = true
+			return madeBlock
 		}
 		return madeBlock
 	}
