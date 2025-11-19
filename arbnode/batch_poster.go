@@ -2007,8 +2007,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 							break
 						}
 						if msg.Pos == uint64(batchPosition.MessageCount-1) {
-							found = true
 							log.Info("found next position in espresso streamer. no need for reset")
+							found = true
+							break
 						}
 					}
 				}
