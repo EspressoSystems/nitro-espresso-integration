@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/offchainlabs/nitro/arbnode/mel"
-	"github.com/offchainlabs/nitro/espresso/test-utils"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 )
 
@@ -141,13 +140,13 @@ func Test_getSequencerBatchData(t *testing.T) {
 	})
 	t.Run("arbnode.BatchDataTxInput", func(t *testing.T) {
 		msgData := []byte("foobar")
-		addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin"]
+		addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin1"]
 		seqNumber := big.NewInt(1)
 		afterDelayedRead := big.NewInt(1)
 		gasRefunder := common.Address{}
 		prevMsgCount := big.NewInt(1)
 		newMsgCount := big.NewInt(1)
-		originTxData, err := addSequencerL2BatchFromOriginCallABI.Inputs.Pack(seqNumber, msgData, afterDelayedRead, gasRefunder, prevMsgCount, newMsgCount, testutils.CreateDummyEspressoMetadata(t))
+		originTxData, err := addSequencerL2BatchFromOriginCallABI.Inputs.Pack(seqNumber, msgData, afterDelayedRead, gasRefunder, prevMsgCount, newMsgCount)
 		require.NoError(t, err)
 		fullTxData := make([]byte, 0)
 		fullTxData = append(fullTxData, addSequencerL2BatchFromOriginCallABI.ID...)
