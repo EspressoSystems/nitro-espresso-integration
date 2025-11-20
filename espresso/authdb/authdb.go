@@ -13,8 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-
-	"github.com/offchainlabs/nitro/util/dbutil"
 )
 
 var (
@@ -422,14 +420,14 @@ func (d *AuthDB) TruncateTail(n uint64) (uint64, error) {
 }
 
 func (d *AuthDB) Sync() error {
-	err := d.Database.Sync()
+	err := d.Database.SyncAncient()
 	if err != nil {
 		return err
 	}
 
 	// Sync tag freezer
 	if d.tagFreezer != nil {
-		if tagErr := d.tagFreezer.Sync(); tagErr != nil {
+		if tagErr := d.tagFreezer.SyncAncient(); tagErr != nil {
 			return fmt.Errorf("failed to sync tag freezer: %w", tagErr)
 		}
 	}
@@ -503,7 +501,7 @@ func (d *AuthDB) Put(key []byte, value []byte) error {
 func (d *AuthDB) Has(key []byte) (bool, error) {
 	_, err := d.Get(key)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to Get during Has: %w", err)

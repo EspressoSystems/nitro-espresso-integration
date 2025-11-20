@@ -21,6 +21,7 @@ func newAuthTagFreezerWithTables(ancientDir string, readonly bool, tables map[st
 	if ancientDir == "" {
 		return nil, nil
 	}
+	tableWithConfigs := rawdb.NewEspressoTableConfig(tables)
 
 	tagFreezerDir := filepath.Join(ancientDir, AuthTagFreezerName)
 	tagFreezer, err := rawdb.NewFreezer(
@@ -28,7 +29,7 @@ func newAuthTagFreezerWithTables(ancientDir string, readonly bool, tables map[st
 		"authdb/tags",
 		readonly,
 		tagFreezerTableSize,
-		tables,
+		tableWithConfigs,
 	)
 	if err != nil {
 		return nil, err

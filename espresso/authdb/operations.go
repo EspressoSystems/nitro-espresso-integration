@@ -4,10 +4,9 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
-
-	"github.com/offchainlabs/nitro/util/dbutil"
 )
 
 // enforceAuthenticatedDB ensures that the db parameter is either *AuthDB or *AuthBatch
@@ -45,7 +44,7 @@ func ReadNextHotshotBlockNum(db ethdb.KeyValueReader) (uint64, error) {
 	}
 	numBytes, err := db.Get(nextHotshotBlockNumKey)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("failed to get nextHotshotBlockNum: %w", err)
@@ -68,7 +67,7 @@ func ReadFromBlock(db ethdb.KeyValueReader) (uint64, error) {
 	}
 	numBytes, err := db.Get(fromBlockKey)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("failed to get fromBlock: %w", err)
@@ -98,7 +97,7 @@ func ReadInitAddresses(db ethdb.KeyValueReader) ([]common.Address, error) {
 	}
 	addrsBytes, err := db.Get(initAddressesKey)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			// on batcher monitor first run, there may be no init addrs, thus not found is fine
 			return nil, nil // nolint:nilerr
 		}
@@ -130,7 +129,7 @@ func ReadEvents(db ethdb.KeyValueReader) ([]byte, error) {
 	}
 	eventsBytes, err := db.Get(eventsKey)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			// Returning (nil, nil) is intentional: absence of events is not an error, but indicates no events have been stored yet.
 			return nil, nil // nolint:nilerr
 		}
@@ -154,7 +153,7 @@ func ReadLastProcessedHeight(db ethdb.KeyValueReader) (uint64, error) {
 	}
 	heightBytes, err := db.Get(lastProcessedHeightKey)
 	if err != nil {
-		if dbutil.IsErrNotFound(err) {
+		if rawdb.IsDbErrNotFound(err) {
 			return 0, nil
 		}
 		return 0, fmt.Errorf("failed to get last processed height: %w", err)
