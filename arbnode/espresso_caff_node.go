@@ -132,7 +132,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	AuthDBBatchSize:               10000,
 	StateChecker:                  DefaultStateCheckerConfig,
 	ForceInclusionChecker:         DefaultEspressoForceInclusionCheckerConfig,
-	AddressMonitorStep:            100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -162,7 +161,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
-	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
+	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig, dataposter.DataPosterUsageCaffNode)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
 	EspressoStateCheckerConfigAddOptions(prefix+".state-checker", f)
