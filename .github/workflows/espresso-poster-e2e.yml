@@ -1,4 +1,4 @@
-name: Espresso E2E test CI
+name: Espresso E2E Batch Poster test CI
 
 on:
   workflow_dispatch:
@@ -153,4 +153,4 @@ jobs:
 
       - name: Run Espresso tests
         run: |
-          scripts/run-espresso-ci-job
+          bash scripts/run-espresso-timeboost-ci-tests

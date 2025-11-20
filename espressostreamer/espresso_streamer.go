@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -26,11 +26,8 @@ import (
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/util"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
-
-const NextHotshotBlockKey = "nextHotshotBlock"
 
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
@@ -52,11 +49,10 @@ type EspressoStreamerInterface interface {
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
-	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
-	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
+	StopAndWait()
 }
 
 type MessageWithMetadataAndPos struct {
@@ -82,6 +78,8 @@ type EspressoStreamer struct {
 	batcherAddressesFetcher  func(l1Height uint64) []common.Address
 	isDecentralizedTimeboost bool
 	committeeFetcher         func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error)
+
+	dangerousMinimumHotshotBlockNum uint64
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -96,6 +94,7 @@ func NewEspressoStreamer(
 	retryTime time.Duration,
 	isDecentralizedTimeboost bool,
 	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+	dangerousMinimumHotshotBlockNum uint64,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -104,16 +103,17 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:           espressoClient,
-		nextHotshotBlockNum:      nextHotshotBlockNum,
-		namespace:                namespace,
-		espressoSGXVerifier:      espressoSGXVerifier,
-		PerfRecorder:             PerfRecorder,
-		batcherAddressesFetcher:  batcherAddressesFetcher,
-		retryTime:                retryTime,
-		currentMessagePos:        1,
-		isDecentralizedTimeboost: isDecentralizedTimeboost,
-		committeeFetcher:         committeeFetcher,
+		espressoClient:                  espressoClient,
+		nextHotshotBlockNum:             nextHotshotBlockNum,
+		namespace:                       namespace,
+		espressoSGXVerifier:             espressoSGXVerifier,
+		PerfRecorder:                    PerfRecorder,
+		batcherAddressesFetcher:         batcherAddressesFetcher,
+		retryTime:                       retryTime,
+		currentMessagePos:               1,
+		isDecentralizedTimeboost:        isDecentralizedTimeboost,
+		committeeFetcher:                committeeFetcher,
+		dangerousMinimumHotshotBlockNum: dangerousMinimumHotshotBlockNum,
 	}
 }
 
@@ -134,8 +134,13 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock 
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 
+	hotshotBlockNum := currentHostshotBlock
+	if currentHostshotBlock < s.dangerousMinimumHotshotBlockNum {
+		hotshotBlockNum = s.dangerousMinimumHotshotBlockNum
+	}
+
 	s.currentMessagePos = currentMessagePos
-	s.nextHotshotBlockNum = currentHostshotBlock
+	s.nextHotshotBlockNum = hotshotBlockNum
 	s.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{}
 }
 
@@ -249,19 +254,15 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 		return fmt.Errorf("failed to convert signature to public key: %w", err)
 	}
 	addr := crypto.PubkeyToAddress(*publicKey)
-	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
+		log.Warn("no valid addresses found", "validAddresses", validAddresses)
 		// No valid addresses right now. Need to catch up
 		return ErrRetryParsingHotShotPayload
 	}
-	for _, allowed := range validAddresses {
-		if allowed == addr {
-			found = true
-			break
-		}
-	}
-	if !found {
+	// if the list of valid addresses doesn't contain the address from the signature, this signature is invalid,
+	// and we must return an error.
+	if !slices.Contains(validAddresses, addr) {
 		log.Warn("batch poster address", "addr", addr, "expected one of", validAddresses)
 		return fmt.Errorf("batch poster address does not match")
 	}
@@ -279,6 +280,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
+	// as of 02/10/2025 there has never been an sgx TEE Caff Node that has signed a transaction meant to be checked by the verify function.
+	// Therefore we can hard code espressotee.BatchPoster as we will only ever need to check batch poster pcr0 values
+	// to verify the signature on messages.
 	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature)
 	if err == nil {
 		return nil
@@ -348,36 +352,6 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		log.Info("Added message to queue", "message", indices[i])
 	}
 	return result, nil
-}
-
-func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
-	var nextHotshotBlock uint64
-	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
-	}
-	if nextHotshotBytes != nil {
-		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
-		if err != nil {
-			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
-		}
-	}
-
-	return nextHotshotBlock, nil
-}
-
-func (s *EspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
-	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next hotshot block: %w", err)
-	}
-
-	err = db.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next hotshot block: %w", err)
-	}
-
-	return nil
 }
 
 func (s *EspressoStreamer) getEspressoBlockTimestamp(ctx context.Context, blockHeight uint64) (time.Time, error) {
@@ -503,4 +477,8 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return 0
 	})
 	return err
+}
+
+func (s *EspressoStreamer) StopAndWait() {
+	s.StopWaiter.StopAndWait()
 }

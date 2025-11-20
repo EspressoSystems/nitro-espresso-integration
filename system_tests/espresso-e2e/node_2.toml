@@ -1,0 +1,40 @@
+committee = 0
+stamp = "/tmp/timeboost.2.stamp"
+
+[net.public]
+address = "node2:8020"
+http-api = "node2:8024"
+batch-poster-api = "http://localhost:9047"
+
+[net.internal]
+address = "node2:8023"
+nitro = "host.docker.internal:55002"
+
+[keys.signing]
+secret = "2yWTaC6MWvNva97t81cd9QX5qph68NnB1wRVwAChtuGr"
+public = "264jMLf85hfufg4ck97Hw2jiL6i1PHNoGUqxUqfhtssaE"
+
+[keys.dh]
+secret = "Fo2nYV4gE9VfoVW9bSySAJ1ZuKT461x6ovZnr3EecCZg"
+public = "63eYNKoW2PsWZFhHHj3eZwHTdPE7gEjEDM7gGeDf9Uaj"
+
+[keys.dkg]
+secret = "77r7T3En7NNQvRA81G5hLhJD3VpnigJdkPonX3oAwWkX"
+public = "62bnAAbU58zZUcGqy9JKGZRZHkm3g7JZB2DtJGQyChXQBPGvXSS6fF21yoxiVuD1eb"
+
+[chain]
+namespace = 412346
+
+[chain.parent]
+id = 1337
+rpc-url = "http://host.docker.internal:8545/"
+ibox-contract = "0x76C580B9441C62b27F08DE546640c8607D6108e0"
+block-tag = "latest"
+key-manager-contract = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
+ws-url = "ws://host.docker.internal:8546/"
+
+[espresso]
+base-url = "http://espresso-dev-node:41000/v1/"
+builder-base-url = "http://espresso-dev-node:41000/v1/"
+websockets-base-url = "ws://espresso-dev-node:41000/v1/"
+max-transaction-size = 1048576

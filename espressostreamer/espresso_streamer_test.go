@@ -22,7 +22,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 )
 
 func TestEspressoStreamer(t *testing.T) {
@@ -31,7 +31,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil)
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil, 0)
 
 		streamer.Reset(1, 3)
 
@@ -63,7 +63,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil)
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil, 0)
 
 		streamer.Reset(1, 3)
 
@@ -116,9 +116,9 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
 		// Simulate the call to the tee verifier returning a byte array. To the streamer, this indicates the attestation quote is valid.
-		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
+		mockEspressoTEEVerifierClient.On("Verify", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
 		// create a new streamer object
-		streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil)
+		streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil, 0)
 		streamer.Reset(735805, 1)
 		// Get the data for this test
 		testBlocks := GetTestBlocks()
@@ -149,7 +149,7 @@ func TestEspressoStreamer(t *testing.T) {
 
 		mockEspressoClient.On("FetchTransactionsInBlock", ctx, uint64(6), namespace).Return(espressoClient.TransactionsInBlock{}, errors.New("test error"))
 
-		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil)
+		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil, 0)
 
 		testParseFn := func(tx types.Bytes, l1 uint64) ([]*MessageWithMetadataAndPos, error) {
 			return nil, nil
@@ -191,7 +191,7 @@ func TestEspressoStreamer(t *testing.T) {
 			},
 		}, nil)
 
-		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil)
+		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, false, nil, 0)
 
 		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
 
@@ -254,7 +254,7 @@ func TestEspressoStreamer(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(messages), "Expected to process two messages")
-		if len(messages) == 2 {
+		if len(messages) == 2 && len(tx1) > 0 && len(tx3) > 0 {
 			assert.Equal(t, uint64(tx1[0]), messages[0].Pos)
 			assert.Equal(t, uint64(tx3[0]), messages[1].Pos)
 		}
@@ -277,7 +277,7 @@ func ExpectErr(t *testing.T, err error, expectedError error) {
 func TestEspressoEmptyTransaction(t *testing.T) {
 	mockEspressoClient := new(mockEspressoClient)
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-	streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, time.Millisecond, false, nil)
+	streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, time.Millisecond, false, nil, 0)
 	// This determines the contents of the message. For this test the contents of the message needs to be empty (not 0's) to properly test the behavior
 	msgFetcher := func(arbutil.MessageIndex) ([]byte, error) {
 		return []byte{}, nil
@@ -303,8 +303,8 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
-	return espressogen.EnclaveReport{}, nil
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
+	return legacy_espressogen.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {
