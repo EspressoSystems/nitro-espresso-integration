@@ -48,8 +48,13 @@
 	branch = integration
 [submodule "bold"]
 	path = bold
-	url = https://github.com/EspressoSystems/bold.git
-	branch = release-v3.5.6-2e27869
+	url = git@github.com:EspressoSystems/bold.git
+	branch = 3.6.7-commit
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
+	branch = release-tee-caff-node
+[submodule "espresso-tee-contracts-legacy"]
+	path = espresso-tee-contracts-legacy
+	url = https://github.com/EspressoSystems/espresso-tee-contracts.git
+

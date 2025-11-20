@@ -55,6 +55,7 @@ libs = []
 cache_path  = 'forge-cache/gas-dimensions-yul'
 remappings = []
 auto_detect_remappings = false
+lint.lint_on_build = false
 
 [fmt]
 line_length = 100

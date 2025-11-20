@@ -52,7 +52,6 @@ func createL1AndL2NodeForTimeboost(
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = batchPoster
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl, hotShotUrl}
-	builder.nodeConfig.BatchPoster.EspressoRegisterSignerConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
 	builder.nodeConfig.BatchPoster.MaxSize = 10000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 30 * time.Second

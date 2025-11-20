@@ -81,19 +81,25 @@ func (w *execClientWrapper) SetFinalityData(
 }
 
 func (w *execClientWrapper) DigestMessage(num arbutil.MessageIndex, msg *arbostypes.MessageWithMetadata, msgForPrefetch *arbostypes.MessageWithMetadata) containers.PromiseInterface[*execution.MessageResult] {
-	return containers.NewReadyPromise(w.ExecutionEngine.DigestMessage(num, msg, msgForPrefetch))
+	// TODO: golangci-lint can't implicitly work
+	// with unpacking in generics, so here is quick fix
+	res, err := w.ExecutionEngine.DigestMessage(num, msg, msgForPrefetch)
+	return containers.NewReadyPromise(res, err)
 }
 
 func (w *execClientWrapper) Reorg(count arbutil.MessageIndex, newMessages []arbostypes.MessageWithMetadataAndBlockInfo, oldMessages []*arbostypes.MessageWithMetadata) containers.PromiseInterface[[]*execution.MessageResult] {
-	return containers.NewReadyPromise(w.ExecutionEngine.Reorg(count, newMessages, oldMessages))
+	res, err := w.ExecutionEngine.Reorg(count, newMessages, oldMessages)
+	return containers.NewReadyPromise(res, err)
 }
 
 func (w *execClientWrapper) HeadMessageIndex() containers.PromiseInterface[arbutil.MessageIndex] {
-	return containers.NewReadyPromise(w.ExecutionEngine.HeadMessageIndex())
+	res, err := w.ExecutionEngine.HeadMessageIndex()
+	return containers.NewReadyPromise(res, err)
 }
 
 func (w *execClientWrapper) ResultAtMessageIndex(pos arbutil.MessageIndex) containers.PromiseInterface[*execution.MessageResult] {
-	return containers.NewReadyPromise(w.ExecutionEngine.ResultAtMessageIndex(pos))
+	res, err := w.ExecutionEngine.ResultAtMessageIndex(pos)
+	return containers.NewReadyPromise(res, err)
 }
 
 func (w *execClientWrapper) Start(ctx context.Context) error {
@@ -105,7 +111,8 @@ func (w *execClientWrapper) MessageIndexToBlockNumber(messageNum arbutil.Message
 }
 
 func (w *execClientWrapper) BlockNumberToMessageIndex(blockNum uint64) containers.PromiseInterface[arbutil.MessageIndex] {
-	return containers.NewReadyPromise(w.ExecutionEngine.BlockNumberToMessageIndex(blockNum))
+	res, err := w.ExecutionEngine.BlockNumberToMessageIndex(blockNum)
+	return containers.NewReadyPromise(res, err)
 }
 
 func (w *execClientWrapper) StopAndWait() {
