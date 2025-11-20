@@ -54,7 +54,8 @@ func (t *testAuthDB) HasAncient(kind string, number uint64) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	return t.AuthDB.HasAncient(mapped, number)
+	_, err := t.AuthDB.Ancient(mapped, number)
+	return err == nil, nil
 }
 
 func (t *testAuthDB) Ancient(kind string, number uint64) ([]byte, error) {
@@ -103,7 +104,8 @@ func (op *testAncientReaderOp) HasAncient(kind string, number uint64) (bool, err
 	if !ok {
 		return false, nil
 	}
-	return op.AncientReaderOp.HasAncient(mapped, number)
+	_, err := op.AncientReaderOp.Ancient(mapped, number)
+	return err == nil, nil
 }
 
 func (op *testAncientReaderOp) Ancient(kind string, number uint64) ([]byte, error) {
@@ -164,10 +166,9 @@ func (db *testDatabase) Close() error {
 	return db.KeyValueStore.Close()
 }
 
-func (db *testDatabase) Compact(start []byte, limit []byte) error    { return nil }
-func (db *testDatabase) Stat() (string, error)                       { return "", nil }
-func (db *testDatabase) WasmDataBase() (ethdb.KeyValueStore, uint32) { return db.KeyValueStore, 0 }
-func (db *testDatabase) WasmTargets() []ethdb.WasmTarget             { return nil }
+func (db *testDatabase) Compact(start []byte, limit []byte) error { return nil }
+func (db *testDatabase) Stat() (string, error)                    { return "", nil }
+func (db *testDatabase) WasmDataBase() ethdb.KeyValueStore        { return db.KeyValueStore }
 
 // TestAuthDBAncientSuite runs geth's comprehensive ancient store test suite
 // against AuthDB. This validates that all ancient store operations work correctly
@@ -183,9 +184,10 @@ func TestAuthDBAncientSuite(t *testing.T) {
 		for i := range len(kinds) {
 			tables[whitelistedKinds[i]] = true
 		}
+		tableWithConfigs := rawdb.NewEspressoTableConfig(tables)
 
 		freezerDir := t.TempDir()
-		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tables)
+		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tableWithConfigs)
 		Require(t, err)
 		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
 
@@ -219,8 +221,10 @@ func TestAuthDBAncientSuiteNoAuth(t *testing.T) {
 			tables[kind] = true
 		}
 
+		tableWithConfigs := rawdb.NewEspressoTableConfig(tables)
+
 		freezerDir := t.TempDir()
-		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tables)
+		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tableWithConfigs)
 		Require(t, err)
 		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
 
