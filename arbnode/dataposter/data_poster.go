@@ -1446,6 +1446,8 @@ const (
 	// Note: The enable flag (post-4844-blobs) is NOT exposed here because batch poster
 	// controls that at its own configuration level.
 	DataPosterUsageBatchPoster
+
+	DataPosterUsageCaffNode
 )
 
 func DataPosterConfigAddOptions(prefix string, f *pflag.FlagSet, defaultDataPosterConfig DataPosterConfig, usageContext DataPosterUsageContext) {
