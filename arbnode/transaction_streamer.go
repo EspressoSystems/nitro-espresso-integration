@@ -32,6 +32,7 @@ import (
 	"github.com/offchainlabs/nitro/broadcastclient"
 	"github.com/offchainlabs/nitro/broadcaster"
 	"github.com/offchainlabs/nitro/broadcaster/message"
+	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/util/arbmath"
@@ -71,6 +72,7 @@ type TransactionStreamer struct {
 
 	trackBlockMetadataFrom arbutil.MessageIndex
 	syncTillMessage        arbutil.MessageIndex
+	espressoSubmitter      submitter.EspressoSubmitter
 }
 
 type TransactionStreamerConfig struct {
@@ -79,6 +81,8 @@ type TransactionStreamerConfig struct {
 	ExecuteMessageLoopDelay time.Duration `koanf:"execute-message-loop-delay" reload:"hot"`
 	SyncTillBlock           uint64        `koanf:"sync-till-block"`
 	TrackBlockMetadataFrom  uint64        `koanf:"track-block-metadata-from"`
+	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
+	QuoteFile               string        `koanf:"quote-file"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig
@@ -89,6 +93,8 @@ var DefaultTransactionStreamerConfig = TransactionStreamerConfig{
 	ExecuteMessageLoopDelay: time.Millisecond * 100,
 	SyncTillBlock:           0,
 	TrackBlockMetadataFrom:  0,
+	QuoteFile:               "",
+	UserDataAttestationFile: "",
 }
 
 var TestTransactionStreamerConfig = TransactionStreamerConfig{
@@ -105,6 +111,8 @@ func TransactionStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".execute-message-loop-delay", DefaultTransactionStreamerConfig.ExecuteMessageLoopDelay, "delay when polling calls to execute messages")
 	f.Uint64(prefix+".sync-till-block", DefaultTransactionStreamerConfig.SyncTillBlock, "node will not sync past this block")
 	f.Uint64(prefix+".track-block-metadata-from", DefaultTransactionStreamerConfig.TrackBlockMetadataFrom, "block number to start saving blockmetadata, 0 to disable")
+	f.String(prefix+".user-data-attestation-file", DefaultTransactionStreamerConfig.UserDataAttestationFile, "specifies the file containing the user data attestation")
+	f.String(prefix+".quote-file", DefaultTransactionStreamerConfig.QuoteFile, "specifies the file containing the quote")
 }
 
 func NewTransactionStreamer(
@@ -1208,6 +1216,11 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 		batch = s.db.NewBatch()
 	}
 	for i, msg := range messages {
+		if len(msg.MessageWithMeta.Message.L2msg) > arbostypes.MaxL2MessageSize {
+			// #nosec G115
+			log.Warn("L2 message is too large", "pos", firstMsgIdx+arbutil.MessageIndex(i), "size", len(msg.MessageWithMeta.Message.L2msg))
+			return fmt.Errorf("L2 message is too large")
+		}
 		// #nosec G115
 		err := s.writeMessage(firstMsgIdx+arbutil.MessageIndex(i), msg, batch)
 		if err != nil {
@@ -1219,6 +1232,16 @@ func (s *TransactionStreamer) writeMessages(firstMsgIdx arbutil.MessageIndex, me
 	if err != nil {
 		return err
 	}
+
+	//  If light client reader and espresso client are set, then we need to store the pos in the database
+	//  to be used later to submit the message to hotshot for finalization.
+	if submitter := s.espressoSubmitter; submitter != nil {
+		err = s.espressoSubmitter.NotifyNewPendingMessages(firstMsgIdx, messages)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = batch.Write()
 	if err != nil {
 		return err
@@ -1487,5 +1510,14 @@ func (s *TransactionStreamer) backfillTrackersForMissingBlockMetadata(ctx contex
 func (s *TransactionStreamer) Start(ctxIn context.Context) error {
 	s.StopWaiter.Start(ctxIn, s)
 	s.LaunchThread(s.backfillTrackersForMissingBlockMetadata)
+
+	if submitter := s.espressoSubmitter; submitter != nil {
+		if err := submitter.Start(&s.StopWaiter); err != nil {
+			return err
+		}
+	} else {
+		log.Warn("light client reader or espresso client not set, skipping espresso verification")
+	}
+
 	return stopwaiter.CallIterativelyWith[struct{}](&s.StopWaiterSafe, s.executeMessages, s.newMessageNotifier)
 }

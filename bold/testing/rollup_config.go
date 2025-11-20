@@ -71,6 +71,7 @@ func GenerateRollupConfig(
 	genesisExecutionState rollupgen.AssertionState,
 	genesisInboxCount *big.Int,
 	anyTrustFastConfirmer common.Address,
+	espressoTEEAddr common.Address,
 	opts ...Opt,
 ) rollupgen.Config {
 	var confirmPeriod uint64
@@ -113,6 +114,8 @@ func GenerateRollupConfig(
 		AnyTrustFastConfirmer:        anyTrustFastConfirmer,
 		NumBigStepLevel:              1,
 		ChallengeGracePeriodBlocks:   gracePeriod,
+
+		EspressoTEEVerifier: espressoTEEAddr,
 	}
 	for _, o := range opts {
 		o(&cfg)

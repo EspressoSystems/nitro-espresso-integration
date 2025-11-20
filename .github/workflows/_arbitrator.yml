@@ -6,7 +6,7 @@ on:
 jobs:
   arbitrator:
     name: Run Arbitrator tests
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: 1
       # RUSTFLAGS: -Dwarnings          # TODO: re-enable after wasmer upgrade
