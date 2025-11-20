@@ -80,7 +80,7 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node"`
+	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
 }
 
 func (c *Config) Validate() error {

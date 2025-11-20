@@ -1060,10 +1060,10 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	}
 	b.L2.cleanup()
 
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil)
 
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
-	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, big.NewInt(1337), 0)
 	Require(t, err)
 
 	feedErrChan := make(chan error, 10)
@@ -1917,7 +1917,7 @@ func createNonL1BlockChainWithStackConfig(
 		}
 	}
 
-	chainData, err := stack.OpenDatabaseWithOptions("l2chaindata", node.DatabaseOptions{MetricsNamespace: "l2chaindata/", PebbleExtraOptions: conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata")})
+	chainData, err = stack.OpenDatabaseWithOptions("l2chaindata", node.DatabaseOptions{MetricsNamespace: "l2chaindata/", PebbleExtraOptions: conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata")})
 	Require(t, err)
 
 	wasmData, err := stack.OpenDatabaseWithOptions("wasm", node.DatabaseOptions{MetricsNamespace: "wasm/", PebbleExtraOptions: conf.PersistentConfigDefault.Pebble.ExtraOptions("wasm"), NoFreezer: true})

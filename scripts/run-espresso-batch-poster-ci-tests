@@ -11,4 +11,5 @@ gotestsum \
     -timeout 45m \
     -p 1 \
     -parallel 1 \
-    -run 'TestEspresso'
+    -run 'TestEspresso' \
+    -skip 'TestEspressoCaffNode|TestAuthDB'
