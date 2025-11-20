@@ -1058,22 +1058,7 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	if b.L2 == nil {
 		t.Fatalf("L2 was not created")
 	}
-	log.Info("L2 was created")
-	// Stop the consensus node first and wait for it to fully stop
-	b.L2.ConsensusNode.StopAndWait()
-	// Give extra time for all goroutines and background tasks to finish
-	time.Sleep(500 * time.Millisecond)
-	// Now close the stack which will close all databases
-	if b.L2.Stack != nil {
-		err := b.L2.Stack.Close()
-		if err != nil {
-			log.Warn("Error closing stack during restart", "err", err)
-		}
-		b.L2.Stack = nil
-	}
-	// Give the OS time to release file handles and locks
-	// This is critical in CI environments where file system operations are slower
-	time.Sleep(1 * time.Second)
+	b.L2.cleanup()
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
 
@@ -1084,8 +1069,19 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	feedErrChan := make(chan error, 10)
 	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
 	Require(t, err)
-
-	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
+	var sequencerTxOpts *bind.TransactOpts
+	var validatorTxOpts *bind.TransactOpts
+	var dataSigner signature.DataSignerFunc
+	var l1Client *ethclient.Client
+	if b.withL1 {
+		sequencerTxOptsNP := b.L1Info.GetDefaultTransactOpts("Sequencer", b.ctx)
+		sequencerTxOpts = &sequencerTxOptsNP
+		validatorTxOptsNP := b.L1Info.GetDefaultTransactOpts("Validator", b.ctx)
+		validatorTxOpts = &validatorTxOptsNP
+		dataSigner = signature.DataSignerFromPrivateKey(b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
+		l1Client = b.L1.Client
+	}
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), l1Client, b.addresses, validatorTxOpts, sequencerTxOpts, dataSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -1097,12 +1093,7 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() {
-		currentNode.StopAndWait()
-		if stack != nil {
-			stack.Close()
-		}
-	}
+	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
 	l2.Stack = stack
 
 	b.L2 = l2
