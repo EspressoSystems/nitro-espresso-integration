@@ -35,6 +35,6 @@ jobs:
         with:
           version: "2.22.0"
 
-      - name: Run Espresso tests
+      - name: Run Espresso Caff Node tests
         run: |
           bash scripts/run-espresso-caff-node-ci-tests

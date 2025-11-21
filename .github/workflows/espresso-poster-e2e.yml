@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -35,7 +35,6 @@ jobs:
         with:
           version: "2.22.0"
 
-
-      - name: Run Espresso tests
+      - name: Run Espresso Batch Poster tests
         run: |
           bash scripts/run-espresso-batch-poster-ci-tests
