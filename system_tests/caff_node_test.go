@@ -38,9 +38,12 @@ func createCaffNode(
 	existing *NodeBuilder,
 	dangerous bool,
 ) (*NodeBuilder, func(), error) {
-	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, false).DontParalellise()
 	nodeConfig := builder.nodeConfig
 	execConfig := builder.execConfig
+
+	// Disable the transaction indexer
+	execConfig.TxIndexer.Enable = false
 
 	// Disable the batch poster because it requires redis if enabled on the 2nd node
 	nodeConfig.BatchPoster.Enable = false
@@ -338,7 +341,7 @@ func TestEspressoCaffNode(t *testing.T) {
 }
 
 func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
-	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
+	builder := NewNodeBuilder(ctx).DefaultConfig(t, false).DontParalellise()
 	builder.l2StackConfig.HTTPPort = port
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 	return builder.BuildL2(t)
@@ -558,7 +561,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	cleanupCaffNode()
 
 	// Now we need to check if it created a snapshot.txt file in the parent chain directory
-	snapshotFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name, "system_tests.test"), "snapshot.txt")
+	snapshotFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name), "snapshot.txt")
 	// Read the snapshot file and get the sha256 hash
 	snapshotFileContent, err := os.ReadFile(snapshotFile)
 	Require(t, err)

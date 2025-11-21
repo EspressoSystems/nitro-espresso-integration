@@ -886,6 +886,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 }
 
 func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder) (func(), error) {
+	existing.DontParalellise()
 	b.L2 = NewTestClient(b.ctx)
 	AddValNodeIfNeeded(t, b.ctx, b.nodeConfig, true, "", b.valnodeConfig.Wasm.RootPath)
 
@@ -1093,7 +1094,12 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
-	l2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	l2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
 	l2.Stack = stack
 
 	b.L2 = l2
@@ -1939,7 +1945,7 @@ func createNonL1BlockChainWithStackConfig(
 		}
 	}
 	coreCacheConfig := gethexec.DefaultCacheConfigFor(&execConfig.Caching)
-	blockchain, err := gethexec.WriteOrTestBlockChain(chainDb, coreCacheConfig, initReader, chainConfig, arbOSInit, nil, initMessage, &gethexec.ConfigDefault.TxIndexer, 0)
+	blockchain, err := gethexec.WriteOrTestBlockChain(chainDb, coreCacheConfig, initReader, chainConfig, arbOSInit, nil, initMessage, &execConfig.TxIndexer, 0)
 	Require(t, err)
 
 	return info, stack, chainDb, arbDb, blockchain
