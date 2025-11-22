@@ -90,9 +90,13 @@ func NewBatcherAddrMonitor(
 	fromParentBlock uint64,
 	step uint64,
 ) *BatcherAddrMonitor {
-	seqInboxInterface, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
-	if err != nil {
-		panic(err)
+	var seqInboxInterface *bridgegen.SequencerInbox
+	if l1Reader != nil {
+		var err error
+		seqInboxInterface, err = bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
+		if err != nil {
+			panic(err)
+		}
 	}
 	if fromParentBlock < deployAt+1 {
 		fromParentBlock = deployAt + 1
