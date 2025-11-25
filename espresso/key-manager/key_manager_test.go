@@ -23,12 +23,12 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) RegisterSigner(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, opts espressotee.EspressoRegisterSignerOpts) error {
+func (m *mockEspressoTEEVerifier) RegisterService(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, serviceType espressotee.ServiceType, opts espressotee.EspressoRegisterServiceOpts) error {
 	args := m.Called(dataPoster, attestation, data, teeType, opts)
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredSigners(addr common.Address, teeType uint8, opts espressotee.EspressoRegisterSignerOpts) (bool, error) {
+func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType uint8, serviceType espressotee.ServiceType, opts espressotee.EspressoRegisterServiceOpts) (bool, error) {
 	args := m.Called(addr, teeType, opts)
 	return args.Bool(0), nil
 }
@@ -37,17 +37,17 @@ type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterSignerOpts) (common.Hash, error) {
-	args := m.Called(dataPoster, certificate, parentCertHash, isCA, opts)
+func (m *mockNitroEspressoTEEVerifier) VerifyCert(dataPoster *dataposter.DataPoster, certificate []byte, parentCertHash [32]byte, isCA bool, opts espressotee.EspressoRegisterServiceOpts, serviceType espressotee.ServiceType) (common.Hash, error) {
+	args := m.Called(dataPoster, certificate, parentCertHash, isCA, opts, serviceType)
 	return common.Hash{}, args.Error(0)
 }
 
-func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, opts espressotee.EspressoRegisterSignerOpts) ([]byte, []byte, error) {
-	args := m.Called(attestationBytes, dataPoster, opts)
+func (m *mockNitroEspressoTEEVerifier) VerifyAttestationAndCertificates(attestationBytes []byte, dataPoster *dataposter.DataPoster, opts espressotee.EspressoRegisterServiceOpts, serviceType espressotee.ServiceType) ([]byte, []byte, error) {
+	args := m.Called(attestationBytes, dataPoster, opts, serviceType)
 	return nil, nil, args.Error(0)
 }
 
-func (m *mockNitroEspressoTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
+func (m *mockNitroEspressoTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType espressotee.ServiceType) (bool, error) {
 	args := m.Called(pcr0Hash)
 	return true, args.Error(0)
 }
@@ -59,7 +59,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	require.NoError(t, err, "Should open wallet")
 	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
 	dataposter := &dataposter.DataPoster{}
-	registerOpts := espressotee.DefaultEspressoRegisterSignerConfig
+	registerOpts := espressotee.DefaultEspressoRegisterServiceConfig
 	registerOpts.MaxRetries = 1
 	mockEspressoNitroTEEVerifier := new(mockNitroEspressoTEEVerifier)
 	mockEspressoNitroTEEVerifier.On("VerifyCert", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(common.Hash{}, nil)
@@ -69,9 +69,9 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test initialization
 	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.GetCurrentKey(), "Public key should be set")
 		// assert.NotNil(t, km.privKey, "Private key should be set")
@@ -82,9 +82,9 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test HasRegistered and Registry
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
 
@@ -98,6 +98,7 @@ func TestEspressoKeyManager(t *testing.T) {
 			return []byte("mock-signature"), nil
 		}
 
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		// First registration
 		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
@@ -115,21 +116,21 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test GetCurrentKey
 	t.Run("GetCurrentKey", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		pubKey := km.GetCurrentKey()
 		assert.NotEmpty(t, pubKey, "Public key should not be empty")
 	})
 
 	// Test Sign
-	t.Run("SGX SignBatch with the ephemeral key", func(t *testing.T) {
+	t.Run("SGX SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignBatch(message)
+		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
@@ -141,11 +142,11 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	t.Run("SGX Sign Hotshot payload with batcher private key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignHotShotPayload(message)
+		signature, err := km.SignPayload(message)
 		require.NoError(t, err, "Sign should succeed")
 
 		privKeyBytes, err := hex.DecodeString(privKey)
@@ -162,9 +163,9 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "")
 		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
 
@@ -178,6 +179,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// First registration
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		err := km.Register(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
@@ -194,13 +196,13 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 
 	// Test Sign
-	t.Run("Nitro SignBatch with the ephemeral key", func(t *testing.T) {
+	t.Run("Nitro SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignBatch(message)
+		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
@@ -212,11 +214,11 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	t.Run("Nitro Sign Hotshot payload with batcher private key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-		mockEspressoTEEVerifierClient.On("RegisterSigner", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredSigners", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, registerOpts)
+		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "")
 		message := []byte("test-message")
-		signature, err := km.SignHotShotPayload(message)
+		signature, err := km.SignPayload(message)
 		require.NoError(t, err, "Sign should succeed")
 
 		privKeyBytes, err := hex.DecodeString(privKey)

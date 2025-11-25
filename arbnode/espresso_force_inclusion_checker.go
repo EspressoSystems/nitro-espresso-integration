@@ -254,3 +254,7 @@ func (f *ForceInclusionChecker) findFirstParentChainBlockBelow(ctx context.Conte
 	}
 	return 0, fmt.Errorf("no parent block found")
 }
+
+func (f *ForceInclusionChecker) StopAndWait() {
+	f.StopWaiter.StopAndWait()
+}

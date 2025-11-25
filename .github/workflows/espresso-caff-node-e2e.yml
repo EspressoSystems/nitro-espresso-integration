@@ -1,4 +1,4 @@
-name: Espresso E2E test CI
+name: Espresso E2E Caff Node test CI
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     name: Espresso E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-8core
 
     steps:
       - name: Checkout
@@ -35,6 +35,6 @@ jobs:
         with:
           version: "2.22.0"
 
-      - name: Run Espresso tests
+      - name: Run Espresso Caff Node tests
         run: |
-          scripts/run-espresso-ci-job
+          bash scripts/run-espresso-caff-node-ci-tests

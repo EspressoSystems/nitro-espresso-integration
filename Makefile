@@ -43,6 +43,13 @@ precompile_names = AddressTable Aggregator BLS Debug FunctionTable GasInfo Info 
 precompiles = $(patsubst %,./solgen/generated/%.go, $(precompile_names))
 
 output_root=target
+export PKG_CONFIG_PATH=$(abspath $(output_root)/pkgconfig)
+# For nix pkg-config
+ifdef IN_NIX_SHELL
+  export PKG_CONFIG_PATH_FOR_TARGET := $(abspath $(output_root)/pkgconfig):$(PKG_CONFIG_PATH_FOR_TARGET)
+endif
+
+sed_escaped_output_root:=$(subst /,\/,$(output_root))
 output_latest=$(output_root)/machines/latest
 
 repo_dirs = arbos arbcompress arbnode arbutil arbstate cmd das precompiles solgen system_tests util validator wavmio
@@ -290,10 +297,15 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	@rm -rf contracts/build contracts/cache solgen/go/
-	@rm -rf contracts-legacy/build contracts-legacy/cache
-	@rm -rf contracts-local/out contracts-local/forge-cache
-	@rm -f .make/*
+	rm -rf contracts/build contracts/cache solgen/go/
+	rm -rf contracts-legacy/build contracts-legacy/cache contracts-legacy/out
+	rm -rf contracts-local/out contracts-local/forge-cache
+	rm -rf  espresso-tee-contracts/espressogen/ espresso-tee-contracts-legacy/espressogen/ contracts/out
+	rm -f .make/*
+	rm -rf brotli/buildfiles
+	# Ensure lib64 is a symlink to lib
+	mkdir -p $(output_root)/lib
+	ln -s lib $(output_root)/lib64
 
 .PHONY: docker
 docker:
@@ -601,16 +613,20 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen .make/espresso-legacy-gen  $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
 	go run solgen/gen.go
 	@touch $@
 
-.make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity .make/espresso-gen $(ORDER_ONLY_PREDICATE) .make
+.make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p espresso-tee-contracts/espressogen/
 	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
 	@touch $@
 
+.make/espresso-legacy-gen: $(DEP_PREDICATE) espresso-tee-contracts-legacy/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+	mkdir -p espresso-tee-contracts-legacy/espressogen/
+	go run -modfile ./espresso-tee-contracts-legacy/bindings/go.mod ./espresso-tee-contracts-legacy/bindings/gen.go
+	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	npm --prefix safe-smart-account run build
@@ -619,6 +635,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	yarn --cwd contracts-legacy build
 	yarn --cwd contracts-legacy build:forge:yul
 	cd espresso-tee-contracts && forge build && cd ../
+	cd espresso-tee-contracts-legacy && forge build && cd ../
 	make -C contracts-local build
 	@touch $@
 

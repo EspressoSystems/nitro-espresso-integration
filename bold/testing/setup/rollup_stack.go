@@ -24,16 +24,16 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/offchainlabs/nitro/bold/chain-abstraction"
-	"github.com/offchainlabs/nitro/bold/chain-abstraction/sol-implementation"
-	"github.com/offchainlabs/nitro/bold/layer2-state-provider"
-	"github.com/offchainlabs/nitro/bold/runtime"
-	"github.com/offchainlabs/nitro/bold/testing"
-	"github.com/offchainlabs/nitro/bold/testing/mocks/state-provider"
+	protocol "github.com/offchainlabs/nitro/bold/chain-abstraction"
+	solimpl "github.com/offchainlabs/nitro/bold/chain-abstraction/sol-implementation"
+	l2stateprovider "github.com/offchainlabs/nitro/bold/layer2-state-provider"
+	retry "github.com/offchainlabs/nitro/bold/runtime"
+	challenge_testing "github.com/offchainlabs/nitro/bold/testing"
+	stateprovider "github.com/offchainlabs/nitro/bold/testing/mocks/state-provider"
+	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/challengeV2gen"
 	"github.com/offchainlabs/nitro/solgen/go/contractsgen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
 	"github.com/offchainlabs/nitro/solgen/go/proxiesgen"
@@ -302,7 +302,7 @@ func ChainsWithEdgeChallengeManager(opts ...Opt) (*ChainSetup, error) {
 		accs[0].TxOpts.Value = big.NewInt(0)
 	}
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend)
+	espressoTEEVerifierAddress, tx, _, err := legacy_gen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend)
 	if err != nil {
 		return nil, err
 	}
