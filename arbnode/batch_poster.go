@@ -161,6 +161,7 @@ const (
 type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool   `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 	FixedGasLimit                                           uint64 `koanf:"fixed-gas-limit"`
+	MinimumHotshotBlockNum                                  uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 type BatchPosterConfig struct {
@@ -217,9 +218,10 @@ type BatchPosterConfig struct {
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses []string `koanf:"init-batcher-addresses"`
+	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
+	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
+	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -251,6 +253,7 @@ type BatchPosterConfigFetcher func() *BatchPosterConfig
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
 	f.Uint64(prefix+".fixed-gas-limit", DefaultBatchPosterConfig.Dangerous.FixedGasLimit, "use this gas limit for batch posting instead of estimating it")
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultBatchPosterConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 }
 
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
@@ -289,6 +292,8 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
+	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
+	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
@@ -340,6 +345,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
+	AddressMonitorStep:       100,
+	AddressMonitorStartL1:    1,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -386,6 +393,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
+	AddressMonitorStartL1:    1,
+	AddressMonitorStep:       100,
 	EspressoEventPollingStep: 100,
 }
 
@@ -592,6 +601,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
 				opts.Config().AddressMonitorStartL1,
+				opts.Config().AddressMonitorStep,
 			)
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
@@ -602,6 +612,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				false,
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
+				opts.Config().Dangerous.MinimumHotshotBlockNum,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor

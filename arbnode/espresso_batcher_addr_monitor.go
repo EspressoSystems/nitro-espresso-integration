@@ -78,6 +78,7 @@ type BatcherAddrMonitor struct {
 	seqInboxAddr      common.Address
 	seqInboxInterface *bridgegen.SequencerInbox
 	deployAt          uint64
+	step              uint64
 }
 
 func NewBatcherAddrMonitor(
@@ -87,10 +88,15 @@ func NewBatcherAddrMonitor(
 	seqInboxAddr common.Address,
 	deployAt uint64,
 	fromParentBlock uint64,
+	step uint64,
 ) *BatcherAddrMonitor {
-	seqInboxInterface, err := bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
-	if err != nil {
-		panic(err)
+	var seqInboxInterface *bridgegen.SequencerInbox
+	if l1Reader != nil {
+		var err error
+		seqInboxInterface, err = bridgegen.NewSequencerInbox(seqInboxAddr, l1Reader.Client())
+		if err != nil {
+			panic(err)
+		}
 	}
 	if fromParentBlock < deployAt+1 {
 		fromParentBlock = deployAt + 1
@@ -103,6 +109,7 @@ func NewBatcherAddrMonitor(
 		seqInboxInterface:         seqInboxInterface,
 		deployAt:                  deployAt,
 		lastProcessedParentHeight: fromParentBlock - 1,
+		step:                      step,
 	}
 }
 
@@ -369,7 +376,7 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 		return nil
 	}
 
-	blocksToRead := uint64(100)
+	blocksToRead := b.step
 	allowedRetry := 10
 	retry := 0
 	latestParentHeight := latestParentHeader.Number.Uint64()
@@ -383,6 +390,7 @@ func (b *BatcherAddrMonitor) backfill(ctx context.Context) error {
 			break
 		}
 
+		log.Info("batcher addr monitor backfilling", "lastProcessedHeight", lastProcessedHeight, "latestParentHeight", latestParentHeight, "blocksToRead", blocksToRead)
 		events, err := b.LookupAddressUpdates(ctx, lastProcessedHeight+1, lastProcessedHeight+blocksToRead)
 		if err != nil {
 			retry++
