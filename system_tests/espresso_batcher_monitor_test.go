@@ -37,6 +37,7 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 		seqInboxAddr,
 		builder.L2.ConsensusNode.DeployInfo.DeployedAt,
 		builder.L2.ConsensusNode.DeployInfo.DeployedAt,
+		0,
 	)
 	err = monitor.Start(ctx)
 	Require(t, err)
