@@ -616,7 +616,6 @@ func mainImpl() int {
 		stack,
 		execNode,
 		arbDb,
-		chainDb,
 		&NodeConfigFetcher{liveNodeConfig},
 		l2BlockChain.Config(),
 		l1Client,

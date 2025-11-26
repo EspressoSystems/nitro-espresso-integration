@@ -40,10 +40,10 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/redislock"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
+	"github.com/offchainlabs/nitro/arbstate/daprovider"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
-	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
@@ -162,6 +162,7 @@ const (
 type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool   `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 	FixedGasLimit                                           uint64 `koanf:"fixed-gas-limit"`
+	MinimumHotshotBlockNum                                  uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 type BatchPosterConfig struct {
@@ -223,6 +224,7 @@ type BatchPosterConfig struct {
 	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
 	InitBatcherAddresses []string `koanf:"init-batcher-addresses"`
+	AddressMonitorStep   uint64   `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -293,8 +295,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
-	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
-	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
@@ -351,6 +351,8 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
+	AddressMonitorStep:       100,
+	AddressMonitorStartL1:    1,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -610,6 +612,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
 				opts.Config().AddressMonitorStartL1,
+				opts.Config().AddressMonitorStep,
 			)
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
@@ -620,6 +623,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				false,
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
+				opts.Config().Dangerous.MinimumHotshotBlockNum,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor

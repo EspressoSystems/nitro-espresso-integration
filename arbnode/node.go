@@ -444,7 +444,7 @@ func createNodeImpl(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
-	espressoCaffNodeInitArgs *espresso_tee_utils.EspressoCaffNodeInitArgs,
+	espressoCaffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	config := configFetcher.Get()
 
@@ -586,19 +586,25 @@ func createNodeImpl(
 
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
+			espressoCaffNode, err := NewEspressoCaffNode(
+				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				exec.ChainDB,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
-				stack.Config().HTTPPort,
+				stack,
+				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				espressoCaffNodeInitArgs,
 			)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to create espresso caff node: %w", err)
+			}
 
 			return &Node{
 				ArbDB:                   arbDb,
@@ -945,7 +951,7 @@ func CreateNode(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
-	espressoCaffNodeInitArgs *espresso_tee_utils.EspressoCaffNodeInitArgs,
+	espressoCaffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, espressoCaffNodeInitArgs)
 	if err != nil {

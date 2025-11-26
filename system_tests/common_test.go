@@ -65,16 +65,14 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
-	"github.com/offchainlabs/nitro/das"
 	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
+	"github.com/offchainlabs/nitro/das"
 	"github.com/offchainlabs/nitro/deploy"
 	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -487,7 +485,7 @@ func buildOnParentChain(
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	_, chainTestClient.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, chainInfo, dataDir, chainConfig, initMessage, stackConfig, execConfig, wasmCacheTag)
+		t, chainInfo, dataDir, chainConfig, initMessage, stackConfig, execConfig, wasmCacheTag, nodeConfig)
 
 	var sequencerTxOptsPtr *bind.TransactOpts
 	var dataSigner signature.DataSignerFunc
@@ -635,7 +633,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	var blockchain *core.BlockChain
 	if b.useL2StackConfig {
 		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-			t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+			t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 	} else {
 		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
 			t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
@@ -699,7 +697,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+		t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -716,6 +714,10 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
 		}
+		teeHMAC, err := espresso_tee_utils.HmacForTest()
+		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
+		Require(t, err)
+		caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			TeeHMAC:                teeHMAC,
@@ -723,14 +725,10 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 			CaffNodetxOpts:         &caffNodeTxopts,
 			CaffNodePrivateKey:     caffNodePrivateKey,
 		}
-		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
-		Require(t, err)
 
 		b.L2.ConsensusNode, err = arbnode.CreateNode(
-		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), espressoCaffNodeInitArgs)
+			b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		if err != nil {
 			return nil, err
 		}
@@ -738,10 +736,12 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			InitializeCaffNodeTags: false,
 		}
-		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
-		Require(t, err)
+		b.L2.ConsensusNode, err = arbnode.CreateNode(
+			b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
@@ -784,15 +784,9 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	// Give the OS time to release file handles and locks
 	// This is critical in CI environments where file system operations are slower
 	time.Sleep(500 * time.Millisecond)
-
-<<<<<<< HEAD
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
-=======
 	caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
 	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(caffNodePrivateKey)))
-
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, b.nodeConfig, b.wasmCacheTag, b.useFreezer)
->>>>>>> 46a0a92fc (Release tee caff node (#834))
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
 	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher)
@@ -800,8 +794,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 
 	feedErrChan := make(chan error, 10)
 
-		var currentNode *arbnode.Node
-	var caffDB *authdb.AuthDB
+	var currentNode *arbnode.Node
 	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		teeHMAC, err := espresso_tee_utils.HmacForTest()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
@@ -818,17 +811,15 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 			CaffNodetxOpts:         &caffNodeTxopts,
 			CaffNodePrivateKey:     caffNodePrivateKey,
 		}
-	currentNode, err := arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), espressoCaffNodeInitArgs)
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	} else {
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			InitializeCaffNodeTags: false,
 		}
-	currentNode, err := arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), espressoCaffNodeInitArgs)
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	}
-
-
 
 	Require(t, currentNode.Start(b.ctx))
 	client := ClientForStack(t, stack)
@@ -1615,7 +1606,7 @@ func createL2BlockChain(
 
 func createNonL1BlockChainWithStackConfig(
 	t *testing.T, info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, initMessage *arbostypes.ParsedInitMessage, stackConfig *node.Config, execConfig *gethexec.Config, wasmCacheTag uint32,
-	nodeConfig *config.Config,
+	nodeConfig *arbnode.Config,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
 	if info == nil {
 		info = NewArbTestInfo(t, chainConfig.ChainID)
@@ -1654,7 +1645,7 @@ func createNonL1BlockChainWithStackConfig(
 			t.Setenv("INITIALIZE_TAGS", "true")
 		}
 	}
-	chainData, err = stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", 0, 0, "l2chaindata/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
+	chainData, err = stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", int(0), int(0), "l2chaindata/", "l2chaindata", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
 	Require(t, err)
 	wasmData, err := stack.OpenDatabaseWithExtraOptions("wasm", 0, 0, "wasm/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("wasm"))
 	Require(t, err)

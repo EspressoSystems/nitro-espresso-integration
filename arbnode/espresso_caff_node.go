@@ -91,12 +91,15 @@ func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
 }
 
 type DangerousCaffNodeConfig struct {
-	IgnoreDatabaseHotshotBlock bool `koanf:"ignore-database-hotshot-block"`
-	IgnoreDatabaseFromBlock    bool `koanf:"ignore-database-from-block"`
+	IgnoreDatabaseHotshotBlock bool   `koanf:"ignore-database-hotshot-block"`
+	IgnoreDatabaseFromBlock    bool   `koanf:"ignore-database-from-block"`
+	MinimumHotshotBlockNum     uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 	IgnoreDatabaseHotshotBlock: false,
+	IgnoreDatabaseFromBlock:    false,
+	MinimumHotshotBlockNum:     0,
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
@@ -250,23 +253,6 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create hotshot client: %w", err)
 	}
-
-	batcherAddrMonitor := NewBatcherAddrMonitor(
-		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
-		db,
-		l1Reader,
-		sequencerInbox.address,
-		delayedBridge.fromBlock,
-		configFetcher().FromBlock,
-	)
-	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
-		configFetcher().NextHotshotBlock,
-		sgxVerifier,
-		client,
-		recordPerformance,
-		batcherAddrMonitor.GetValidAddresses,
-		configFetcher().RetryTime,
-	)
 
 	fromBlock := configFetcher().FromBlock
 
