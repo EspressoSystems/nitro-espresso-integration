@@ -238,6 +238,12 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 		return nil, nil, err
 	}
 
+	log.Info("attestation unmarshaled",
+		"cose_sign1_len", len(res.COSESign1),
+		"signature_len", len(res.Signature),
+		"signature_ok", res.SignatureOK,
+	)
+
 	pcr0Hash := crypto.Keccak256Hash(res.Document.PCRs[0])
 	log.Info("successfully got attestation", "pcr0 hash", pcr0Hash)
 
@@ -278,6 +284,18 @@ func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
 		log.Error("failed to get client cert verified", "err", err)
 		return nil, nil, err
 	}
+
+	// The signature from nitrite.Result.Signature is the raw ECDSA signature bytes
+	// which should be 96 bytes (r and s values, each 48 bytes for ECDSA384)
+	if len(res.Signature) != 96 {
+		return nil, nil, fmt.Errorf("invalid signature length: expected 96 bytes, got %d bytes", len(res.Signature))
+	}
+
+	log.Info("attestation verification successful",
+		"cose_sign1_len", len(res.COSESign1),
+		"signature_len", len(res.Signature),
+		"signature_ok", res.SignatureOK,
+	)
 
 	// Return attestation and signature
 	return res.COSESign1, res.Signature, nil

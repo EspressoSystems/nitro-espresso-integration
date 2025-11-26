@@ -289,7 +289,7 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	@rm -rf contracts/build contracts/cache solgen/go/
+	@rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/ espresso-tee-contracts-legacy/espressogen/
 	@rm -f .make/*
 	rm -rf brotli/buildfiles
 # Ensure lib64 is a symlink to lib
