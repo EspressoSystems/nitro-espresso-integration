@@ -155,6 +155,7 @@ func (op *testAncientWriteOp) AppendRaw(kind string, number uint64, item []byte)
 type testDatabase struct {
 	ethdb.KeyValueStore
 	*rawdb.Freezer
+	ancientDatadir string
 }
 
 func (db *testDatabase) Close() error {
@@ -165,9 +166,10 @@ func (db *testDatabase) Close() error {
 }
 
 func (db *testDatabase) Compact(start []byte, limit []byte) error    { return nil }
-func (db *testDatabase) Stat() (string, error)                       { return "", nil }
+func (db *testDatabase) Stat(string) (string, error)                 { return "", nil }
 func (db *testDatabase) WasmDataBase() (ethdb.KeyValueStore, uint32) { return db.KeyValueStore, 0 }
 func (db *testDatabase) WasmTargets() []ethdb.WasmTarget             { return nil }
+func (db *testDatabase) AncientDatadir() (string, error)             { return db.ancientDatadir, nil }
 
 // TestAuthDBAncientSuite runs geth's comprehensive ancient store test suite
 // against AuthDB. This validates that all ancient store operations work correctly
@@ -187,7 +189,7 @@ func TestAuthDBAncientSuite(t *testing.T) {
 		freezerDir := t.TempDir()
 		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tables)
 		Require(t, err)
-		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
+		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer, ancientDatadir: freezerDir}
 
 		mac, err := espresso_tee_utils.HmacForTest()
 		Require(t, err)
@@ -222,7 +224,7 @@ func TestAuthDBAncientSuiteNoAuth(t *testing.T) {
 		freezerDir := t.TempDir()
 		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tables)
 		Require(t, err)
-		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer}
+		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer, ancientDatadir: freezerDir}
 
 		authDB, err := NewAuthDB(db, nil, false)
 		Require(t, err)
