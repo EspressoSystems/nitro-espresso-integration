@@ -811,13 +811,13 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 			CaffNodetxOpts:         &caffNodeTxopts,
 			CaffNodePrivateKey:     caffNodePrivateKey,
 		}
-		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	} else {
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			InitializeCaffNodeTags: false,
 		}
-		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	}
 

@@ -576,7 +576,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
 	builderCaffNode.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
 
-	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
+	parentChainTransactionOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
 	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
 	Require(t, err)
 	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
@@ -585,6 +585,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	_ = logHandler
 
 	time.Sleep(10 * time.Second)
+	builderCaffNode.L1Info = builder.L1Info
 	builderCaffNode.RestartCaffNode(t)
 
 	// This time check if it printed the log about snapshot already verified
