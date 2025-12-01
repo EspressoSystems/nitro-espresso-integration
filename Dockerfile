@@ -34,6 +34,8 @@ RUN cd contracts && yarn install
 COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
 RUN cd safe-smart-account && yarn install
+COPY espresso-tee-contracts espresso-tee-contracts/
+COPY espresso-tee-contracts-legacy espresso-tee-contracts-legacy/
 COPY Makefile .
 RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
@@ -88,6 +90,8 @@ COPY ./zeroheavy ./zeroheavy
 COPY ./contracts/src/precompiles/ ./contracts/src/precompiles/
 COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
 COPY ./safe-smart-account ./safe-smart-account
+COPY ./espresso-tee-contracts ./espresso-tee-contracts
+COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 COPY ./solgen/gen.go ./solgen/
 COPY ./fastcache ./fastcache
 COPY ./go-ethereum ./go-ethereum
@@ -206,6 +210,8 @@ COPY ./arbitrator ./arbitrator
 COPY ./solgen ./solgen
 COPY ./contracts ./contracts
 COPY ./safe-smart-account ./safe-smart-account
+COPY ./espresso-tee-contracts ./espresso-tee-contracts
+COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-replay-env
 
 FROM debian:bookworm-slim AS machine-versions
@@ -278,6 +284,8 @@ COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
 COPY --from=contracts-builder workspace/contracts/out/ contracts/out/
 COPY --from=contracts-builder workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
 COPY --from=contracts-builder workspace/safe-smart-account/build/ safe-smart-account/build/
+COPY --from=contracts-builder workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
+COPY --from=contracts-builder workspace/espresso-tee-contracts-legacy/out/ espresso-tee-contracts-legacy/out/
 COPY --from=contracts-builder workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/

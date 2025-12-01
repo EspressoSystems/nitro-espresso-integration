@@ -51,7 +51,7 @@ Arbitrum One successfully migrated from the Classic Arbitrum stack onto Nitro on
 
 0. Clone repository
 ```bash
-git clone --recurse-submodules git@github.com:EspressoSystems/nitro-espresso-integration.git 
+git clone --recurse-submodules git@github.com:EspressoSystems/nitro-espresso-integration.git
 ```
 
 1. For MacOS Users Only:
@@ -70,8 +70,18 @@ make build-replay-env
 ```
 4. Run E2E tests (ensure Docker is running):
 ```bash
-gotestsum --format standard-verbose --packages="$packages" -- -v -timeout 15m -p 1 ./system_tests/... -run 'TestEspressoE2E'
+go test -v -timeout 60m -p 1 ./system_tests/... -run 'TestEspressoE2E' 2>&1 |  sed '/ld: warning/d; /object file/d; /^$/d' | tee test_output.log
 ```
+
+This filters out Rust linker warnings in real-time, showing only test output and errors.
+
+**Option B: Full output (for debugging)**
+
+```bash
+gotestsum --format=testname --packages="./system_tests/..." -- -v -timeout 15m -p 1 -count=1 -run 'TestEspressoE2E'
+```
+
+Shows all output including linker warnings.
 
 Alternatively to steps 3 and 4 you can run:
 ```bash
