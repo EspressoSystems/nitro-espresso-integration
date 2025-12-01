@@ -9,6 +9,8 @@ import (
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
+var BlockSignaturePrefix = []byte("blockSignature")
+
 var (
 	binarySearch_LessThanTarget    = -1
 	binarySearch_GreaterThanTarget = 1

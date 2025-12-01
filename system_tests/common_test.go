@@ -65,12 +65,14 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/conf"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 	"github.com/offchainlabs/nitro/das"
 	"github.com/offchainlabs/nitro/deploy"
+	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -109,7 +111,7 @@ type TestClient struct {
 	Stack         *node.Node
 	ConsensusNode *arbnode.Node
 	ExecNode      *gethexec.ExecutionNode
-
+	caffDB        *authdb.AuthDB
 	// having cleanup() field makes cleanup customizable from default cleanup methods after calling build
 	cleanup func()
 }
@@ -483,7 +485,7 @@ func buildOnParentChain(
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	_, chainTestClient.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, chainInfo, dataDir, chainConfig, initMessage, stackConfig, execConfig, wasmCacheTag)
+		t, chainInfo, dataDir, chainConfig, initMessage, stackConfig, execConfig, wasmCacheTag, nodeConfig)
 
 	var sequencerTxOptsPtr *bind.TransactOpts
 	var dataSigner signature.DataSignerFunc
@@ -515,7 +517,7 @@ func buildOnParentChain(
 	fatalErrChan := make(chan error, 10)
 	chainTestClient.ConsensusNode, err = arbnode.CreateNode(
 		ctx, chainTestClient.Stack, execNode, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainTestClient.Client,
-		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, fatalErrChan, parentChainId, nil)
+		addresses, validatorTxOptsPtr, sequencerTxOptsPtr, dataSigner, fatalErrChan, parentChainId, nil, nil)
 	Require(t, err)
 
 	err = chainTestClient.ConsensusNode.Start(ctx)
@@ -526,7 +528,12 @@ func buildOnParentChain(
 	StartWatchChanErr(t, ctx, fatalErrChan, chainTestClient.ConsensusNode)
 
 	chainTestClient.ExecNode = getExecNode(t, chainTestClient.ConsensusNode)
-	chainTestClient.cleanup = func() { chainTestClient.ConsensusNode.StopAndWait() }
+	chainTestClient.cleanup = func() {
+		chainTestClient.ConsensusNode.StopAndWait()
+		if chainTestClient.Stack != nil {
+			chainTestClient.Stack.Close()
+		}
+	}
 
 	return chainTestClient
 }
@@ -626,7 +633,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	var blockchain *core.BlockChain
 	if b.useL2StackConfig {
 		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-			t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+			t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 	} else {
 		b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
 			t, b.L2Info, b.dataDir, b.chainConfig, b.execConfig, b.wasmCacheTag)
@@ -641,7 +648,7 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	fatalErrChan := make(chan error, 10)
 	b.L2.ConsensusNode, err = arbnode.CreateNode(
 		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil)
+		nil, nil, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, nil)
 	Require(t, err)
 
 	// Give the node an init message
@@ -670,7 +677,12 @@ func (b *NodeBuilder) BuildL2(t *testing.T) func() {
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
 	return func() { b.L2.cleanup() }
 }
 
@@ -685,7 +697,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	var arbDb ethdb.Database
 	var blockchain *core.BlockChain
 	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createNonL1BlockChainWithStackConfig(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+		t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -696,25 +708,138 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	}
 
 	fatalErrChan := make(chan error, 10)
-	b.L2.ConsensusNode, err = arbnode.CreateNode(
-		b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil)
-	if err != nil {
-		return nil, err
+
+	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+		initializeTags := false
+		if os.Getenv("INITIALIZE_TAGS") != "" {
+			initializeTags = true
+		}
+		teeHMAC, err := espresso_tee_utils.HmacForTest()
+		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
+		Require(t, err)
+		caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
+
+		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+			TeeHMAC:                teeHMAC,
+			InitializeCaffNodeTags: initializeTags,
+			CaffNodetxOpts:         &caffNodeTxopts,
+			CaffNodePrivateKey:     caffNodePrivateKey,
+		}
+
+		b.L2.ConsensusNode, err = arbnode.CreateNode(
+			b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+			InitializeCaffNodeTags: false,
+		}
+		b.L2.ConsensusNode, err = arbnode.CreateNode(
+			b.ctx, b.L2.Stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
-	if err != nil {
-		return nil, err
-	}
 
 	b.L2.Client = ClientForStack(t, b.L2.Stack)
 
 	StartWatchChanErr(t, b.ctx, fatalErrChan, b.L2.ConsensusNode)
 
 	b.L2.ExecNode = getExecNode(t, b.L2.ConsensusNode)
-	b.L2.cleanup = func() { b.L2.ConsensusNode.StopAndWait() }
-	return func() { b.L2.cleanup() }, nil
+	b.L2.cleanup = func() {
+		b.L2.ConsensusNode.StopAndWait()
+		if b.L2.Stack != nil {
+			b.L2.Stack.Close()
+		}
+	}
+	b.addresses = existing.addresses
+	return func() { b.L2.cleanup() }, err
+}
+
+// L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
+func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
+	if b.L2 == nil {
+		t.Fatalf("L2 was not created")
+	}
+	// Close caffDB explicitly to release tag freezer lock before closing stack
+	if b.L2.caffDB != nil {
+		if err := b.L2.caffDB.Close(); err != nil {
+			log.Warn("Error closing caffDB during restart", "err", err)
+		}
+		b.L2.caffDB = nil
+	}
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(500 * time.Millisecond)
+	caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
+	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(caffNodePrivateKey)))
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
+
+	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher)
+	Require(t, err)
+
+	feedErrChan := make(chan error, 10)
+
+	var currentNode *arbnode.Node
+	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+		teeHMAC, err := espresso_tee_utils.HmacForTest()
+		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
+		Require(t, err)
+		caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
+		initializeTags := false
+		if os.Getenv("INITIALIZE_TAGS") != "" {
+			initializeTags = true
+		}
+
+		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+			TeeHMAC:                teeHMAC,
+			InitializeCaffNodeTags: initializeTags,
+			CaffNodetxOpts:         &caffNodeTxopts,
+			CaffNodePrivateKey:     caffNodePrivateKey,
+		}
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		Require(t, err)
+	} else {
+		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+			InitializeCaffNodeTags: false,
+		}
+		currentNode, err = arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
+		Require(t, err)
+	}
+
+	Require(t, currentNode.Start(b.ctx))
+	client := ClientForStack(t, stack)
+
+	StartWatchChanErr(t, b.ctx, feedErrChan, currentNode)
+
+	l2 := NewTestClient(b.ctx)
+	l2.ConsensusNode = currentNode
+	l2.Client = client
+	l2.ExecNode = execNode
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
+	l2.Stack = stack
+
+	b.L2 = l2
+	b.L2Info = l2info
 }
 
 // L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
@@ -724,14 +849,14 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	}
 	b.L2.cleanup()
 
-	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag)
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.initMessage, b.l2StackConfig, b.execConfig, b.wasmCacheTag, b.nodeConfig)
 
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
 	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher)
 	Require(t, err)
 
 	feedErrChan := make(chan error, 10)
-	currentNode, err := arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil)
+	currentNode, err := arbnode.CreateNode(b.ctx, stack, execNode, arbDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), nil, nil, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, nil)
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -804,7 +929,9 @@ func build2ndNode(
 	testClient.Client, testClient.ConsensusNode =
 		Create2ndNodeWithConfig(t, ctx, firstNodeTestClient.ConsensusNode, parentChainTestClient.Stack, parentChainInfo, params.initData, params.nodeConfig, params.execConfig, params.stackConfig, valnodeConfig, params.addresses, initMessage, params.wasmCacheTag)
 	testClient.ExecNode = getExecNode(t, testClient.ConsensusNode)
-	testClient.cleanup = func() { testClient.ConsensusNode.StopAndWait() }
+	testClient.cleanup = func() {
+		testClient.ConsensusNode.StopAndWait()
+	}
 	return testClient, func() { testClient.cleanup() }
 }
 
@@ -1386,8 +1513,11 @@ func deployOnParentChain(
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
 
+	var espressoTEEVerifierAddress common.Address
+	var tx *types.Transaction
+
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+	espressoTEEVerifierAddress, tx, _, err = legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
 
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
@@ -1473,7 +1603,7 @@ func deployOnParentChain(
 	} else {
 
 		//  Deploy a espressoTEEVerifierMock contract
-		espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+		espressoTEEVerifierAddress, tx, _, err := legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
 		Require(t, err)
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
@@ -1504,11 +1634,12 @@ func deployOnParentChain(
 func createL2BlockChain(
 	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, execConfig *gethexec.Config, wasmCacheTag uint32,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
-	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, execConfig, wasmCacheTag)
+	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, execConfig, wasmCacheTag, nil)
 }
 
 func createNonL1BlockChainWithStackConfig(
 	t *testing.T, info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, initMessage *arbostypes.ParsedInitMessage, stackConfig *node.Config, execConfig *gethexec.Config, wasmCacheTag uint32,
+	nodeConfig *arbnode.Config,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
 	if info == nil {
 		info = NewArbTestInfo(t, chainConfig.ChainID)
@@ -1524,7 +1655,30 @@ func createNonL1BlockChainWithStackConfig(
 	stack, err := node.New(stackConfig)
 	Require(t, err)
 
-	chainData, err := stack.OpenDatabaseWithExtraOptions("l2chaindata", 0, 0, "l2chaindata/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
+	var chainData ethdb.Database
+	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
+	if nodeConfig != nil && nodeConfig.EspressoCaffNode.SnapshotChecksum != "" {
+		log.Info("Snapshot mode enabled in Caff node")
+		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
+			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
+		}
+		privKey := os.Getenv("CAFF_NODE_PRIV_KEY")
+		if privKey == "" {
+			Fatal(t, "CAFF_NODE_PRIV_KEY environment variable is not set")
+		}
+		// Use the private key from the environment variable as needed
+		caffPrivKey, err := crypto.HexToECDSA(privKey)
+		if err != nil {
+			Fatal(t, "Invalid CAFF_NODE_PRIV_KEY format")
+		}
+		t.Setenv("INITIALIZE_TAGS", "")
+		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
+		Require(t, err)
+		if initializeTags {
+			t.Setenv("INITIALIZE_TAGS", "true")
+		}
+	}
+	chainData, err = stack.OpenDatabaseWithFreezerWithExtraOptions("l2chaindata", int(0), int(0), "l2chaindata/", "l2chaindata", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("l2chaindata"))
 	Require(t, err)
 	wasmData, err := stack.OpenDatabaseWithExtraOptions("wasm", 0, 0, "wasm/", false, conf.PersistentConfigDefault.Pebble.ExtraOptions("wasm"))
 	Require(t, err)
@@ -1647,7 +1801,7 @@ func Create2ndNodeWithConfig(
 	currentExec, err := gethexec.CreateExecutionNode(ctx, chainStack, chainDb, blockchain, parentChainClient, configFetcher)
 	Require(t, err)
 
-	currentNode, err := arbnode.CreateNode(ctx, chainStack, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, feedErrChan, big.NewInt(1337), nil)
+	currentNode, err := arbnode.CreateNode(ctx, chainStack, currentExec, arbDb, NewFetcherFromConfig(nodeConfig), blockchain.Config(), parentChainClient, addresses, &validatorTxOpts, &sequencerTxOpts, dataSigner, feedErrChan, big.NewInt(1337), nil, nil)
 	Require(t, err)
 
 	err = currentNode.Start(ctx)

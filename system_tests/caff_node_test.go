@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,8 +24,12 @@ import (
 
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
-	"github.com/offchainlabs/nitro/solgen/go/espressogen"
+	"github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/util/testhelpers"
 )
 
 func createCaffNode(
@@ -50,12 +56,18 @@ func createCaffNode(
 	nodeConfig.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.EspressoCaffNode.NextHotshotBlock = 1
 	nodeConfig.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+
 	// reuse the caff node settings so we can set them outside this function.
 	nodeConfig.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.EspressoCaffNode.WaitForFinalization
 	nodeConfig.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.EspressoCaffNode.WaitForConfirmations
 	nodeConfig.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.EspressoCaffNode.RequiredBlockDepth
 	nodeConfig.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.EspressoCaffNode.FromBlock = 1
+	nodeConfig.EspressoCaffNode.EspressoTeeType = ""
+	nodeConfig.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
+	nodeConfig.EspressoCaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
 
 	nodeConfig.EspressoCaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,
@@ -86,7 +98,14 @@ func createCaffNode(
 		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
 		nodeConfig.EspressoCaffNode.NextHotshotBlock = 0
 	}
+
+	nodeConfig.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.EspressoCaffNode.EspressoTeeType
+	nodeConfig.EspressoCaffNode.SnapshotChecksum = existing.nodeConfig.EspressoCaffNode.SnapshotChecksum
+	nodeConfig.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.EspressoCaffNode.GenerateSnapshot
+	nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = existing.nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr
+
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
+	builder.L1 = existing.L1
 	return builder, cleanup, err
 }
 
@@ -215,15 +234,13 @@ func TestEspressoCaffNode(t *testing.T) {
 	})
 	Require(t, err)
 
-	log.Info("Starting the caff node")
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = false
 	// start the node
-	builder, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	builder, _, err = createCaffNode(ctx, t, builder, arbnode.TestBatchPosterConfig.DisableDapFallbackStoreDataOnChain)
 	Require(t, err)
 	builderCaffNode := builder.L2
-	defer cleanupCaffNode()
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builderCaffNode.GetBalance(t, l2Info.GetAddress("User14"))
@@ -505,6 +522,92 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	Require(t, err)
 }
 
+func TestEspressoCaffNodeSnapshot(t *testing.T) {
+	// First we will run the caff node in generate snapshot mode
+	ctx, _, _, _, cancel, valNodeCleanup, builder, cleanup, cleanEspresso := Setup(t)
+	defer cancel()
+	defer valNodeCleanup()
+	defer cleanup()
+	defer cleanEspresso()
+
+	// Set caff node config variables
+	builder.nodeConfig.EspressoCaffNode.WaitForConfirmations = true
+	builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.EspressoCaffNode.GenerateSnapshot = true
+
+	// start the node
+	log.Info("Starting the caff node initially")
+	// Start the caff node without a snapshot signer
+	builderCaffNode, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
+	Require(t, err)
+
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User14", builder.L2Info)
+	Require(t, err)
+	err = checkTransferTxOnL2(t, ctx, builder.L2, "User15", builder.L2Info)
+	Require(t, err)
+
+	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
+		balance1 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User14"))
+		balance2 := builderCaffNode.L2.GetBalance(t, builder.L2Info.GetAddress("User15"))
+		log.Info("waiting for balance", "account", "User14", "balance", balance1, "account", "User15", "balance", balance2)
+		return balance1.Cmp(transferAmount) > 0 && balance2.Cmp(transferAmount) > 0
+	})
+	Require(t, err)
+
+	// start the node
+	time.Sleep(10 * time.Second)
+
+	cleanupCaffNode()
+
+	// Now we need to check if it created a snapshot.txt file in the parent chain directory
+	snapshotFile := filepath.Join(filepath.Join(builderCaffNode.dataDir, builderCaffNode.l2StackConfig.Name, "system_tests.test"), "snapshot.txt")
+	// Read the snapshot file and get the sha256 hash
+	snapshotFileContent, err := os.ReadFile(snapshotFile)
+	Require(t, err)
+
+	// Convert to base64 to string
+	base64SnapshotFileContent := strings.TrimSpace(string(snapshotFileContent))
+	log.Info("sha256Hash read from snapshot.txt", "sha256Hash", base64SnapshotFileContent)
+
+	// now we need to restart the caff node in Snapshot mode such and it will use this snapshot,
+	// verify it and re-initialize the tags with tmac
+	builderCaffNode.nodeConfig.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
+	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTeeType = "TESTS"
+	builderCaffNode.nodeConfig.EspressoCaffNode.GenerateSnapshot = false
+
+	parentChainTransactionOpts := builder.L1Info.GetDefaultTransactOpts("Faucet", ctx)
+	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
+	Require(t, err)
+	builderCaffNode.nodeConfig.EspressoCaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
+
+	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
+	_ = logHandler
+
+	time.Sleep(10 * time.Second)
+	builderCaffNode.L1Info = builder.L1Info
+	builderCaffNode.RestartCaffNode(t)
+
+	// This time check if it printed the log about snapshot already verified
+	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
+		return logHandler.WasLogged("Snapshot hash matches")
+	})
+	Require(t, err)
+
+	// Now restart the caff node again, and it should print that the snapshot has already been verified previously
+	builderCaffNode.L2.cleanup()
+
+	time.Sleep(10 * time.Second)
+	builderCaffNode.RestartCaffNode(t)
+
+	// This time check if it printed the log about snapshot already verified
+	err = waitForWith(ctx, 10*time.Minute, 1*time.Second, func() bool {
+		return logHandler.WasLogged("Snapshot has already been verified previously")
+	})
+
+	Require(t, err)
+}
+
 // RequireErr:
 // This serves to assert that we should be expecting some error during the test, and if there is not an error, fail the test.
 func RequireErr(t *testing.T, err error, expectedError error) {
@@ -584,11 +687,11 @@ type mockSgxTeeVerifier struct {
 	time time.Time
 }
 
-func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressogen.EnclaveReport, error) {
+func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
 	if time.Since(v.time) < 1*time.Minute {
-		return espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
+		return legacy_espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
 	}
-	return espressogen.EnclaveReport{}, nil
+	return legacy_espressogen.EnclaveReport{}, nil
 }
 
 func NewMockSgxTeeVerifier() *mockSgxTeeVerifier {
@@ -653,7 +756,7 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 
 }
 
-func TestEspressoForceInclusionChecker(t *testing.T) {
+func TestEspressoCaffNodeForceInclusionChecker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -699,7 +802,6 @@ func TestEspressoForceInclusionChecker(t *testing.T) {
 	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
 		delayedBridge,
 		reader,
-		builder.L2.ConsensusNode.ArbDB,
 		100,
 		false,
 		false,
@@ -745,4 +847,13 @@ func (m *MockSeqInbox) MaxTimeVariation(ctx context.Context) (*big.Int, *big.Int
 
 func (m *MockSeqInbox) TotalDelayedMessagesRead(ctx context.Context) (*big.Int, error) {
 	return m.seqInbox.TotalDelayedMessagesRead(&bind.CallOpts{Context: ctx})
+}
+
+// system_tests/caff_node_test.go:25:2: "github.com/offchainlabs/nitro/espressostreamer" imported and not used (typecheck)
+//
+//	"github.com/offchainlabs/nitro/espressostreamer"
+//	^
+func UnusedEspressostreamer() espressostreamer.EspressoStreamerInterface {
+	var a espressostreamer.EspressoStreamerInterface
+	return a
 }

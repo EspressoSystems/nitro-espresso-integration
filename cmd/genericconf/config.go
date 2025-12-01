@@ -109,13 +109,18 @@ func FileLoggingConfigAddOptions(prefix string, f *flag.FlagSet) {
 }
 
 type RpcConfig struct {
-	MaxBatchResponseSize int `koanf:"max-batch-response-size"`
-	BatchRequestLimit    int `koanf:"batch-request-limit"`
+	MaxBatchResponseSize             int    `koanf:"max-batch-response-size"`
+	BatchRequestLimit                int    `koanf:"batch-request-limit"`
+	EnableTeeIntegrityAttestation    bool   `koanf:"enable-tee-integrity-attestation"`
+	IntegrityKeyPairAttestationsPath string `koanf:"integrity-key-pair-attestations-path"`
 }
 
 var DefaultRpcConfig = RpcConfig{
 	MaxBatchResponseSize: 10_000_000, // 10MB
 	BatchRequestLimit:    node.DefaultConfig.BatchRequestLimit,
+
+	EnableTeeIntegrityAttestation:    false,
+	IntegrityKeyPairAttestationsPath: "integrity_key_pair_attestations",
 }
 
 func (c *RpcConfig) Apply(stackConf *node.Config) {
@@ -126,4 +131,6 @@ func (c *RpcConfig) Apply(stackConf *node.Config) {
 func RpcConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Int(prefix+".max-batch-response-size", DefaultRpcConfig.MaxBatchResponseSize, "the maximum response size for a JSON-RPC request measured in bytes (0 means no limit)")
 	f.Int(prefix+".batch-request-limit", DefaultRpcConfig.BatchRequestLimit, "the maximum number of requests in a batch (0 means no limit)")
+	f.Bool(prefix+".enable-tee-integrity-attestation", DefaultRpcConfig.EnableTeeIntegrityAttestation, "enable TEE integrity attestation")
+	f.String(prefix+".integrity-key-pair-attestations-path", DefaultRpcConfig.IntegrityKeyPairAttestationsPath, "path to integrity key pair attestations")
 }
