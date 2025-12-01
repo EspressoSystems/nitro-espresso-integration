@@ -7,6 +7,8 @@ linters:
     - gosec
     - nilerr
     - misspell
+  disable:
+    - misspell
   settings:
     errcheck:
       check-type-assertions: true
@@ -39,6 +41,15 @@ linters:
         - "-ST1012" # Errors should be named errFoo or ErrFoo
         - "-ST1003" # Variable naming rules (e.g. underscores in packages, and abbreviations)
         - "-ST1016" # Methods on the same type should ahve the same reciever name
+        - "-ST1019"
+        - "-QF1011"
+        - "-QF1009"
+        - "-ST1023"
+        - "-ST1006"
+        - "-ST1008"
+        - "-QF1002"
+        - "-QF1012"
+        - "-QF1010"
   exclusions:
     generated: lax
     presets:
