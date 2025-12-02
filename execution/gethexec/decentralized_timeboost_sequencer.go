@@ -732,7 +732,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 			}
 
 			for _, block := range body.Blocks {
-				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManger.GetCommitteeById); err != nil {
+				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManager.GetCommitteeById); err != nil {
 					log.Warn("catchup error verifying timeboost block", "err", err)
 					continue
 				}
