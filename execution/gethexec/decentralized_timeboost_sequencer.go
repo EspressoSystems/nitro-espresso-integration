@@ -762,7 +762,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 						log.Info("catchup complete: queue caught up", "next round", txn.roundId, "certified block round", currentRound, "l2 block", executedBlock)
 						return nil
 					}
-					// We can safely discard any old inclusion lists that where round ids are less than the round ids in the certified block
+					// We can safely discard any old inclusion lists whose round ids are less than the round ids in the certified block
 					discarded := s.txQueue.dequeue()
 					log.Info("discarded obsolete txn", "discarded round", discarded.roundId, "certified block round", currentRound, "l2 block", executedBlock)
 				}
