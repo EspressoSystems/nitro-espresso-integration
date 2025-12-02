@@ -846,13 +846,13 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 				return 0
 			}
 			// catchup is done, now make sure we can produce a block
-			s.state = WaitingForBlockProducion
+			s.state = WaitingForBlockProduction
 			return 0
 		case Running:
 			if s.createBlock(ctx) {
 				return 0
 			}
-		case WaitingForBlockProducion:
+		case WaitingForBlockProduction:
 			if s.createBlock(ctx) {
 				return 0
 			}
