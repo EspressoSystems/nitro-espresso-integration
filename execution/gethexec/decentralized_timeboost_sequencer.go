@@ -241,7 +241,7 @@ func NewDecentralizedTimeboostSequencer(
 		},
 		inclusionListsReceived: 0,
 		hotshotClient:          client,
-		timeboostKeyManger:     timeboostKeyManager,
+		timeboostKeyManager:     timeboostKeyManager,
 		state:                  Running,
 	}, nil
 }
