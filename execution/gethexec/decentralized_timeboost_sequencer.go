@@ -768,7 +768,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 				}
 			}
 		}
-		// If we dont meet this conditions, fetch next hotshot block and try again
+		// If we don't meet these conditions, fetch next hotshot block and try again
 		height += 1
 	}
 }
