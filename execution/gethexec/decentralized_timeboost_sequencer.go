@@ -49,7 +49,7 @@ type sequencerState int
 
 const (
 	CatchUp sequencerState = iota
-	WaitingForBlockProducion
+	WaitingForBlockProduction
 	Running
 )
 
