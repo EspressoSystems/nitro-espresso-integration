@@ -389,7 +389,7 @@ outer:
 
 	if len(queueItems) == 0 {
 		// If we are in waiting state, we want to retry immediately
-		if s.state == WaitingForBlockProducion {
+		if s.state == WaitingForBlockProduction {
 			madeBlock = true
 			return madeBlock
 		}
