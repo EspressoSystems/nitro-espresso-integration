@@ -1,6 +1,7 @@
 package keymanager
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/json"
@@ -21,6 +22,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
 )
@@ -58,7 +60,8 @@ type EspressoKeyManager struct {
 	userDataAttestationFile string
 	quoteFile               string
 
-	hasRegistered bool
+	hasRegistered                    bool
+	espressoNitroAttesVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
 }
 
 func NewEspressoKeyManager(
@@ -72,6 +75,7 @@ func NewEspressoKeyManager(
 	servicePersistentPrivateKey *ecdsa.PrivateKey,
 	userDataAttestationFile string,
 	quoteFile string,
+	zkAttestationServiceURL string,
 ) *EspressoKeyManager {
 	var pubKey *ecdsa.PublicKey
 	var err error
@@ -122,6 +126,8 @@ func NewEspressoKeyManager(
 		panic("Retry getting base fee delay cannot be more than 3 minutes")
 	}
 
+	espressoNitroAttesVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
+
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
 		privKey:                   privKey,
@@ -138,9 +144,10 @@ func NewEspressoKeyManager(
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
 			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
-		userDataAttestationFile: userDataAttestationFile,
-		quoteFile:               quoteFile,
-		serviceType:             serviceType,
+		userDataAttestationFile:          userDataAttestationFile,
+		quoteFile:                        quoteFile,
+		serviceType:                      serviceType,
+		espressoNitroAttesVerifierClient: espressoNitroAttesVerifierClient,
 	}
 }
 
@@ -178,6 +185,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("sgx signing failed: %w", err)
 		}
+
 		return attestationQuote, addr, nil
 
 	case NITRO:
@@ -188,17 +196,14 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("nitro signing failed: %w", err)
 		}
-
-		attestation, data, err := k.espressoNitroTEEVerifier.VerifyAttestationAndCertificates(
-			attestationBytes,
-			k.dataPoster,
-			k.registerSignerOpts,
-			k.serviceType,
-		)
-		if err != nil {
-			return nil, nil, fmt.Errorf("attestation verification failed: %w", err)
+		if k.espressoNitroAttesVerifierClient == nil {
+			return nil, nil, errors.New("attestation verifier client is not initialized")
 		}
-		return attestation, data, nil
+		onchainProof, err := k.espressoNitroAttesVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
+		}
+		return onchainProof.RawProof.Journal, onchainProof.OnchainProof, nil
 	case TESTS:
 		addr := signerAddr.Bytes()
 		log.Info("TESTS signing address", "addr", signerAddr)

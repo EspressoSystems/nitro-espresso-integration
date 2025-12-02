@@ -2,12 +2,8 @@ package espressotee
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
-
-	"github.com/hf/nitrite"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -31,12 +27,6 @@ type EspressoNitroTEEVerifierInterface interface {
 		registerSignerOpts EspressoRegisterServiceOpts,
 		serviceType ServiceType,
 	) (common.Hash, error)
-	VerifyAttestationAndCertificates(
-		attestationBytes []byte,
-		dataPoster *dataposter.DataPoster,
-		registerSignerOpts EspressoRegisterServiceOpts,
-		serviceType ServiceType,
-	) ([]byte, []byte, error)
 	IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error)
 }
 
@@ -203,82 +193,4 @@ func (e *EspressoNitroTEEVerifier) VerifyCert(
 	} else {
 		return certHash, errors.New("attestation certificate is not registered in contract even after successful transaction")
 	}
-}
-
-/**
- * This function validates parses the attestation result we received from AWS Nitro Secure Module (NSM) then validates the following on-chain
- * 1. The PCR0 hash is registered in the espresso nitro tee verifier contract
- * 2. The CA certificate chain
- * 3. The client certificate
- */
-func (e *EspressoNitroTEEVerifier) VerifyAttestationAndCertificates(
-	attestationBytes []byte,
-	dataPoster *dataposter.DataPoster,
-	registerSignerOpts EspressoRegisterServiceOpts,
-	serviceType ServiceType,
-) ([]byte, []byte, error) {
-	// First check base fee is low enough
-	err := BaseFeeCheck(
-		registerSignerOpts.MaxBaseFee,
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryBaseFeeDelay,
-		func() (*big.Int, error) {
-			return dataPoster.BaseFee()
-		},
-		"verify certificate: latest base fee is greater than max base fee",
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Unmarshal attestation document
-	var res nitrite.Result
-	err = json.Unmarshal(attestationBytes, &res)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	pcr0Hash := crypto.Keccak256Hash(res.Document.PCRs[0])
-	log.Info("successfully got attestation", "pcr0 hash", pcr0Hash)
-
-	// Before verifying certificates on chain, check if the pcr0 hash is registered to save gas
-	verified, err := e.IsPCR0HashRegistered(pcr0Hash, serviceType) // Currently we only call this function with the batcher, this might change in the future.
-	if err != nil {
-		log.Error("failed to check if pcr0 hash is verified", "pcr0 hash", pcr0Hash)
-		return nil, nil, err
-	}
-
-	if !verified {
-		return nil, nil, fmt.Errorf("prc0 hash is not registered in espresso tee verifier contract")
-	}
-
-	// Verify CA certificate chain
-	if len(res.Document.CABundle) == 0 {
-		return nil, nil, errors.New("CA bundle is empty")
-	}
-
-	// Go over the CA certificate bundle in attestation and verify each
-	parentCertHash := crypto.Keccak256Hash(res.Document.CABundle[0])
-	for i := 0; i < len(res.Document.CABundle); i++ {
-		cert := res.Document.CABundle[i]
-		// Verify current certificate against parent hash in NitroEspressoTEEVerifier contracts
-		certHash, err := e.VerifyCert(dataPoster, cert, parentCertHash, true, registerSignerOpts, serviceType)
-		if err != nil {
-			log.Error("failed to get CA cert verified", "index", i, "err", err)
-			return nil, nil, err
-		}
-
-		// For next certificate in bundle we need to compare it with this certificate hash
-		parentCertHash = certHash
-	}
-
-	// Verify client certificate
-	_, err = e.VerifyCert(dataPoster, res.Document.Certificate, parentCertHash, false, registerSignerOpts, serviceType)
-	if err != nil {
-		log.Error("failed to get client cert verified", "err", err)
-		return nil, nil, err
-	}
-
-	// Return attestation and signature
-	return res.COSESign1, res.Signature, nil
 }
