@@ -179,7 +179,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 
 	var sigs [][]byte
 	v.adjustRecoveryByte(args.Signature)
-	// acount for our own
+	// account for our own
 	sigCount := 1
 	// Note: We append empty signatures on any error because if we still receive a quorum of signatures,
 	// we will still try to post the batch and timeboost contracts checks signatures in order in respect to member ordering in contract
