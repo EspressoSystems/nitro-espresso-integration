@@ -202,11 +202,20 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
-		log.Info("successfully generated zk proof from nitro attestation")
-		log.Info("onchain proof journal length", "journal", hex.EncodeToString(onchainProof.RawProof.Journal))
-		log.Info("onchain proof is", "onchain proof", hex.EncodeToString(onchainProof.OnchainProof))
 
-		return onchainProof.RawProof.Journal, onchainProof.OnchainProof, nil
+		journalBytes, err := hex.DecodeString(onchainProof.RawProof.Journal)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decode journal hex string: %w", err)
+		}
+		onchainProofBytes, err := hex.DecodeString(onchainProof.OnchainProof)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decode onchain proof hex string: %w", err)
+		}
+		log.Info("successfully generated zk proof from nitro attestation")
+		log.Info("onchain proof journal length", "journal", onchainProof.RawProof.Journal)
+		log.Info("onchain proof is", "onchain proof", onchainProof.OnchainProof)
+
+		return journalBytes, onchainProofBytes, nil
 	case TESTS:
 		addr := signerAddr.Bytes()
 		log.Info("TESTS signing address", "addr", signerAddr)

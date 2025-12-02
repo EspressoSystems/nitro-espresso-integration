@@ -13,38 +13,20 @@ type EspressoAttestationVerifierClient struct {
 	client  *http.Client
 }
 
-type ProofType string
-
-const (
-	ProofTypeVerifier   ProofType = "Verifier"
-	ProofTypeAggregator ProofType = "Aggregator"
-)
-
-type ZkCoProcessorType string
-
-const (
-	ZkCoProcessorTypeSP1      ZkCoProcessorType = "SP1"
-	ZkCoProcessorTypeRISCZero ZkCoProcessorType = "RISCZero"
-)
-
 type OnchainProof struct {
-	ZkType       ZkCoProcessorType `json:"zktype"`
-	ZkVMVersion  string            `json:"zkvm_version"`
-	ProgramID    ProgramId         `json:"program_id"`
-	RawProof     RawProof          `json:"raw_proof"`
-	OnchainProof []byte            `json:"onchain_proof"`
-	ProofType    ProofType         `json:"proof_type"`
-}
-
-type ProgramId struct {
-	VerifierID      [32]byte `json:"verifier_id"`
-	VerifierProofID [32]byte `json:"verifier_proof_id"`
-	AggregatorID    [32]byte `json:"aggregator_id"`
-}
-
-type RawProof struct {
-	EncodedProof []byte `json:"encoded_proof"`
-	Journal      []byte `json:"journal"`
+	Zktype      string `json:"zktype"`
+	ZkvmVersion string `json:"zkvm_version"`
+	ProgramID   struct {
+		VerifierID      string `json:"verifier_id"`
+		VerifierProofID string `json:"verifier_proof_id"`
+		AggregatorID    string `json:"aggregator_id"`
+	} `json:"program_id"`
+	RawProof struct {
+		EncodedProof string `json:"encoded_proof"`
+		Journal      string `json:"journal"`
+	} `json:"raw_proof"`
+	OnchainProof string `json:"onchain_proof"`
+	ProofType    string `json:"proof_type"`
 }
 
 func NewEspressoAttestationVerifierClient(
