@@ -4,13 +4,12 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"time"
 
-	"github.com/hf/nitrite"
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 
@@ -203,6 +202,10 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
+		log.Info("successfully generated zk proof from nitro attestation")
+		log.Info("onchain proof journal length", "journal", hex.EncodeToString(onchainProof.RawProof.Journal))
+		log.Info("onchain proof is", "onchain proof", hex.EncodeToString(onchainProof.OnchainProof))
+
 		return onchainProof.RawProof.Journal, onchainProof.OnchainProof, nil
 	case TESTS:
 		addr := signerAddr.Bytes()
@@ -358,16 +361,8 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 		return nil, fmt.Errorf("no attestation document returned")
 	}
 
-	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify attestation")
-	}
-
-	attestationBytes, err := json.Marshal(attestation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal attestation")
-	}
-	return attestationBytes, nil
+	log.Info("Res Attestation document", "document", res.Attestation.Document)
+	return res.Attestation.Document, nil
 }
 
 // No-Op Signauture
