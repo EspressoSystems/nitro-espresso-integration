@@ -452,7 +452,7 @@ outer:
 		}
 		for _, queueItem := range queueItems {
 			// TODO: should send the error back to the user
-			if s.state == WaitingForBlockProducion {
+			if s.state == WaitingForBlockProduction {
 				log.Error("error sequencing transactions after catchup. this will be retried", "err", err, "tx", queueItem.tx.Hash().Hex())
 				s.txRetryQueue.enqueueItems(queueItems)
 			} else {
