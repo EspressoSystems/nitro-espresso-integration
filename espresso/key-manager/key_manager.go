@@ -203,18 +203,15 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
 
-		journalBytes, err := hex.DecodeString(stripHexPrefix(onchainProof.RawProof.Journal))
+		journalBytes, err := hex.DecodeString(arbutil.StripHexPrefix(onchainProof.RawProof.Journal))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode journal hex string: %w", err)
 		}
-		onchainProofBytes, err := hex.DecodeString(stripHexPrefix(onchainProof.OnchainProof))
+		onchainProofBytes, err := hex.DecodeString(arbutil.StripHexPrefix(onchainProof.OnchainProof))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode onchain proof hex string: %w", err)
 		}
 		log.Info("successfully generated zk proof from nitro attestation")
-		log.Info("onchain proof journal length", "journal", onchainProof.RawProof.Journal)
-		log.Info("onchain proof is", "onchain proof", onchainProof.OnchainProof)
-
 		return journalBytes, onchainProofBytes, nil
 	case TESTS:
 		addr := signerAddr.Bytes()
@@ -370,7 +367,6 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 		return nil, fmt.Errorf("no attestation document returned")
 	}
 
-	log.Info("Res Attestation document", "document", res.Attestation.Document)
 	return res.Attestation.Document, nil
 }
 
@@ -379,14 +375,6 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 
 func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
 	return payload, nil
-}
-
-// stripHexPrefix removes "0x" prefix from hex strings if present
-func stripHexPrefix(hexStr string) string {
-	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
-		return hexStr[2:]
-	}
-	return hexStr
 }
 
 func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, serviceType espressotee.ServiceType) (espressotee.EspressoNitroTEEVerifierInterface, error) {
