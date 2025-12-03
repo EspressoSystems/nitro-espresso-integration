@@ -203,11 +203,11 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
 
-		journalBytes, err := hex.DecodeString(onchainProof.RawProof.Journal)
+		journalBytes, err := hex.DecodeString(stripHexPrefix(onchainProof.RawProof.Journal))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode journal hex string: %w", err)
 		}
-		onchainProofBytes, err := hex.DecodeString(onchainProof.OnchainProof)
+		onchainProofBytes, err := hex.DecodeString(stripHexPrefix(onchainProof.OnchainProof))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to decode onchain proof hex string: %w", err)
 		}
@@ -379,6 +379,14 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 
 func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
 	return payload, nil
+}
+
+// stripHexPrefix removes "0x" prefix from hex strings if present
+func stripHexPrefix(hexStr string) string {
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		return hexStr[2:]
+	}
+	return hexStr
 }
 
 func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, serviceType espressotee.ServiceType) (espressotee.EspressoNitroTEEVerifierInterface, error) {
