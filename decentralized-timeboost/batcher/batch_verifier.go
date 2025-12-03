@@ -189,7 +189,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 			sigs = append(sigs, args.Signature)
 			continue
 		}
-		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
+		resp, err := v.client.Post("http://"+member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			log.Error("http request failed", "err", err, "to", member.SigKey)
 			sigs = append(sigs, []byte{})
