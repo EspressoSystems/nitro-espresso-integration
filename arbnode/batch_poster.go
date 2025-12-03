@@ -698,7 +698,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			if opts.Config().IsDecentralizedTimeboost {
 				height, err := hotShotClient.FetchLatestBlockHeight(ctx)
 				if err != nil {
-					log.Warn("timeboost error getting height defaulting to config height", "height", hotshotBlock, "err", err)
+					log.Warn("error fetching hotshot height for timeboost, defaulting to configured hotshot height", "height", hotshotBlock, "err", err)
 				} else {
 					lookback := uint64(100)
 					if height >= lookback {
@@ -2861,8 +2861,13 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 		}
 
 		if !msg.Message.Equals(muxBackend.allMsgs[index].Message) {
-			log.Warn("message mismatch between what leader sent and what is in batch", "received l2 msg", msg.Message.L2msg, "l2 msg in db", muxBackend.allMsgs[index].Message.L2msg)
-			log.Warn("message mismatch between what leader sent and what is in batch", "received header", msg.Message.Header, "header in db", muxBackend.allMsgs[index].Message.Header)
+			log.Warn(
+				"message mismatch between what leader sent and what is in batch",
+				"received l2 msg", msg.Message.L2msg,
+				"l2 msg in db", muxBackend.allMsgs[index].Message.L2msg,
+				"received header", msg.Message.Header,
+				"header in db", muxBackend.allMsgs[index].Message.Header,
+			)
 			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 		}
 	}

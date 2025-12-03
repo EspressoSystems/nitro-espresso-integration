@@ -155,7 +155,7 @@ type DecentralizedTimeboostSequencer struct {
 	inclusionListsReceived uint64
 	hotshotClient          *hotshotClient.MultipleNodesClient
 	state                  sequencerState
-	timeboostKeyManger     *decentralizedtimeboostgen.KeyManager
+	timeboostKeyManager    *decentralizedtimeboostgen.KeyManager
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -241,7 +241,7 @@ func NewDecentralizedTimeboostSequencer(
 		},
 		inclusionListsReceived: 0,
 		hotshotClient:          client,
-		timeboostKeyManager:     timeboostKeyManager,
+		timeboostKeyManager:    timeboostKeyManager,
 		state:                  Running,
 	}, nil
 }
