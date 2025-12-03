@@ -236,9 +236,10 @@ type BatchPosterConfig struct {
 	QuoteFile                        string                                    `koanf:"quote-file"`
 
 	// Fetch messages from HotShot block
-	HotShotBlock             uint64 `koanf:"hotshot-block"`
-	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
-	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
+	HotShotBlock                  uint64 `koanf:"hotshot-block"`
+	TimeboostHotShotBlockLookback uint64 `koanf:"timeboost-hotshot-block-lookback"`
+	EspressoEventPollingStep      uint64 `koanf:"espresso-event-polling-step"`
+	HotShotFirstPostingBlock      uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
 	AddressMonitorStartL1                      uint64                                                     `koanf:"address-monitor-start-l1"`
 	InitBatcherAddresses                       []string                                                   `koanf:"init-batcher-addresses"`
@@ -303,6 +304,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+	f.Uint64(prefix+".timeboost-hotshot-block-lookback", DefaultBatchPosterConfig.TimeboostHotShotBlockLookback, "specifies the hotshot block number to start from the current height")
 	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
@@ -395,6 +397,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	DecentralizedTimeboostKeyManagementAddress: "",
 	AddressMonitorStep:                         100,
 	AddressMonitorStartL1:                      1,
+	TimeboostHotShotBlockLookback:              200,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -446,6 +449,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	AddressMonitorStartL1:               1,
 	AddressMonitorStep:                  100,
 	EspressoEventPollingStep:            100,
+	TimeboostHotShotBlockLookback:       0,
 }
 
 type BatchPosterOpts struct {
@@ -1993,7 +1997,12 @@ var errAttemptLockFailed = errors.New("failed to acquire lock; either another ba
 
 func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error) {
 	if b.batchReverted.Load() {
-		return false, fmt.Errorf("batch was reverted, not posting any more batches")
+		if b.config().IsDecentralizedTimeboost {
+			b.batchReverted.Store(false)
+			log.Warn("decentralized timeboost batch post was reverted; this can be because two batches were posted at same time, will try and attempt to post another batch")
+		} else {
+			return false, fmt.Errorf("batch was reverted, not posting any more batches")
+		}
 	}
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		registered := espressoSubmitter.GetKeyManager().HasRegistered()
@@ -2044,7 +2053,20 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
 				// Also ensure this isnt the chains first batch
 				if b.batchVerifier.LatestVerified == nil {
-					// TODO: This only works for newly deployed chains
+					// first check if we have the correct starting position in streamer
+					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(batchPosition.MessageCount), uint64(batchPosition.MessageCount))
+					if block != nil {
+						log.Info("no batch was yet verified but found correct starting position in espresso streamer", "messageCount", uint64(batchPosition.MessageCount))
+						b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
+							MessageCount:  batchPosition.MessageCount,
+							HotshotHeight: *block,
+						}
+					}
+				}
+				// recheck if we are still not set
+				if b.batchVerifier.LatestVerified == nil {
+					// If we dont have the correct starting position in streamer and this in not the start of a chain
+					// We need to wait for a quruom of nodes to post a batch so eventually we can catch up
 					if batchPosition.MessageCount > 1 {
 						log.Warn("batch poster is yet to verify a batch. Waiting for batch verification before continuing", "messageCount", batchPosition.MessageCount)
 						return false, nil
