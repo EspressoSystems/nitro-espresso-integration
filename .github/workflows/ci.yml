@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: buildjet-16vcpu-ubuntu-2204
+    runs-on: buildjet-8vcpu-ubuntu-2204
 
     # Creates a redis container for redis tests
     services:
@@ -34,11 +34,6 @@ jobs:
         test-mode: [defaults, pathdb, challenge, stylus, l3challenge]
 
     steps:
-      # - name: Free Disk Space (Ubuntu)
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     tool-cache: true
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
