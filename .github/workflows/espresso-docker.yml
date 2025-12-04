@@ -24,7 +24,7 @@ jobs:
       matrix:
         platform: [linux/amd64]
 
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-24.04-8core
 
     steps:
       - uses: cargo-bins/cargo-binstall@main

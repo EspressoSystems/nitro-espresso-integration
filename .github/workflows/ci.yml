@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     name: Go Tests
-    runs-on: buildjet-8vcpu-ubuntu-2204
+    runs-on: ubuntu-24.04-8core
 
     # Creates a redis container for redis tests
     services:
@@ -128,7 +128,7 @@ jobs:
         run: cargo install --force cbindgen
 
       - name: Cache Build Products
-        uses: buildjet/cache@v4
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cache/go-build
@@ -136,7 +136,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-${{ matrix.test-mode }}-
 
       - name: Cache Rust Build Products
-        uses: buildjet/cache@v4
+        uses: actions/cache@v3
         with:
           path: |
             ~/.cargo/
@@ -149,7 +149,7 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-${{ steps.install-rust.outputs.rustc_hash }}-
 
       - name: Cache cbrotli
-        uses: buildjet/cache@v4
+        uses: actions/cache@v3
         id: cache-cbrotli
         with:
           path: |
