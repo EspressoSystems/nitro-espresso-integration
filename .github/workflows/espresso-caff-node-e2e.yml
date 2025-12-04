@@ -39,16 +39,6 @@ jobs:
         with:
           gotestsum_version: 1.12.0
 
-      - name: free disk space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: false
-          swap-storage: true
-
       - name: Setup nodejs
         uses: actions/setup-node@v3
         with:
