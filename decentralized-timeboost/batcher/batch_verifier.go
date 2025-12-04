@@ -171,7 +171,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 	args *BatchPosterArgs,
 	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
 ) ([]byte, error) {
-	requiredQuorum := (2 * (len(members) - 1) / 3) + 1
+	requiredQuorum := (2*len(members))/3 + 1
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "batcher_submitBatch",
@@ -300,24 +300,20 @@ func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	leader := committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
+
 	pubKey := v.getCompressedPubKey()
-	if !bytes.Equal(pubKey, leader.SigKey) {
-		if time.Since(v.lastBatchUpdatedTime) <= v.waitForLeaderDelay {
-			return false, nil
-		}
+	if time.Since(v.lastBatchUpdatedTime) >= v.waitForLeaderDelay {
 		v.lastBatchUpdatedTime = time.Now()
 		v.leaderTimeouts += 1
-		leader = committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
-		if !bytes.Equal(pubKey, leader.SigKey) {
-			return false, nil
-		}
 		log.Warn(
-			"time expired waiting for batch to be posted from leader, trying to construct own batch",
+			"time expired waiting for batch to be posted from leader",
 			"leader timeouts", v.leaderTimeouts,
-			"batch", seqNum,
-			"pub key", "0x"+hex.EncodeToString(pubKey),
+			"batch num", seqNum,
 		)
+	}
+	leader := committee.Members[(seqNum+v.leaderTimeouts)%uint64(len(committee.Members))]
+	if !bytes.Equal(pubKey, leader.SigKey) {
+		return false, nil
 	}
 
 	return true, nil

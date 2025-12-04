@@ -2053,9 +2053,16 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				// Wait for the espresso streamer to catch up and verify a batch before we try constructing our own
 				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
 				// Also ensure this isnt the chains first batch
-				if b.batchVerifier.LatestVerified == nil {
+				hasVerified := b.batchVerifier.LatestVerified != nil
+				if !hasVerified || b.batchVerifier.LatestVerified.MessageCount < batchPosition.MessageCount {
+					start := batchPosition.MessageCount
+					if hasVerified {
+						start = b.batchVerifier.LatestVerified.MessageCount
+						log.Warn("last verified an old batch resetting", "last verified", start, "message count", batchPosition.MessageCount)
+						b.batchVerifier.LatestVerified = nil
+					}
 					// first check if we have the correct starting position in streamer
-					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(batchPosition.MessageCount), uint64(batchPosition.MessageCount))
+					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(start), uint64(batchPosition.MessageCount))
 					if block != nil && *block != uint64(math.MaxUint64) {
 						log.Info("no batch was yet verified but found correct starting position in espresso streamer", "messageCount", uint64(batchPosition.MessageCount))
 						b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
@@ -2092,7 +2099,12 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 						}
 					}
 					if !found {
-						log.Info("resetting streamer to last verified", "messageCount", batchPosition.MessageCount)
+						log.Info(
+							"resetting streamer to last verified",
+							"messageCount", batchPosition.MessageCount,
+							"last verified pos", b.batchVerifier.LatestVerified.MessageCount,
+							"height", b.batchVerifier.LatestVerified.HotshotHeight,
+						)
 						b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
 					}
 				}
