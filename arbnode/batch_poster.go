@@ -40,6 +40,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/parent"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
+	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbstate"
 	"github.com/offchainlabs/nitro/arbutil"
@@ -2055,7 +2056,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				if b.batchVerifier.LatestVerified == nil {
 					// first check if we have the correct starting position in streamer
 					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(batchPosition.MessageCount), uint64(batchPosition.MessageCount))
-					if block != nil {
+					if block != nil && *block != uint64(math.MaxUint64) {
 						log.Info("no batch was yet verified but found correct starting position in espresso streamer", "messageCount", uint64(batchPosition.MessageCount))
 						b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
 							MessageCount:  batchPosition.MessageCount,
@@ -2883,13 +2884,16 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 		}
 
 		if !msg.Message.Equals(muxBackend.allMsgs[index].Message) {
-			log.Warn(
-				"message mismatch between what leader sent and what is in batch",
-				"received l2 msg", msg.Message.L2msg,
-				"l2 msg in db", muxBackend.allMsgs[index].Message.L2msg,
-				"received header", msg.Message.Header,
-				"header in db", muxBackend.allMsgs[index].Message.Header,
-			)
+			rcvTxn, err := arbos.ParseL2Transactions(msg.Message, b.streamer.chainConfig.ChainID)
+			if err != nil {
+				return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
+			}
+			dbTxn, err := arbos.ParseL2Transactions(muxBackend.allMsgs[index].Message, b.streamer.chainConfig.ChainID)
+			if err != nil {
+				return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
+			}
+			b.batchVerifier.LogTransactions(fmt.Sprintf("position %d. received transaction", index), rcvTxn)
+			b.batchVerifier.LogTransactions(fmt.Sprintf("position %d. transaction in db", index), dbTxn)
 			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 		}
 	}

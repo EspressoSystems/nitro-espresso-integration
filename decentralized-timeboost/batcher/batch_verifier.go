@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -18,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -74,21 +76,24 @@ type BatchVerifier struct {
 }
 
 type BatchVerifierConfig struct {
-	RpcTimeout         time.Duration `koanf:"rpc-timeout"`
-	RpcKeepalive       time.Duration `koanf:"rpc-keepalive"`
-	WaitForLeaderDelay time.Duration `koanf:"wait-for-leader-delay"`
+	RpcTimeout          time.Duration `koanf:"rpc-timeout"`
+	RpcKeepalive        time.Duration `koanf:"rpc-keepalive"`
+	WaitForLeaderDelay  time.Duration `koanf:"wait-for-leader-delay"`
+	MaxIdleConnsPerHost int           `koanf:"max-idle-conns-per-host"`
 }
 
 var DefaultBatchVerifierConfig = BatchVerifierConfig{
-	RpcTimeout:         time.Second * 10,
-	RpcKeepalive:       time.Second * 30,
-	WaitForLeaderDelay: time.Minute * 5,
+	RpcTimeout:          time.Second * 10,
+	RpcKeepalive:        time.Second * 30,
+	MaxIdleConnsPerHost: 5,
+	WaitForLeaderDelay:  time.Minute * 5,
 }
 
 func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".rpc-timeout", DefaultBatchVerifierConfig.RpcTimeout, "timeout for http client")
 	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
 	f.Duration(prefix+".wait-for-leader-delay", DefaultBatchVerifierConfig.WaitForLeaderDelay, "how long we should wait for a leader to send batch, before trying constructing our own")
+	f.Int(prefix+".max-idle-conns-per-host", DefaultBatchVerifierConfig.MaxIdleConnsPerHost, "max idle connections")
 }
 
 func NewBatchVerifier(
@@ -120,6 +125,7 @@ func NewBatchVerifier(
 		client: &http.Client{
 			Timeout: config.RpcTimeout,
 			Transport: &http.Transport{
+				MaxIdleConnsPerHost: int(config.MaxIdleConnsPerHost),
 				DialContext: (&net.Dialer{
 					Timeout:   config.RpcTimeout,
 					KeepAlive: config.RpcKeepalive,
@@ -189,7 +195,11 @@ func (v *BatchVerifier) sendBatchForVerification(
 			sigs = append(sigs, args.Signature)
 			continue
 		}
-		resp, err := v.client.Post("http://"+member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
+		addr := strings.TrimSpace(member.BatchPosterAddress)
+		if !strings.HasPrefix(addr, "http://") {
+			addr = "http://" + addr
+		}
+		resp, err := v.client.Post(addr, "application/json", bytes.NewBuffer(jsonData))
 		if err != nil {
 			log.Error("http request failed", "err", err, "to", member.SigKey)
 			sigs = append(sigs, []byte{})
@@ -612,4 +622,25 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 		return nil, err
 	}
 	return sigs, nil
+}
+
+func (b *BatchVerifier) LogTransactions(msg string, txns types.Transactions) {
+	for _, txn := range txns {
+		from, _ := types.Sender(types.LatestSignerForChainID(txn.ChainId()), txn)
+		to := "<nil>"
+		if txn.To() != nil {
+			to = txn.To().Hex()
+		}
+		log.Warn(msg,
+			"hash", txn.Hash().Hex(),
+			"from", from.Hex(),
+			"to", to,
+			"time", txn.Time(),
+			"valueEth", txn.Value(),
+			"gas", txn.Gas(),
+			"gwei", txn.GasPrice(),
+			"nonce", txn.Nonce(),
+			"data", txn.Data(),
+		)
+	}
 }

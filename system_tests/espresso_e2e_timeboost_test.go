@@ -228,7 +228,7 @@ func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Clien
 			DhKey:              base58.Decode("AZrLbV37HAGhBWh49JHzup6Wfpu2AAGWGJJnxCDJibiY"),
 			DkgKey:             base58.Decode("7PdmfTS45d2hTXB8NcrTmvDwUVBimpYBbrBaGnu3i5Ne65krVfUpbe7bYRHS3AEg7H"),
 			NetworkAddress:     "node0:8000",
-			BatchPosterAddress: "http://localhost:8945",
+			BatchPosterAddress: "localhost:8945",
 			SigKeyAddress:      crypto.PubkeyToAddress(*uncompressed1),
 		},
 		{
@@ -236,7 +236,7 @@ func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Clien
 			DhKey:              base58.Decode("FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"),
 			DkgKey:             base58.Decode("7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"),
 			NetworkAddress:     "node1:8010",
-			BatchPosterAddress: "http://localhost:8947",
+			BatchPosterAddress: "localhost:8947",
 			SigKeyAddress:      crypto.PubkeyToAddress(*uncompressed2),
 		},
 	}
