@@ -7,18 +7,18 @@ on:
 
   workflow_dispatch:
     inputs:
-        image:
-            type: choice
-            default: dev
-            required: true
-            description: "Image to use for the regression test"
-            options:
-                - dev # build from source
-                - custom # use custom image
-        custom_image: # please make sure this image is compatible with the nitro-testnode submodule
-            type: string
-            required: false
-            description: "Custom image to use for the regression test"
+      image:
+        type: choice
+        default: dev
+        required: true
+        description: "Image to use for the regression test"
+        options:
+          - dev # build from source
+          - custom # use custom image
+      custom_image: # please make sure this image is compatible with the nitro-testnode submodule
+        type: string
+        required: false
+        description: "Custom image to use for the regression test"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -40,7 +40,6 @@ jobs:
     runs-on: buildjet-8vcpu-ubuntu-2204
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'v'))
     steps:
-
       - name: Setup environment variables
         run: |
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
@@ -63,6 +62,10 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Transaction Streamer regression test
+        run: |
+          bash scripts/run-transaction-streamer-regression-ci-tests
+
       - name: Run regression test
         run: |
           echo "ESPRESSO_VERSION=${{ env.ESPRESSO_VERSION }}"
@@ -73,4 +76,3 @@ jobs:
           fi
           cd nitro-testnode
           ./regression-test.bash
-
