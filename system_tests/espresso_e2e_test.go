@@ -11,10 +11,7 @@ import (
 	"testing"
 	"time"
 
-	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -170,14 +167,6 @@ func waitForEspressoNode(ctx context.Context) error {
 	})
 }
 
-func waitForHotShotLiveness(ctx context.Context, lightClientReader *lightclient.LightClientReader) error {
-	return waitForWith(ctx, 500*time.Second, 1*time.Second, func() bool {
-		log.Info("Waiting for HotShot Liveness")
-		_, err := lightClientReader.FetchMerkleRoot(1, nil)
-		return err == nil
-	})
-}
-
 func waitForL1Node(ctx context.Context) error {
 	err := waitFor(ctx, func() bool {
 		if e := exec.Command(
@@ -254,15 +243,6 @@ func TestEspressoE2E(t *testing.T) {
 		// Chosen based on intuition; no empirical data supports this value.
 		return h > 10
 	})
-	Require(t, err)
-
-	// make light client reader
-
-	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
-	Require(t, err)
-	// wait for hotshot liveness
-
-	err = waitForHotShotLiveness(ctx, lightClientReader)
 	Require(t, err)
 
 	// Check if the tx is executed correctly
@@ -452,15 +432,6 @@ func TestEspressoWithBlobs(t *testing.T) {
 		// Chosen based on intuition; no empirical data supports this value.
 		return h > 10
 	})
-	Require(t, err)
-
-	// make light client reader
-
-	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
-	Require(t, err)
-	// wait for hotshot liveness
-
-	err = waitForHotShotLiveness(ctx, lightClientReader)
 	Require(t, err)
 
 	// Check if the tx is executed correctly
