@@ -158,7 +158,7 @@ func waitForWith(
 
 func waitForEspressoNode(ctx context.Context) error {
 	return waitForWith(ctx, 3*time.Minute, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://localhost:20000/api/dev-info", "-L").Output()
+		out, err := exec.Command("curl", "http://localhost:41000/v1/availability/block/10", "-L").Output()
 		if err != nil {
 			log.Warn("retry to check the espresso dev node", "err", err)
 			return false
@@ -437,6 +437,7 @@ func TestEspressoWithBlobs(t *testing.T) {
 	// Check if the tx is executed correctly
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User10", l2Info)
 	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 
 	// Remember the number of messages
 	var msgCnt arbutil.MessageIndex
