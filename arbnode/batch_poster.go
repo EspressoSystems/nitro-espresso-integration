@@ -108,6 +108,7 @@ type BatchPoster struct {
 	gasRefunderAddr    common.Address
 	building           *buildingBatch
 	dapWriter          daprovider.Writer
+	anytrustWriter     daprovider.Writer
 	dapReaders         *daprovider.ReaderRegistry
 	dataPoster         *dataposter.DataPoster
 	redisLock          *redislock.Simple
@@ -147,8 +148,9 @@ type BatchPosterDangerousConfig struct {
 }
 
 type BatchPosterConfig struct {
-	Enable                             bool `koanf:"enable"`
-	DisableDapFallbackStoreDataOnChain bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
+	Enable                              bool `koanf:"enable"`
+	DisableDapFallbackStoreDataOnChain  bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
+	DisableDapFallbackStoreDataAnytrust bool `koanf:"disable-dap-fallback-store-data-on-anytrust" reload:"hot"`
 	// Max batch size.
 	MaxSize int `koanf:"max-size" reload:"hot"`
 	// Maximum 4844 blob enabled batch size.
@@ -221,6 +223,7 @@ func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultBatchPosterConfig.Enable, "enable posting batches to l1")
 	f.Bool(prefix+".disable-dap-fallback-store-data-on-chain", DefaultBatchPosterConfig.DisableDapFallbackStoreDataOnChain, "If unable to batch to DA provider, disable fallback storing data on chain")
+	f.Bool(prefix+".disable-dap-fallback-store-data-on-anytrust", DefaultBatchPosterConfig.DisableDapFallbackStoreDataAnytrust, "If unable to batch to DA provider, disable fallback storing data on chain")
 	f.Int(prefix+".max-size", DefaultBatchPosterConfig.MaxSize, "maximum estimated compressed batch size")
 	f.Int(prefix+".max-4844-batch-size", DefaultBatchPosterConfig.Max4844BatchSize, "maximum estimated compressed 4844 blob enabled batch size")
 	f.Duration(prefix+".max-delay", DefaultBatchPosterConfig.MaxDelay, "maximum batch posting delay")
@@ -251,8 +254,9 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 }
 
 var DefaultBatchPosterConfig = BatchPosterConfig{
-	Enable:                             false,
-	DisableDapFallbackStoreDataOnChain: false,
+	Enable:                              false,
+	DisableDapFallbackStoreDataOnChain:  false,
+	DisableDapFallbackStoreDataAnytrust: false,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
 	MaxSize: 100000,
 	// The Max4844BatchSize should be calculated from the values from L1 chain configs
@@ -293,46 +297,48 @@ var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 }
 
 var TestBatchPosterConfig = BatchPosterConfig{
-	Enable:                             true,
-	DisableDapFallbackStoreDataOnChain: true,
-	MaxSize:                            100000,
-	Max4844BatchSize:                   DefaultBatchPosterConfig.Max4844BatchSize,
-	PollInterval:                       time.Millisecond * 10,
-	ErrorDelay:                         time.Millisecond * 10,
-	MaxDelay:                           0,
-	WaitForMaxDelay:                    false,
-	CompressionLevel:                   2,
-	DASRetentionPeriod:                 daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:                 "",
-	ExtraBatchGas:                      10_000,
-	Post4844Blobs:                      false,
-	IgnoreBlobPrice:                    false,
-	DataPoster:                         dataposter.TestDataPosterConfig,
-	ParentChainWallet:                  DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                       "",
-	L1BlockBoundBypass:                 time.Hour,
-	UseAccessLists:                     true,
-	RedisLock:                          redislock.TestCfg,
-	GasEstimateBaseFeeMultipleBips:     arbmath.OneInUBips * 3 / 2,
-	CheckBatchCorrectness:              true,
-	DelayBufferThresholdMargin:         0,
-	DelayBufferAlwaysUpdatable:         true,
-	ParentChainEip7623:                 "auto",
+	Enable:                              true,
+	DisableDapFallbackStoreDataOnChain:  true,
+	DisableDapFallbackStoreDataAnytrust: true,
+	MaxSize:                             100000,
+	Max4844BatchSize:                    DefaultBatchPosterConfig.Max4844BatchSize,
+	PollInterval:                        time.Millisecond * 10,
+	ErrorDelay:                          time.Millisecond * 10,
+	MaxDelay:                            0,
+	WaitForMaxDelay:                     false,
+	CompressionLevel:                    2,
+	DASRetentionPeriod:                  daprovider.DefaultDASRetentionPeriod,
+	GasRefunderAddress:                  "",
+	ExtraBatchGas:                       10_000,
+	Post4844Blobs:                       false,
+	IgnoreBlobPrice:                     false,
+	DataPoster:                          dataposter.TestDataPosterConfig,
+	ParentChainWallet:                   DefaultBatchPosterL1WalletConfig,
+	L1BlockBound:                        "",
+	L1BlockBoundBypass:                  time.Hour,
+	UseAccessLists:                      true,
+	RedisLock:                           redislock.TestCfg,
+	GasEstimateBaseFeeMultipleBips:      arbmath.OneInUBips * 3 / 2,
+	CheckBatchCorrectness:               true,
+	DelayBufferThresholdMargin:          0,
+	DelayBufferAlwaysUpdatable:          true,
+	ParentChainEip7623:                  "auto",
 }
 
 type BatchPosterOpts struct {
-	DataPosterDB  ethdb.Database
-	L1Reader      *headerreader.HeaderReader
-	Inbox         *InboxTracker
-	Streamer      *TransactionStreamer
-	VersionGetter execution.ArbOSVersionGetter
-	SyncMonitor   *SyncMonitor
-	Config        BatchPosterConfigFetcher
-	DeployInfo    *chaininfo.RollupAddresses
-	TransactOpts  *bind.TransactOpts
-	DAPWriter     daprovider.Writer
-	ParentChainID *big.Int
-	DAPReaders    *daprovider.ReaderRegistry
+	DataPosterDB   ethdb.Database
+	L1Reader       *headerreader.HeaderReader
+	Inbox          *InboxTracker
+	Streamer       *TransactionStreamer
+	VersionGetter  execution.ArbOSVersionGetter
+	SyncMonitor    *SyncMonitor
+	Config         BatchPosterConfigFetcher
+	DeployInfo     *chaininfo.RollupAddresses
+	TransactOpts   *bind.TransactOpts
+	DAPWriter      daprovider.Writer
+	AnytrustWriter daprovider.Writer
+	ParentChainID  *big.Int
+	DAPReaders     *daprovider.ReaderRegistry
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -387,6 +393,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		gasRefunderAddr:    opts.Config().gasRefunder,
 		bridgeAddr:         opts.DeployInfo.Bridge,
 		dapWriter:          opts.DAPWriter,
+		anytrustWriter:     opts.AnytrustWriter,
 		redisLock:          redisLock,
 		dapReaders:         opts.DAPReaders,
 		parentChain:        &parent.ParentChain{ChainID: opts.ParentChainID, L1Reader: opts.L1Reader},
@@ -1687,10 +1694,19 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		// #nosec G115
 		sequencerMsg, err = b.dapWriter.Store(batchData, uint64(time.Now().Add(config.DASRetentionPeriod).Unix())).Await(ctx)
 		if err != nil {
-			if config.DisableDapFallbackStoreDataOnChain {
+
+			if !config.DisableDapFallbackStoreDataAnytrust {
+				log.Info("Falling back to storing data on anytrust", "err", err)
+				sequencerMsg, err = b.anytrustWriter.Store(batchData, uint64(time.Now().Add(config.DASRetentionPeriod).Unix())).Await(ctx)
+				if err != nil {
+					log.Warn("error falling back to anytrust, attempting to store data on-chain", "err", err)
+
+				}
+			} else if config.DisableDapFallbackStoreDataOnChain {
 				batchPosterDAFailureCounter.Inc(1)
 				return false, err
 			} else {
+				log.Info("Failed to store data on celestia or anytrust, falling back to storing data on-chain", "err", err)
 				// DAP on-chain fallback storage
 				sequencerMsg = batchData
 			}

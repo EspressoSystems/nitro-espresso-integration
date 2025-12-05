@@ -44,8 +44,8 @@ import (
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/staker/bold"
-	"github.com/offchainlabs/nitro/staker/legacy"
-	"github.com/offchainlabs/nitro/staker/multi_protocol"
+	legacystaker "github.com/offchainlabs/nitro/staker/legacy"
+	multiprotocolstaker "github.com/offchainlabs/nitro/staker/multi_protocol"
 	"github.com/offchainlabs/nitro/staker/validatorwallet"
 	"github.com/offchainlabs/nitro/util/containers"
 	"github.com/offchainlabs/nitro/util/contracts"
@@ -570,10 +570,10 @@ func getDAS(
 	dataSigner signature.DataSignerFunc,
 	l1client *ethclient.Client,
 	stack *node.Node,
-) (daprovider.Writer, func(), *daprovider.ReaderRegistry, error) {
-	if config.DAProvider.Enable && config.DataAvailability.Enable {
-		return nil, nil, nil, errors.New("da-provider and data-availability cannot be enabled together")
-	}
+) (daprovider.Writer, daprovider.Writer, func(), *daprovider.ReaderRegistry, error) {
+	// if config.DAProvider.Enable && config.DataAvailability.Enable {
+	// 	return nil, nil, nil, errors.New("da-provider and data-availability cannot be enabled together")
+	// }
 
 	var err error
 	var daClient *daclient.Client
@@ -584,11 +584,13 @@ func getDAS(
 	if config.DAProvider.Enable {
 		daClient, err = daclient.NewClient(ctx, &config.DAProvider, data_streaming.PayloadCommiter())
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		// Only allow dawriter if batchposter is enabled
 		withDAWriter = config.DAProvider.WithWriter && config.BatchPoster.Enable
-	} else if config.DataAvailability.Enable {
+	}
+
+	if config.DataAvailability.Enable {
 		// Create AnyTrust factory
 		daFactory, err := factory.NewDAProviderFactory(
 			factory.ModeAnyTrust,
@@ -601,11 +603,11 @@ func getDAS(
 			config.BatchPoster.Enable,
 		)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		if err := daFactory.ValidateConfig(); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		// Create writer if batch poster is enabled
@@ -613,7 +615,7 @@ func getDAS(
 		if config.BatchPoster.Enable {
 			anytrustWriter, writerCleanup, err = daFactory.CreateWriter(ctx)
 			if err != nil {
-				return nil, nil, nil, err
+				return nil, nil, nil, nil, err
 			}
 			withDAWriter = true
 		}
@@ -622,7 +624,7 @@ func getDAS(
 		var readerCleanup func()
 		anytrustReader, readerCleanup, err = daFactory.CreateReader(ctx)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		// Set up cleanup function
@@ -635,12 +637,12 @@ func getDAS(
 			}
 		}
 	} else if l2Config.ArbitrumChainParams.DataAvailabilityCommittee {
-		return nil, nil, nil, errors.New("a data availability service is required for this chain, but it was not configured")
+		return nil, nil, nil, nil, errors.New("a data availability service is required for this chain, but it was not configured")
 	}
 
 	// We support a nil txStreamer for the pruning code
 	if txStreamer != nil && txStreamer.chainConfig.ArbitrumChainParams.DataAvailabilityCommittee && daClient == nil && anytrustReader == nil {
-		return nil, nil, nil, errors.New("data availability service required but unconfigured")
+		return nil, nil, nil, nil, errors.New("data availability service required but unconfigured")
 	}
 
 	dapReaders := daprovider.NewReaderRegistry()
@@ -648,10 +650,10 @@ func getDAS(
 		promise := daClient.GetSupportedHeaderBytes()
 		result, err := promise.Await(ctx)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get supported header bytes from DA client: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to get supported header bytes from DA client: %w", err)
 		}
 		if err := dapReaders.RegisterAll(result.HeaderBytes, daClient); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to register DA client: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to register DA client: %w", err)
 		}
 	}
 	if anytrustReader != nil {
@@ -660,23 +662,19 @@ func getDAS(
 			daprovider.DASMessageHeaderFlag | daprovider.TreeDASMessageHeaderFlag,
 		}
 		if err := dapReaders.RegisterAll(headerBytes, anytrustReader); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to register AnyTrust reader: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to register AnyTrust reader: %w", err)
 		}
 	}
 	if blobReader != nil {
 		if err := dapReaders.SetupBlobReader(daprovider.NewReaderForBlobReader(blobReader)); err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to register blob reader: %w", err)
+			return nil, nil, nil, nil, fmt.Errorf("failed to register blob reader: %w", err)
 		}
 	}
 
 	if withDAWriter {
-		// Return anytrustWriter if it exists, otherwise daClient
-		if anytrustWriter != nil {
-			return anytrustWriter, dasServerCloseFn, dapReaders, nil
-		}
-		return daClient, dasServerCloseFn, dapReaders, nil
+		return daClient, anytrustWriter, dasServerCloseFn, dapReaders, nil
 	}
-	return nil, dasServerCloseFn, dapReaders, nil
+	return nil, nil, dasServerCloseFn, dapReaders, nil
 }
 
 func getInboxTrackerAndReader(
@@ -945,6 +943,7 @@ func getBatchPoster(
 	configFetcher ConfigFetcher,
 	txOptsBatchPoster *bind.TransactOpts,
 	dapWriter daprovider.Writer,
+	anytrustWriter daprovider.Writer,
 	l1Reader *headerreader.HeaderReader,
 	inboxTracker *InboxTracker,
 	txStreamer *TransactionStreamer,
@@ -970,18 +969,19 @@ func getBatchPoster(
 		}
 		var err error
 		batchPoster, err = NewBatchPoster(ctx, &BatchPosterOpts{
-			DataPosterDB:  rawdb.NewTable(arbDb, storage.BatchPosterPrefix),
-			L1Reader:      l1Reader,
-			Inbox:         inboxTracker,
-			Streamer:      txStreamer,
-			VersionGetter: arbOSVersionGetter,
-			SyncMonitor:   syncMonitor,
-			Config:        func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
-			DeployInfo:    deployInfo,
-			TransactOpts:  txOptsBatchPoster,
-			DAPWriter:     dapWriter,
-			ParentChainID: parentChainID,
-			DAPReaders:    dapReaders,
+			DataPosterDB:   rawdb.NewTable(arbDb, storage.BatchPosterPrefix),
+			L1Reader:       l1Reader,
+			Inbox:          inboxTracker,
+			Streamer:       txStreamer,
+			VersionGetter:  arbOSVersionGetter,
+			SyncMonitor:    syncMonitor,
+			Config:         func() *BatchPosterConfig { return &configFetcher.Get().BatchPoster },
+			DeployInfo:     deployInfo,
+			TransactOpts:   txOptsBatchPoster,
+			DAPWriter:      dapWriter,
+			AnytrustWriter: anytrustWriter,
+			ParentChainID:  parentChainID,
+			DAPReaders:     dapReaders,
 		})
 		if err != nil {
 			return nil, err
@@ -1153,7 +1153,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	dapWriter, dasServerCloseFn, dapReaders, err := getDAS(ctx, config, l2Config, txStreamer, blobReader, l1Reader, deployInfo, dataSigner, l1client, stack)
+	dapWriter, anytrustWriter, dasServerCloseFn, dapReaders, err := getDAS(ctx, config, l2Config, txStreamer, blobReader, l1Reader, deployInfo, dataSigner, l1client, stack)
 	if err != nil {
 		return nil, err
 	}
@@ -1178,7 +1178,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, l1Reader, inboxTracker, txStreamer, arbOSVersionGetter, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr)
+	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, anytrustWriter, l1Reader, inboxTracker, txStreamer, arbOSVersionGetter, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr)
 	if err != nil {
 		return nil, err
 	}
