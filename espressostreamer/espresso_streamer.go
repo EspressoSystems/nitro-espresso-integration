@@ -218,10 +218,10 @@ func (s *EspressoStreamer) VerifyConsecutivePositions(start uint64, target uint6
 	}
 	log.Warn(
 		"failed to verify consecutive position in streamer",
-		"prev msg count", start,
-		"new msg count", target,
+		"prevMsgCount", start,
+		"newMsgCount", target,
 		"current position", s.currentMessagePos,
-		"earliest hotshot block", s.GetCurrentEarliestHotShotBlockNumber(),
+		"hotshot block", s.GetCurrentEarliestHotShotBlockNumber(),
 		"len", len(s.messageWithMetadataAndPos),
 	)
 	return nil

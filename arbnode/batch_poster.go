@@ -1626,7 +1626,7 @@ func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 		HotshotHeight: b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(),
 		MessageCount:  newMsgNum,
 	}
-	log.Info("decentralized timeboost received enough signatures. attempting to post batch", "prev msg", prevMsgNum, "new msg num", newMsgNum)
+	log.Info("decentralized timeboost received enough signatures. attempting to post batch", "prevMsgCount", prevMsgNum, "newMsgNum", newMsgNum)
 	return signatures, nil
 }
 
@@ -2052,67 +2052,12 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				// If we havent verified a batch, this might mean we were restarted or are new to the protocol.
 				// Wait for the espresso streamer to catch up and verify a batch before we try constructing our own
 				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
-				// Also ensure this isnt the chains first batch
-				hasVerified := b.batchVerifier.LatestVerified != nil
-				if !hasVerified || b.batchVerifier.LatestVerified.MessageCount != batchPosition.MessageCount {
-					// This can be a case where leader sent us a batch, we verified it but they never posted to L1
-					start := batchPosition.MessageCount
-					if hasVerified && b.batchVerifier.LatestVerified.MessageCount < batchPosition.MessageCount {
-						start = b.batchVerifier.LatestVerified.MessageCount
-						log.Warn("last verified an old batch resetting", "last verified", start, "message count", batchPosition.MessageCount)
-					}
-					b.batchVerifier.LatestVerified = nil
-					// first check if we have the correct starting position in streamer
-					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(start), uint64(batchPosition.MessageCount))
-					if block != nil && *block != uint64(math.MaxUint64) {
-						log.Info(
-							"no batch was yet verified but found correct starting position in espresso streamer",
-							"messageCount", uint64(batchPosition.MessageCount),
-							"hotshot block", *block,
-						)
-						b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
-							MessageCount:  batchPosition.MessageCount,
-							HotshotHeight: *block,
-						}
-					}
+				b.batchVerifier.CheckLatestVerified(batchPosition.MessageCount, b.espressoStreamer)
+				// Check if we have the data we need in streamer to build the batch
+				if !b.batchVerifier.ShouldBuildBatch(ctx, batchPosition.MessageCount, b.espressoStreamer) {
+					return false, nil
 				}
-				// recheck if we are still not set
-				if b.batchVerifier.LatestVerified == nil {
-					// If we dont have the correct starting position in streamer and this in not the start of a chain
-					// We need to wait for a quruom of nodes to post a batch so eventually we can catch up
-					if batchPosition.MessageCount > 1 {
-						log.Warn("batch poster is yet to verify a batch. Waiting for batch verification before continuing", "messageCount", batchPosition.MessageCount)
-						return false, nil
-					}
-				} else {
-					// Look in the espresso streamer first to see if we need to reset or not
-					// For timeboost to help speed things up, resetting may not be necessary
-					// If a node has verified the previous batch go through the espresso streamer to the start message
-					// This will also increase streamer current position, in the case that they were non-leader batch posters they should do so now
-					found := false
-					if b.batchVerifier.LatestVerified.MessageCount == batchPosition.MessageCount {
-						for {
-							msg := b.espressoStreamer.Next(ctx)
-							if msg == nil {
-								break
-							}
-							if msg.Pos == uint64(batchPosition.MessageCount-1) {
-								log.Info("found next position in espresso streamer. no need for reset", "messageCount", batchPosition.MessageCount)
-								found = true
-								break
-							}
-						}
-					}
-					if !found {
-						log.Info(
-							"resetting streamer to last verified",
-							"messageCount", batchPosition.MessageCount,
-							"last verified pos", b.batchVerifier.LatestVerified.MessageCount,
-							"height", b.batchVerifier.LatestVerified.HotshotHeight,
-						)
-						b.espressoStreamer.Reset(uint64(b.batchVerifier.LatestVerified.MessageCount), uint64(b.batchVerifier.LatestVerified.HotshotHeight))
-					}
-				}
+
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
@@ -2133,7 +2078,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 					if err != nil {
 						return false, err
 					}
-					log.Info("submitted pending transactions after restart", "from", batchPosition.MessageCount, "count", len(queue))
+					log.Info("submitted pending transactions after restart", "messageCount", batchPosition.MessageCount, "count", len(queue))
 				}
 				b.espressoRestarting = false
 			}
@@ -2830,7 +2775,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 	if err != nil {
 		return nil, err
 	}
-	log.Info("decentralized timeboost successfully verified batch!", "from key", "0x"+hex.EncodeToString(args.PubKey), "prev msg", signedData.PreviousMessageCount, "new msg", signedData.NewMessageCount)
+	log.Info("decentralized timeboost successfully verified batch!", "from key", "0x"+hex.EncodeToString(args.PubKey), "prevMsgCount", signedData.PreviousMessageCount, "newMsgCount", signedData.NewMessageCount)
 	return data.Signature, nil
 }
 

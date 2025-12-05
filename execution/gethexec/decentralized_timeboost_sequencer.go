@@ -331,20 +331,20 @@ outer:
 			// This tx is too large
 			// Even if its a priority item this should be skipped,
 			// TODO: return the error to the user here
-			log.Warn("timeboost transaction is too large", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Warn("timeboost transaction is too large", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			// This tx is too low gas fee
 			// TODO: return the error to the user here
-			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "hash", queueItem.tx.Hash().Hex())
+			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
-			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "txHash", queueItem.tx.Hash().Hex())
 			s.txRetryQueue.enqueue(queueItem)
 			// End the batch here to put this tx in the next one
 			break
@@ -453,10 +453,10 @@ outer:
 		for _, queueItem := range queueItems {
 			// TODO: should send the error back to the user
 			if s.state == WaitingForBlockProduction {
-				log.Error("error sequencing transactions after catchup. this will be retried", "err", err, "tx", queueItem.tx.Hash().Hex())
+				log.Error("error sequencing transactions after catchup. this will be retried", "err", err, "txHash", queueItem.tx.Hash().Hex())
 				s.txRetryQueue.enqueueItems(queueItems)
 			} else {
-				log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
+				log.Error("error sequencing transactions", "err", err, "txHash", queueItem.tx.Hash().Hex())
 			}
 		}
 		return madeBlock
@@ -475,7 +475,7 @@ outer:
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
 		if block.NumberU64()%100 == 0 {
-			log.Info("enqueuing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
+			log.Info("enqueuing block to timeboost", "block", block.NumberU64(), "block hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
 		}
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
@@ -485,7 +485,7 @@ outer:
 		blockCreationTimer.Update(elapsed)
 		if elapsed >= config.MetricTimeForBlockCreation {
 			blockNum := block.Number()
-			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2Block", blockNum)
+			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2 block", blockNum)
 		}
 	}
 
@@ -509,7 +509,7 @@ outer:
 		}
 		var nonceError NonceError
 		if errors.As(err, &nonceError) && nonceError.txNonce > nonceError.stateNonce {
-			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash())
+			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 	}
@@ -755,7 +755,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 				for {
 					txn = s.txQueue.Peek()
 					if txn == nil {
-						log.Info("catchup complete: queue empty", "l2Block", executedBlock, "certified block round", currentRound)
+						log.Info("catchup complete: queue empty", "l2 block", executedBlock, "certified block round", currentRound)
 						return nil
 					}
 					if currentRound <= txn.roundId {

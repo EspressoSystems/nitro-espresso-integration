@@ -2,6 +2,7 @@ package decentralized_timeboost_batch_verifier
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
@@ -263,6 +264,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 	if err != nil {
 		return nil, fmt.Errorf("failed to ABI encode signatures: %w", err)
 	}
+	log.Info("decentralized timeboost received enough signatures", "signatures received", sigCount, "quruom", requiredQuorum)
 	return encodedSigs, nil
 }
 
@@ -618,6 +620,75 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 		return nil, err
 	}
 	return sigs, nil
+}
+
+func (b *BatchVerifier) CheckLatestVerified(msgCount arbutil.MessageIndex, espressoStreamer *espressostreamer.EspressoStreamer) {
+	hasVerified := b.LatestVerified != nil
+	if !hasVerified || b.LatestVerified.MessageCount != msgCount {
+		// This can be a case where leader sent us a batch, we verified it but they never posted to L1
+		start := msgCount
+		if hasVerified && b.LatestVerified.MessageCount < msgCount {
+			start = b.LatestVerified.MessageCount
+			log.Warn("last verified an old batch resetting", "last verified", start, "messageCount", msgCount)
+		}
+		b.LatestVerified = nil
+		// See if message count is in streamer
+		block := espressoStreamer.VerifyConsecutivePositions(uint64(start), uint64(msgCount))
+		if block != nil && *block != uint64(math.MaxUint64) {
+			log.Info(
+				"no batch was yet verified but found correct starting position in espresso streamer",
+				"messageCount", uint64(msgCount),
+				"hotshot block", *block,
+			)
+			b.LatestVerified = &VerifiedInfo{
+				MessageCount:  msgCount,
+				HotshotHeight: *block,
+			}
+		}
+	}
+}
+
+func (b *BatchVerifier) ShouldBuildBatch(ctx context.Context, msgCount arbutil.MessageIndex, espressoStreamer *espressostreamer.EspressoStreamer) bool {
+	if b.LatestVerified == nil {
+		// If we dont have the correct starting position in streamer and this in not the start of a chain
+		// We need to wait for a quruom of nodes to post a batch so eventually we can catch up
+		if msgCount > 1 {
+			log.Warn("batch poster is yet to verify a batch. Waiting for batch verification before continuing", "messageCount", msgCount)
+			return false
+		}
+	} else {
+		// Look in the espresso streamer first to see if we need to reset or not
+		// For timeboost to help speed things up, resetting may not be necessary
+		// If a node has verified the previous batch go through the espresso streamer to the start message
+		// This will also increase streamer current position, in the case that they were non-leader batch posters they should do so now
+		found := false
+		if b.LatestVerified.MessageCount == msgCount {
+			// When other batch posters verify the streamer position they do not call `Advance()`
+			// This is in case the leader never posts we do not need to reparse old hotshot blocks.
+			// So now we can start advancing
+			for {
+				msg := espressoStreamer.Next(ctx)
+				if msg == nil {
+					break
+				}
+				if msg.Pos == uint64(msgCount-1) {
+					log.Info("found next position in espresso streamer. no need for reset", "messageCount", msgCount)
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			log.Info(
+				"resetting streamer to last verified",
+				"messageCount", msgCount,
+				"last verified", b.LatestVerified.MessageCount,
+				"hotshot block", b.LatestVerified.HotshotHeight,
+			)
+			espressoStreamer.Reset(uint64(b.LatestVerified.MessageCount), uint64(b.LatestVerified.HotshotHeight))
+		}
+	}
+	return true
 }
 
 func (b *BatchVerifier) LogTransactions(msg string, txns types.Transactions) {
