@@ -2054,17 +2054,22 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
 				// Also ensure this isnt the chains first batch
 				hasVerified := b.batchVerifier.LatestVerified != nil
-				if !hasVerified || b.batchVerifier.LatestVerified.MessageCount < batchPosition.MessageCount {
+				if !hasVerified || b.batchVerifier.LatestVerified.MessageCount != batchPosition.MessageCount {
+					// This can be a case where leader sent us a batch, we verified it but they never posted to L1
 					start := batchPosition.MessageCount
-					if hasVerified {
+					if hasVerified && b.batchVerifier.LatestVerified.MessageCount < batchPosition.MessageCount {
 						start = b.batchVerifier.LatestVerified.MessageCount
 						log.Warn("last verified an old batch resetting", "last verified", start, "message count", batchPosition.MessageCount)
-						b.batchVerifier.LatestVerified = nil
 					}
+					b.batchVerifier.LatestVerified = nil
 					// first check if we have the correct starting position in streamer
 					block := b.espressoStreamer.VerifyConsecutivePositions(uint64(start), uint64(batchPosition.MessageCount))
 					if block != nil && *block != uint64(math.MaxUint64) {
-						log.Info("no batch was yet verified but found correct starting position in espresso streamer", "messageCount", uint64(batchPosition.MessageCount))
+						log.Info(
+							"no batch was yet verified but found correct starting position in espresso streamer",
+							"messageCount", uint64(batchPosition.MessageCount),
+							"hotshot block", *block,
+						)
 						b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
 							MessageCount:  batchPosition.MessageCount,
 							HotshotHeight: *block,
