@@ -88,8 +88,8 @@ type TransactionStreamerConfig struct {
 	TrackBlockMetadataFrom      uint64        `koanf:"track-block-metadata-from"`
 	ShutdownOnBlockhashMismatch bool          `koanf:"shutdown-on-blockhash-mismatch"`
 
-	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
-	QuoteFile               string        `koanf:"quote-file"`
+	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
+	QuoteFile               string `koanf:"quote-file"`
 }
 
 type TransactionStreamerConfigFetcher func() *TransactionStreamerConfig

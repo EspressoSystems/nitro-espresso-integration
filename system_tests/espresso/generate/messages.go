@@ -59,8 +59,13 @@ func GenerateMessage(
 				},
 				L2msg: msgData,
 			},
+			DelayedMessagesRead: 0,
 		},
+		BlockHash:     nil,
+		BlockMetadata: nil,
 	}
+	_ = msg.BlockHash     // avoid unused warning
+	_ = msg.BlockMetadata // avoid unused warning
 	hash := hasher.HashMessageWithMetadata(&msg.MessageWithMeta)
 	msgResult := &execution.MessageResult{
 		BlockHash: hash,
