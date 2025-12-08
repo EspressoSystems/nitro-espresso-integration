@@ -373,8 +373,14 @@ func NewEspressoCaffNode(
 		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
 
 	}
+	initializeCaffNodeTags := false
+	var caffNodePrivateKey *ecdsa.PrivateKey
+	if caffNodeInitArgs != nil {
+		initializeCaffNodeTags = caffNodeInitArgs.InitializeCaffNodeTags
+		caffNodePrivateKey = caffNodeInitArgs.CaffNodePrivateKey
+	}
 
-	snapshotHandler = NewEspressoSnapshotHandler(&db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), caffNodeInitArgs.InitializeCaffNodeTags, keyManager, configFetcher().GenerateSnapshot, configFetcher().AuthDBBatchSize)
+	snapshotHandler = NewEspressoSnapshotHandler(&db, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), initializeCaffNodeTags, keyManager, configFetcher().GenerateSnapshot, configFetcher().AuthDBBatchSize)
 
 	return &EspressoCaffNode{
 		configFetcher:         configFetcher,
@@ -389,7 +395,7 @@ func NewEspressoCaffNode(
 		snapshotHandler:       snapshotHandler,
 		keyManager:            keyManager,
 		dataPoster:            dataPoster,
-		caffNodePrivateKey:    caffNodeInitArgs.CaffNodePrivateKey,
+		caffNodePrivateKey:    caffNodePrivateKey,
 	}, nil
 }
 

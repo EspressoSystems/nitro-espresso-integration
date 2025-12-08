@@ -227,6 +227,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	})
 
 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
+		AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 		balance := builder.L2.GetBalance(t, addr)
 		log.Info("waiting for balance", "account", newAccount, "addr", addr, "balance", balance)
 		return balance.Cmp(transferAmount) >= 0
@@ -400,6 +401,7 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	// Create the event function closures for the assert statement.
 	firstEvent := func() error {
 		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
+			AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 10)
 			header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
 			Require(t, err)
 			return header.Number.Uint64() >= tx[0].BlockNumber.Uint64()+builder.nodeConfig.EspressoCaffNode.RequiredBlockDepth // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
@@ -459,6 +461,7 @@ func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 		err := waitForWith(ctx, 240*time.Second, 1*time.Second, func() bool {
 			header, err := builder.L1.Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 			Require(t, err)
+			AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
 			return header.Number.Int64() >= tx[0].BlockNumber.Int64()
 		})
 		return err

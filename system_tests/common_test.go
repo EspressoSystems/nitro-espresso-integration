@@ -746,31 +746,25 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
 	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
+	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
 	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		initializeTags := false
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
 		}
 
-		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+		espressoCaffNodeInitArgs = &arbnode.EspressoCaffNodeInitArgs{
 			TeeHMAC:                teeHMAC,
 			InitializeCaffNodeTags: initializeTags,
 			CaffNodetxOpts:         &caffNodeTxopts,
 			CaffNodePrivateKey:     caffNodePrivateKey,
 		}
-		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
-		Require(t, err)
-	} else {
-		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
-			InitializeCaffNodeTags: false,
-		}
-		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
-			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
-		Require(t, err)
 	}
+
+	b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
+		b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
+		l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
+	Require(t, err)
 
 	err = b.L2.ConsensusNode.Start(b.ctx)
 

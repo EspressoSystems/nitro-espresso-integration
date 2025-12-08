@@ -10,10 +10,7 @@ import (
 	"testing"
 	"time"
 
-	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -141,20 +138,12 @@ func waitForWith(
 
 func waitForEspressoNode(ctx context.Context) error {
 	return waitForWith(ctx, 3*time.Minute, 1*time.Second, func() bool {
-		out, err := exec.Command("curl", "http://localhost:20000/api/dev-info", "-L").Output()
+		out, err := exec.Command("curl", "http://localhost:41000/v1/availability/block/10", "-L").Output()
 		if err != nil {
 			log.Warn("retry to check the espresso dev node", "err", err)
 			return false
 		}
 		return len(out) > 0
-	})
-}
-
-func waitForHotShotLiveness(ctx context.Context, lightClientReader *lightclient.LightClientReader) error {
-	return waitForWith(ctx, 500*time.Second, 1*time.Second, func() bool {
-		log.Info("Waiting for HotShot Liveness")
-		_, err := lightClientReader.FetchMerkleRoot(1, nil)
-		return err == nil
 	})
 }
 
@@ -234,15 +223,6 @@ func TestEspressoE2E(t *testing.T) {
 		// Chosen based on intuition; no empirical data supports this value.
 		return h > 10
 	})
-	Require(t, err)
-
-	// make light client reader
-
-	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
-	Require(t, err)
-	// wait for hotshot liveness
-
-	err = waitForHotShotLiveness(ctx, lightClientReader)
 	Require(t, err)
 
 	// Check if the tx is executed correctly
@@ -434,18 +414,10 @@ func TestEspressoWithBlobs(t *testing.T) {
 	})
 	Require(t, err)
 
-	// make light client reader
-
-	lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddress), builder.L1.Client)
-	Require(t, err)
-	// wait for hotshot liveness
-
-	err = waitForHotShotLiveness(ctx, lightClientReader)
-	Require(t, err)
-
 	// Check if the tx is executed correctly
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User10", l2Info)
 	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 
 	// Remember the number of messages
 	var msgCnt arbutil.MessageIndex
