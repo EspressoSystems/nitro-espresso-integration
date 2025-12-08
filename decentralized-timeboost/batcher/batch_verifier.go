@@ -288,8 +288,9 @@ func (v *BatchVerifier) getCompressedPubKey() []byte {
 	return crypto.CompressPubkey(v.publicKey)
 }
 
-func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
-	if seqNum != v.currentBatch {
+func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64, msgCount arbutil.MessageIndex, batchMsgCount arbutil.MessageIndex) (bool, error) {
+	// reset if we have received a batch from inbox contract, or if there are no new messages
+	if seqNum != v.currentBatch || msgCount <= batchMsgCount {
 		v.currentBatch = seqNum
 		v.lastBatchUpdatedTime = time.Now()
 		v.leaderTimeouts = 0

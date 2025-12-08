@@ -606,6 +606,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
 		var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
+		var committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error)
 		if opts.Config().IsDecentralizedTimeboost {
 			// TODO: This should read the address from sequencer inbox contract
 			decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(
@@ -615,8 +616,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			if err != nil {
 				return nil, fmt.Errorf("failed to get key manager from contract: %w", err)
 			}
-		} else {
-			decentralizedTimeboostKeyManager = nil
+			committeeFetcher = decentralizedTimeboostKeyManager.GetCommitteeById
 		}
 
 		// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
@@ -724,7 +724,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
 				opts.Config().IsDecentralizedTimeboost,
-				decentralizedTimeboostKeyManager.GetCommitteeById,
+				committeeFetcher,
 				opts.Config().Dangerous.MinimumHotshotBlockNum,
 			)
 
@@ -2026,8 +2026,13 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	if b.config().IsDecentralizedTimeboost {
-		// TODO: Fallback if leader fails to post batch
-		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum)
+		msgCount, err := b.streamer.GetMessageCount()
+		if err != nil {
+			log.Error("Error getting message count", "err", err)
+			return false, err
+		}
+
+		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum, msgCount, batchPosition.MessageCount)
 		if err != nil {
 			return false, err
 		}

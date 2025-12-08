@@ -1574,7 +1574,6 @@ func deployOnParentChain(
 		timeboostAddr = setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
 	} else {
 		timeboostAddr = setMockTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
-		log.Info("timeboost addr", "addr", timeboostAddr)
 	}
 
 	Require(t, err)
