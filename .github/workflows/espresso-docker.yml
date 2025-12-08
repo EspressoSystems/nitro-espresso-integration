@@ -21,46 +21,11 @@ jobs:
 
     outputs:
       digest: ${{ steps.docker.outputs.digest }}
+    runs-on: ubuntu-24.04-8core
 
     steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-
       - uses: cargo-bins/cargo-binstall@main
 
-      - name: Make more disk space available on public runner
-        run: |
-          # rmz seems to be faster at deleting files than rm
-          cargo binstall -y --version 2.2.0 rmz
-          sudo mv /home/runner/.cargo/bin/rmz /usr/local/bin/rmz
-
-          echo "Available storage before:"
-          sudo df -h
-          echo
-
-          sudo rmz -f $AGENT_TOOLSDIRECTORY
-          sudo rmz -f /opt/az
-          sudo rmz -f /opt/ghc
-          sudo rmz -f /opt/google
-          sudo rmz -f /opt/microsoft
-          sudo rmz -f /opt/pipx
-          sudo rmz -f /usr/lib/mono
-          sudo rmz -f /usr/local/julia*
-          sudo rmz -f /usr/local/lib/android
-          sudo rmz -f /usr/local/lib/node_modules
-          sudo rmz -f /usr/local/share/boost
-          sudo rmz -f /usr/local/share/chromium
-          sudo rmz -f /usr/local/share/powershell
-          sudo rmz -f /usr/share/az_*
-          sudo rmz -f /usr/share/dotnet
-          sudo rmz -f /usr/share/gradle-*
-          sudo rmz -f /usr/share/swift
-
-          echo "Available storage after:"
-          sudo df -h
-          echo
       - name: Fix submodule permissions check
         run: |
           git config --global --add safe.directory '*'
