@@ -37,7 +37,7 @@ func (u UnimplementedExecutionClient) MaintenanceStatus() containers.PromiseInte
 }
 
 // SetConsensusSyncData implements execution.ExecutionClient.
-func (u UnimplementedExecutionClient) SetConsensusSyncData(ctx context.Context, syncData *execution.ConsensusSyncData) containers.PromiseInterface[struct{}] {
+func (u UnimplementedExecutionClient) SetConsensusSyncData(syncData *execution.ConsensusSyncData) containers.PromiseInterface[struct{}] {
 	panic("unimplemented")
 }
 
@@ -54,6 +54,10 @@ func (u UnimplementedExecutionClient) TriggerMaintenance() containers.PromiseInt
 // Compile time check to ensure that UnimplementedExecutionClient implements
 // the execution.ExecutionClient interface.
 var _ execution.ExecutionClient = UnimplementedExecutionClient{}
+
+func (u UnimplementedExecutionClient) ArbOSVersionForMessageIndex(msgIdx arbutil.MessageIndex) containers.PromiseInterface[uint64] {
+	panic(ErrorExecutionClientUnimplementedMethod{"ArbOSVersionForMessageIndex"})
+}
 
 // BlockNumberToMessageIndex implements execution.ExecutionClient.
 func (u UnimplementedExecutionClient) BlockNumberToMessageIndex(blockNum uint64) containers.PromiseInterface[arbutil.MessageIndex] {
@@ -91,7 +95,7 @@ func (u UnimplementedExecutionClient) ResultAtMessageIndex(msgIdx arbutil.Messag
 }
 
 // SetFinalityData implements execution.ExecutionClient.
-func (u UnimplementedExecutionClient) SetFinalityData(ctx context.Context, safeFinalityData *arbutil.FinalityData, finalizedFinalityData *arbutil.FinalityData, validatedFinalityData *arbutil.FinalityData) containers.PromiseInterface[struct{}] {
+func (u UnimplementedExecutionClient) SetFinalityData(safeFinalityData *arbutil.FinalityData, finalizedFinalityData *arbutil.FinalityData, validatedFinalityData *arbutil.FinalityData) containers.PromiseInterface[struct{}] {
 	panic(ErrorExecutionClientUnimplementedMethod{"SetFinalityData"})
 }
 

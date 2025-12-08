@@ -86,7 +86,7 @@ func TestUnimplementedExecutionClient(t *testing.T) {
 
 	t.Run("SetFinalityData", func(t *testing.T) {
 		expectPanicWithErrorExecutionClientUnimplementedMethod(t, func() {
-			_ = client.SetFinalityData(context.Background(), nil, nil, nil)
+			_ = client.SetFinalityData(nil, nil, nil)
 		}, "SetFinalityData")
 	})
 
