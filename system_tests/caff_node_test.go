@@ -240,7 +240,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	// don't make the caff node wait for finalization during the default test.
 	builder.nodeConfig.EspressoCaffNode.WaitForFinalization = false
 	// start the node
-	builder, _, err = createCaffNode(ctx, t, builder, arbnode.TestBatchPosterConfig.DisableDapFallbackStoreDataOnChain)
+	builder, _, err = createCaffNode(ctx, t, builder, false)
 	Require(t, err)
 	builderCaffNode := builder.L2
 
