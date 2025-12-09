@@ -1,0 +1,40 @@
+name: Espresso E2E Caff Node test CI
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    branches:
+      - integration
+      - celestia-integration
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Espresso E2E
+    runs-on: ubuntu-24.04-8core
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Setup CI
+        uses: ./.github/actions/ci-setup
+
+      - name: Build
+        run: make build build-replay-env -j
+
+      - name: Install docker-compose
+        uses: KengoTODA/actions-setup-docker-compose@v1.2.1
+        with:
+          version: "2.22.0"
+
+      - name: Run Espresso Caff Node tests
+        run: |
+          bash scripts/run-espresso-caff-node-ci-tests
