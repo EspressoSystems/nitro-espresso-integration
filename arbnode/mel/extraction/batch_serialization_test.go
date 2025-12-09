@@ -140,7 +140,7 @@ func Test_getSequencerBatchData(t *testing.T) {
 	})
 	t.Run("arbnode.BatchDataTxInput", func(t *testing.T) {
 		msgData := []byte("foobar")
-		addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin0"]
+		addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin1"]
 		seqNumber := big.NewInt(1)
 		afterDelayedRead := big.NewInt(1)
 		gasRefunder := common.Address{}

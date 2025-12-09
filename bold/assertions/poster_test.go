@@ -18,12 +18,13 @@ import (
 	gethtypes "github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/offchainlabs/nitro/bold/assertions"
-	"github.com/offchainlabs/nitro/bold/chain-abstraction"
-	"github.com/offchainlabs/nitro/bold/challenge-manager"
+	protocol "github.com/offchainlabs/nitro/bold/chain-abstraction"
+	challengemanager "github.com/offchainlabs/nitro/bold/challenge-manager"
 	"github.com/offchainlabs/nitro/bold/challenge-manager/types"
-	"github.com/offchainlabs/nitro/bold/testing"
-	"github.com/offchainlabs/nitro/bold/testing/mocks/state-provider"
+	challenge_testing "github.com/offchainlabs/nitro/bold/testing"
+	stateprovider "github.com/offchainlabs/nitro/bold/testing/mocks/state-provider"
 	"github.com/offchainlabs/nitro/bold/testing/setup"
+	testutils "github.com/offchainlabs/nitro/espresso/test-utils"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
@@ -194,8 +195,8 @@ func forceSequencerMessageBatchPosting(
 	seqNum.Sub(seqNum, common.Big1)
 	seqInbox, err := bridgegen.NewSequencerInbox(seqInboxAddr, backend)
 	require.NoError(t, err)
-	tx, err := seqInbox.AddSequencerL2BatchFromOrigin8f111f3c(
-		sequencerOpts, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0),
+	tx, err := seqInbox.AddSequencerL2BatchFromOrigin37501551(
+		sequencerOpts, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), testutils.CreateDummyEspressoMetadata(t),
 	)
 	require.NoError(t, err)
 	require.NoError(t, challenge_testing.WaitForTx(ctx, backend, tx))
