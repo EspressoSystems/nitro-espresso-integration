@@ -25,6 +25,7 @@ func createL1AndL2NodeForTimeboost(
 	privKey string,
 	nodeBuilder *NodeBuilder,
 	blobsEnabled bool,
+	offset int,
 ) (*NodeBuilder, func()) {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, true)
 	if nodeBuilder == nil {
@@ -41,7 +42,7 @@ func createL1AndL2NodeForTimeboost(
 		builder.L1 = nodeBuilder.L1
 		builder.l1StackConfig = nodeBuilder.l1StackConfig
 		builder.withL1 = true
-		builder.l2StackConfig.HTTPPort = 8947
+		builder.l2StackConfig.HTTPPort = 8947 + offset
 	}
 
 	builder.l2StackConfig.HTTPModules = append(builder.l2StackConfig.HTTPModules, "batcher")
@@ -55,11 +56,12 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.MaxSize = 10000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 30 * time.Second
-	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = batchPoster
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = true
 	priv := hex.EncodeToString(base58.Decode(privKey))
 	builder.nodeConfig.BatchPoster.ParentChainWallet.PrivateKey = priv
 	builder.nodeConfig.BatchPoster.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
+	builder.nodeConfig.BatchPoster.ErrorDelay = time.Second * 10
+	builder.nodeConfig.BatchPoster.DecentralizedTimeboostBatchVerifier.WaitForLeaderDelay = 60 * time.Second
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
@@ -89,9 +91,15 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
 	builder.nodeConfig.DecentralizedTimeboostSequencer.HotshotUrls = []string{hotShotUrl, hotShotUrl}
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
-	if nodeBuilder != nil {
+	if nodeBuilder != nil && offset == 0 {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"
+	} else if offset == 100 {
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55002
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8023"
+	} else if offset == 200 {
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55003
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8033"
 	}
 	if blobsEnabled {
 		builder.nodeConfig.BatchPoster.Post4844Blobs = true
@@ -187,7 +195,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 	defer valNodeCleanup()
 	// In future, we also need to create a version of
 	// delayed sequencer for timeboost
-	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false)
+	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false, 0)
 	defer cleanup()
 
 	err := waitForL1Node(ctx)

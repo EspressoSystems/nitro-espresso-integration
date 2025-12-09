@@ -264,7 +264,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 	if err != nil {
 		return nil, fmt.Errorf("failed to ABI encode signatures: %w", err)
 	}
-	log.Info("decentralized timeboost received enough signatures", "signatures received", sigCount, "quruom", requiredQuorum)
+	log.Info("decentralized timeboost received enough signatures", "signatures received", sigCount, "quorum", requiredQuorum)
 	return encodedSigs, nil
 }
 
@@ -652,7 +652,7 @@ func (b *BatchVerifier) CheckLatestVerified(msgCount arbutil.MessageIndex, espre
 func (b *BatchVerifier) ShouldBuildBatch(ctx context.Context, msgCount arbutil.MessageIndex, espressoStreamer *espressostreamer.EspressoStreamer) bool {
 	if b.LatestVerified == nil {
 		// If we dont have the correct starting position in streamer and this in not the start of a chain
-		// We need to wait for a quruom of nodes to post a batch so eventually we can catch up
+		// We need to wait for a quorum of nodes to post a batch so eventually we can catch up
 		if msgCount > 1 {
 			log.Warn("batch poster is yet to verify a batch. Waiting for batch verification before continuing", "messageCount", msgCount)
 			return false
