@@ -521,7 +521,8 @@ func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, 
 	finalizationTime := uint64(s.config().ParentChainFinalizationTime.Seconds())
 	targetTime := consensusTimestamp - finalizationTime
 
-	for blockNumber := startBlockNumber; blockNumber > 0; blockNumber-- {
+	blockNumber := startBlockNumber
+	for {
 		var header *types.Header
 		if cached := s.blockHeaderCache.Get(blockNumber); cached != nil {
 			header = cached
@@ -537,9 +538,8 @@ func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, 
 		if header.Time <= targetTime {
 			return header, nil
 		}
+		blockNumber--
 	}
-
-	return nil, fmt.Errorf("no suitable block found before finalized block %d", startBlockNumber)
 }
 
 func (s *DecentralizedTimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {

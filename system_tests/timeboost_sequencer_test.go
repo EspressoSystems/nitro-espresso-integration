@@ -55,6 +55,7 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.HotShotUrls = []string{hotShotUrl, hotShotUrl}
 	builder.nodeConfig.BatchPoster.MaxSize = 10000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
+	builder.nodeConfig.BatchPoster.PollIntervalAfterBatchPost = 5 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = 30 * time.Second
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = true
 	priv := hex.EncodeToString(base58.Decode(privKey))
@@ -85,7 +86,8 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxTxDataSize = 3000
 	builder.nodeConfig.DecentralizedTimeboostSequencer.NonceCacheSize = 1024
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxRevertGasReject = 0
-	builder.nodeConfig.DecentralizedTimeboostSequencer.ParentChainFinalizationTime = 2 * time.Second
+	// L1 is 1 block every 20s and 32 blocks for finalization
+	builder.nodeConfig.DecentralizedTimeboostSequencer.ParentChainFinalizationTime = 20 * 32 * time.Second
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"

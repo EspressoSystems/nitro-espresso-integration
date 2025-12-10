@@ -200,9 +200,9 @@ func (v *BatchVerifier) sendBatchForVerification(
 		if !strings.HasPrefix(addr, "http://") {
 			addr = "http://" + addr
 		}
-		resp, err := v.client.Post(addr, "application/json", bytes.NewBuffer(jsonData))
+		resp, err := v.sendWithRetries(addr, jsonData, member.SigKey)
 		if err != nil {
-			log.Error("http request failed", "err", err, "to", member.SigKey)
+			log.Error("http request failed after max tries", "err", err, "to", member.SigKey)
 			sigs = append(sigs, []byte{})
 			continue
 		}
@@ -249,7 +249,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 		sigCount += 1
 	}
 	if sigCount < requiredQuorum {
-		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, sigCount)
+		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. quorum: %d, signatures received: %d", requiredQuorum, sigCount)
 	}
 	bytesType, err := abi.NewType("bytes[]", "", nil)
 	if err != nil {
@@ -266,6 +266,20 @@ func (v *BatchVerifier) sendBatchForVerification(
 	}
 	log.Info("decentralized timeboost received enough signatures", "signatures received", sigCount, "quorum", requiredQuorum)
 	return encodedSigs, nil
+}
+
+func (v *BatchVerifier) sendWithRetries(addr string, data []byte, sigKey []byte) (*http.Response, error) {
+	const max = 5
+	var err error
+	for range max {
+		resp, err := v.client.Post(addr, "application/json", bytes.NewBuffer(data))
+		if err != nil {
+			log.Error("http request failed", "err", err, "to", sigKey, "addr", addr)
+			continue
+		}
+		return resp, nil
+	}
+	return nil, err
 }
 
 func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
@@ -626,16 +640,20 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 func (b *BatchVerifier) CheckLatestVerified(msgCount arbutil.MessageIndex, espressoStreamer *espressostreamer.EspressoStreamer) {
 	hasVerified := b.LatestVerified != nil
 	if !hasVerified || b.LatestVerified.MessageCount != msgCount {
-		// This can be a case where leader sent us a batch, we verified it but they never posted to L1
+		// In case we didnt verify the last batch, check if we have everything in the streamer
 		start := msgCount
 		if hasVerified && b.LatestVerified.MessageCount < msgCount {
 			start = b.LatestVerified.MessageCount
 			log.Warn("last verified an old batch resetting", "last verified", start, "messageCount", msgCount)
 		}
-		b.LatestVerified = nil
+
 		// See if message count is in streamer
 		block := espressoStreamer.VerifyConsecutivePositions(uint64(start), uint64(msgCount))
-		if block != nil && *block != uint64(math.MaxUint64) {
+		if block != nil {
+			if *block == uint64(math.MaxUint64) {
+				log.Info("streamer position is higher than msg count", "messageCount", msgCount, "streamerPos", espressoStreamer.GetCurrentMessagePosition())
+				return
+			}
 			log.Info(
 				"no batch was yet verified but found correct starting position in espresso streamer",
 				"messageCount", uint64(msgCount),
@@ -645,6 +663,8 @@ func (b *BatchVerifier) CheckLatestVerified(msgCount arbutil.MessageIndex, espre
 				MessageCount:  msgCount,
 				HotshotHeight: *block,
 			}
+		} else {
+			b.LatestVerified = nil
 		}
 	}
 }
@@ -662,18 +682,23 @@ func (b *BatchVerifier) ShouldBuildBatch(ctx context.Context, msgCount arbutil.M
 		// For timeboost to help speed things up, resetting may not be necessary
 		// If a node has verified the previous batch go through the espresso streamer to the start message
 		// This will also increase streamer current position, in the case that they were non-leader batch posters they should do so now
+		// When other batch posters verify the streamer position they do not call `Advance()`
+		// This is in case the leader never posts we do not need to reparse old hotshot blocks.
+		// So now we can start advancing
 		found := false
-		if b.LatestVerified.MessageCount == msgCount {
-			// When other batch posters verify the streamer position they do not call `Advance()`
-			// This is in case the leader never posts we do not need to reparse old hotshot blocks.
-			// So now we can start advancing
+		streamerPos := espressoStreamer.GetCurrentMessagePosition()
+		if uint64(msgCount) == streamerPos {
+			log.Info("streamer is in sync with message count. no need for reset", "messageCount", msgCount, "streamerPos", streamerPos)
+			found = true
+		} else {
 			for {
 				msg := espressoStreamer.Next(ctx)
 				if msg == nil {
 					break
 				}
-				if msg.Pos == uint64(msgCount-1) {
-					log.Info("found next position in espresso streamer. no need for reset", "messageCount", msgCount)
+				streamerPos = espressoStreamer.GetCurrentMessagePosition()
+				if uint64(msgCount) == streamerPos {
+					log.Info("found next position in espresso streamer. no need for reset", "messageCount", msgCount, "streamerPos", streamerPos)
 					found = true
 					break
 				}
@@ -685,6 +710,7 @@ func (b *BatchVerifier) ShouldBuildBatch(ctx context.Context, msgCount arbutil.M
 				"messageCount", msgCount,
 				"last verified", b.LatestVerified.MessageCount,
 				"hotshot block", b.LatestVerified.HotshotHeight,
+				"streamerPos", streamerPos,
 			)
 			espressoStreamer.Reset(uint64(b.LatestVerified.MessageCount), uint64(b.LatestVerified.HotshotHeight))
 		}
@@ -700,7 +726,7 @@ func (b *BatchVerifier) LogTransactions(msg string, txns types.Transactions) {
 			to = txn.To().Hex()
 		}
 		log.Warn(msg,
-			"hash", txn.Hash().Hex(),
+			"txHash", txn.Hash().Hex(),
 			"from", from.Hex(),
 			"to", to,
 			"time", txn.Time(),

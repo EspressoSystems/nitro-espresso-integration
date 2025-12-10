@@ -2062,7 +2062,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 				if !b.batchVerifier.ShouldBuildBatch(ctx, batchPosition.MessageCount, b.espressoStreamer) {
 					return false, nil
 				}
-
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
@@ -2859,8 +2858,8 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 			if err != nil {
 				return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 			}
-			b.batchVerifier.LogTransactions(fmt.Sprintf("position %d. received transaction", index), rcvTxn)
-			b.batchVerifier.LogTransactions(fmt.Sprintf("position %d. transaction in db", index), dbTxn)
+			b.batchVerifier.LogTransactions(fmt.Sprintf("msg position %d. received transaction", index), rcvTxn)
+			b.batchVerifier.LogTransactions(fmt.Sprintf("msg position %d. transaction in db", index), dbTxn)
 			return fmt.Errorf("message mismatch between what leader sent and what is in batch. received: %v, in db: %v", msg.Message.Header, muxBackend.allMsgs[index].Message.Header)
 		}
 	}

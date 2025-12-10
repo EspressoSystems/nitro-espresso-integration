@@ -130,6 +130,10 @@ func (s *EspressoStreamer) GetMessageCount() uint64 {
 	return s.currentMessagePos + CountUniqueEntries(&s.messageWithMetadataAndPos)
 }
 
+func (s *EspressoStreamer) GetCurrentMessagePosition() uint64 {
+	return s.currentMessagePos
+}
+
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
@@ -187,8 +191,16 @@ func (s *EspressoStreamer) VerifyConsecutivePositions(start uint64, target uint6
 	defer s.messageLock.Unlock()
 	// if we are already greater than the target no need to do anything
 	height := uint64(math.MaxUint64)
-	if s.currentMessagePos >= target {
+	if s.currentMessagePos > target {
 		return &height
+	}
+	if s.currentMessagePos == target {
+		height = s.GetCurrentEarliestHotShotBlockNumber()
+		return &height
+	}
+
+	if s.currentMessagePos > start {
+		start = s.currentMessagePos
 	}
 
 	expectedCount := target - start + 1
@@ -220,7 +232,7 @@ func (s *EspressoStreamer) VerifyConsecutivePositions(start uint64, target uint6
 		"failed to verify consecutive position in streamer",
 		"prevMsgCount", start,
 		"newMsgCount", target,
-		"current position", s.currentMessagePos,
+		"streamerPos", s.currentMessagePos,
 		"hotshot block", s.GetCurrentEarliestHotShotBlockNumber(),
 		"len", len(s.messageWithMetadataAndPos),
 	)
@@ -404,7 +416,7 @@ func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTyp
 
 	for _, msg := range parsedMsgs {
 		if msg.Pos%100 == 0 {
-			log.Info("added timeboost message to queue", "messagePos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+			log.Info("added timeboost message to queue", "messagePos", msg.Pos, "streamerPos", s.currentMessagePos)
 		}
 		msgs = append(msgs, &MessageWithMetadataAndPos{
 			MessageWithMeta: msg.Message,
