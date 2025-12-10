@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
 type EspressoAttestationVerifierClient struct {
 	baseURL string
-	client  *http.Client
 }
 
 type OnchainProof struct {
@@ -32,12 +34,8 @@ type OnchainProof struct {
 func NewEspressoAttestationVerifierClient(
 	attestationServiceURL string,
 ) *EspressoAttestationVerifierClient {
-	if attestationServiceURL == "" {
-		return nil
-	}
 	return &EspressoAttestationVerifierClient{
-		baseURL: attestationServiceURL,
-		client:  http.DefaultClient,
+		baseURL: strings.TrimSuffix(attestationServiceURL, "/"),
 	}
 }
 
@@ -47,7 +45,11 @@ func (c *EspressoAttestationVerifierClient) GenerateZKProof(ctx context.Context,
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/octet-stream")
-	res, err := c.client.Do(request)
+
+	client := http.Client{
+		Timeout: 2 * time.Minute,
+	}
+	res, err := client.Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -56,6 +58,10 @@ func (c *EspressoAttestationVerifierClient) GenerateZKProof(ctx context.Context,
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("attestation service returned status %d: %s", res.StatusCode, string(responseData))
 	}
 
 	var zkProof OnchainProof

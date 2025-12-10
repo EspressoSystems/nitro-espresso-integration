@@ -59,8 +59,8 @@ type EspressoKeyManager struct {
 	userDataAttestationFile string
 	quoteFile               string
 
-	hasRegistered                    bool
-	espressoNitroAttesVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
+	hasRegistered                          bool
+	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
 }
 
 func NewEspressoKeyManager(
@@ -125,7 +125,11 @@ func NewEspressoKeyManager(
 		panic("Retry getting base fee delay cannot be more than 3 minutes")
 	}
 
-	espressoNitroAttesVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
+	if teeType == NITRO && zkAttestationServiceURL == "" {
+		panic("zk attestation service URL must be provided for nitro TEE type")
+	}
+
+	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
 
 	return &EspressoKeyManager{
 		pubKey:                    pubKey,
@@ -143,10 +147,10 @@ func NewEspressoKeyManager(
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
 			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
-		userDataAttestationFile:          userDataAttestationFile,
-		quoteFile:                        quoteFile,
-		serviceType:                      serviceType,
-		espressoNitroAttesVerifierClient: espressoNitroAttesVerifierClient,
+		userDataAttestationFile:                userDataAttestationFile,
+		quoteFile:                              quoteFile,
+		serviceType:                            serviceType,
+		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
 	}
 }
 
@@ -195,10 +199,10 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("nitro signing failed: %w", err)
 		}
-		if k.espressoNitroAttesVerifierClient == nil {
+		if k.espressoNitroAttestationVerifierClient == nil {
 			return nil, nil, errors.New("attestation verifier client is not initialized")
 		}
-		onchainProof, err := k.espressoNitroAttesVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
+		onchainProof, err := k.espressoNitroAttestationVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
