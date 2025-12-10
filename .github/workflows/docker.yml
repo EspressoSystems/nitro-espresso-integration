@@ -25,15 +25,9 @@ jobs:
             const hasLabel = labels.some(label => label.name === 'design-approved');
             core.setOutput('has-label', hasLabel);
             console.log(`PR has 'design-approved' label: ${hasLabel}`);
-  free-disk-space:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
+
   docker:
-    needs: [free-disk-space, check-label]
+    needs: [check-label]
     name: Docker build
     # Run if it's not a PR or if it's a PR with the required label
     if: github.event_name != 'pull_request' || needs.check-label.outputs.should-run == 'true'
