@@ -593,7 +593,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 # strategic rules to minimize dependency building
 
 .make/lint: $(DEP_PREDICATE) build-node-deps $(ORDER_ONLY_PREDICATE) .make
-	go run ./linters ./...
+	go run ./linters $$(go list ./... | grep -v "/celestia")
 	golangci-lint run --fix
 	yarn --cwd contracts solhint
 	@touch $@

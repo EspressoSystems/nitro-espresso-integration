@@ -169,9 +169,9 @@ type BatchPosterDangerousConfig struct {
 }
 
 type BatchPosterConfig struct {
-	Enable                              bool `koanf:"enable"`
-	DisableDapFallbackStoreDataOnChain  bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
-	DisableDapFallbackStoreDataAnytrust bool `koanf:"disable-dap-fallback-store-data-on-anytrust" reload:"hot"`
+	Enable                                bool `koanf:"enable"`
+	DisableDapFallbackStoreDataOnChain    bool `koanf:"disable-dap-fallback-store-data-on-chain" reload:"hot"`
+	DisableDapFallbackStoreDataOnAnytrust bool `koanf:"disable-dap-fallback-store-data-on-anytrust" reload:"hot"`
 	// Max batch size.
 	MaxSize int `koanf:"max-size" reload:"hot"`
 	// Maximum 4844 blob enabled batch size.
@@ -265,7 +265,7 @@ func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultBatchPosterConfig.Enable, "enable posting batches to l1")
 	f.Bool(prefix+".disable-dap-fallback-store-data-on-chain", DefaultBatchPosterConfig.DisableDapFallbackStoreDataOnChain, "If unable to batch to DA provider, disable fallback storing data on chain")
-	f.Bool(prefix+".disable-dap-fallback-store-data-on-anytrust", DefaultBatchPosterConfig.DisableDapFallbackStoreDataAnytrust, "If unable to batch to DA provider, disable fallback storing data on chain")
+	f.Bool(prefix+".disable-dap-fallback-store-data-on-anytrust", DefaultBatchPosterConfig.DisableDapFallbackStoreDataOnAnytrust, "If unable to batch to DA provider, disable fallback storing data on chain")
 	f.Int(prefix+".max-size", DefaultBatchPosterConfig.MaxSize, "maximum estimated compressed batch size")
 	f.Int(prefix+".max-4844-batch-size", DefaultBatchPosterConfig.Max4844BatchSize, "maximum estimated compressed 4844 blob enabled batch size")
 	f.Duration(prefix+".max-delay", DefaultBatchPosterConfig.MaxDelay, "maximum batch posting delay")
@@ -313,9 +313,9 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 }
 
 var DefaultBatchPosterConfig = BatchPosterConfig{
-	Enable:                              false,
-	DisableDapFallbackStoreDataOnChain:  false,
-	DisableDapFallbackStoreDataAnytrust: false,
+	Enable:                                false,
+	DisableDapFallbackStoreDataOnChain:    false,
+	DisableDapFallbackStoreDataOnAnytrust: false,
 	// This default is overridden for L3 chains in applyChainParameters in cmd/nitro/nitro.go
 	MaxSize: 100000,
 	// The Max4844BatchSize should be calculated from the values from L1 chain configs
@@ -381,32 +381,32 @@ var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
 }
 
 var TestBatchPosterConfig = BatchPosterConfig{
-	Enable:                              true,
-	DisableDapFallbackStoreDataOnChain:  true,
-	DisableDapFallbackStoreDataAnytrust: true,
-	MaxSize:                             100000,
-	Max4844BatchSize:                    DefaultBatchPosterConfig.Max4844BatchSize,
-	PollInterval:                        time.Millisecond * 10,
-	ErrorDelay:                          time.Millisecond * 10,
-	MaxDelay:                            0,
-	WaitForMaxDelay:                     false,
-	CompressionLevel:                    2,
-	DASRetentionPeriod:                  daprovider.DefaultDASRetentionPeriod,
-	GasRefunderAddress:                  "",
-	ExtraBatchGas:                       10_000,
-	Post4844Blobs:                       false,
-	IgnoreBlobPrice:                     false,
-	DataPoster:                          dataposter.TestDataPosterConfig,
-	ParentChainWallet:                   DefaultBatchPosterL1WalletConfig,
-	L1BlockBound:                        "",
-	L1BlockBoundBypass:                  time.Hour,
-	UseAccessLists:                      true,
-	RedisLock:                           redislock.TestCfg,
-	GasEstimateBaseFeeMultipleBips:      arbmath.OneInUBips * 3 / 2,
-	CheckBatchCorrectness:               true,
-	DelayBufferThresholdMargin:          0,
-	DelayBufferAlwaysUpdatable:          true,
-	ParentChainEip7623:                  "auto",
+	Enable:                                true,
+	DisableDapFallbackStoreDataOnChain:    true,
+	DisableDapFallbackStoreDataOnAnytrust: true,
+	MaxSize:                               100000,
+	Max4844BatchSize:                      DefaultBatchPosterConfig.Max4844BatchSize,
+	PollInterval:                          time.Millisecond * 10,
+	ErrorDelay:                            time.Millisecond * 10,
+	MaxDelay:                              0,
+	WaitForMaxDelay:                       false,
+	CompressionLevel:                      2,
+	DASRetentionPeriod:                    daprovider.DefaultDASRetentionPeriod,
+	GasRefunderAddress:                    "",
+	ExtraBatchGas:                         10_000,
+	Post4844Blobs:                         false,
+	IgnoreBlobPrice:                       false,
+	DataPoster:                            dataposter.TestDataPosterConfig,
+	ParentChainWallet:                     DefaultBatchPosterL1WalletConfig,
+	L1BlockBound:                          "",
+	L1BlockBoundBypass:                    time.Hour,
+	UseAccessLists:                        true,
+	RedisLock:                             redislock.TestCfg,
+	GasEstimateBaseFeeMultipleBips:        arbmath.OneInUBips * 3 / 2,
+	CheckBatchCorrectness:                 true,
+	DelayBufferThresholdMargin:            0,
+	DelayBufferAlwaysUpdatable:            true,
+	ParentChainEip7623:                    "auto",
 
 	EspressoTxnsPollingInterval:      time.Second,
 	EspressoTxnsSendingInterval:      time.Second,
@@ -2335,7 +2335,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		sequencerMsg, err = b.dapWriter.Store(batchData, uint64(time.Now().Add(config.DASRetentionPeriod).Unix())).Await(ctx)
 		if err != nil {
 
-			if !config.DisableDapFallbackStoreDataAnytrust {
+			if !config.DisableDapFallbackStoreDataOnAnytrust {
 				log.Info("Falling back to storing data on anytrust", "err", err)
 				sequencerMsg, err = b.anytrustWriter.Store(batchData, uint64(time.Now().Add(config.DASRetentionPeriod).Unix())).Await(ctx)
 				if err != nil {

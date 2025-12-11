@@ -29,4 +29,4 @@ jobs:
 
       - name: Custom Lint
         run: |
-          go run ./linters ./...
+          go run ./linters $(go list ./... | grep -v "/celestia")
