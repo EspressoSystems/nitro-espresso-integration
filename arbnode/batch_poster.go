@@ -2337,6 +2337,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 
 			if !config.DisableDapFallbackStoreDataOnAnytrust {
 				log.Info("Falling back to storing data on anytrust", "err", err)
+				// #nosec G115
 				sequencerMsg, err = b.anytrustWriter.Store(batchData, uint64(time.Now().Add(config.DASRetentionPeriod).Unix())).Await(ctx)
 				if err != nil {
 					log.Warn("error falling back to anytrust, attempting to store data on-chain", "err", err)
