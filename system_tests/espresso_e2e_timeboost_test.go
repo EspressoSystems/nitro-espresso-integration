@@ -569,7 +569,7 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 	createAndSendBundleToTimeboostLoad(t, builder, users, txnsToSendPerUser, nil)
 
 	// Wait for blocks and batch
-	time.Sleep(time.Second * 30)
+	time.Sleep(15 * time.Second)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
@@ -605,9 +605,7 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 		}
 	}
 
-	time.Sleep(30 * time.Second)
-
-	err = waitForWith(ctx, 3*time.Minute, 5*time.Second, func() bool {
+	err = waitForWith(ctx, 4*time.Minute, 5*time.Second, func() bool {
 		// Check the sequencer inbox contract
 		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 		Require(t, err)
@@ -651,6 +649,8 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 	err = waitForTimeboostNodes(ctx)
 	Require(t, err)
 
+	time.Sleep(5 * time.Second)
+
 	blockNumberBefore, err := builder2.L2.Client.BlockNumber(ctx)
 
 	var users []string
@@ -684,7 +684,7 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 		// should make a lot of small batches
 		return batchCount.Uint64() > 5
 	})
-	time.Sleep(60 * time.Second)
+	time.Sleep(20 * time.Second)
 	Require(t, err)
 
 	blockNumberAfter, err := builder2.L2.Client.BlockNumber(ctx)
@@ -711,7 +711,6 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 			}
 		}
 	}
-	log.Info("all verified")
 
 	builder.L2.cleanup()
 	builder.L1.cleanup()

@@ -937,9 +937,8 @@ func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
 	}
 	// Stop the consensus node first and wait for it to fully stop
 	b.L2.ConsensusNode.StopAndWait()
-	b.L2.ConsensusNode.DecentralizedTimeboostSequencer.StopAndWait()
 	// Give extra time for all goroutines and background tasks to finish
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(2 * time.Second)
 	// Now close the stack which will close all databases
 	if b.L2.Stack != nil {
 		err := b.L2.Stack.Close()
@@ -950,7 +949,7 @@ func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
 	}
 	// Give the OS time to release file handles and locks
 	// This is critical in CI environments where file system operations are slower
-	time.Sleep(1 * time.Second)
+	time.Sleep(3 * time.Second)
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
