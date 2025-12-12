@@ -797,6 +797,9 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	}
 	// add delayed messages to the end
 	if s.delayedMessagesRead < inclusionList.DelayedMessagesRead {
+		log.Info("found delayed messages", "curr", s.delayedMessagesRead, "next", inclusionList.DelayedMessagesRead)
+		time.Sleep(5 * time.Minute)
+		log.Info("now processing after 5 min", "curr", s.delayedMessagesRead, "next", inclusionList.DelayedMessagesRead)
 		// We will fetch the transaction when we go to make a block, so just set to nil
 		txQueueItem := timeboostTransactionQueueItem{
 			tx:                 nil,
