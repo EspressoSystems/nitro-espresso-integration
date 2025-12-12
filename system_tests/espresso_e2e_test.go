@@ -277,6 +277,7 @@ func TestEspressoE2E(t *testing.T) {
 	builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx, builder.L1Info, "Faucet", 100000),
 	})
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 
 	err = waitForWith(ctx, 180*time.Second, 2*time.Second, func() bool {
 		balance2 := l2Node.GetBalance(t, addr2)

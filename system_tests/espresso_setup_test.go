@@ -55,12 +55,12 @@ func createL1AndL2Node(
 	builder.execConfig.Sequencer.Enable = true
 	builder.execConfig.Caching.StateScheme = "hash"
 	builder.execConfig.Caching.Archive = true
+	builder.deployBold = false
 
 	if blobsEnabled {
 		builder.nodeConfig.BatchPoster.Post4844Blobs = true
 		builder.nodeConfig.BatchPoster.IgnoreBlobPrice = true
 		builder.withL1 = true
-		builder.deployBold = false
 		// Enabling this to false because we dont have a blob reader in the tests
 		// which is needed for staker
 		builder.nodeConfig.BlockValidator.Enable = false
