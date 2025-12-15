@@ -698,7 +698,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			hotshotBlock := opts.Config().HotShotBlock
 			if opts.Config().IsDecentralizedTimeboost {
 				height := b.fetchHotshotBlockFromLastCheckpoint(ctx)
-				log.Info("streamer will start with hothshot height", "height", height)
+				log.Info("streamer found checkpoint hotshot height", "hotshot height", height)
 				hotshotBlock = height
 			}
 
