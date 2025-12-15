@@ -478,12 +478,12 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	}
 
 	// We need to verify we have indeed received the transactions from espresso
-	hotshotHeight := streamer.VerifyConsecutivePositions(uint64(signedData.PreviousMessageCount), uint64(signedData.NewMessageCount))
-	if hotshotHeight == nil {
-		return fmt.Errorf("failed to match new message data vs whats in streamer. wanted: %d", signedData.NewMessageCount)
+	hotshotHeight, err := streamer.GetEarliestHotshotBlockForPosition(uint64(signedData.NewMessageCount - 1))
+	if err != nil {
+		return fmt.Errorf("failed to get hotshot block number. newMsgCount: %d, err: %w", signedData.NewMessageCount, err)
 	}
-	if *hotshotHeight != signedData.HotshotBlock {
-		return fmt.Errorf("failed to match hotshot height. got hotshot block: %d, have hotshot block: %d", signedData.HotshotBlock, *hotshotHeight)
+	if hotshotHeight != signedData.HotshotBlock {
+		return fmt.Errorf("failed to match hotshot height. got hotshot block: %d, have hotshot block: %d. newMsgCount: %d", signedData.HotshotBlock, hotshotHeight, signedData.NewMessageCount)
 	}
 
 	var calldata []byte

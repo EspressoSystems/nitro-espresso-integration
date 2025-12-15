@@ -241,12 +241,11 @@ type BatchPosterConfig struct {
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	AddressMonitorStartL1                      uint64                                                     `koanf:"address-monitor-start-l1"`
-	InitBatcherAddresses                       []string                                                   `koanf:"init-batcher-addresses"`
-	IsDecentralizedTimeboost                   bool                                                       `koanf:"is-decentralized-timeboost"`
-	DecentralizedTimeboostBatchVerifier        decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
-	DecentralizedTimeboostKeyManagementAddress string                                                     `koanf:"decentralized-timeboost-key-management-address"`
-	AddressMonitorStep                         uint64                                                     `koanf:"address-monitor-step"`
+	AddressMonitorStartL1               uint64                                                     `koanf:"address-monitor-start-l1"`
+	InitBatcherAddresses                []string                                                   `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
+	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
+	AddressMonitorStep                  uint64                                                     `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -1583,7 +1582,10 @@ func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 	useBlobs := len(blobs) > 0
 	var signatures []byte
 	var err error
-	hotshotBlock := b.espressoStreamer.GetEarliestBlockForPosition(uint64(newMsgNum - 1))
+	hotshotBlock, err := b.espressoStreamer.GetEarliestHotshotBlockForPosition(uint64(newMsgNum - 1))
+	if err != nil {
+		return nil, err
+	}
 	if useBlobs {
 		signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
 			seqNum,
@@ -2015,7 +2017,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		msgCount := arbutil.MessageIndex(b.espressoStreamer.GetMessageCount())
 
 		// This will advance the streamer only if msg count > streamer pos
-		// This means a batch was verified ffrom leader
+		// This means a batch was verified from leader
 		b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
 
 		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum, msgCount, batchPosition.MessageCount)
@@ -2792,9 +2794,9 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 
 	var index arbutil.MessageIndex
 	for index = signedData.PreviousMessageCount; index < signedData.NewMessageCount; index++ {
-		message, err := b.streamer.getMessageWithMetadataAndBlockInfo(index)
-		if err != nil {
-			return fmt.Errorf("error getting message at index: %d, err: %w", index, err)
+		message := b.espressoStreamer.GetMsg(index)
+		if message == nil {
+			return fmt.Errorf("error getting message at index from streamer: %d", index)
 		}
 		muxBackend.allMsgs[index] = &message.MessageWithMeta
 		if prevDelayedMessagesRead < message.MessageWithMeta.DelayedMessagesRead {

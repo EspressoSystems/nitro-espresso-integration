@@ -325,13 +325,14 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 	return s.nextHotshotBlockNum
 }
 
-func (s *EspressoStreamer) GetEarliestBlockForPosition(pos uint64) uint64 {
+func (s *EspressoStreamer) GetEarliestHotshotBlockForPosition(pos uint64) (uint64, error) {
 	s.messageLock.RLock()
 	defer s.messageLock.RUnlock()
 	if msg, exists := s.messageWithMetadataAndPos[pos]; exists {
-		return msg.HotshotHeight
+		return msg.HotshotHeight, nil
 	}
-	return s.nextHotshotBlockNum
+	log.Warn("position is not found in streamer", "pos", pos, "hotshot block", s.nextHotshotBlockNum)
+	return 0, fmt.Errorf("earliest hotshot block not found")
 }
 
 /* Verify the attestation quote */

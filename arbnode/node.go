@@ -1092,6 +1092,7 @@ func getDecentralizedTimeboostSequencer(
 	exec execution.ExecutionClient,
 	configFetcher ConfigFetcher,
 	delayedSequencer *DecentralizedTimeboostDelayedSequencer,
+	chainInfo *chaininfo.RollupAddresses,
 ) (*gethexec.DecentralizedTimeboostSequencer, error) {
 	if !configFetcher.Get().DecentralizedTimeboostSequencer.Enable {
 		return nil, nil
@@ -1104,9 +1105,19 @@ func getDecentralizedTimeboostSequencer(
 	}
 
 	if exec, ok := exec.(*gethexec.ExecutionNode); ok {
+		seqInbox, err := bridgegen.NewSequencerInbox(chainInfo.SequencerInbox, l1Reader.Client())
+		if err != nil {
+			log.Error("error getting seq inbox", "err", err)
+			return nil, err
+		}
+		addr, err := seqInbox.TimeboostKeyManager(&bind.CallOpts{})
+		if err != nil {
+			log.Error("error getting timeboost key manager addr", "err", err)
+			return nil, err
+		}
 		timeboostSequencer, err := gethexec.NewDecentralizedTimeboostSequencer(exec.ExecEngine, l1Reader, delayedSequencer, func() *gethexec.DecentralizedTimeboostSequencerConfig {
 			return &configFetcher.Get().DecentralizedTimeboostSequencer
-		})
+		}, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -1290,7 +1301,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	decentralizedTimeboostSequencer, err := getDecentralizedTimeboostSequencer(l1Reader, executionClient, configFetcher, decentralizedTimeboostDelayedSequencer)
+	decentralizedTimeboostSequencer, err := getDecentralizedTimeboostSequencer(l1Reader, executionClient, configFetcher, decentralizedTimeboostDelayedSequencer, deployInfo)
 	if err != nil {
 		return nil, err
 	}

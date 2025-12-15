@@ -678,11 +678,10 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 		Require(t, err)
 
 		// wait for one batch to be posted before restart
+		// We are testing the node can restart and fetch hotshot height from contract
 		return batchCount.Uint64() > 1
 	})
 	Require(t, err)
-
-	time.Sleep(10)
 
 	log.Info("batch posted, restarting")
 
