@@ -1572,7 +1572,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 
 func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 	l2MessageData []byte,
-	method abi.Method,
 	seqNum *big.Int,
 	prevMsgNum arbutil.MessageIndex,
 	newMsgNum arbutil.MessageIndex,
@@ -1721,7 +1720,7 @@ func (b *BatchPoster) createCalldata(
 	var signatures []byte
 	var err error
 	if b.config().IsDecentralizedTimeboost {
-		signatures, err = b.createCalldataDecentralizedTimeboost(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
+		signatures, err = b.createCalldataDecentralizedTimeboost(l2MessageData, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
 	} else {
 		signatures, err = b.createCalldataEspresso(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
 	}
@@ -2718,7 +2717,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 			return nil, err
 		}
 	}
-	if err = b.batchVerifier.VerifySignedDataCorrectness(
+	calldata, err := b.batchVerifier.VerifySignedDataCorrectness(
 		signedData,
 		batchPosition.NextSeqNum,
 		b.gasRefunderAddr,
@@ -2726,7 +2725,8 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		args,
 		encodedBlobs,
 		b.espressoStreamer,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -2734,24 +2734,6 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		return nil, err
 	}
 
-	calldata := args.SignedData
-	if isBlob {
-		arguments, err := b.batchVerifier.GetBlobAbiArguments()
-		if err != nil {
-			return nil, err
-		}
-		calldata, err = arguments.Pack(
-			new(big.Int).SetUint64(signedData.SequencerNumber),
-			new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
-			signedData.GasRefunder,
-			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
-			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
-			encodedBlobs,
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
 	data, err := b.batchVerifier.HashAndSignBatchData(calldata)
 	if err != nil {
 		return nil, err

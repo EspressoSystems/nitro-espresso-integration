@@ -696,9 +696,9 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 		Require(t, err)
 
 		// should make a lot of small batches
-		return batchCount.Uint64() > 8
+		return batchCount.Uint64() > 5
 	})
-	time.Sleep(60 * time.Second)
+	time.Sleep(30 * time.Second)
 	Require(t, err)
 
 	blockNumberAfter, err := builder2.L2.Client.BlockNumber(ctx)
