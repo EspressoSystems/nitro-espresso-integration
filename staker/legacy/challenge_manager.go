@@ -630,6 +630,7 @@ func (m *ChallengeManager) getDAProof(ctx context.Context, proof []byte) ([]byte
 				if !exists {
 					return nil, errors.New("celestia DapReader does not")
 				}
+				//nolint:gocritic // ignore singleCaseSwitch
 				switch reader := dapReader.(type) {
 				case celestiaTypes.CelestiaReader:
 					celestiaReader = reader

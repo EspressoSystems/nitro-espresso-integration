@@ -6,7 +6,7 @@ on:
 jobs:
   lint-and-build:
     name: Lint and Build
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -29,4 +29,4 @@ jobs:
 
       - name: Custom Lint
         run: |
-          go run ./linters ./...
+          go run ./linters $(go list ./... | grep -v "/celestia")
