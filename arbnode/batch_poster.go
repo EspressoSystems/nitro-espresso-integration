@@ -695,11 +695,21 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStep,
 			)
 
-			hotshotBlock := opts.Config().HotShotBlock
+			hotshotBlock := uint64(0)
 			if opts.Config().IsDecentralizedTimeboost {
-				height := b.fetchHotshotBlockFromLastCheckpoint(ctx)
-				log.Info("streamer found checkpoint hotshot height", "hotshot height", height)
-				hotshotBlock = height
+				hotshotBlock = b.fetchHotshotBlockFromLastCheckpoint(ctx)
+				if hotshotBlock != 0 {
+					log.Info("streamer found checkpoint hotshot height", "hotshot height", hotshotBlock)
+				} else {
+					curr, err := hotShotClient.FetchLatestBlockHeight(ctx)
+					if err != nil {
+						hotshotBlock = opts.Config().HotShotBlock
+						log.Warn("error fetching latest block", "err", err, "using config height", hotshotBlock)
+					} else {
+						hotshotBlock = curr
+					}
+				}
+				log.Info("starting streamer with hotshot height", "hotshot height", hotshotBlock)
 			}
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(

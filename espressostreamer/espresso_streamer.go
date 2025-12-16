@@ -271,6 +271,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	for _, msg := range messages {
 		if msg.Pos < s.currentMessagePos {
 			log.Debug("message index is less than current message pos, skipping", "msgPos", msg.Pos, "currentMessagePos", s.currentMessagePos)
+			continue
 		}
 		// in the case a transaction was resubmitted we dont need to re add the position
 		if _, ok := s.messageWithMetadataAndPos[msg.Pos]; ok {
