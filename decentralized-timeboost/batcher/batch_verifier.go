@@ -224,7 +224,7 @@ func (v *BatchVerifier) sendBatchForVerification(
 		}
 		resp, err := v.sendWithRetries(addr, jsonData, member.SigKey)
 		if err != nil {
-			log.Error("http request failed after max tries", "err", err, "to", member.SigKey)
+			log.Error("http request failed after max tries", "err", err, "to", hex.EncodeToString(member.SigKey))
 			sigs = append(sigs, []byte{})
 			continue
 		}
@@ -300,10 +300,11 @@ func (v *BatchVerifier) sendBatchForVerification(
 func (v *BatchVerifier) sendWithRetries(addr string, data []byte, sigKey []byte) (*http.Response, error) {
 	const max = 5
 	var err error
+	var resp *http.Response
 	for range max {
-		resp, err := v.client.Post(addr, "application/json", bytes.NewBuffer(data))
+		resp, err = v.client.Post(addr, "application/json", bytes.NewBuffer(data))
 		if err != nil {
-			log.Error("http request failed", "err", err, "to", sigKey, "addr", addr)
+			log.Error("http request failed", "err", err, "to", hex.EncodeToString(sigKey), "addr", addr)
 			continue
 		}
 		return resp, nil
