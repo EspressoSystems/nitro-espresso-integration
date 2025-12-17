@@ -273,10 +273,6 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 			log.Debug("message index is less than current message pos, skipping", "msgPos", msg.Pos, "currentMessagePos", s.currentMessagePos)
 			continue
 		}
-		// in the case a transaction was resubmitted we dont need to re add the position
-		if _, ok := s.messageWithMetadataAndPos[msg.Pos]; ok {
-			continue
-		}
 
 		s.messageWithMetadataAndPos[msg.Pos] = msg
 
@@ -289,6 +285,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 		for nextPos := msg.Pos + 1; nextPos <= s.highestPos; nextPos++ {
 			if higherPos, ok := s.messageWithMetadataAndPos[nextPos]; ok && higherPos.HotshotHeight < currHeight {
 				s.messageWithMetadataAndPos[msg.Pos].HotshotHeight = higherPos.HotshotHeight
+				currHeight = higherPos.HotshotHeight
 			}
 		}
 	}

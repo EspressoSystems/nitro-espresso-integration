@@ -2023,11 +2023,10 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	if b.config().IsDecentralizedTimeboost {
-		msgCount := arbutil.MessageIndex(b.espressoStreamer.GetMessageCount())
-
 		// This will advance the streamer only if msg count > streamer pos
 		// This means a batch was verified from leader
 		b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+		msgCount := arbutil.MessageIndex(b.espressoStreamer.GetMessageCount())
 
 		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum, msgCount, batchPosition.MessageCount)
 		if err != nil {
