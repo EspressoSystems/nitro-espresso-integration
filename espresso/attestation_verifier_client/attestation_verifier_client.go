@@ -3,12 +3,15 @@ package attestationverifierclient
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/offchainlabs/nitro/arbutil"
 )
 
 type EspressoAttestationVerifierClient struct {
@@ -39,10 +42,10 @@ func NewEspressoAttestationVerifierClient(
 	}
 }
 
-func (c *EspressoAttestationVerifierClient) GenerateZKProof(ctx context.Context, attestationBytes []byte) (*OnchainProof, error) {
+func (c *EspressoAttestationVerifierClient) GenerateZKProof(ctx context.Context, attestationBytes []byte) ([]byte, []byte, error) {
 	request, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/generate_proof", bytes.NewBuffer(attestationBytes))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	request.Header.Set("Content-Type", "application/octet-stream")
 
@@ -51,24 +54,32 @@ func (c *EspressoAttestationVerifierClient) GenerateZKProof(ctx context.Context,
 	}
 	res, err := client.Do(request)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer res.Body.Close()
 
 	responseData, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("attestation service returned status %d: %s", res.StatusCode, string(responseData))
+		return nil, nil, fmt.Errorf("attestation service returned status %d: %s", res.StatusCode, string(responseData))
 	}
 
 	var zkProof OnchainProof
 	err = json.Unmarshal(responseData, &zkProof)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &zkProof, nil
+	journalBytes, err := hex.DecodeString(arbutil.StripHexPrefix(zkProof.RawProof.Journal))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode journal hex string: %w", err)
+	}
+	onchainProofBytes, err := hex.DecodeString(arbutil.StripHexPrefix(zkProof.OnchainProof))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode onchain proof hex string: %w", err)
+	}
+	return journalBytes, onchainProofBytes, nil
 }
