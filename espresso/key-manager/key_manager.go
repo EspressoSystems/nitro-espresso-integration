@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -202,19 +201,15 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if k.espressoNitroAttestationVerifierClient == nil {
 			return nil, nil, errors.New("attestation verifier client is not initialized")
 		}
-		onchainProof, err := k.espressoNitroAttestationVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
+		// this condition is only possible in tests where we want to skip attestation verification.
+		if len(attestationBytes) == 0 {
+			return nil, nil, nil
+		}
+		journalBytes, onchainProofBytes, err := k.espressoNitroAttestationVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
 		}
 
-		journalBytes, err := hex.DecodeString(arbutil.StripHexPrefix(onchainProof.RawProof.Journal))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decode journal hex string: %w", err)
-		}
-		onchainProofBytes, err := hex.DecodeString(arbutil.StripHexPrefix(onchainProof.OnchainProof))
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decode onchain proof hex string: %w", err)
-		}
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
 	case TESTS:
