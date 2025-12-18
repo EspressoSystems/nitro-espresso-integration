@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -47,7 +46,8 @@ type EspressoStreamerInterface interface {
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
-	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
+	SetBatcherAddressesFetcher(fetcher func(l1Height uint64, address common.Address) (bool, error))
+	CanBatcherAddressSend(ctx context.Context, address common.Address) (bool, error)
 	StopAndWait()
 }
 
@@ -71,7 +71,7 @@ type EspressoStreamer struct {
 
 	PerfRecorder *PerfRecorder
 
-	batcherAddressesFetcher func(l1Height uint64) []common.Address
+	batcherAddressesFetcher func(l1Height uint64, address common.Address) (bool, error)
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -82,7 +82,7 @@ func NewEspressoStreamer(
 	espressoSGXVerifier espressotee.EspressoSGXVerifierInterface,
 	espressoClient espressoClient.EspressoClient,
 	recordPerformance bool,
-	batcherAddressesFetcher func(l1Height uint64) []common.Address,
+	batcherAddressesFetcher func(l1Height uint64, address common.Address) (bool, error),
 	retryTime time.Duration,
 ) *EspressoStreamer {
 
@@ -101,6 +101,29 @@ func NewEspressoStreamer(
 		retryTime:               retryTime,
 		currentMessagePos:       1,
 	}
+}
+
+func (s *EspressoStreamer) CanBatcherAddressSend(ctx context.Context, address common.Address) (bool, error) {
+	if s.batcherAddressesFetcher == nil {
+		return false, errors.New("batcher addresses fetcher not set")
+	}
+	latest, err := s.espressoClient.FetchLatestBlockHeight(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch espresso latest block height: %w", err)
+	}
+	// Even though we can query the latest block height, the node may not yet serve
+	// the header at that exact height. Using `latest-1` avoids spurious errors
+	// where this function would otherwise always fail. This is safe because
+	// Espresso block production is much faster than L1, and the L1 lag has
+	// already been accounted for in the batcher address monitor.
+	// TODO: Figure out why this doesn't work without `-1`.
+	// It might be just a dev node issue.
+	header, err := s.espressoClient.FetchHeaderByHeight(ctx, latest-1)
+	if err != nil {
+		return false, fmt.Errorf("failed to fetch espresso block header: %w", err)
+	}
+	l1Finalized := header.Header.GetL1Finalized().Number
+	return s.batcherAddressesFetcher(l1Finalized, address)
 }
 
 // GetMessageCount
@@ -200,17 +223,15 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 		return fmt.Errorf("failed to convert signature to public key: %w", err)
 	}
 	addr := crypto.PubkeyToAddress(*publicKey)
-	validAddresses := s.batcherAddressesFetcher(l1Height)
-	if len(validAddresses) == 0 {
-		log.Warn("no valid addresses found", "validAddresses", validAddresses)
-		// No valid addresses right now. Need to catch up
+	valid, err := s.batcherAddressesFetcher(l1Height, addr)
+	if err != nil {
+		log.Warn("failed to get valid addresses", "err", err)
 		return ErrRetryParsingHotShotPayload
 	}
-	// if the list of valid addresses doesn't contain the address from the signature, this signature is invalid,
-	// and we must return an error.
-	if !slices.Contains(validAddresses, addr) {
-		log.Warn("batch poster address", "addr", addr, "expected one of", validAddresses)
-		return fmt.Errorf("batch poster address does not match")
+	if !valid {
+		log.Error("address not valid", "addr", addr)
+		// Address not valid. Need to catch up
+		return fmt.Errorf("address not valid: %v", addr)
 	}
 	return nil
 }
@@ -329,7 +350,7 @@ func (s *EspressoStreamer) SetSGXVerifier(sgxVerifier espressotee.EspressoSGXVer
 	s.espressoSGXVerifier = sgxVerifier
 }
 
-func (s *EspressoStreamer) SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address) {
+func (s *EspressoStreamer) SetBatcherAddressesFetcher(fetcher func(l1Height uint64, address common.Address) (bool, error)) {
 	s.batcherAddressesFetcher = fetcher
 }
 

@@ -17,8 +17,8 @@ var (
 	// caff node specific
 	fromBlockKey           = []byte("fromBlk")
 	nextHotshotBlockNumKey = []byte("nextHsBlkNum")
-	initAddressesKey       = []byte("initAddrs")
-	eventsKey              = []byte("events")
+	addressesKey           = []byte("addresses")
+	eventsKey              = []byte("events2")
 	lastProcessedHeightKey = []byte("lastProcessedHeight")
 )
 

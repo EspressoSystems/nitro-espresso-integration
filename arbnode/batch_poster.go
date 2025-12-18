@@ -148,6 +148,7 @@ type BatchPoster struct {
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
 	espressoRestarting         bool
+	signerAddr                 common.Address
 }
 
 type l1BlockBound int
@@ -620,20 +621,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-			initStringAddresses := opts.Config().InitBatcherAddresses
-			// Convert the init addresses to common.Address
-			initAddresses := []common.Address{}
-			for _, addr := range initStringAddresses {
-				initAddresses = append(initAddresses, common.HexToAddress(addr))
+			addr, err := recoverAddressFromSigner(opts.DataSigner)
+			if err != nil {
+				return nil, err
 			}
-			if len(initAddresses) == 0 {
-				addr, err := recoverAddressFromSigner(opts.DataSigner)
-				if err != nil {
-					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
-				}
-
-				initAddresses = []common.Address{addr}
-			}
+			b.signerAddr = addr
 
 			// We dont need auth reads here because batch poster is not reliant on the
 			// database for determining which messages to post, it gets the messages
@@ -643,7 +635,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return nil, err
 			}
 			monitor := NewBatcherAddrMonitor(
-				initAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
@@ -658,7 +649,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				nil,
 				hotShotClient,
 				false,
-				monitor.GetValidAddresses,
+				func(l1Height uint64, addr common.Address) (bool, error) {
+					return monitor.IsValid(ctx, addr, l1Height)
+				},
 				opts.Config().EspressoTxnsPollingInterval,
 			)
 
@@ -1910,6 +1903,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			if err != nil {
 				return false, fmt.Errorf("unable to register signer: %w", err)
 			}
+		}
+		canSend, err := b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
+		if err != nil {
+			log.Warn("failed to check if batcher address can send", "err", err)
+			return false, nil
+		}
+		if !canSend {
+			log.Warn("batcher address cannot send at this time", "address", b.signerAddr)
+			return false, nil
 		}
 	}
 
