@@ -2800,17 +2800,18 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 				streamerMsg.MessageWithMeta.DelayedMessagesRead,
 			)
 		}
-		if !dbMsg.MessageWithMeta.Message.Equals(streamerMsg.MessageWithMeta.Message) {
+
+		muxBackend.allMsgs[index] = &streamerMsg.MessageWithMeta
+		if prevDelayedMessagesRead < streamerMsg.MessageWithMeta.DelayedMessagesRead {
+			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &streamerMsg.MessageWithMeta)
+			prevDelayedMessagesRead += 1
+		} else if !dbMsg.MessageWithMeta.Message.Equals(streamerMsg.MessageWithMeta.Message) {
+			// Note for delayed messages we do not send full message to hotshot so only compare with non delayed messages
 			return fmt.Errorf(
 				"message mismatch between whats in espresso streamer and database! db: %v, espresso streamer: %v",
 				dbMsg.MessageWithMeta.Message,
 				streamerMsg.MessageWithMeta.Message,
 			)
-		}
-		muxBackend.allMsgs[index] = &streamerMsg.MessageWithMeta
-		if prevDelayedMessagesRead < streamerMsg.MessageWithMeta.DelayedMessagesRead {
-			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &streamerMsg.MessageWithMeta)
-			prevDelayedMessagesRead += 1
 		}
 	}
 
