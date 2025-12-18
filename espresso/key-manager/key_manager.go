@@ -203,7 +203,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		}
 
 		// this can only happen in tests where we don't have an attestation
-		if attestationBytes == nil || len(attestationBytes) == 0 {
+		if len(attestationBytes) == 0 {
 			return nil, nil, nil
 		}
 		journalBytes, onchainProofBytes, err := k.espressoNitroAttestationVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
