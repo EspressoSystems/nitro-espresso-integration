@@ -47,6 +47,8 @@ TestGettingState
 TestBatchPosterDelayBufferDisabled
 TestEthSyncing
 TestOutOfGasInStorageCacheFlush
+TestPrimaryToSecondaryFailover
+TestRetryableExpiry
 
 # These tests are skipped because of invalid long paths of temporary directory
 # in CI environment. Currently we don't have methods to modify the
