@@ -141,13 +141,6 @@ func (s *EspressoStreamer) GetMessageCount() uint64 {
 	return s.currentMessagePos + count
 }
 
-func (s *EspressoStreamer) GetCurrentMessagePosition() uint64 {
-	s.messageLock.RLock()
-	defer s.messageLock.RUnlock()
-
-	return s.currentMessagePos
-}
-
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHostshotBlock uint64) {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
@@ -186,43 +179,6 @@ func (s *EspressoStreamer) Peek() *MessageWithMetadataAndPos {
 	defer s.messageLock.RUnlock()
 
 	return s.messageWithMetadataAndPos[s.currentMessagePos]
-}
-
-// Checks if we have a consecutive sequence of messages from the current position to the target.
-// This is used when verifying correctness of batch sent from another batch poster for decentralized timeboost
-// We need to be sure the batch isnt lying about the espresso confirmations so we verify against what we have in our internal state
-// Return the minimum hotshot position after the target for when we call `Reset()` on the streamer to ensure no data will be lost
-func (s *EspressoStreamer) VerifyConsecutivePositions(start uint64, target uint64) *uint64 {
-	s.messageLock.RLock()
-	defer s.messageLock.RUnlock()
-
-	if start <= s.currentMessagePos {
-		start = s.currentMessagePos
-	}
-
-	// Verify all positions exist from start to target
-	foundAll := true
-	for pos := start; pos < target; pos++ {
-		if _, exists := s.messageWithMetadataAndPos[pos]; !exists {
-			foundAll = false
-			break
-		}
-	}
-
-	if foundAll {
-		// Get pre-computed min height
-		pos := s.messageWithMetadataAndPos[target-1]
-		return &pos.HotshotHeight
-	}
-	log.Warn(
-		"failed to verify consecutive position in streamer",
-		"prevMsgCount", start,
-		"newMsgCount", target,
-		"streamerPos", s.currentMessagePos,
-		"hotshot block", s.GetCurrentEarliestHotShotBlockNumber(),
-		"len", len(s.messageWithMetadataAndPos),
-	)
-	return nil
 }
 
 // Call this function to advance the streamer to the next message
