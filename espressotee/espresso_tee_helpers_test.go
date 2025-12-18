@@ -14,7 +14,7 @@ func TestBaseFeeCheck_NilBaseFee(t *testing.T) {
 			if attempts < 2 {
 				return nil, nil
 			}
-			return big.NewInt(1000000), nil // Succeed on retry
+			return big.NewInt(1000000), nil // Succeed on 3rd retry
 		}
 
 		err := BaseFeeCheck(10000000, 3, 10*time.Millisecond, fn, "test")
