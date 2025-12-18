@@ -400,7 +400,7 @@ outer:
 	// It should be the same for all transactions in the queue because
 	// each transaction is a part of the same round
 	timestamp := firstQueueItem.consensusTimestamp
-	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
+	header, err := s.l1Reader.LastHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
 		s.txRetryQueue.enqueueItems(queueItems)

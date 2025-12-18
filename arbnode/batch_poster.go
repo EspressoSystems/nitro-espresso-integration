@@ -2785,13 +2785,31 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 
 	var index arbutil.MessageIndex
 	for index = signedData.PreviousMessageCount; index < signedData.NewMessageCount; index++ {
-		message := b.espressoStreamer.GetMsg(index)
-		if message == nil {
-			return fmt.Errorf("error getting message at index from streamer: %d", index)
+		streamerMsg := b.espressoStreamer.GetMsg(index)
+		if streamerMsg == nil {
+			return fmt.Errorf("error getting message at index from espresso streamer: %d", index)
 		}
-		muxBackend.allMsgs[index] = &message.MessageWithMeta
-		if prevDelayedMessagesRead < message.MessageWithMeta.DelayedMessagesRead {
-			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &message.MessageWithMeta)
+		dbMsg, err := b.streamer.getMessageWithMetadataAndBlockInfo(index)
+		if err != nil {
+			return fmt.Errorf("error getting message at index: %d, err: %w", index, err)
+		}
+		if dbMsg.MessageWithMeta.DelayedMessagesRead != streamerMsg.MessageWithMeta.DelayedMessagesRead {
+			return fmt.Errorf(
+				"message mismatch between espresso streamer and database for delayed messages! db: %d, espresso streamer: %d",
+				dbMsg.MessageWithMeta.DelayedMessagesRead,
+				streamerMsg.MessageWithMeta.DelayedMessagesRead,
+			)
+		}
+		if !dbMsg.MessageWithMeta.Message.Equals(streamerMsg.MessageWithMeta.Message) {
+			return fmt.Errorf(
+				"message mismatch between whats in espresso streamer and database! db: %v, espresso streamer: %v",
+				dbMsg.MessageWithMeta.Message,
+				streamerMsg.MessageWithMeta.Message,
+			)
+		}
+		muxBackend.allMsgs[index] = &streamerMsg.MessageWithMeta
+		if prevDelayedMessagesRead < streamerMsg.MessageWithMeta.DelayedMessagesRead {
+			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &streamerMsg.MessageWithMeta)
 			prevDelayedMessagesRead += 1
 		}
 	}
