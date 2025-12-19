@@ -393,3 +393,11 @@ func VerifyMessage(message []byte, signature []byte, pubKey *ecdsa.PublicKey) er
 	}
 	return nil
 }
+
+// StripHexPrefix removes "0x" prefix from hex strings if present
+func StripHexPrefix(hexStr string) string {
+	if len(hexStr) >= 2 && hexStr[:2] == "0x" {
+		return hexStr[2:]
+	}
+	return hexStr
+}

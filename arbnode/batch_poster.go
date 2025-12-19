@@ -220,6 +220,7 @@ type BatchPosterConfig struct {
 	EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
 	UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
 	QuoteFile                        string                                    `koanf:"quote-file"`
+	AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
 
 	// Fetch messages from HotShot block
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
@@ -299,6 +300,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
+	f.String(prefix+".attestation-service-url", DefaultBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
@@ -360,10 +362,10 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoTeeType:                  "NITRO",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
-	EspressoTxSizeLimit:     900 * 1024,
-	UserDataAttestationFile: "",
-	QuoteFile:               "",
-
+	EspressoTxSizeLimit:      900 * 1024,
+	UserDataAttestationFile:  "",
+	QuoteFile:                "",
+	AttestationServiceURL:    "",
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
@@ -725,7 +727,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				submitterOptions,
 				// TODO: pass the persistent private key to the key manager in future
 				submitter.WithKeyManager(
-					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
+					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile, opts.Config().AttestationServiceURL),
 				),
 			)
 
