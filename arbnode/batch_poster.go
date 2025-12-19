@@ -37,8 +37,6 @@ import (
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/offchainlabs/bold/solgen/go/bridgegen"
-
-	"github.com/offchainlabs/bold/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/arbnode/redislock"
@@ -340,7 +338,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	LightClientAddress:               "",
 	HotShotUrls:                      []string{},
 	EspressoTeeType:                  "SGX",
-	EspressoTeeType:                  "NITRO",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	EspressoTxSizeLimit:     900 * 1024,
@@ -349,7 +346,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
+	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
 	AddressMonitorStep:       100,
 	AddressMonitorStartL1:    1,
@@ -398,7 +395,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []common.Address{},
+	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
 }
 
@@ -587,7 +584,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				if err != nil {
 					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
 				}
-				initAddresses = []common.Address{addr}
+				initAddresses = []string{addr.Hex()}
 			}
 
 			// We dont need auth reads here because batch poster is not reliant on the
@@ -597,8 +594,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			if err != nil {
 				return nil, err
 			}
+			// convert init addresses to common.Address
+			var commonInitAddresses []common.Address
+			for _, addr := range initAddresses {
+				commonInitAddresses = append(commonInitAddresses, common.HexToAddress(addr))
+			}
+
 			monitor := NewBatcherAddrMonitor(
-				initAddresses,
+				commonInitAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,

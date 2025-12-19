@@ -61,7 +61,6 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 
 	fromBlock := d.fromBlock
 	log.Info("backfilling delayed messages", "fromBlock", fromBlock, "matureL1Block", matureL1Block)
-	batch := d.db.NewBatch()
 
 	// Loop through the blocks until we reach the matureL1Block
 	for fromBlock < matureL1Block {
@@ -78,14 +77,6 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 			return err
 		}
 		fromBlock = toBlock + 1
-<<<<<<< HEAD
-	}
-
-	err = batch.Write()
-	if err != nil {
-		return err
-=======
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 	}
 
 	log.Info("Backfilled delayed messages")
@@ -158,28 +149,14 @@ func (d *DelayedMessageFetcher) processNewHeader(ctx context.Context, header *ty
 func (d *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 
-<<<<<<< HEAD
-	// Get the delayed message count store in the database
-	delayedCount, err := getDelayedMessageLatestIndex(f.db)
-	if err != nil {
-		log.Error("Failed to get delayed message count from db", "err", err)
-		return nil, err
-	}
-
-=======
 	delayedCount := d.delayedCount
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 	// If this is delayed message, we need to get the message from L1
 	// and replace the message in the messageWithMetadataAndPos
 	delayedMessageToProcess := delayedMessagesRead - 1
 
 	if delayedMessageToProcess > delayedCount {
 		log.Warn("delayed message fetcher is lagging behind", "delayedMessagesRead", delayedMessagesRead, "delayedCount", delayedCount)
-<<<<<<< HEAD
-		return nil, fmt.Errorf("delayed message fetcher is lagging behind")
-=======
 		return nil, 0, fmt.Errorf("delayed message fetcher is lagging behind")
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 	}
 	log.Debug("Getting delayed message", "delayedCount", delayedMessageToProcess)
 
@@ -254,11 +231,7 @@ func (f *DelayedMessageFetcher) getDelayedMessageLatestIndexAtBlock(blockNumber 
 getDelayedMessagedInRange fetches all the delayed messages in the range [startBlock, endBlock]
 and stores them in the database
 */
-<<<<<<< HEAD
-func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, toBlock uint64) error {
-=======
 func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, fromBlock uint64, toBlock uint64) error {
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
 	log.Debug("Looking for batches in range", "from", fromBlock, "to", toBlock)
@@ -290,16 +263,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, f
 
 	log.Debug("sequencer delayed messages found", "delayedMessages", msgs)
 
-<<<<<<< HEAD
-	// Get the delayed message index stored in the database
-	lastDelayedMessageIndex, err := getDelayedMessageLatestIndex(d.db)
-	if err != nil {
-		log.Error("Failed to get delayed message index from db", "err", err)
-		return err
-	}
-=======
 	lastDelayedMessageIndex := d.delayedCount
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 
 	for _, msg := range msgs {
 		seqNum, err := msg.Message.Header.SeqNum()
@@ -340,23 +304,6 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, f
 	return nil
 }
 
-<<<<<<< HEAD
-// getDelayedMessageLatestIndex returns the delayed message index from the database
-func getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error) {
-	var delayedCount uint64
-	delayedCountBytes, err := db.Get([]byte(DelayedMessageCountKey))
-	if err != nil {
-		return 0, fmt.Errorf("failed to get delayed message count: %w", err)
-	}
-	err = rlp.DecodeBytes(delayedCountBytes, &delayedCount)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode delayed message count: %w", err)
-	}
-	return delayedCount, nil
-}
-
-=======
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 /*
 getL1BlockWithinSafetyTolerance checks if the L1 block is within the safety tolerance of the rollup
   - if we need to wait for finalized block, then it returns the latest finalized block number
@@ -392,57 +339,9 @@ func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Cont
 	return header.Number.Uint64(), nil
 }
 
-<<<<<<< HEAD
-/***** Setter Functions *****/
-
-/*
-Stores the current from block in the database.
-*/
-func storeCurrentFromBlock(batch ethdb.Batch, fromBlock uint64) error {
-	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next from block: %w", err)
-	}
-
-	err = batch.Put([]byte(DelayedFetcherCurrentFromBlockKey), blockNumberBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next from block: %w", err)
-	}
-
-	return nil
-}
-
-/*
-Store the delayed message and delayed message count in the database
-*/
-func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum uint64, msg DelayedInboxMessage) error {
-	key := dbKey(DelayedMessagePrefix, seqNum)
-	encodedMsg, err := rlp.EncodeToBytes(msg)
-	if err != nil {
-		return fmt.Errorf("failed to encode delayed message: %w", err)
-	}
-	// Also update the delayed message count in the database
-	err = f.storeDelayedMessageLatestIndex(f.db, seqNum)
-	if err != nil {
-		return err
-	}
-	log.Debug("stored delayed message", "seqNum", seqNum)
-
-	return batch.Put(key, encodedMsg)
-}
-
-// storeDelayedMessageLatestIndex stores the delayed message index in the database
-func (f *DelayedMessageFetcher) storeDelayedMessageLatestIndex(db ethdb.Database, count uint64) error {
-	countBytes, err := rlp.EncodeToBytes(count)
-	if err != nil {
-		return fmt.Errorf("failed to encode delayed message count: %w", err)
-	}
-	return db.Put([]byte(DelayedMessageCountKey), countBytes)
-=======
 // storeDelayedMessageLatestIndex stores the delayed message index in the database
 func (d *DelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
 	d.delayedCount = count
->>>>>>> 36d91f7f1 (Merge release tee caff node (#865))
 }
 
 func NewDelayedMessageFetcher(
