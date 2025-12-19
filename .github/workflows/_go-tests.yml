@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        test-mode: [defaults-A, defaults-B, flaky, pathdb, challenge, stylus, l3challenge]
+        test-mode: [defaults-A, defaults-B, defaults-C, flaky, pathdb, challenge, stylus, l3challenge]
     services:
       redis:
         image: redis
@@ -66,7 +66,16 @@ jobs:
         run: >-
           ${{ github.workspace }}/.github/workflows/gotestsum.sh
           --tags cionly --timeout 60m --test_state_scheme hash
-          --junitfile test-results/junit-b.xml --skip '^Test[A-L]'
+          --junitfile test-results/junit-b.xml --run '^Test[M-S]'
+
+      - name: run tests without race detection and hash state scheme (C-batch)
+        if: matrix.test-mode == 'defaults-C'
+        id: run-tests-defaults-c
+        continue-on-error: true
+        run: >-
+          ${{ github.workspace }}/.github/workflows/gotestsum.sh
+          --tags cionly --timeout 60m --test_state_scheme hash
+          --junitfile test-results/junit-c.xml --skip '^Test[A-S]'
 
       - name: Process JUnit XML logs
         if: startsWith(matrix.test-mode, 'defaults') && always()
