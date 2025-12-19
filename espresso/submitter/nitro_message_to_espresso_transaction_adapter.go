@@ -86,11 +86,7 @@ func (n *NitroMessageToEspressoTransactionAdapter) bundleTransactions(startPos, 
 			return startPos, ErrorBundledHotShotTransactionContainsNoMessages{}
 		}
 
-<<<<<<< HEAD
 		payload, err := arbutil.SignHotShotPayload(payload, n.keyManager.SignPayload)
-=======
-		payload, err := arbutil.SignHotShotPayload(payload, n.keyManager.SignHotShotPayload)
->>>>>>> ec583c8c11c4d09e17fe20733f479b41996a564d
 		if err != nil {
 			return startPos, ErrorFailedToSignDataForHotShotPayload{Cause: err}
 		}
@@ -263,11 +259,7 @@ func (t *NitroMessageToEspressoTransactionAdapter) getNitroAttestation(pubKey []
 
 	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
 	if err != nil {
-<<<<<<< HEAD
 		return nil, fmt.Errorf("failed to verify attestation: %w", err)
-=======
-		return nil, fmt.Errorf("failed to verify attestation")
->>>>>>> ec583c8c11c4d09e17fe20733f479b41996a564d
 	}
 
 	attestationBytes, err := json.Marshal(attestation)
@@ -277,22 +269,15 @@ func (t *NitroMessageToEspressoTransactionAdapter) getNitroAttestation(pubKey []
 	return attestationBytes, nil
 }
 
-<<<<<<< HEAD
 func (n *NitroMessageToEspressoTransactionAdapter) RegisterService() error {
-=======
-func (n *NitroMessageToEspressoTransactionAdapter) RegisterSigner() error {
->>>>>>> ec583c8c11c4d09e17fe20733f479b41996a564d
 	teeType := n.keyManager.TeeType()
 	switch teeType {
 	case espresso_key_manager.SGX:
 		return n.keyManager.Register(n.getAttestationQuote)
 	case espresso_key_manager.NITRO:
 		return n.keyManager.Register(n.getNitroAttestation)
-<<<<<<< HEAD
 	case espresso_key_manager.TESTS:
 		return n.keyManager.Register(n.getAttestationQuote)
-=======
->>>>>>> ec583c8c11c4d09e17fe20733f479b41996a564d
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}

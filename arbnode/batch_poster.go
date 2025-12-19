@@ -596,7 +596,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				if err != nil {
 					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
 				}
-				initAddresses = []string{addr.Hex()}
+				initAddresses = append(initAddresses, addr)
 			}
 
 			// We dont need auth reads here because batch poster is not reliant on the
@@ -606,14 +606,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			if err != nil {
 				return nil, err
 			}
-			// convert init addresses to common.Address
-			var commonInitAddresses []common.Address
-			for _, addr := range initAddresses {
-				commonInitAddresses = append(commonInitAddresses, common.HexToAddress(addr))
-			}
 
 			monitor := NewBatcherAddrMonitor(
-				commonInitAddresses,
+				initAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
