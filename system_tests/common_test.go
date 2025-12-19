@@ -731,17 +731,18 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 
 	b.L1Info = existing.L1Info
 
-	teeHMAC, err := espresso_tee_utils.HmacForTest()
-	Require(t, err)
 	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
-	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
-	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
 		initializeTags := false
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
 		}
+
+		teeHMAC, err := espresso_tee_utils.HmacForTest()
+		Require(t, err)
+		caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
+		caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			TeeHMAC:                teeHMAC,
@@ -751,7 +752,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 		}
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	} else {
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
@@ -759,7 +760,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 		}
 		b.L2.ConsensusNode, err = arbnode.CreateNodeFullExecutionClient(
 			b.ctx, b.L2.Stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(),
-			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), espressoCaffNodeInitArgs)
+			l1Client, deployInfo, nil, nil, nil, fatalErrChan, big.NewInt(1337), nil, espressoCaffNodeInitArgs)
 		Require(t, err)
 	}
 
