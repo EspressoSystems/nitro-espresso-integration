@@ -244,6 +244,7 @@ type BatchPosterConfig struct {
 	AddressMonitorStartL1               uint64                                                     `koanf:"address-monitor-start-l1"`
 	InitBatcherAddresses                []string                                                   `koanf:"init-batcher-addresses"`
 	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
+	UseLatestHotshotBlock               bool                                                       `koanf:"use-latest-hotshot-block"`
 	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
 	AddressMonitorStep                  uint64                                                     `koanf:"address-monitor-step"`
 }
@@ -321,6 +322,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Bool(prefix+".is-decentralized-timeboost", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
+	f.Bool(prefix+".use-latest-hotshot-block", DefaultBatchPosterConfig.UseLatestHotshotBlock, "if batch poster should start from most recent hotshot block with decentralized timeboost")
 	decentralized_timeboost_batch_verifier.DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix+".decentralized-timeboost-batch-verifier", f)
 	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
@@ -393,6 +395,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	DecentralizedTimeboostBatchVerifier: decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
 	AddressMonitorStep:                  100,
 	AddressMonitorStartL1:               1,
+	UseLatestHotshotBlock:               true,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -444,6 +447,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	AddressMonitorStartL1:               1,
 	AddressMonitorStep:                  100,
 	EspressoEventPollingStep:            100,
+	UseLatestHotshotBlock:               false,
 }
 
 type BatchPosterOpts struct {
@@ -697,9 +701,19 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			hotshotBlock := uint64(0)
 			if opts.Config().IsDecentralizedTimeboost {
-				hotshotBlock = b.fetchHotshotBlockFromLastCheckpoint(ctx)
-				if hotshotBlock != 0 {
-					log.Info("streamer found checkpoint hotshot height", "hotshot height", hotshotBlock)
+				if !opts.Config().UseLatestHotshotBlock {
+					hotshotBlock = b.fetchHotshotBlockFromLastCheckpoint(ctx)
+					if hotshotBlock != 0 {
+						log.Info("streamer found checkpoint hotshot height", "hotshot height", hotshotBlock)
+					} else {
+						curr, err := hotShotClient.FetchLatestBlockHeight(ctx)
+						if err != nil {
+							hotshotBlock = opts.Config().HotShotBlock
+							log.Warn("error fetching latest block", "err", err, "using config height", hotshotBlock)
+						} else {
+							hotshotBlock = curr
+						}
+					}
 				} else {
 					curr, err := hotShotClient.FetchLatestBlockHeight(ctx)
 					if err != nil {
