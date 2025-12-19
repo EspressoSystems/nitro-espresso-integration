@@ -54,6 +54,7 @@ TestStylusPrecompileMethodsSimple
 TestGettingState
 TestEmptyCliConfig
 TestBatchPosterDelayBufferDisabled
+TestLatestConsensusRelease
 
 # These tests are failing with celestia integration
 

@@ -101,6 +101,7 @@ type batchPosterPosition struct {
 	MessageCount        arbutil.MessageIndex
 	DelayedMessageCount uint64
 	NextSeqNum          uint64
+	HotShotBlockNumber  uint64
 }
 
 type BatchPoster struct {
@@ -142,6 +143,7 @@ type BatchPoster struct {
 
 	espressoStreamer           *espressostreamer.EspressoStreamer
 	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	espressoRestarting         bool
 }
 
 type l1BlockBound int
@@ -218,10 +220,10 @@ type BatchPosterConfig struct {
 	HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	AddressMonitorStartL1    uint64 `koanf:"address-monitor-start-l1"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	InitBatcherAddresses []string `koanf:"init-batcher-addresses"`
-	AddressMonitorStep   uint64   `koanf:"address-monitor-step"`
+	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
+	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
+	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -253,6 +255,7 @@ type BatchPosterConfigFetcher func() *BatchPosterConfig
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
 	f.Uint64(prefix+".fixed-gas-limit", DefaultBatchPosterConfig.Dangerous.FixedGasLimit, "use this gas limit for batch posting instead of estimating it")
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultBatchPosterConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 }
 
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
@@ -332,7 +335,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	MaxEmptyBatchDelay:               3 * 24 * time.Hour,
 	DelayBufferThresholdMargin:       25, // 5 minutes considering 12-second blocks
 	EspressoTxnsPollingInterval:      time.Second,
-	EspressoTxnsSendingInterval:      time.Second,
+	EspressoTxnsSendingInterval:      125 * time.Millisecond,
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
@@ -396,6 +399,8 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
+	AddressMonitorStartL1:    1,
+	AddressMonitorStep:       100,
 	EspressoEventPollingStep: 100,
 }
 
@@ -480,6 +485,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
+
+		espressoRestarting: true,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -578,7 +585,12 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-			initAddresses := opts.Config().InitBatcherAddresses
+			initStringAddresses := opts.Config().InitBatcherAddresses
+			// Convert the init addresses to common.Address
+			initAddresses := []common.Address{}
+			for _, addr := range initStringAddresses {
+				initAddresses = append(initAddresses, common.HexToAddress(addr))
+			}
 			if len(initAddresses) == 0 {
 				addr, err := recoverAddressFromSigner(opts.DataSigner)
 				if err != nil {
@@ -1734,7 +1746,32 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			if batchPosition.HotShotBlockNumber > 0 {
+				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
+			} else {
+				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
+				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
+				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			}
+			if b.espressoRestarting {
+				cnt, err := b.streamer.GetMessageCount()
+				if err != nil {
+					return false, err
+				}
+				// Submit transactions that were already in tx streamer
+				if cnt > batchPosition.MessageCount {
+					queue := []arbutil.MessageIndex{}
+					for i := batchPosition.MessageCount; i < cnt; i++ {
+						queue = append(queue, arbutil.MessageIndex(i))
+					}
+					err = b.streamer.espressoSubmitter.EnqueuePendingTransaction(queue)
+					if err != nil {
+						return false, err
+					}
+					log.Info("submitted pending transactions after restart", "from", batchPosition.MessageCount, "count", len(queue))
+				}
+				b.espressoRestarting = false
+			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)
 		if err != nil {
@@ -1870,11 +1907,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	}
 
-	if b.building.firstDelayedMsg != nil {
+	if b.building.firstDelayedMsg != nil && b.espressoStreamer != nil {
 		// #nosec G115
 		timeSinceMsg := time.Since(time.Unix(int64(b.building.firstDelayedMsg.Message.Header.Timestamp), 0))
 		if timeSinceMsg >= config.MaxEmptyBatchDelay {
 			forcePostBatch = true
+			b.building.haveUsefulMessage = true
 		}
 	}
 	var getNextMessage func() (*arbostypes.MessageWithMetadata, error)
@@ -1889,7 +1927,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Next(ctx)
+			espressoMsg := b.espressoStreamer.Peek(ctx)
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -1904,6 +1942,11 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			forcePostBatch = true
 			b.building.haveUsefulMessage = true
 		}
+		log.Info("reach max empty batch delay",
+			"firstDelayedMsgTimestamp", b.building.firstDelayedMsg.Message.Header.Timestamp,
+			"timeSinceMsg", timeSinceMsg,
+			"maxEmptyBatchDelay", config.MaxEmptyBatchDelay,
+		)
 	}
 
 	for b.building.msgCount < msgCount {
@@ -1977,6 +2020,9 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
+		if b.espressoStreamer != nil {
+			b.espressoStreamer.Advance()
+		}
 	}
 
 	firstUsefulMsgTime := time.Now()
@@ -2157,10 +2203,15 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
+	var HotShotBlockNumber uint64
+	if b.espressoStreamer != nil {
+		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	}
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,
 		DelayedMessageCount: b.building.segments.delayedMsg,
 		NextSeqNum:          batchPosition.NextSeqNum + 1,
+		HotShotBlockNumber:  HotShotBlockNumber,
 	})
 	if err != nil {
 		return false, err
