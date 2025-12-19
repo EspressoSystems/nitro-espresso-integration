@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rlp"
 
+	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
@@ -38,7 +39,7 @@ func TestBatcherAddrMonitor(t *testing.T) {
 		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0, 100)
 		b.SetL1Height(100)
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
-		err := b.AddBatchPosterSetEvents([]BatcherAddrUpdate{
+		err = b.AddBatchPosterSetEvents([]BatcherAddrUpdate{
 			{50, 50, initAddr1, false},
 			{60, 60, initAddr2, false},
 			{70, 70, addr3, true},

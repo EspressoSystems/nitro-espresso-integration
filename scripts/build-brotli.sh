@@ -107,8 +107,13 @@ if $BUILD_WASM; then
 fi
 
 if $BUILD_LOCAL; then
+    export CMAKE_POLICY_VERSION_MINIMUM=3.5 # add a minimum policy version before running cmake, This is a hack to get the build working during this merge, not sure why it hasn't happened before. 
     mkdir -p buildfiles/build-local
     cd buildfiles/build-local
+    echo "building local"
+    cmake_version=$(which cmake)
+    echo "cmake version"
+    echo $cmake_version
     cmake ../../ -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$TARGET_DIR_ABS"
     make -j
     make install

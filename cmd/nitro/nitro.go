@@ -1,5 +1,5 @@
 // Copyright 2021-2022, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 
 package main
 
@@ -7,8 +7,10 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"math/big"
 	"os"
@@ -31,15 +33,16 @@ import (
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
+	_ "github.com/ethereum/go-ethereum/eth/tracers/live"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/graphql"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
-	"github.com/ethereum/go-ethereum/metrics/exp"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 
@@ -53,6 +56,7 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/cmd/util"
 	"github.com/offchainlabs/nitro/cmd/util/confighelpers"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 	"github.com/offchainlabs/nitro/das"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
@@ -142,28 +146,6 @@ func main() {
 	os.Exit(mainImpl())
 }
 
-// Checks metrics and PProf flag, runs them if enabled.
-// Note: they are separate so one can enable/disable them as they wish, the only
-// requirement is that they can't run on the same address and port.
-func startMetrics(cfg *NodeConfig) error {
-	mAddr := fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port)
-	pAddr := fmt.Sprintf("%v:%v", cfg.PprofCfg.Addr, cfg.PprofCfg.Port)
-	if cfg.Metrics && !metrics.Enabled {
-		return fmt.Errorf("metrics must be enabled via command line by adding --metrics, json config has no effect")
-	}
-	if cfg.Metrics && cfg.PProf && mAddr == pAddr {
-		return fmt.Errorf("metrics and pprof cannot be enabled on the same address:port: %s", mAddr)
-	}
-	if cfg.Metrics {
-		go metrics.CollectProcessMetrics(cfg.MetricsServer.UpdateInterval)
-		exp.Setup(fmt.Sprintf("%v:%v", cfg.MetricsServer.Addr, cfg.MetricsServer.Port))
-	}
-	if cfg.PProf {
-		genericconf.StartPprof(pAddr)
-	}
-	return nil
-}
-
 // Returns the exit code
 func mainImpl() int {
 	ctx, cancelFunc := context.WithCancel(context.Background())
@@ -183,9 +165,6 @@ func mainImpl() int {
 	nodeConfig.Auth.Apply(&stackConf)
 	nodeConfig.IPC.Apply(&stackConf)
 	nodeConfig.GraphQL.Apply(&stackConf)
-	if nodeConfig.WS.ExposeAll {
-		stackConf.WSModules = append(stackConf.WSModules, "personal")
-	}
 	stackConf.P2P.ListenAddr = ""
 	stackConf.P2P.NoDial = true
 	stackConf.P2P.NoDiscovery = true
@@ -251,11 +230,12 @@ func mainImpl() int {
 	}
 
 	var dataSigner signature.DataSignerFunc
+	var teeHMAC hash.Hash
 	var l1TransactionOptsValidator *bind.TransactOpts
 	var l1TransactionOptsBatchPoster *bind.TransactOpts
 	// If sequencer and signing is enabled or batchposter is enabled without
 	// external signing sequencer will need a key.
-	sequencerNeedsKey := (nodeConfig.Node.Sequencer && !nodeConfig.Node.Feed.Output.DisableSigning) ||
+	sequencerNeedsKey := (nodeConfig.Node.Sequencer && nodeConfig.Node.Feed.Output.Signed) ||
 		(nodeConfig.Node.BatchPoster.Enable && (nodeConfig.Node.BatchPoster.DataPoster.ExternalSigner.URL == "" || nodeConfig.Node.DataAvailability.Enable))
 	validatorNeedsKey := nodeConfig.Node.Staker.OnlyCreateWalletContract ||
 		(nodeConfig.Node.Staker.Enable && !strings.EqualFold(nodeConfig.Node.Staker.Strategy, "watchtower") && nodeConfig.Node.Staker.DataPoster.ExternalSigner.URL == "")
@@ -270,6 +250,51 @@ func mainImpl() int {
 	nodeConfig.Node.BatchPoster.ParentChainWallet.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 	defaultBatchPosterL1WalletConfig := arbnode.DefaultBatchPosterL1WalletConfig
 	defaultBatchPosterL1WalletConfig.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
+
+	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
+
+	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
+
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
+		caffNodePrivateKey, err := espresso_tee_utils.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+		if err != nil {
+			flag.Usage()
+			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
+		}
+
+		teeHMAC, err = espresso_tee_utils.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+		if err != nil {
+			flag.Usage()
+			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
+		}
+		privHex := hex.EncodeToString(caffNodePrivateKey.D.Bytes())
+
+		//
+		// This will be used by the hyperlane validator
+		os.Setenv("VALIDATOR_KEY", privHex)
+
+		// Use top-level wallet config, with env variable as fallback
+		caffNodeWallet := nodeConfig.EspressoCaffNodeWallet
+		if envPrivateKey := os.Getenv("ESPRESSO_CAFF_NODE_WALLET_PRIVATE_KEY"); envPrivateKey != "" {
+			caffNodeWallet.PrivateKey = envPrivateKey
+			log.Info("Using Espresso Caff Node private key from environment variable")
+		}
+
+		caffNodetxOpts, _, err := util.OpenWallet("l1-espresso-caff-node", &caffNodeWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
+		if err != nil {
+			flag.Usage()
+			log.Crit("error opening Espresso Caff Node parent chain wallet", "path", caffNodeWallet.Pathname, "account", caffNodeWallet.Account, "err", err)
+		}
+		if caffNodeWallet.OnlyCreateKey {
+			return 0
+		}
+		espressoCaffNodeInitArgs = &arbnode.EspressoCaffNodeInitArgs{
+			InitializeCaffNodeTags: false,
+			CaffNodePrivateKey:     caffNodePrivateKey,
+			CaffNodetxOpts:         caffNodetxOpts,
+			TeeHMAC:                teeHMAC,
+		}
+	}
 
 	if sequencerNeedsKey || nodeConfig.Node.BatchPoster.ParentChainWallet.OnlyCreateKey {
 		l1TransactionOptsBatchPoster, dataSigner, err = util.OpenWallet("l1-batch-poster", &nodeConfig.Node.BatchPoster.ParentChainWallet, new(big.Int).SetUint64(nodeConfig.ParentChain.ID))
@@ -424,7 +449,13 @@ func mainImpl() int {
 		}
 	}
 
-	if err := startMetrics(nodeConfig); err != nil {
+	err = util.StartMetricsAndPProf(&util.MetricsPProfOpts{
+		Metrics:       nodeConfig.Metrics,
+		MetricsServer: nodeConfig.MetricsServer,
+		PProf:         nodeConfig.PProf,
+		PprofCfg:      nodeConfig.PprofCfg,
+	})
+	if err != nil {
 		log.Error("Error starting metrics", "error", err)
 		return 1
 	}
@@ -448,7 +479,35 @@ func mainImpl() int {
 		}
 	}
 
-	chainDb, l2BlockChain, err := openInitializeChainDb(ctx, stack, nodeConfig, new(big.Int).SetUint64(nodeConfig.Chain.ID), gethexec.DefaultCacheConfigFor(stack, &nodeConfig.Execution.Caching), &nodeConfig.Execution.StylusTarget, &nodeConfig.Persistent, l1Client, rollupAddrs)
+	traceConfig := nodeConfig.Execution.VmTrace
+	var tracer *tracing.Hooks
+	if traceConfig.TracerName != "" {
+		tracer, err = tracers.LiveDirectory.New(traceConfig.TracerName, json.RawMessage(traceConfig.JSONConfig))
+		if err != nil {
+			log.Error("custom tracer error:", "name", traceConfig.TracerName, "err", err)
+			return 1
+		}
+		log.Info("enabling custom tracer", "name", traceConfig.TracerName)
+	}
+
+	var initializeCaffNodeTags bool
+	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
+	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+		// Check that TEE is enabled
+		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType == "" {
+			log.Error("snapshot verification requires TEE, but no TEE type was specified")
+			return 1
+		}
+		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
+		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), espressoCaffNodeInitArgs.CaffNodePrivateKey)
+		if err != nil {
+			log.Error("failed to verify snapshot", "err", err)
+			return 1
+		}
+		espressoCaffNodeInitArgs.InitializeCaffNodeTags = initializeCaffNodeTags
+	}
+
+	chainDb, l2BlockChain, err := openInitializeChainDb(ctx, stack, nodeConfig, new(big.Int).SetUint64(nodeConfig.Chain.ID), gethexec.DefaultCacheConfigFor(stack, &nodeConfig.Execution.Caching), &nodeConfig.Execution.StylusTarget, tracer, &nodeConfig.Persistent, l1Client, rollupAddrs)
 	if l2BlockChain != nil {
 		deferFuncs = append(deferFuncs, func() { l2BlockChain.Stop() })
 	}
@@ -540,17 +599,30 @@ func mainImpl() int {
 		l2BlockChain,
 		l1Client,
 		func() *gethexec.Config { return &liveNodeConfig.Get().Execution },
+		liveNodeConfig.Get().Node.TransactionStreamer.SyncTillBlock,
 	)
 	if err != nil {
 		log.Error("failed to create execution node", "err", err)
 		return 1
 	}
+	var wasmModuleRoot common.Hash
+	if liveNodeConfig.Get().Node.ValidatorRequired() {
+		locator, err := server_common.NewMachineLocator(liveNodeConfig.Get().Validation.Wasm.RootPath)
+		if err != nil {
+			log.Error("failed to create machine locator: %w", err)
+		}
+		wasmModuleRoot = locator.LatestWasmModuleRoot()
+	}
 
-	currentNode, err := arbnode.CreateNode(
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(
 		ctx,
 		stack,
 		execNode,
+		execNode,
+		execNode,
+		execNode,
 		arbDb,
+		chainDb,
 		&NodeConfigFetcher{liveNodeConfig},
 		l2BlockChain.Config(),
 		l1Client,
@@ -561,6 +633,8 @@ func mainImpl() int {
 		fatalErrChan,
 		new(big.Int).SetUint64(nodeConfig.ParentChain.ID),
 		blobReader,
+		wasmModuleRoot,
+		espressoCaffNodeInitArgs,
 	)
 	if err != nil {
 		log.Error("failed to create node", "err", err)
@@ -579,7 +653,7 @@ func mainImpl() int {
 		res, err := seqInbox.MaxDataSize(&bind.CallOpts{Context: ctx})
 		if err == nil {
 			seqInboxMaxDataSize = int(res.Int64())
-		} else if !headerreader.ExecutionRevertedRegexp.MatchString(err.Error()) {
+		} else if !headerreader.IsExecutionReverted(err) {
 			log.Error("error fetching MaxDataSize from sequencer inbox", "err", err)
 			return 1
 		}
@@ -592,12 +666,16 @@ func mainImpl() int {
 			return 1
 		}
 	}
-	// If sequencer is enabled, validate MaxTxDataSize to be at least 5kB below the batch poster's MaxSize to allow space for headers and such.
-	// And since batchposter's MaxSize is to be at least 10kB below the sequencer inbox’s maxDataSize, this leads to another condition of atlest 15kB below the sequencer inbox’s maxDataSize.
+
 	if nodeConfig.Execution.Sequencer.Enable {
-		if nodeConfig.Execution.Sequencer.MaxTxDataSize > nodeConfig.Node.BatchPoster.MaxSize-5000 ||
-			nodeConfig.Execution.Sequencer.MaxTxDataSize > seqInboxMaxDataSize-15000 {
-			log.Error("sequencer's MaxTxDataSize too large")
+		// Validate MaxTxDataSize to be at least 5kB below the batch poster's MaxSize to allow space for headers and such.
+		if nodeConfig.Execution.Sequencer.MaxTxDataSize > nodeConfig.Node.BatchPoster.MaxSize-5000 {
+			log.Error("sequencer's MaxTxDataSize too large compared to the batchPoster's MaxSize")
+			return 1
+		}
+		// Since the batchposter's MaxSize must be at least 10kB below the sequencer inbox’s maxDataSize, then MaxTxDataSize must also be 15kB below the sequencer inbox’s maxDataSize.
+		if nodeConfig.Execution.Sequencer.MaxTxDataSize > seqInboxMaxDataSize-15000 && !nodeConfig.Execution.Sequencer.Dangerous.DisableSeqInboxMaxDataSizeCheck {
+			log.Error("sequencer's MaxTxDataSize too large compared to the sequencer inbox's MaxDataSize")
 			return 1
 		}
 	}
@@ -678,6 +756,7 @@ func mainImpl() int {
 			fatalErrChan <- fmt.Errorf("error starting validator node: %w", err)
 		} else {
 			log.Info("validation node started")
+			defer valNode.Stop()
 		}
 	}
 	if err == nil {
@@ -751,6 +830,7 @@ type NodeConfig struct {
 	Rpc                    genericconf.RpcConfig           `koanf:"rpc"`
 	BlocksReExecutor       blocksreexecutor.Config         `koanf:"blocks-reexecutor"`
 	EnsureRollupDeployment bool                            `koanf:"ensure-rollup-deployment" reload:"hot"`
+	EspressoCaffNodeWallet genericconf.WalletConfig        `koanf:"espresso-caff-node-wallet"`
 }
 
 var NodeConfigDefault = NodeConfig{
@@ -777,6 +857,7 @@ var NodeConfigDefault = NodeConfig{
 	PprofCfg:               genericconf.PProfDefault,
 	BlocksReExecutor:       blocksreexecutor.DefaultConfig,
 	EnsureRollupDeployment: true,
+	EspressoCaffNodeWallet: genericconf.WalletConfigDefault,
 }
 
 func NodeConfigAddOptions(f *flag.FlagSet) {
@@ -804,6 +885,7 @@ func NodeConfigAddOptions(f *flag.FlagSet) {
 	genericconf.RpcConfigAddOptions("rpc", f)
 	blocksreexecutor.ConfigAddOptions("blocks-reexecutor", f)
 	f.Bool("ensure-rollup-deployment", NodeConfigDefault.EnsureRollupDeployment, "before starting the node, wait until the transaction that deployed rollup is finalized")
+	genericconf.WalletConfigAddOptions("espresso-caff-node-wallet", f, "")
 }
 
 func (c *NodeConfig) ResolveDirectoryNames() error {
@@ -812,6 +894,7 @@ func (c *NodeConfig) ResolveDirectoryNames() error {
 		return err
 	}
 	c.Chain.ResolveDirectoryNames(c.Persistent.Chain)
+	c.EspressoCaffNodeWallet.ResolveDirectoryNames(c.Persistent.Chain)
 
 	return nil
 }
@@ -1095,7 +1178,7 @@ func checkWasmModuleRootCompatibility(ctx context.Context, wasmConfig valnode.Wa
 		for _, root := range allowedWasmModuleRoots {
 			bytes, err := hex.DecodeString(strings.TrimPrefix(root, "0x"))
 			if err == nil {
-				if common.HexToHash(root) == common.BytesToHash(bytes) {
+				if common.BytesToHash(bytes) == moduleRoot {
 					moduleRootMatched = true
 					break
 				}

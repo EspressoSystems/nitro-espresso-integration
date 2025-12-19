@@ -1,5 +1,5 @@
 # Copyright 2021-2024, Offchain Labs, Inc.
-# For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE
+# For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 
 # Docker builds mess up file timestamps. Then again, in docker builds we never
 # have to update an existing file. So - for docker, convert all dependencies
@@ -213,7 +213,7 @@ build: $(patsubst %,$(output_root)/bin/%, nitro deploy relay daserver autonomous
 	@printf $(done)
 
 .PHONY: build-node-deps
-build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib build-espresso-crypto-lib
+build-node-deps: $(go_source) build-prover-header build-prover-lib build-jit .make/solgen .make/cbrotli-lib
 
 .PHONY: test-go-deps
 test-go-deps: \
@@ -280,7 +280,12 @@ test-go-stylus: test-go-deps
 
 .PHONY: test-go-redis
 test-go-redis: test-go-deps
-	TEST_REDIS=redis://localhost:6379/0 gotestsum --format short-verbose --no-color=false -- -p 1 -run TestRedis ./system_tests/... ./arbnode/...
+	gotestsum --format short-verbose --no-color=false -- -p 1 -run TestRedis ./system_tests/... ./arbnode/... -- --test_redis=redis://localhost:6379/0
+	@printf $(done)
+
+.PHONY: test-go-gas-dimensions
+test-go-gas-dimensions: test-go-deps
+	gotestsum --format short-verbose --no-color=false -- -timeout 120m ./system_tests/... -run "TestDim(Log|TxOp)" -tags gasdimensionstest
 	@printf $(done)
 
 .PHONY: test-gen-proofs
@@ -328,8 +333,8 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	@rm -rf contracts/build contracts/cache solgen/go/
-	@rm -f .make/*
+	rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/ espresso-tee-contracts-legacy/espressogen/ contracts/out
+	rm -f .make/*
 	rm -rf brotli/buildfiles
 	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
 	rm -f $(ESPRESSO_TAR)
@@ -354,6 +359,9 @@ $(output_root)/bin/deploy: $(DEP_PREDICATE) build-node-deps
 
 $(output_root)/bin/relay: $(DEP_PREDICATE) build-node-deps
 	go build $(GOLANG_PARAMS) -o $@ "$(CURDIR)/cmd/relay"
+
+$(output_root)/bin/daprovider: $(DEP_PREDICATE) build-node-deps
+	go build $(GOLANG_PARAMS) -o $@ "$(CURDIR)/cmd/daprovider"
 
 $(output_root)/bin/daserver: $(DEP_PREDICATE) build-node-deps
 	go build $(GOLANG_PARAMS) -o $@ "$(CURDIR)/cmd/daserver"
@@ -634,7 +642,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	golangci-lint run --disable-all -E gofmt --fix
 	cargo fmt -p arbutil -p prover -p jit -p stylus --manifest-path arbitrator/Cargo.toml -- --check
 	cargo fmt --all --manifest-path arbitrator/wasm-testsuite/Cargo.toml -- --check
-	cargo fmt --all --manifest-path arbitrator/langs/rust/Cargo.toml -- --check
 	yarn --cwd contracts prettier:solidity
 	@touch $@
 
@@ -646,17 +653,29 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen .make/espresso-legacy-gen  $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
-	go run solgen/gen.go
+	go run ./solgen/gen.go
+	@touch $@
+
+.make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+	mkdir -p espresso-tee-contracts/espressogen/
+	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
+	@touch $@
+
+.make/espresso-legacy-gen: $(DEP_PREDICATE) espresso-tee-contracts-legacy/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
+	mkdir -p espresso-tee-contracts-legacy/espressogen/
+	go run -modfile ./espresso-tee-contracts-legacy/bindings/go.mod ./espresso-tee-contracts-legacy/bindings/gen.go
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account build
-	yarn --cwd contracts build:all
+	yarn --cwd contracts build
+	cd espresso-tee-contracts && forge build && cd ../
+	cd espresso-tee-contracts-legacy && forge build && cd ../
 	@touch $@
 
-.make/yarndeps: $(DEP_PREDICATE) contracts/package.json contracts/yarn.lock $(ORDER_ONLY_PREDICATE) .make
+.make/yarndeps: $(DEP_PREDICATE) */package.json */yarn.lock $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account install
 	yarn --cwd contracts install
 	@touch $@
