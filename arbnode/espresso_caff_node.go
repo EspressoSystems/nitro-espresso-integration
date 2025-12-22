@@ -290,6 +290,8 @@ func NewEspressoCaffNode(
 		recordPerformance,
 		batcherAddrMonitor.GetValidAddresses,
 		configFetcher().RetryTime,
+		false,
+		nil,
 		configFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
 
@@ -323,13 +325,8 @@ func NewEspressoCaffNode(
 	// Eventually we should only read from the SequencerInbox
 	if configAddress != "" && common.IsHexAddress(configAddress) {
 		espressoTEEVerifierAddress = common.HexToAddress(configAddress)
-	} else {
-		espressoTEEVerifierAddress, err = sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
-	}
 	espressoTEEVerifier, err := espressogen.NewIEspressoTEEVerifier(espressoTEEVerifierAddress, l1Reader.Client())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nitro verifier address: %w", err)
@@ -417,7 +414,7 @@ func NewEspressoCaffNode(
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
-	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
+	messageWithMetadataAndPos := n.espressoStreamer.Peek()
 
 	if messageWithMetadataAndPos == nil {
 		return nil, 0, nil

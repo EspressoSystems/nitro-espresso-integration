@@ -68,8 +68,6 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
-	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
@@ -409,6 +407,16 @@ func (b *NodeBuilder) Build(t *testing.T) func() {
 	return b.BuildL2(t)
 }
 
+func (b *NodeBuilder) BuildOnSameL1(t *testing.T, b2 *NodeBuilder) func() {
+	b.CheckConfig(t)
+	if b.withL1 {
+		b.addresses = b2.addresses
+		b.initMessage = b2.initMessage
+		return b.BuildL2OnL1(t)
+	}
+	return b.BuildL2(t)
+}
+
 func (b *NodeBuilder) CheckConfig(t *testing.T) {
 	if b.chainConfig == nil {
 		b.chainConfig = chaininfo.ArbitrumDevTestChainConfig()
@@ -457,6 +465,7 @@ func (b *NodeBuilder) BuildL1(t *testing.T) {
 		true,
 		b.deployBold,
 		b.delayBufferThreshold,
+		b.nodeConfig.BatchPoster.IsDecentralizedTimeboost,
 	)
 	b.L1.cleanup = func() { requireClose(t, b.L1.Stack) }
 }
@@ -571,6 +580,7 @@ func (b *NodeBuilder) BuildL3OnL2(t *testing.T) func() {
 		false,
 		b.deployBold,
 		0,
+		b.nodeConfig.BatchPoster.IsDecentralizedTimeboost,
 	)
 
 	b.L3 = buildOnParentChain(
@@ -896,6 +906,63 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	Require(t, err)
 
 	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
+
+	Require(t, err)
+
+	Require(t, currentNode.Start(b.ctx))
+	client := ClientForStack(t, stack)
+
+	StartWatchChanErr(t, b.ctx, feedErrChan, currentNode)
+
+	l2 := NewTestClient(b.ctx)
+	l2.ConsensusNode = currentNode
+	l2.Client = client
+	l2.ExecNode = execNode
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
+	l2.Stack = stack
+
+	b.L2 = l2
+	b.L2Info = l2info
+}
+
+// L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
+func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
+	if b.L2 == nil {
+		t.Fatalf("L2 was not created")
+	}
+	// Stop the consensus node first and wait for it to fully stop
+	b.L2.ConsensusNode.StopAndWait()
+	// Give extra time for all goroutines and background tasks to finish
+	time.Sleep(2 * time.Second)
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(2 * time.Second)
+
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
+	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
+	Require(t, err)
+
+	feedErrChan := make(chan error, 10)
+	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
+	Require(t, err)
+
+	sequencerTxOpts := b.L1Info.GetDefaultTransactOpts("Sequencer", context.Background())
+	dataSigner := signature.DataSignerFromPrivateKey(b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, &sequencerTxOpts, dataSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -1527,6 +1594,7 @@ func deployOnParentChain(
 	chainSupportsBlobs bool,
 	deployBold bool,
 	delayBufferThreshold uint64,
+	decentralizedTimeboost bool,
 ) (*chaininfo.RollupAddresses, *arbostypes.ParsedInitMessage) {
 	parentChainInfo.GenerateAccount("RollupOwner")
 	parentChainInfo.GenerateAccount("Sequencer")
@@ -1552,21 +1620,13 @@ func deployOnParentChain(
 	nativeToken := common.Address{}
 	maxDataSize := big.NewInt(117964)
 
-	var espressoTEEVerifierAddress common.Address
-	var tx *types.Transaction
+	var timeboostAddr common.Address
+	if decentralizedTimeboost {
+		timeboostAddr = setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainInfo, parentChainTransactionOpts)
+	} else {
+		timeboostAddr = setMockTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+	}
 
-	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err = legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-	Require(t, err)
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-	Require(t, err)
-
-	rollupSequencerManagerAddress, tx, _, err := espressogen.DeployEspressoRollupSequencerManager(&parentChainTransactionOpts, parentChainClient, []common.Address{
-		parentChainInfo.GetAddress("Sequencer"),
-	})
-	Require(t, err)
-
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
 
 	var addresses *chaininfo.RollupAddresses
@@ -1609,16 +1669,16 @@ func deployOnParentChain(
 				DelaySeconds:  big.NewInt(60 * 60 * 24),
 				FutureSeconds: big.NewInt(60 * 60),
 			},
-			LayerZeroBlockEdgeHeight:     new(big.Int).SetUint64(blockChallengeLeafHeight),
-			LayerZeroBigStepEdgeHeight:   new(big.Int).SetUint64(bigStepChallengeLeafHeight),
-			LayerZeroSmallStepEdgeHeight: new(big.Int).SetUint64(smallStepChallengeLeafHeight),
-			GenesisAssertionState:        genesisExecutionState,
-			GenesisInboxCount:            common.Big0,
-			AnyTrustFastConfirmer:        common.Address{},
-			NumBigStepLevel:              3,
-			ChallengeGracePeriodBlocks:   3,
-			BufferConfig:                 bufferConfig,
-			EspressoTEEVerifier:          espressoTEEVerifierAddress,
+			LayerZeroBlockEdgeHeight:         new(big.Int).SetUint64(blockChallengeLeafHeight),
+			LayerZeroBigStepEdgeHeight:       new(big.Int).SetUint64(bigStepChallengeLeafHeight),
+			LayerZeroSmallStepEdgeHeight:     new(big.Int).SetUint64(smallStepChallengeLeafHeight),
+			GenesisAssertionState:            genesisExecutionState,
+			GenesisInboxCount:                common.Big0,
+			AnyTrustFastConfirmer:            common.Address{},
+			NumBigStepLevel:                  3,
+			ChallengeGracePeriodBlocks:       3,
+			BufferConfig:                     bufferConfig,
+			DecentralizedTimeboostKeyManager: timeboostAddr,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(
@@ -1648,11 +1708,6 @@ func deployOnParentChain(
 			DeployedAt:             boldAddresses.DeployedAt,
 		}
 	} else {
-		//  Deploy a espressoTEEVerifierMock contract
-		espressoTEEVerifierAddress, tx, _, err := legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-		Require(t, err)
-		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-		Require(t, err)
 		addresses, err = deploy.DeployLegacyOnParentChain(
 			ctx,
 			parentChainReader,
@@ -1660,7 +1715,7 @@ func deployOnParentChain(
 			[]common.Address{parentChainInfo.GetAddress("Sequencer")},
 			parentChainInfo.GetAddress("RollupOwner"),
 			0,
-			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, espressoTEEVerifierAddress),
+			deploy.GenerateLegacyRollupConfig(prodConfirmPeriodBlocks, wasmModuleRoot, parentChainInfo.GetAddress("RollupOwner"), chainConfig, serializedChainConfig, common.Address{}, timeboostAddr),
 			nativeToken,
 			maxDataSize,
 			chainSupportsBlobs,
@@ -1671,8 +1726,7 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("SequencerInbox", addresses.SequencerInbox)
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
-	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
-	parentChainInfo.SetContract("RollupSequencerManager", rollupSequencerManagerAddress)
+	parentChainInfo.SetContract("TimeboostKeyManager", timeboostAddr)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }

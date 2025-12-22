@@ -143,4 +143,4 @@ jobs:
 
       - name: Run Espresso tests
         run: |
-          bash scripts/run-espresso-batch-poster-ci-tests
+          bash scripts/run-espresso-timeboost-ci-tests

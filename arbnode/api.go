@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	"github.com/offchainlabs/nitro/arbutil"
+	decentralized_timeboost_batch_verifier "github.com/offchainlabs/nitro/decentralized-timeboost/batcher"
 	"github.com/offchainlabs/nitro/staker"
 	"github.com/offchainlabs/nitro/validator"
 	"github.com/offchainlabs/nitro/validator/server_api"
@@ -74,4 +75,12 @@ func (a *MaintenanceAPI) SecondsSinceLastMaintenance(ctx context.Context) (int64
 
 func (a *MaintenanceAPI) Trigger(ctx context.Context) error {
 	return a.runner.Trigger()
+}
+
+type BatcherApi struct {
+	batchPoster *BatchPoster
+}
+
+func (api *BatcherApi) SubmitBatch(args decentralized_timeboost_batch_verifier.BatchPosterArgs) ([]byte, error) {
+	return api.batchPoster.CheckBatchCorrectnessAndSign(args)
 }
