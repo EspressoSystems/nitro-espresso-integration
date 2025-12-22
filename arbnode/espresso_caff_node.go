@@ -409,7 +409,7 @@ func NewEspressoCaffNode(
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
-	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
+	messageWithMetadataAndPos := n.espressoStreamer.Peek()
 
 	if messageWithMetadataAndPos == nil {
 		return nil, 0, nil

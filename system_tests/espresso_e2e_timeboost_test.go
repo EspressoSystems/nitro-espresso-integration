@@ -36,10 +36,88 @@ var timeboostUrls = []string{
 	"http://localhost:8004", "http://localhost:8014",
 }
 
-func runDecentralizedTimeboost() func() {
+var signingPubKeys = []string{
+	"eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX",
+	"vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR",
+	"264jMLf85hfufg4ck97Hw2jiL6i1PHNoGUqxUqfhtssaE",
+	"v6UBdLT5BvMhLW7iKv7M2xYeaW2SCAsnZ5PiSg6AaKfA",
+}
+
+var membersTemplate = []decentralizedtimeboostgen.KeyManagerCommitteeMember{
+	{
+		SigKey:             []byte{},
+		DhKey:              base58.Decode("AZrLbV37HAGhBWh49JHzup6Wfpu2AAGWGJJnxCDJibiY"),
+		DkgKey:             base58.Decode("7PdmfTS45d2hTXB8NcrTmvDwUVBimpYBbrBaGnu3i5Ne65krVfUpbe7bYRHS3AEg7H"),
+		NetworkAddress:     "node0:8000",
+		BatchPosterAddress: "localhost:8945",
+		SigKeyAddress:      common.Address{},
+	},
+	{
+		SigKey:             []byte{},
+		DhKey:              base58.Decode("FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"),
+		DkgKey:             base58.Decode("7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"),
+		NetworkAddress:     "node1:8010",
+		BatchPosterAddress: "localhost:8947",
+		SigKeyAddress:      common.Address{},
+	},
+	{
+		SigKey:             base58.Decode("264jMLf85hfufg4ck97Hw2jiL6i1PHNoGUqxUqfhtssaE"),
+		DhKey:              base58.Decode("63eYNKoW2PsWZFhHHj3eZwHTdPE7gEjEDM7gGeDf9Uaj"),
+		DkgKey:             base58.Decode("62bnAAbU58zZUcGqy9JKGZRZHkm3g7JZB2DtJGQyChXQBPGvXSS6fF21yoxiVuD1eb"),
+		NetworkAddress:     "node2:8020",
+		BatchPosterAddress: "http://localhost:9047",
+		SigKeyAddress:      common.Address{},
+	},
+	{
+		SigKey:             base58.Decode("v6UBdLT5BvMhLW7iKv7M2xYeaW2SCAsnZ5PiSg6AaKfA"),
+		DhKey:              base58.Decode("Do2GmAexW5MUdD8nToDiBWGbDgk1AwXoxtLTyirDtKQh"),
+		DkgKey:             base58.Decode("7aZBFZUEbXxFH9SiGJeUyjzas4mYJ1R13mTPsPeawVU7JFuocfvX9XsRT8qgr17RCe"),
+		NetworkAddress:     "node3:8030",
+		BatchPosterAddress: "http://localhost:9147",
+		SigKeyAddress:      common.Address{},
+	},
+}
+
+var committeeMembers = []decentralizedtimeboostgen.KeyManagerCommitteeMember{}
+
+type Bundle struct {
+	Chain     int      `json:"chain"`
+	Epoch     uint64   `json:"epoch"`
+	Data      string   `json:"data"`
+	Encrypted bool     `json:"encrypted"`
+	Hash      [32]byte `json:"hash"`
+}
+
+func NewBundle(chain int, epoch uint64, data []byte, hash common.Hash) Bundle {
+	return Bundle{
+		Chain:     chain,
+		Epoch:     epoch,
+		Data:      "0x" + hex.EncodeToString(data),
+		Encrypted: false,
+		Hash:      hash,
+	}
+}
+
+func setTestCommitteeMembers(members uint64) error {
+	committeeMembers = []decentralizedtimeboostgen.KeyManagerCommitteeMember{}
+
+	for i := range members {
+		decoded := base58.Decode(signingPubKeys[i])
+		membersTemplate[i].SigKey = decoded
+		key, err := crypto.DecompressPubkey(decoded)
+		if err != nil {
+			return err
+		}
+		membersTemplate[i].SigKeyAddress = crypto.PubkeyToAddress(*key)
+		committeeMembers = append(committeeMembers, membersTemplate[i])
+	}
+	return nil
+}
+
+func runDecentralizedTimeboost(dockerfile string) func() {
 	shutdown := func() {
 		log.Warn("shutdown timeboost docker")
-		p := exec.Command("docker", "compose", "-f", "docker-compose.timeboost.yml", "down", "--volumes")
+		p := exec.Command("docker", "compose", "-f", dockerfile, "down", "--volumes")
 		p.Dir = workingDir
 		var stderr bytes.Buffer
 		p.Stderr = &stderr
@@ -51,7 +129,7 @@ func runDecentralizedTimeboost() func() {
 	}
 	shutdown()
 
-	cmd := exec.Command("docker", "compose", "-f", "docker-compose.timeboost.yml", "up", "-d")
+	cmd := exec.Command("docker", "compose", "-f", dockerfile, "up", "-d")
 	cmd.Dir = workingDir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -60,6 +138,24 @@ func runDecentralizedTimeboost() func() {
 		panic(err)
 	}
 
+	return shutdown
+}
+
+func restartTimeboostNode(container string) func() {
+	shutdown := func() {
+		log.Warn("restarting timeboost node", "container", container)
+
+		restartCmd := exec.Command("docker", "restart", container)
+		restartCmd.Dir = workingDir
+		var stderr bytes.Buffer
+		restartCmd.Stderr = &stderr
+		if err := restartCmd.Run(); err != nil {
+			log.Error("failed to restart container", "container", container, "err", err, "str", stderr.String())
+			panic(err)
+		}
+	}
+
+	shutdown()
 	return shutdown
 }
 
@@ -85,22 +181,24 @@ func waitForTimeboostNodes(ctx context.Context) error {
 	return nil
 }
 
-type Bundle struct {
-	Chain     int      `json:"chain"`
-	Epoch     uint64   `json:"epoch"`
-	Data      string   `json:"data"`
-	Encrypted bool     `json:"encrypted"`
-	Hash      [32]byte `json:"hash"`
-}
-
-func NewBundle(chain int, epoch uint64, data []byte, hash common.Hash) Bundle {
-	return Bundle{
-		Chain:     chain,
-		Epoch:     epoch,
-		Data:      "0x" + hex.EncodeToString(data),
-		Encrypted: false,
-		Hash:      hash,
+func waitForTimeboostNode(ctx context.Context, url string) error {
+	if err := waitForWith(ctx, 10*time.Second, 50*time.Millisecond, func() bool {
+		resp, err := http.Get(url + timeBoostHealth)
+		if err != nil {
+			log.Debug("retry to check the timeboost health", "err", err)
+			return false
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			log.Debug("retry to check the timeboost health", "code", resp.StatusCode)
+			return false
+		}
+		return true
+	}); err != nil {
+		return err
 	}
+
+	return nil
 }
 
 func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []string) []*types.Transaction {
@@ -160,29 +258,50 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 	return expectedTxs
 }
 
-func createAndSendBundleToTimeboostLoad(t *testing.T, builder *NodeBuilder, users []string, txnsPerUser int) {
+func prepareTxn(t *testing.T, builder *NodeBuilder, userName string) []byte {
+	tx := builder.L2Info.PrepareTx(userName, "Owner", builder.L2Info.TransferGas, big.NewInt(1), nil)
+	txBytes, err := tx.MarshalBinary()
+	Require(t, err)
+	encoded, err := ssz.Marshal([][]byte{txBytes})
+	Require(t, err)
+
+	current := time.Now().Unix()
+	if current < 0 {
+		t.Fatalf("Invalid time %d", current)
+	}
+	epoch := uint64(current)
+	bundle := NewBundle(0, epoch, encoded, tx.Hash())
+	jsonData, err := json.MarshalIndent(bundle, "", "  ")
+	Require(t, err)
+	return jsonData
+}
+
+func createAndSendBundleToTimeboostLoad(t *testing.T, builder *NodeBuilder, users []string, txnsPerUser int, nodeToShutdown *NodeBuilder) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 	total := 0
+	restart := true
 	for range txnsPerUser {
 		for _, userName := range users {
-			tx := builder.L2Info.PrepareTx(userName, "Owner", builder.L2Info.TransferGas, big.NewInt(1), nil)
-			txBytes, err := tx.MarshalBinary()
-			Require(t, err)
-			encoded, err := ssz.Marshal([][]byte{txBytes})
-			Require(t, err)
-
-			current := time.Now().Unix()
-			if current < 0 {
-				t.Fatalf("Invalid time %d", current)
-			}
-			epoch := uint64(current)
-			bundle := NewBundle(0, epoch, encoded, tx.Hash())
-			jsonData, err := json.MarshalIndent(bundle, "", "  ")
-			Require(t, err)
-
+			jsonData := prepareTxn(t, builder, userName)
 			// Send to both nodes
+			if restart && nodeToShutdown != nil {
+				go func() {
+					nodeToShutdown.RestartTimeboostL2Node(t)
+				}()
+				go func() {
+					for {
+						restartTimeboostNode("espresso-e2e-node3-1")
+						if err := waitForTimeboostNode(context.Background(), "http://localhost:8034"); err == nil {
+							log.Info("timeboost healthy after restart")
+							break
+						}
+					}
+
+				}()
+				restart = false
+			}
 			for _, timeboostUrl := range timeboostUrls {
 				url := timeboostUrl + timeBoostSubmit
 				req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
@@ -190,14 +309,12 @@ func createAndSendBundleToTimeboostLoad(t *testing.T, builder *NodeBuilder, user
 
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Accept", "application/json")
-				_, err = client.Do(req)
-				Require(t, err)
+				_, _ = client.Do(req)
 			}
 			total += 1
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
-	log.Info("sent txns", "total", total)
 }
 
 func setMockTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
@@ -208,37 +325,31 @@ func setMockTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Cli
 	return addr
 }
 
-func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, parentChainTransactionOpts bind.TransactOpts) common.Address {
+func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Client *ethclient.Client, chaininfo info, parentChainTransactionOpts bind.TransactOpts) common.Address {
 	address, tx, _, err := decentralizedtimeboostgen.DeployKeyManager(&parentChainTransactionOpts, l1Client)
 	if err != nil {
 		t.Fatalf("error deploying key manager contract: %v", err)
 	}
 	_, err = bind.WaitMined(ctx, l1Client, tx)
 	Require(t, err)
-	decoded1 := base58.Decode("eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX")
-	uncompressed1, err := crypto.DecompressPubkey(decoded1)
-	Require(t, err)
-	decoded2 := base58.Decode("vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR")
-	uncompressed2, err := crypto.DecompressPubkey(decoded2)
-	Require(t, err)
 
-	members := []decentralizedtimeboostgen.KeyManagerCommitteeMember{
-		{
-			SigKey:             base58.Decode("eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX"),
-			DhKey:              base58.Decode("AZrLbV37HAGhBWh49JHzup6Wfpu2AAGWGJJnxCDJibiY"),
-			DkgKey:             base58.Decode("7PdmfTS45d2hTXB8NcrTmvDwUVBimpYBbrBaGnu3i5Ne65krVfUpbe7bYRHS3AEg7H"),
-			NetworkAddress:     "node0:8000",
-			BatchPosterAddress: "http://localhost:8945",
-			SigKeyAddress:      crypto.PubkeyToAddress(*uncompressed1),
-		},
-		{
-			SigKey:             base58.Decode("vGKKAxVNfkSCdn8qh36nXdSZqyhPq644sQBoeZtcEUCR"),
-			DhKey:              base58.Decode("FHTJAk6oyt3jefEp1ZrPEn2MkqRt2LibEFd57AnEUZdb"),
-			DkgKey:             base58.Decode("7p1BtEz7WnFMt6Hr28X3Rngqza6i8hRoswhzZRFd6GzgkspLKHBfDocHP8DwzXiNiZ"),
-			NetworkAddress:     "node1:8010",
-			BatchPosterAddress: "http://localhost:8947",
-			SigKeyAddress:      crypto.PubkeyToAddress(*uncompressed2),
-		},
+	// Send 1 ETH to each member
+	nonce := uint64(1)
+	for _, m := range committeeMembers {
+		to := m.SigKeyAddress
+		tx := chaininfo.PrepareTxTo("Faucet", &to, chaininfo.TransferGas, big.NewInt(9223372036854775807), nil)
+		err = l1Client.SendTransaction(ctx, tx)
+		if err != nil {
+			t.Fatalf("error sending transaction to %s: %v", to.Hex(), err)
+		}
+
+		_, err = bind.WaitMined(ctx, l1Client, tx)
+		if err != nil {
+			t.Fatalf("error waiting for transaction to %s: %v", to.Hex(), err)
+		}
+
+		log.Info("Sent 1 ETH", "to", to.Hex(), "tx", tx.Hash().Hex())
+		nonce += 1
 	}
 
 	keyManagerABI, err := abi.JSON(strings.NewReader(decentralizedtimeboostgen.KeyManagerABI))
@@ -271,7 +382,7 @@ func setupTimeboostKeyManagerContract(t *testing.T, ctx context.Context, l1Clien
 	if timestamp < 0 {
 		t.Fatalf("timestamp cannot be negative")
 	}
-	tx, err = proxyContract.SetNextCommittee(&parentChainTransactionOpts, uint64(timestamp), members)
+	tx, err = proxyContract.SetNextCommittee(&parentChainTransactionOpts, uint64(timestamp), committeeMembers)
 	Require(t, err)
 	receipt, err = bind.WaitMined(ctx, l1Client, tx)
 	Require(t, err)
@@ -292,14 +403,16 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
-
-	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false)
-	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false)
-
-	err := waitForL1Node(ctx)
+	err := setTestCommitteeMembers(2)
 	Require(t, err)
 
-	shutdown := runDecentralizedTimeboost()
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false, 0)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false, 0)
+
+	err = waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runDecentralizedTimeboost("docker-compose.timeboost.yml")
 	defer shutdown()
 
 	err = waitForEspressoNode(ctx)
@@ -415,14 +528,16 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 
 	valNodeCleanup := createValidationNode(ctx, t, true)
 	defer valNodeCleanup()
-
-	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false)
-	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false)
-
-	err := waitForL1Node(ctx)
+	err := setTestCommitteeMembers(2)
 	Require(t, err)
 
-	shutdown := runDecentralizedTimeboost()
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false, 0)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false, 0)
+
+	err = waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runDecentralizedTimeboost("docker-compose.timeboost.yml")
 	defer shutdown()
 
 	err = waitForEspressoNode(ctx)
@@ -451,10 +566,10 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 	}
 
 	txnsToSendPerUser := 100
-	createAndSendBundleToTimeboostLoad(t, builder, users, txnsToSendPerUser)
+	createAndSendBundleToTimeboostLoad(t, builder, users, txnsToSendPerUser, nil)
 
 	// Wait for blocks and batch
-	time.Sleep(time.Second * 30)
+	time.Sleep(15 * time.Second)
 
 	blockNumberAfter, err := builder.L2.Client.BlockNumber(ctx)
 	Require(t, err)
@@ -490,9 +605,7 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 		}
 	}
 
-	time.Sleep(30 * time.Second)
-
-	err = waitForWith(ctx, 3*time.Minute, 5*time.Second, func() bool {
+	err = waitForWith(ctx, 4*time.Minute, 5*time.Second, func() bool {
 		// Check the sequencer inbox contract
 		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 		Require(t, err)
@@ -509,17 +622,130 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 	builder2.L2.cleanup()
 }
 
-func TestEspressoTimeboostSequencerE2EWithBlobs(t *testing.T) {
+func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, true)
-	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, true)
+	valNodeCleanup := createValidationNode(ctx, t, true)
+	defer valNodeCleanup()
 
-	err := waitForL1Node(ctx)
+	err := setTestCommitteeMembers(4)
 	Require(t, err)
 
-	shutdown := runDecentralizedTimeboost()
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false, 0)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, false, 0)
+	builder3, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "2yWTaC6MWvNva97t81cd9QX5qph68NnB1wRVwAChtuGr", builder, false, 100)
+	builder4, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "CUpkbkn8bix7ZrbztPKJwu66MRpJrc1Wr2JfdrhetASk", builder, false, 200)
+
+	err = waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runDecentralizedTimeboost("docker-compose.timeboost4.yml")
+	defer shutdown()
+
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	err = waitForTimeboostNodes(ctx)
+	Require(t, err)
+
+	time.Sleep(5 * time.Second)
+
+	blockNumberBefore, err := builder2.L2.Client.BlockNumber(ctx)
+
+	var users []string
+	const numUsers = 15
+
+	Require(t, err)
+
+	for num := 0; num < numUsers; num++ {
+		userName := fmt.Sprintf("My_User_%d", num)
+		builder2.L2Info.GenerateAccount(userName)
+		users = append(users, userName)
+	}
+
+	// Fund users
+	expectedTxs := createAndSendBundleToTimeboost(t, builder2, users)
+	// account 2 transactions in a bundle
+	if len(expectedTxs) != numUsers+1 {
+		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
+	}
+
+	err = waitForWith(ctx, 2*time.Minute, 5*time.Second, func() bool {
+		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
+		Require(t, err)
+		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		Require(t, err)
+
+		// wait for one batch to be posted before restart
+		// We are testing the node can restart and fetch hotshot height from contract
+		return batchCount.Uint64() > 1
+	})
+	Require(t, err)
+
+	log.Info("batch posted, restarting")
+
+	createAndSendBundleToTimeboostLoad(t, builder2, users, 2, builder4)
+
+	err = waitForWith(ctx, 10*time.Minute, 5*time.Second, func() bool {
+		createAndSendBundleToTimeboostLoad(t, builder2, users, 5, nil)
+		// Check the sequencer inbox contract
+		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
+		Require(t, err)
+		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		Require(t, err)
+
+		// should make a lot of small batches
+		return batchCount.Uint64() > 5
+	})
+	time.Sleep(30 * time.Second)
+	Require(t, err)
+
+	blockNumberAfter, err := builder2.L2.Client.BlockNumber(ctx)
+	Require(t, err)
+	for i := blockNumberBefore + 1; i <= blockNumberAfter; i++ {
+		if i > math.MaxInt64 {
+			t.Fatalf("expected blockNumberAfter to be less than max int64, got: %d", blockNumberAfter)
+		}
+		block, err := builder.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		transactions := block.Transactions()[1:]
+		block, err = builder2.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		transactions2 := block.Transactions()[1:]
+		block, err = builder3.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		transactions3 := block.Transactions()[1:]
+		block, err = builder4.L2.Client.BlockByNumber(ctx, big.NewInt(int64(i)))
+		Require(t, err)
+		transactions4 := block.Transactions()[1:]
+		for i, txn := range transactions {
+			if txn.Hash() != transactions2[i].Hash() && txn.Hash() != transactions3[i].Hash() && txn.Hash() != transactions4[i].Hash() {
+				t.Fatalf("txHash doesn't match, got %s, want %s. %s. %s", txn.Hash().Hex(), transactions[i].Hash().Hex(), transactions3[i].Hash(), transactions4[i].Hash())
+			}
+		}
+	}
+
+	builder.L2.cleanup()
+	builder.L1.cleanup()
+	builder2.L2.cleanup()
+	builder3.L2.cleanup()
+	builder4.L2.cleanup()
+}
+
+func TestEspressoTimeboostSequencerE2EWithBlobs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := setTestCommitteeMembers(2)
+	Require(t, err)
+
+	builder, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, true, 0)
+	builder2, _ := createL1AndL2NodeForTimeboost(ctx, t, true, true, "FWJzNGvEjFS3h1N1sSMkcvvroWwjT5LQuGkGHu9JMAYs", builder, true, 0)
+
+	err = waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runDecentralizedTimeboost("docker-compose.timeboost.yml")
 	defer shutdown()
 
 	err = waitForEspressoNode(ctx)

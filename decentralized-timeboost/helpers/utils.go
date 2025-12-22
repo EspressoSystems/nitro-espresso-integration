@@ -77,9 +77,55 @@ func ValidateTimeboostCertificate(
 	return nil
 }
 
+func VerifyTimeboostBlock(
+	block *decentralized_timeboost_types.CertifiedBlock,
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+) error {
+	if block.Version != blockVersion {
+		return fmt.Errorf("block version mismatch! should be version 1, got %d", block.Version)
+	}
+
+	// We need to recalculate the `block hash` to ensure the data is the same
+	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L150-L155
+	blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
+	if err != nil {
+		return fmt.Errorf("failed to get timeboost block hash: err=%w", err)
+	}
+	if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
+		return fmt.Errorf("block hash mismatch! computed hash: 0x%s, certificate hash: 0x%s",
+			hex.EncodeToString(blockHash),
+			hex.EncodeToString(block.Cert.Data.Hash),
+		)
+	}
+
+	// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
+	// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
+	commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
+		Field("num", block.Cert.Data.CommitNum()).
+		Field("round", block.Cert.Data.Round.Commit()).
+		Field("hash", block.Cert.Data.CommitHash()).
+		Finalize()
+	if !bytes.Equal(commitment[:], block.Cert.Commitment) {
+		return fmt.Errorf("block commitment mismatch! computed: 0x%s, expected: 0x%s",
+			hex.EncodeToString(commitment[:]),
+			hex.EncodeToString(block.Cert.Commitment),
+		)
+	}
+
+	// Validate the commitment against the committee signatures
+	committee, err := committeeFetcher(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
+	if err != nil {
+		return fmt.Errorf("failed to get committee: committee id=%d, err=%w", block.Cert.Data.Round.CommitteeId, err)
+	}
+
+	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
+		return fmt.Errorf("failed to validate timeboost certificate: committee id=%d, err=%w", block.Cert.Data.Round.CommitteeId, err)
+	}
+	return nil
+}
+
 func ParseTimeboostEspressoTransaction(
 	tx espressoTypes.Bytes,
-	l1Height uint64,
 	streamerCurrentPos uint64,
 	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
 ) ([]*DecentralizedTimeboostParsedMessage, error) {
@@ -93,46 +139,11 @@ func ParseTimeboostEspressoTransaction(
 	// Dont error out if one block fails to be parsed, verified, or we see an old block
 	// There can be new block later the response body from hotshot, so erroring out may miss this
 	for _, block := range body.Blocks {
-		if block.Version != blockVersion {
-			log.Warn("block version mismatch! should be version 1", "got", block.Version)
-			continue
-		}
-
-		// We need to recalculate the `block hash` to ensure the data is the same
-		// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L150-L155
-		blockHash, err := GetTimeboostBlockHash(block.Data.Round, block.Data.Payload)
+		err := VerifyTimeboostBlock(&block, committeeFetcher)
 		if err != nil {
-			log.Warn("failed to get timeboost block hash", "err", err)
+			log.Warn("error parsing and verifying timeboost block", "err", err)
 			continue
 		}
-		if !bytes.Equal(blockHash, block.Cert.Data.Hash) {
-			log.Warn("block hash mismatch!", "computed hash", "0x"+hex.EncodeToString(blockHash), "certificate hash", "0x"+hex.EncodeToString(block.Cert.Data.Hash))
-			continue
-		}
-
-		// We need to ensure the commitment is the same between timeboost certificate and what is found in hotshot
-		// See: https://github.com/EspressoSystems/timeboost/blob/ad534f3d7c6485e80b265811073d4e242dfd0746/timeboost-types/src/block.rs#L191-L197
-		commitment := espressoCommon.NewRawCommitmentBuilder("BlockInfo").
-			Field("num", block.Cert.Data.CommitNum()).
-			Field("round", block.Cert.Data.Round.Commit()).
-			Field("hash", block.Cert.Data.CommitHash()).
-			Finalize()
-		if !bytes.Equal(commitment[:], block.Cert.Commitment) {
-			log.Warn("block commitment mismatch!", "computed commitment", "0x"+hex.EncodeToString(commitment[:]), "certificate commitment", "0x"+hex.EncodeToString(block.Cert.Commitment))
-			continue
-		}
-
-		// Validate the commitment against the committee signatures
-		committee, err := committeeFetcher(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
-		if err != nil {
-			log.Warn("failed to get committee", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
-			continue
-		}
-		if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
-			log.Warn("failed to validate timeboost certificate", "committee id", block.Cert.Data.Round.CommitteeId, "err", err)
-			continue
-		}
-
 		// After validation has succeeded deserialize the payload
 		var msg decentralized_timeboost_types.MessagePayload
 		if err = cbor.Unmarshal(block.Data.Payload, &msg); err != nil {
@@ -145,10 +156,6 @@ func ParseTimeboostEspressoTransaction(
 			continue
 		}
 
-		if msg.Position < streamerCurrentPos {
-			log.Warn("timeboost message index is less than current pos, skipping", "messageIndex", streamerCurrentPos, "currentMessagePos", msg.Position)
-			continue
-		}
 		msgs = append(msgs, &DecentralizedTimeboostParsedMessage{
 			Message: messageWithMetadata,
 			Pos:     msg.Position,

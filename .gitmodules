@@ -48,8 +48,8 @@
 	branch = integration
 [submodule "bold"]
 	path = bold
-	url = git@github.com:EspressoSystems/bold.git
-	branch = 3.6.7-commit
+	url = git@github.com:EspressoSystems/timeboost-bold.git
+	branch = timeboost-v3.6.7
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts

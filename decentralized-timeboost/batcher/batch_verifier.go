@@ -10,20 +10,22 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
-	"github.com/btcsuite/btcutil/base58"
 	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
+	"github.com/offchainlabs/nitro/util/signature"
 )
 
 type BatchPosterArgs struct {
@@ -40,6 +42,7 @@ type SigningData struct {
 	PreviousMessageCount     arbutil.MessageIndex
 	NewMessageCount          arbutil.MessageIndex
 	Data                     []byte
+	HotshotBlock             uint64
 }
 
 type BatchRpcResponse struct {
@@ -61,47 +64,66 @@ type VerifiedInfo struct {
 }
 
 type BatchVerifier struct {
-	LatestVerified      *VerifiedInfo
-	privateKey          *ecdsa.PrivateKey
-	client              *http.Client
-	timeboostKeyManager *decentralizedtimeboostgen.KeyManager
+	publicKey            *ecdsa.PublicKey
+	client               *http.Client
+	timeboostKeyManager  *decentralizedtimeboostgen.KeyManager
+	currentBatch         uint64
+	lastBatchUpdatedTime time.Time
+	signer               signature.DataSignerFunc
+	waitForLeaderDelay   time.Duration
 }
 
 type BatchVerifierConfig struct {
-	PrivateKey   string        `koanf:"private-key"`
-	RpcTimeout   time.Duration `koanf:"rpc-timeout"`
-	RpcKeepalive time.Duration `koanf:"rpc-keepalive"`
+	RpcTimeout          time.Duration `koanf:"rpc-timeout"`
+	RpcKeepalive        time.Duration `koanf:"rpc-keepalive"`
+	WaitForLeaderDelay  time.Duration `koanf:"wait-for-leader-delay"`
+	MaxIdleConnsPerHost int           `koanf:"max-idle-conns-per-host"`
 }
 
 var DefaultBatchVerifierConfig = BatchVerifierConfig{
-	PrivateKey:   "",
-	RpcTimeout:   time.Second * 10,
-	RpcKeepalive: time.Second * 30,
+	RpcTimeout:          time.Second * 10,
+	RpcKeepalive:        time.Second * 30,
+	MaxIdleConnsPerHost: 5,
+	WaitForLeaderDelay:  time.Minute * 5,
 }
 
 func DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix string, f *pflag.FlagSet) {
-	f.String(prefix+".private-key", DefaultBatchVerifierConfig.PrivateKey, "batch verifier private key")
 	f.Duration(prefix+".rpc-timeout", DefaultBatchVerifierConfig.RpcTimeout, "timeout for http client")
 	f.Duration(prefix+".rpc-keepalive", DefaultBatchVerifierConfig.RpcKeepalive, "keep alive for http client")
+	f.Duration(prefix+".wait-for-leader-delay", DefaultBatchVerifierConfig.WaitForLeaderDelay, "how long we should wait for a leader to send batch, before trying constructing our own")
+	f.Int(prefix+".max-idle-conns-per-host", DefaultBatchVerifierConfig.MaxIdleConnsPerHost, "max idle connections")
 }
 
-func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManager *decentralizedtimeboostgen.KeyManager) (*BatchVerifier, error) {
-	if len(config.PrivateKey) == 0 {
-		return nil, fmt.Errorf("decentralized timeboost private key must be set")
-	}
-	decoded := base58.Decode(config.PrivateKey)
-	privateKey, err := crypto.ToECDSA(decoded)
+func NewBatchVerifier(
+	config BatchVerifierConfig,
+	timeboostKeyManager *decentralizedtimeboostgen.KeyManager,
+	privKey string,
+) (*BatchVerifier, error) {
+	privKeyBytes, err := hex.DecodeString(privKey)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode decentralized timeboost private key: %w", err)
+		return nil, err
 	}
-	if privateKey == nil {
-		return nil, fmt.Errorf("decentralized timeboost private key cannot be nil")
+	privateKey, err := crypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ECDSA private key: %w", err)
+	}
+	signer := signature.DataSignerFromPrivateKey(privateKey)
+	message := make([]byte, 32)
+	signature, err := signer(message)
+	if err != nil {
+		return nil, err
+	}
+
+	publicKey, err := crypto.SigToPub(message, signature)
+	if err != nil {
+		return nil, err
 	}
 	return &BatchVerifier{
-		privateKey: privateKey,
+		publicKey: publicKey,
 		client: &http.Client{
 			Timeout: config.RpcTimeout,
 			Transport: &http.Transport{
+				MaxIdleConnsPerHost: int(config.MaxIdleConnsPerHost),
 				DialContext: (&net.Dialer{
 					Timeout:   config.RpcTimeout,
 					KeepAlive: config.RpcKeepalive,
@@ -111,11 +133,15 @@ func NewBatchVerifier(config BatchVerifierConfig, timeboostKeyManager *decentral
 				},
 			},
 		},
-		timeboostKeyManager: timeboostKeyManager,
+		timeboostKeyManager:  timeboostKeyManager,
+		currentBatch:         0,
+		lastBatchUpdatedTime: time.Now(),
+		signer:               signer,
+		waitForLeaderDelay:   config.WaitForLeaderDelay,
 	}, nil
 }
 
-func (v *BatchVerifier) getAbiArguments() (abi.Arguments, error) {
+func (v *BatchVerifier) getBatchAbiArguments() (abi.Arguments, error) {
 	bytesType, err := abi.NewType("bytes", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bytes type: %w", err)
@@ -135,14 +161,40 @@ func (v *BatchVerifier) getAbiArguments() (abi.Arguments, error) {
 		{Name: "gasRefunder", Type: addressType},
 		{Name: "prevMessageCount", Type: uint256Type},
 		{Name: "newMessageCount", Type: uint256Type},
+		{Name: "hotshotBlock", Type: uint256Type},
+	}, nil
+}
+
+func (v *BatchVerifier) getBlobAbiArguments() (abi.Arguments, error) {
+	bytesType, err := abi.NewType("bytes", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create bytes type: %w", err)
+	}
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
+	addressType, err := abi.NewType("address", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create address type: %w", err)
+	}
+	return abi.Arguments{
+		{Name: "sequencerNumber", Type: uint256Type},
+		{Name: "afterDelayedMessagesRead", Type: uint256Type},
+		{Name: "gasRefunder", Type: addressType},
+		{Name: "prevMessageCount", Type: uint256Type},
+		{Name: "newMessageCount", Type: uint256Type},
+		{Name: "data", Type: bytesType},
+		{Name: "hotshotBlock", Type: uint256Type},
 	}, nil
 }
 
 func (v *BatchVerifier) sendBatchForVerification(
 	args *BatchPosterArgs,
 	members []decentralizedtimeboostgen.KeyManagerCommitteeMember,
+	hotshotBlock *big.Int,
 ) ([]byte, error) {
-	requiredQuorum := (2 * (len(members) - 1) / 3) + 1
+	requiredQuorum := (2*len(members))/3 + 1
 	request := map[string]interface{}{
 		"jsonrpc": "2.0",
 		"method":  "batcher_submitBatch",
@@ -156,6 +208,8 @@ func (v *BatchVerifier) sendBatchForVerification(
 
 	var sigs [][]byte
 	v.adjustRecoveryByte(args.Signature)
+	// account for our own
+	sigCount := 1
 	// Note: We append empty signatures on any error because if we still receive a quorum of signatures,
 	// we will still try to post the batch and timeboost contracts checks signatures in order in respect to member ordering in contract
 	for _, member := range members {
@@ -164,9 +218,13 @@ func (v *BatchVerifier) sendBatchForVerification(
 			sigs = append(sigs, args.Signature)
 			continue
 		}
-		resp, err := v.client.Post(member.BatchPosterAddress, "application/json", bytes.NewBuffer(jsonData))
+		addr := strings.TrimSpace(member.BatchPosterAddress)
+		if !strings.HasPrefix(addr, "http://") {
+			addr = "http://" + addr
+		}
+		resp, err := v.sendWithRetries(addr, jsonData, member.SigKey)
 		if err != nil {
-			log.Error("http request failed", "err", err, "to", member.SigKey)
+			log.Error("http request failed after max tries", "err", err, "to", hex.EncodeToString(member.SigKey))
 			sigs = append(sigs, []byte{})
 			continue
 		}
@@ -210,24 +268,48 @@ func (v *BatchVerifier) sendBatchForVerification(
 		}
 		v.adjustRecoveryByte(rpcResponse.Result)
 		sigs = append(sigs, rpcResponse.Result)
+		sigCount += 1
 	}
-	if len(sigs) < requiredQuorum {
-		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. wanted: %d, have: %d", requiredQuorum, len(sigs))
+	if sigCount < requiredQuorum {
+		return nil, fmt.Errorf("did not receive enough valid signatures for batch correctness. quorum: %d, signatures received: %d", requiredQuorum, sigCount)
 	}
 	bytesType, err := abi.NewType("bytes[]", "", nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bytes array type: %w", err)
 	}
+	uint256Type, err := abi.NewType("uint256", "", nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
+	}
 	arguments := abi.Arguments{
 		{
 			Type: bytesType,
 		},
+		{
+			Type: uint256Type,
+		},
 	}
-	encodedSigs, err := arguments.Pack(sigs)
+	encodedSigs, err := arguments.Pack(sigs, hotshotBlock)
 	if err != nil {
 		return nil, fmt.Errorf("failed to ABI encode signatures: %w", err)
 	}
+	log.Info("decentralized timeboost received enough signatures", "signatures received", sigCount, "quorum", requiredQuorum)
 	return encodedSigs, nil
+}
+
+func (v *BatchVerifier) sendWithRetries(addr string, data []byte, sigKey []byte) (*http.Response, error) {
+	const max = 5
+	var err error
+	var resp *http.Response
+	for range max {
+		resp, err = v.client.Post(addr, "application/json", bytes.NewBuffer(data))
+		if err != nil {
+			log.Error("http request failed", "err", err, "to", hex.EncodeToString(sigKey), "addr", addr)
+			continue
+		}
+		return resp, nil
+	}
+	return nil, err
 }
 
 func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
@@ -247,10 +329,15 @@ func (v *BatchVerifier) adjustRecoveryByte(sig []byte) {
 }
 
 func (v *BatchVerifier) getCompressedPubKey() []byte {
-	return crypto.CompressPubkey(&v.privateKey.PublicKey)
+	return crypto.CompressPubkey(v.publicKey)
 }
 
-func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
+func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64, msgCount arbutil.MessageIndex, batchMsgCount arbutil.MessageIndex) (bool, error) {
+	// reset if we have received a batch from inbox contract, or if there are no new messages
+	if seqNum != v.currentBatch || msgCount <= batchMsgCount {
+		v.currentBatch = seqNum
+		v.lastBatchUpdatedTime = time.Now()
+	}
 	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
 		return false, err
@@ -259,11 +346,18 @@ func (v *BatchVerifier) IsLeaderForBatch(seqNum uint64) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// TODO: Fallback if leader fails to submit
-	leader := committee.Members[seqNum%uint64(len(committee.Members))]
+
 	pubKey := v.getCompressedPubKey()
+	leader := committee.Members[seqNum%uint64(len(committee.Members))]
 	if !bytes.Equal(pubKey, leader.SigKey) {
-		return false, nil
+		if time.Since(v.lastBatchUpdatedTime) >= v.waitForLeaderDelay {
+			log.Warn(
+				"time expired waiting for batch to be posted from leader. will construct our own batch",
+				"batch num", seqNum,
+			)
+		} else {
+			return false, nil
+		}
 	}
 
 	return true, nil
@@ -277,7 +371,7 @@ func (v *BatchVerifier) HashAndSignBatchData(
 	signingData []byte,
 ) (*BatchPosterArgs, error) {
 	hash := v.HashBatchData(signingData)
-	signature, err := crypto.Sign(hash, v.privateKey)
+	signature, err := v.signer(hash)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign data: %w", err)
 	}
@@ -285,7 +379,7 @@ func (v *BatchVerifier) HashAndSignBatchData(
 		SignedData: signingData,
 		Signature:  signature,
 		Hash:       hash,
-		PubKey:     crypto.CompressPubkey(&v.privateKey.PublicKey),
+		PubKey:     crypto.CompressPubkey(v.publicKey),
 	}
 	return args, nil
 }
@@ -305,36 +399,13 @@ func (v *BatchVerifier) VerifySignatureOverHash(hash []byte, signature []byte, p
 	return nil
 }
 
-func (v *BatchVerifier) GetBlobAbiArguments() (abi.Arguments, error) {
-	bytesType, err := abi.NewType("bytes", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create bytes type: %w", err)
-	}
-	uint256Type, err := abi.NewType("uint256", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create uint256 type: %w", err)
-	}
-	addressType, err := abi.NewType("address", "", nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create address type: %w", err)
-	}
-	return abi.Arguments{
-		{Name: "sequencerNumber", Type: uint256Type},
-		{Name: "afterDelayedMessagesRead", Type: uint256Type},
-		{Name: "gasRefunder", Type: addressType},
-		{Name: "prevMessageCount", Type: uint256Type},
-		{Name: "newMessageCount", Type: uint256Type},
-		{Name: "data", Type: bytesType},
-	}, nil
-}
-
 func (v *BatchVerifier) GetSignedDataFromBytes(data []byte, blobs bool) (*SigningData, error) {
 	var arguments abi.Arguments
 	var err error
 	if blobs {
-		arguments, err = v.GetBlobAbiArguments()
+		arguments, err = v.getBlobAbiArguments()
 	} else {
-		arguments, err = v.getAbiArguments()
+		arguments, err = v.getBatchAbiArguments()
 	}
 	if err != nil {
 		return nil, err
@@ -373,6 +444,10 @@ func (v *BatchVerifier) GetSignedDataFromBytes(data []byte, blobs bool) (*Signin
 	if !ok {
 		return nil, fmt.Errorf("invalid new msg type: %v", unpackedMap["newMessageCount"])
 	}
+	hotshotBlock, ok := unpackedMap["hotshotBlock"].(*big.Int)
+	if !ok {
+		return nil, fmt.Errorf("invalid new msg type: %v", unpackedMap["hotshotBlock"])
+	}
 	return &SigningData{
 		SequencerNumber:          seqNum.Uint64(),
 		Data:                     msgData,
@@ -380,6 +455,7 @@ func (v *BatchVerifier) GetSignedDataFromBytes(data []byte, blobs bool) (*Signin
 		GasRefunder:              address,
 		PreviousMessageCount:     arbutil.MessageIndex(prevMsg.Uint64()),
 		NewMessageCount:          arbutil.MessageIndex(newMsg.Uint64()),
+		HotshotBlock:             hotshotBlock.Uint64(),
 	}, nil
 }
 
@@ -391,32 +467,31 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 	args BatchPosterArgs,
 	encodedBlobs []byte,
 	streamer *espressostreamer.EspressoStreamer,
-) error {
+) ([]byte, error) {
 	if signedData.SequencerNumber != seqNum {
-		return fmt.Errorf("failed to match seq num. got %d, wanted %d", signedData.SequencerNumber, seqNum)
+		return nil, fmt.Errorf("failed to match seq num. got %d, wanted %d", signedData.SequencerNumber, seqNum)
 	}
 	if signedData.GasRefunder != gasRefundAddr {
-		return fmt.Errorf("failed to match gas refunder. got %d, wanted %d", signedData.GasRefunder, gasRefundAddr)
+		return nil, fmt.Errorf("failed to match gas refunder. got %d, wanted %d", signedData.GasRefunder, gasRefundAddr)
 	}
 	if signedData.PreviousMessageCount != messageCount {
-		return fmt.Errorf("failed to match previous message count. got %d, wanted %d", signedData.PreviousMessageCount, messageCount)
+		return nil, fmt.Errorf("failed to match previous message count. got %d, wanted %d", signedData.PreviousMessageCount, messageCount)
 	}
 
 	// We need to verify we have indeed received the transactions from espresso
-	hotshotHeight := streamer.VerifyConsecutivePositions(uint64(signedData.NewMessageCount - 1))
-	if hotshotHeight == nil {
-		return fmt.Errorf("failed to match new message data vs whats in streamer. wanted: %d", signedData.NewMessageCount)
+	hotshotHeight, err := streamer.GetEarliestHotshotBlockForPosition(uint64(signedData.NewMessageCount - 1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get hotshot block number. newMsgCount: %d, err: %w", signedData.NewMessageCount, err)
 	}
-	v.LatestVerified = &VerifiedInfo{
-		MessageCount:  signedData.NewMessageCount,
-		HotshotHeight: *hotshotHeight,
+	if hotshotHeight != signedData.HotshotBlock {
+		return nil, fmt.Errorf("failed to match hotshot height. got hotshot block: %d, have hotshot block: %d. newMsgCount: %d", signedData.HotshotBlock, hotshotHeight, signedData.NewMessageCount)
 	}
 
 	var calldata []byte
 	if len(encodedBlobs) > 0 {
-		arguments, err := v.GetBlobAbiArguments()
+		arguments, err := v.getBlobAbiArguments()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		calldata, err = arguments.Pack(
 			new(big.Int).SetUint64(signedData.SequencerNumber),
@@ -425,14 +500,15 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
 			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
 			encodedBlobs,
+			new(big.Int).SetUint64(uint64(signedData.HotshotBlock)),
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	} else {
-		arguments, err := v.getAbiArguments()
+		arguments, err := v.getBatchAbiArguments()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		calldata, err = arguments.Pack(
 			new(big.Int).SetUint64(signedData.SequencerNumber),
@@ -441,31 +517,32 @@ func (v *BatchVerifier) VerifySignedDataCorrectness(
 			signedData.GasRefunder,
 			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
 			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
+			new(big.Int).SetUint64(uint64(signedData.HotshotBlock)),
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	hash := v.HashBatchData(calldata)
 	if !bytes.Equal(hash, args.Hash) {
-		return fmt.Errorf("failed to verify hash, calculated hash. calculated: 0x%s, received: 0x:%s", hex.EncodeToString(hash), hex.EncodeToString(args.Hash))
+		return nil, fmt.Errorf("failed to verify hash, calculated hash. calculated: 0x%s, received: 0x:%s", hex.EncodeToString(hash), hex.EncodeToString(args.Hash))
 	}
 
 	if err := v.VerifySignatureOverHash(args.Hash, args.Signature, args.PubKey); err != nil {
-		return fmt.Errorf("failed to verify signature: %w", err)
+		return nil, fmt.Errorf("failed to verify signature: %w", err)
 	}
-	return nil
+	return calldata, nil
 }
 
 func (v *BatchVerifier) SignAndSendBatchIfLeader(
-	arguments abi.Arguments,
 	seqNum *big.Int,
 	l2MessageData []byte,
 	delayedMsg *big.Int,
 	gasRefunder common.Address,
 	prevMsgNum *big.Int,
 	newMsgNum *big.Int,
+	hotshotBlock *big.Int,
 ) ([]byte, error) {
 	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
@@ -476,6 +553,10 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 		return nil, err
 	}
 
+	arguments, err := v.getBatchAbiArguments()
+	if err != nil {
+		return nil, err
+	}
 	calldata, err := arguments.Pack(
 		seqNum,
 		l2MessageData,
@@ -483,6 +564,7 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 		gasRefunder,
 		prevMsgNum,
 		newMsgNum,
+		hotshotBlock,
 	)
 	if err != nil {
 		return nil, err
@@ -496,6 +578,7 @@ func (v *BatchVerifier) SignAndSendBatchIfLeader(
 	sigs, err := v.sendBatchForVerification(
 		args,
 		committee.Members,
+		hotshotBlock,
 	)
 	if err != nil {
 		return nil, err
@@ -511,6 +594,7 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 	prevMsgNum *big.Int,
 	newMsgNum *big.Int,
 	encodedBlobs []byte,
+	hotshotBlock *big.Int,
 ) ([]byte, error) {
 	id, err := v.timeboostKeyManager.CurrentCommitteeId(&bind.CallOpts{})
 	if err != nil {
@@ -522,7 +606,7 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 	}
 	// We need to signed the encoded blobs, but send the message meta data for verification
 	// First construct calldata with encoded blobs to be signed
-	arguments, err := v.GetBlobAbiArguments()
+	arguments, err := v.getBlobAbiArguments()
 	if err != nil {
 		return nil, err
 	}
@@ -533,6 +617,7 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 		prevMsgNum,
 		newMsgNum,
 		encodedBlobs,
+		hotshotBlock,
 	)
 	if err != nil {
 		return nil, err
@@ -553,6 +638,7 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 		prevMsgNum,
 		newMsgNum,
 		l2MessageData,
+		hotshotBlock,
 	)
 	if err != nil {
 		return nil, err
@@ -561,9 +647,31 @@ func (v *BatchVerifier) SignAndSendBlobBatchIfLeader(
 	sigs, err := v.sendBatchForVerification(
 		args,
 		committee.Members,
+		hotshotBlock,
 	)
 	if err != nil {
 		return nil, err
 	}
 	return sigs, nil
+}
+
+func (b *BatchVerifier) LogTransactions(msg string, txns types.Transactions) {
+	for _, txn := range txns {
+		from, _ := types.Sender(types.LatestSignerForChainID(txn.ChainId()), txn)
+		to := "<nil>"
+		if txn.To() != nil {
+			to = txn.To().Hex()
+		}
+		log.Warn(msg,
+			"txHash", txn.Hash().Hex(),
+			"from", from.Hex(),
+			"to", to,
+			"time", txn.Time(),
+			"valueEth", txn.Value(),
+			"gas", txn.Gas(),
+			"gwei", txn.GasPrice(),
+			"nonce", txn.Nonce(),
+			"data", txn.Data(),
+		)
+	}
 }

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
 	"github.com/fxamacker/cbor/v2"
 	flag "github.com/spf13/pflag"
@@ -27,9 +28,11 @@ import (
 	"github.com/offchainlabs/nitro/arbos/arbosState"
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbos/l1pricing"
+	decentralized_timeboost_helpers "github.com/offchainlabs/nitro/decentralized-timeboost/helpers"
 	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/interfaces"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/execution"
+	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
@@ -40,6 +43,14 @@ type TransactionType uint8
 const (
 	Normal TransactionType = iota
 	Delayed
+)
+
+type sequencerState int
+
+const (
+	CatchUp sequencerState = iota
+	WaitingForBlockProduction
+	Running
 )
 
 type timeboostTransactionQueueItem struct {
@@ -131,12 +142,10 @@ func (c *blockHeaderCache) Get(blockNumber uint64) *types.Header {
 
 type DecentralizedTimeboostSequencer struct {
 	stopwaiter.StopWaiter
-	config DecentralizedTimeboostSequencerConfigFetcher
-	// TODO: we should read this from the storage
-	txQueue    synchronizedTimeboostTransactionQueue
-	execEngine *ExecutionEngine
-	l1Reader   *headerreader.HeaderReader
-	// TODO: We should probably also store the txRetryQueue in storage
+	config                 DecentralizedTimeboostSequencerConfigFetcher
+	txQueue                synchronizedTimeboostTransactionQueue
+	execEngine             *ExecutionEngine
+	l1Reader               *headerreader.HeaderReader
 	txRetryQueue           synchronizedTimeboostTransactionQueue
 	nonceCache             *nonceCache
 	timeboostBridge        *DecentralizedTimeboostBridge
@@ -144,13 +153,17 @@ type DecentralizedTimeboostSequencer struct {
 	delayedSequencer       decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface
 	blockHeaderCache       *blockHeaderCache
 	inclusionListsReceived uint64
+	hotshotClient          *hotshotClient.MultipleNodesClient
+	state                  sequencerState
+	timeboostKeyManager    *decentralizedtimeboostgen.KeyManager
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
 
 type DecentralizedTimeboostSequencerConfig struct {
-	Enable             bool          `koanf:"enable"`
-	BlockRetryDuration time.Duration `koanf:"block-retry-duration"`
+	Enable               bool          `koanf:"enable"`
+	BlockRetryDuration   time.Duration `koanf:"block-retry-duration"`
+	CatchupRetryDuration time.Duration `koanf:"catchup-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
 	MaxTxDataSize                      int                                `koanf:"max-tx-data-size"`
 	NonceCacheSize                     int                                `koanf:"nonce-cache-size"`
@@ -160,11 +173,13 @@ type DecentralizedTimeboostSequencerConfig struct {
 	EnableProfiling                    bool                               `koanf:"enable-profiling"`
 	DecentralizedTimeboostBridgeConfig DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
 	MetricTimeForBlockCreation         time.Duration                      `koanf:"metric-time-for-block-creation"`
+	HotshotUrls                        []string                           `koanf:"hotshot-urls"`
 }
 
 var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
 	Enable:                             false,
 	BlockRetryDuration:                 time.Millisecond * 5,
+	CatchupRetryDuration:               time.Second * 5,
 	MaxTxDataSize:                      95000,
 	NonceCacheSize:                     1024,
 	MaxRevertGasReject:                 0,
@@ -173,11 +188,13 @@ var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequenc
 	EnableProfiling:                    false,
 	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
 	MetricTimeForBlockCreation:         time.Second * 5,
+	HotshotUrls:                        []string{},
 }
 
 func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultDecentralizedTimeboostSequencerConfig.Enable, "enable timeboost sequencer")
 	f.Duration(prefix+".block-retry-duration", DefaultDecentralizedTimeboostSequencerConfig.BlockRetryDuration, "retry duration after failing to create a block")
+	f.Duration(prefix+".catchup-retry-duration", DefaultDecentralizedTimeboostSequencerConfig.CatchupRetryDuration, "catchup retry duration after failing to create a block")
 	f.Int(prefix+".max-tx-data-size", DefaultDecentralizedTimeboostSequencerConfig.MaxTxDataSize, "maximum transaction size the sequencer will accept")
 	f.Int(prefix+".nonce-cache-size", DefaultDecentralizedTimeboostSequencerConfig.NonceCacheSize, "size of the tx sender nonce cache")
 	f.Uint64(prefix+".max-revert-gas-reject", DefaultDecentralizedTimeboostSequencerConfig.MaxRevertGasReject, "maximum gas executed in a revert for the sequencer to reject the transaction instead of posting it (anti-DOS)")
@@ -185,6 +202,7 @@ func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.Flag
 	f.Duration(prefix+".max-acceptable-timestamp-delta", DefaultDecentralizedTimeboostSequencerConfig.MaxAcceptableTimestampDelta, "maximum acceptable time difference between the local time and the latest L1 block's timestamp")
 	f.Bool(prefix+".enable-profiling", DefaultDecentralizedTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 	f.Duration(prefix+".metric-time-for-block-creation", DefaultDecentralizedTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
+	f.StringArray(prefix+".hotshot-urls", DefaultDecentralizedTimeboostSequencerConfig.HotshotUrls, "hotshot urls to query")
 	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
@@ -192,7 +210,17 @@ func NewDecentralizedTimeboostSequencer(
 	execEngine *ExecutionEngine,
 	l1Reader *headerreader.HeaderReader,
 	delayedSequencer decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface,
-	configFetcher DecentralizedTimeboostSequencerConfigFetcher) (*DecentralizedTimeboostSequencer, error) {
+	configFetcher DecentralizedTimeboostSequencerConfigFetcher,
+	keyManagerAddress common.Address,
+) (*DecentralizedTimeboostSequencer, error) {
+	client, err := hotshotClient.NewMultipleNodesClient(configFetcher().HotshotUrls)
+	if err != nil {
+		return nil, err
+	}
+	timeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(keyManagerAddress, l1Reader.Client())
+	if err != nil {
+		return nil, err
+	}
 	return &DecentralizedTimeboostSequencer{
 		config:     configFetcher,
 		execEngine: execEngine,
@@ -210,6 +238,9 @@ func NewDecentralizedTimeboostSequencer(
 			maxSize:    512,
 		},
 		inclusionListsReceived: 0,
+		hotshotClient:          client,
+		timeboostKeyManager:    timeboostKeyManager,
+		state:                  Running,
 	}, nil
 }
 
@@ -230,8 +261,7 @@ func (s *DecentralizedTimeboostSequencer) createBlock(ctx context.Context) (retu
 				log.Error("Error processing transaction", "err", sequencerInternalError, "queueItem", queueItem)
 			}
 		}
-
-		returnValue = true
+		returnValue = madeBlock
 	}()
 
 	lastBlock := s.execEngine.bc.CurrentBlock()
@@ -276,9 +306,11 @@ outer:
 					log.Debug("no blocks were created from processed delayed messages")
 					return madeBlock
 				}
+				s.state = Running
 				log.Info("enqueuing blocks created from delayed messages to timeboost", "blocks", len(protoBlocks))
 				s.timeboostBridge.EnqueueBlocksToTimeboost(protoBlocks)
-				return true
+				madeBlock = true
+				return madeBlock
 			default:
 				log.Warn("unexpected tx type, discarding", "type", tx.txType)
 				s.txQueue.dequeue()
@@ -297,20 +329,20 @@ outer:
 			// This tx is too large
 			// Even if its a priority item this should be skipped,
 			// TODO: return the error to the user here
-			log.Warn("timeboost transaction is too large", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Warn("timeboost transaction is too large", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
 		if arbmath.BigLessThan(queueItem.tx.GasFeeCap(), lastBlock.BaseFee) {
 			// This tx is too low gas fee
 			// TODO: return the error to the user here
-			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "hash", queueItem.tx.Hash().Hex())
+			log.Warn("timeboost transaction has too low gas fee", "txSize", queueItem.txSize, "gasFeeCap", queueItem.tx.GasFeeCap(), "baseFee", lastBlock.BaseFee, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 
 		if totalBlockSize+queueItem.txSize > s.config().MaxTxDataSize {
 			// This tx would be too large to add to this batch
-			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "hash", queueItem.tx.Hash().Hex())
+			log.Info("timeboost transaction is too large, adding to retry queue", "txSize", queueItem.txSize, "maxTxDataSize", s.config().MaxTxDataSize, "txHash", queueItem.tx.Hash().Hex())
 			s.txRetryQueue.enqueue(queueItem)
 			// End the batch here to put this tx in the next one
 			break
@@ -354,6 +386,11 @@ outer:
 	}
 
 	if len(queueItems) == 0 {
+		// If we are in waiting state, we want to retry immediately
+		if s.state == WaitingForBlockProduction {
+			madeBlock = true
+			return madeBlock
+		}
 		return madeBlock
 	}
 
@@ -363,7 +400,7 @@ outer:
 	// It should be the same for all transactions in the queue because
 	// each transaction is a part of the same round
 	timestamp := firstQueueItem.consensusTimestamp
-	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
+	header, err := s.l1Reader.LastHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
 		s.txRetryQueue.enqueueItems(queueItems)
@@ -411,10 +448,14 @@ outer:
 			s.txRetryQueue.enqueueItems(queueItems)
 			return madeBlock
 		}
-		log.Error("error sequencing transactions", "err", err)
 		for _, queueItem := range queueItems {
 			// TODO: should send the error back to the user
-			log.Error("error sequencing transactions", "err", err, "tx", queueItem.tx.Hash())
+			if s.state == WaitingForBlockProduction {
+				log.Error("error sequencing transactions after catchup. this will be retried", "err", err, "txHash", queueItem.tx.Hash().Hex())
+				s.txRetryQueue.enqueueItems(queueItems)
+			} else {
+				log.Error("error sequencing transactions", "err", err, "txHash", queueItem.tx.Hash().Hex())
+			}
 		}
 		return madeBlock
 	}
@@ -432,16 +473,17 @@ outer:
 		// The TimeboostBridge will handle retries if needed
 		elapsed := time.Since(start)
 		if block.NumberU64()%100 == 0 {
-			log.Info("enqueuing block to timeboost", "block", block.NumberU64(), "hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
+			log.Info("enqueuing block to timeboost", "block", block.NumberU64(), "block hash", block.Hash().Hex(), "backlog txns", len(s.txQueue.queue), "block time elapsed", elapsed)
 		}
 		s.timeboostBridge.EnqueueBlockToTimeboost(protoBlock)
 		successfulBlocksCounter.Inc(1)
 		s.nonceCache.Finalize(block)
+		s.state = Running
 		// Add a metric to indicate how long it took to create the block
 		blockCreationTimer.Update(elapsed)
 		if elapsed >= config.MetricTimeForBlockCreation {
 			blockNum := block.Number()
-			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2Block", blockNum)
+			log.Warn("took over 5 seconds to sequence a block", "elapsed", elapsed, "numTxes", len(txes), "success", block != nil, "l2 block", blockNum)
 		}
 	}
 
@@ -465,7 +507,7 @@ outer:
 		}
 		var nonceError NonceError
 		if errors.As(err, &nonceError) && nonceError.txNonce > nonceError.stateNonce {
-			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash())
+			log.Error("nonce error", "err", err, "txHash", queueItem.tx.Hash().Hex())
 			continue
 		}
 	}
@@ -477,7 +519,8 @@ func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, 
 	finalizationTime := uint64(s.config().ParentChainFinalizationTime.Seconds())
 	targetTime := consensusTimestamp - finalizationTime
 
-	for blockNumber := startBlockNumber; blockNumber > 0; blockNumber-- {
+	blockNumber := startBlockNumber
+	for {
 		var header *types.Header
 		if cached := s.blockHeaderCache.Get(blockNumber); cached != nil {
 			header = cached
@@ -493,9 +536,8 @@ func (s *DecentralizedTimeboostSequencer) getL1BlockNumber(ctx context.Context, 
 		if header.Time <= targetTime {
 			return header, nil
 		}
+		blockNumber--
 	}
-
-	return nil, fmt.Errorf("no suitable block found before finalized block %d", startBlockNumber)
 }
 
 func (s *DecentralizedTimeboostSequencer) makeSequencingHooks() *arbos.SequencingHooks {
@@ -597,11 +639,11 @@ func (s *DecentralizedTimeboostSequencer) precheckNonces(queueItems []timeboostT
 					continue
 				}
 				// TODO send the error back to the user
-				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Error("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash().Hex())
 				continue
 			} else if err != nil {
 				nonceCacheRejectedCounter.Inc(1)
-				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash())
+				log.Warn("failed to process transaction nonce", "err", err, "sender", sender, "txNonce", txNonce, "txHash", tx.Hash().Hex())
 				continue
 			} else {
 				log.Warn("unreachable nonce err == nil condition hit in precheckNonces")
@@ -655,6 +697,78 @@ func (s *DecentralizedTimeboostSequencer) createTimeboostProtoBlock(
 		Round:   roundId,
 		Payload: encoded,
 	}, nil
+}
+
+// This method is called if we detect we went down, and we will do the following:
+// 1.) Look for verified timeboost transactions in hotshot blocks
+// 2.) See if our local state syncing from parent chain has caught up to these latest hotshot blocks
+// 3.) Ensure we have inclusion lists from before the found verified timeboost transaction from hotshot
+// 4.) Discard the old inclusion lists then start processing again from our queue
+func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) error {
+	if s.execEngine == nil || s.execEngine.bc == nil {
+		panic("engine should not be nil")
+	}
+
+	// Start from latest hotshot block
+	height, err := s.hotshotClient.FetchLatestBlockHeight(ctx)
+	if err != nil {
+		return err
+	}
+	blocks := make(map[uint64]uint64)
+	for {
+		// Look for certified timeboost blocks
+		txns, err := s.hotshotClient.FetchTransactionsInBlock(ctx, height, s.execEngine.bc.Config().ChainID.Uint64())
+		if err != nil {
+			log.Debug("error getting hotshot block", "err", err, "height", height)
+			continue
+		}
+		for _, tx := range txns.Transactions {
+			var body decentralized_timeboost_types.Body
+			if err := cbor.Unmarshal(tx, &body); err != nil {
+				log.Warn("cbor error decoding certified block", "err", err)
+				continue
+			}
+
+			for _, block := range body.Blocks {
+				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManager.GetCommitteeById); err != nil {
+					log.Warn("catchup error verifying timeboost block", "err", err)
+					continue
+				}
+				blocks[block.Data.Number] = block.Data.Round
+			}
+
+			// Sequencer state will catchup from parent chain.
+			currentBlock := s.execEngine.bc.CurrentBlock()
+			if currentBlock == nil {
+				continue
+			}
+			executedBlock := currentBlock.Number.Uint64()
+			txn := s.txQueue.Peek()
+			if txn == nil {
+				continue
+			}
+			// Make sure local block chain state is up to date with a certified timeboost block found in hotshot
+			if currentRound, exists := blocks[executedBlock]; exists && currentRound > txn.roundId {
+				log.Info("local block is up to date with hotshot block", "certified block round", currentRound, "queued txn round", txn.roundId, "l2 block", executedBlock)
+				for {
+					txn = s.txQueue.Peek()
+					if txn == nil {
+						log.Info("catchup complete: queue empty", "l2 block", executedBlock, "certified block round", currentRound)
+						return nil
+					}
+					if currentRound <= txn.roundId {
+						log.Info("catchup complete: queue caught up", "next round", txn.roundId, "certified block round", currentRound, "l2 block", executedBlock)
+						return nil
+					}
+					// We can safely discard any old inclusion lists whose round ids are less than the round ids in the certified block
+					discarded := s.txQueue.dequeue()
+					log.Info("discarded obsolete txn", "discarded round", discarded.roundId, "certified block round", currentRound, "l2 block", executedBlock)
+				}
+			}
+		}
+		// If we don't meet these conditions, fetch next hotshot block and try again
+		height += 1
+	}
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
@@ -712,9 +826,36 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Check our database to see if we restarted
+	if s.execEngine.recorder != nil && s.execEngine.recorder.execEngine != nil {
+		lastHeader, err := s.execEngine.recorder.execEngine.getCurrentHeader()
+		if err == nil && lastHeader.Number.Uint64() > 0 {
+			log.Warn("Detected sequencer was shutdown, entering catchup protocol")
+			s.state = CatchUp
+		}
+	}
+
 	if err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		if s.createBlock(ctx) {
+		switch s.state {
+		case CatchUp:
+			err := s.waitForCatchup(ctx)
+			if err != nil {
+				log.Warn("error during catchup", "err", err)
+				return 0
+			}
+			// catchup is done, now make sure we can produce a block
+			s.state = WaitingForBlockProduction
 			return 0
+		case Running:
+			if s.createBlock(ctx) {
+				return 0
+			}
+		case WaitingForBlockProduction:
+			if s.createBlock(ctx) {
+				return 0
+			}
+			log.Info("still waiting for first block production since catchup will retry", "retry in", s.config().CatchupRetryDuration)
+			return s.config().CatchupRetryDuration
 		}
 		return s.config().BlockRetryDuration
 	}); err != nil {
@@ -745,6 +886,7 @@ func (s *DecentralizedTimeboostSequencer) storeHeader(header *types.Header) {
 }
 
 func (s *DecentralizedTimeboostSequencer) StopAndWait() {
+	s.timeboostBridge.StopAndWait()
 	s.StopWaiter.StopAndWait()
 
 	if s.txRetryQueue.Len() == 0 &&

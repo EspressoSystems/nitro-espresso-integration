@@ -1,0 +1,120 @@
+services:
+  node0:
+    image: ghcr.io/espressosystems/timeboost:contract3
+    command:
+      [
+        "/app/timeboost",
+        "--config", "/app/node_0.toml",
+        "--https-only", "false"
+      ]
+    environment:
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
+    ports:
+      - "8000:8000"
+      - "8004:8004"
+      - "8003:8003"
+      - "8200:8200"
+      - "8100:8100"
+    volumes:
+      - ./node_0.toml:/app/node_0.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nitro-timeboost
+  node1:
+    image: ghcr.io/espressosystems/timeboost:contract3
+    command:
+      [
+        "/app/timeboost",
+        "--config", "/app/node_1.toml",
+        "--https-only", "false"
+      ]
+    environment:
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
+    ports:
+      - "8010:8010"
+      - "8014:8014"
+      - "8013:8013"
+      - "8210:8210"
+      - "8110:8110"
+    volumes:
+      - ./node_1.toml:/app/node_1.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nitro-timeboost
+  node2:
+    image: ghcr.io/espressosystems/timeboost:contract3
+    command:
+      [
+        "/app/timeboost",
+        "--config", "/app/node_2.toml",
+        "--https-only", "false"
+      ]
+    environment:
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
+    ports:
+      - "8020:8020"
+      - "8024:8024"
+      - "8023:8023"
+      - "8220:8220"
+      - "8120:8120"
+    volumes:
+      - ./node_2.toml:/app/node_2.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nitro-timeboost
+  node3:
+    image: ghcr.io/espressosystems/timeboost:contract3
+    command:
+      [
+        "/app/timeboost",
+        "--config", "/app/node_3.toml",
+        "--https-only", "false"
+      ]
+    environment:
+      - RUST_LOG=timeboost=warn,sailfish=error,cliquenet=error,robusta=debug
+    ports:
+      - "8030:8030"
+      - "8034:8034"
+      - "8033:8033"
+      - "8230:8230"
+      - "8130:8130"
+    volumes:
+      - ./node_3.toml:/app/node_3.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nitro-timeboost
+  espresso-dev-node:
+    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:20250910-patch1
+    ports:
+      - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
+      - "$ESPRESSO_BUILDER_PORT:$ESPRESSO_BUILDER_PORT"
+      - "$ESPRESSO_DEV_NODE_PORT:$ESPRESSO_DEV_NODE_PORT"
+    environment:
+      - ESPRESSO_BUILDER_PORT
+      - ESPRESSO_DEPLOYER_ACCOUNT_INDEX
+      - ESPRESSO_DEV_NODE_PORT
+      - ESPRESSO_SEQUENCER_API_PORT
+      - ESPRESSO_SEQUENCER_ETH_MNEMONIC
+      - ESPRESSO_SEQUENCER_L1_PROVIDER
+      - ESPRESSO_SEQUENCER_DATABASE_MAX_CONNECTIONS=25
+      - ESPRESSO_DEV_NODE_EPOCH_HEIGHT
+      - ESPRESSO_SEQUENCER_STORAGE_PATH=/data/espresso
+      - RUST_LOG=WARN
+      - RUST_LOG_FORMAT
+      - ESPRESSO_DEV_NODE_VERSION=0.4
+    volumes:
+      - espresso_storage:/data/espresso
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - nitro-timeboost
+volumes:
+  espresso_storage:
+networks:
+  nitro-timeboost:
+    driver: bridge
+    name: nitro-timeboost

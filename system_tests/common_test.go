@@ -906,6 +906,63 @@ func (b *NodeBuilder) RestartL2Node(t *testing.T) {
 	Require(t, err)
 
 	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, nil, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, nil, nil, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
+
+	Require(t, err)
+
+	Require(t, currentNode.Start(b.ctx))
+	client := ClientForStack(t, stack)
+
+	StartWatchChanErr(t, b.ctx, feedErrChan, currentNode)
+
+	l2 := NewTestClient(b.ctx)
+	l2.ConsensusNode = currentNode
+	l2.Client = client
+	l2.ExecNode = execNode
+	l2.cleanup = func() {
+		currentNode.StopAndWait()
+		if stack != nil {
+			stack.Close()
+		}
+	}
+	l2.Stack = stack
+
+	b.L2 = l2
+	b.L2Info = l2info
+}
+
+// L2 -Only. RestartL2Node shutdowns the existing l2 node and start it again using the same data dir.
+func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
+	if b.L2 == nil {
+		t.Fatalf("L2 was not created")
+	}
+	// Stop the consensus node first and wait for it to fully stop
+	b.L2.ConsensusNode.StopAndWait()
+	// Give extra time for all goroutines and background tasks to finish
+	time.Sleep(2 * time.Second)
+	// Now close the stack which will close all databases
+	if b.L2.Stack != nil {
+		err := b.L2.Stack.Close()
+		if err != nil {
+			log.Warn("Error closing stack during restart", "err", err)
+		}
+		b.L2.Stack = nil
+	}
+	// Give the OS time to release file handles and locks
+	// This is critical in CI environments where file system operations are slower
+	time.Sleep(2 * time.Second)
+
+	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
+	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
+	execNode, err := gethexec.CreateExecutionNode(b.ctx, stack, chainDb, blockchain, nil, execConfigFetcher, 0)
+	Require(t, err)
+
+	feedErrChan := make(chan error, 10)
+	locator, err := server_common.NewMachineLocator(b.valnodeConfig.Wasm.RootPath)
+	Require(t, err)
+
+	sequencerTxOpts := b.L1Info.GetDefaultTransactOpts("Sequencer", context.Background())
+	dataSigner := signature.DataSignerFromPrivateKey(b.L1Info.GetInfoWithPrivKey("Sequencer").PrivateKey)
+	currentNode, err := arbnode.CreateNodeFullExecutionClient(b.ctx, stack, execNode, execNode, execNode, execNode, arbDb, chainDb, NewFetcherFromConfig(b.nodeConfig), blockchain.Config(), b.L1.Client, b.addresses, nil, &sequencerTxOpts, dataSigner, feedErrChan, big.NewInt(1337), nil, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	Require(t, currentNode.Start(b.ctx))
@@ -1565,10 +1622,9 @@ func deployOnParentChain(
 
 	var timeboostAddr common.Address
 	if decentralizedTimeboost {
-		timeboostAddr = setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
+		timeboostAddr = setupTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainInfo, parentChainTransactionOpts)
 	} else {
 		timeboostAddr = setMockTimeboostKeyManagerContract(t, ctx, parentChainClient, parentChainTransactionOpts)
-		log.Info("timeboost addr", "addr", timeboostAddr)
 	}
 
 	Require(t, err)
@@ -1613,16 +1669,16 @@ func deployOnParentChain(
 				DelaySeconds:  big.NewInt(60 * 60 * 24),
 				FutureSeconds: big.NewInt(60 * 60),
 			},
-			LayerZeroBlockEdgeHeight:     new(big.Int).SetUint64(blockChallengeLeafHeight),
-			LayerZeroBigStepEdgeHeight:   new(big.Int).SetUint64(bigStepChallengeLeafHeight),
-			LayerZeroSmallStepEdgeHeight: new(big.Int).SetUint64(smallStepChallengeLeafHeight),
-			GenesisAssertionState:        genesisExecutionState,
-			GenesisInboxCount:            common.Big0,
-			AnyTrustFastConfirmer:        common.Address{},
-			NumBigStepLevel:              3,
-			ChallengeGracePeriodBlocks:   3,
-			BufferConfig:                 bufferConfig,
-			EspressoTEEVerifier:          timeboostAddr,
+			LayerZeroBlockEdgeHeight:         new(big.Int).SetUint64(blockChallengeLeafHeight),
+			LayerZeroBigStepEdgeHeight:       new(big.Int).SetUint64(bigStepChallengeLeafHeight),
+			LayerZeroSmallStepEdgeHeight:     new(big.Int).SetUint64(smallStepChallengeLeafHeight),
+			GenesisAssertionState:            genesisExecutionState,
+			GenesisInboxCount:                common.Big0,
+			AnyTrustFastConfirmer:            common.Address{},
+			NumBigStepLevel:                  3,
+			ChallengeGracePeriodBlocks:       3,
+			BufferConfig:                     bufferConfig,
+			DecentralizedTimeboostKeyManager: timeboostAddr,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(

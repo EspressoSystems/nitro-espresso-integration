@@ -49,7 +49,7 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 			Context: ctx,
 		}
 
-		logIterator, err := b.seqInbox.FilterTEESignatureVerified(&filterOpts, []*big.Int{}, []*big.Int{})
+		logIterator, err := b.seqInbox.FilterDecentralizedTimeboostQuorumSignaturesVerified(&filterOpts, []*big.Int{}, []*big.Int{}, []*big.Int{})
 		if err != nil {
 			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i, "err", err)
 			continue
