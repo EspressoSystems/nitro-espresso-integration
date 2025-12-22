@@ -11,9 +11,11 @@ import (
 
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/fxamacker/cbor/v2"
 	flag "github.com/spf13/pflag"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/arbitrum"
 	"github.com/ethereum/go-ethereum/arbitrum_types"
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +34,7 @@ import (
 	decentralized_timeboost "github.com/offchainlabs/nitro/decentralized-timeboost/interfaces"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
 	"github.com/offchainlabs/nitro/execution"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
 	"github.com/offchainlabs/nitro/util/arbmath"
 	"github.com/offchainlabs/nitro/util/headerreader"
@@ -49,6 +52,7 @@ type sequencerState int
 
 const (
 	CatchUp sequencerState = iota
+	Init
 	WaitingForBlockProduction
 	Running
 )
@@ -156,6 +160,7 @@ type DecentralizedTimeboostSequencer struct {
 	hotshotClient          *hotshotClient.MultipleNodesClient
 	state                  sequencerState
 	timeboostKeyManager    *decentralizedtimeboostgen.KeyManager
+	sequencerInbox         *bridgegen.SequencerInbox
 }
 
 type DecentralizedTimeboostSequencerConfigFetcher func() *DecentralizedTimeboostSequencerConfig
@@ -211,10 +216,15 @@ func NewDecentralizedTimeboostSequencer(
 	l1Reader *headerreader.HeaderReader,
 	delayedSequencer decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface,
 	configFetcher DecentralizedTimeboostSequencerConfigFetcher,
-	keyManagerAddress common.Address,
+	seqInbox *bridgegen.SequencerInbox,
 ) (*DecentralizedTimeboostSequencer, error) {
 	client, err := hotshotClient.NewMultipleNodesClient(configFetcher().HotshotUrls)
 	if err != nil {
+		return nil, err
+	}
+	keyManagerAddress, err := seqInbox.TimeboostKeyManager(&bind.CallOpts{})
+	if err != nil {
+		log.Error("error getting timeboost key manager addr", "err", err)
 		return nil, err
 	}
 	timeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(keyManagerAddress, l1Reader.Client())
@@ -241,6 +251,7 @@ func NewDecentralizedTimeboostSequencer(
 		hotshotClient:          client,
 		timeboostKeyManager:    timeboostKeyManager,
 		state:                  Running,
+		sequencerInbox:         seqInbox,
 	}, nil
 }
 
@@ -771,6 +782,41 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 	}
 }
 
+// This method is called if we detect we start without a database this waits until we are sync with l1.
+func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) {
+	if s.execEngine == nil || s.execEngine.bc == nil {
+		panic("engine should not be nil")
+	}
+	backOff := 1 * time.Second
+	for {
+		currentBlock := s.execEngine.bc.CurrentBlock()
+		if currentBlock == nil {
+			time.Sleep(backOff)
+			continue
+		}
+		executedBlock := currentBlock.Number.Uint64()
+		batch, err := s.sequencerInbox.BatchCount(&bind.CallOpts{})
+		if err != nil {
+			log.Warn("error getting latest batch number from sequencer inbox", "err", err)
+			time.Sleep(backOff)
+			continue
+		}
+		latestFinalizedMessage, batchNum := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 0, s.l1Reader)
+		if executedBlock+1 == latestFinalizedMessage && batch.Uint64() == batchNum+1 {
+			sent, err := daemon.SdNotify(false, daemon.SdNotifyReady)
+			if err != nil {
+				log.Warn("error sending notify", "err", err)
+			}
+			if !sent {
+				time.Sleep(backOff)
+			}
+			return
+		}
+		log.Info("not caught up", "b", batch, "n", batchNum, "f", latestFinalizedMessage, "e", executedBlock)
+		time.Sleep(backOff)
+	}
+}
+
 func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Context, inclusionList *protos.InclusionList, options *arbitrum_types.ConditionalOptions) error {
 	if s.inclusionListsReceived%200 == 0 {
 		log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
@@ -826,17 +872,31 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		return err
 	}
 
+	batchNum, err := s.sequencerInbox.BatchCount(&bind.CallOpts{})
+	if err != nil {
+		log.Warn("error getting latest batch number from sequencer inbox", "err", err)
+		return err
+	}
+
 	// Check our database to see if we restarted
 	if s.execEngine.recorder != nil && s.execEngine.recorder.execEngine != nil {
 		lastHeader, err := s.execEngine.recorder.execEngine.getCurrentHeader()
 		if err == nil && lastHeader.Number.Uint64() > 0 {
-			log.Warn("Detected sequencer was shutdown, entering catchup protocol")
+			log.Warn("Detected sequencer was shutdown, entering catchup protocol", "lastBlockNum", lastHeader.Number.Uint64())
 			s.state = CatchUp
+		} else if err == nil && batchNum.Uint64() > 1 {
+			msgCount, foundBatch := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 0, s.l1Reader)
+			log.Warn("We are behind l1 state", "foundMsgCount", msgCount, "foundBatchCount", foundBatch)
+			s.state = Init
 		}
 	}
 
 	if err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
 		switch s.state {
+		case Init:
+			s.waitForL1Catchup(ctx)
+			s.state = WaitingForBlockProduction
+			return 0
 		case CatchUp:
 			err := s.waitForCatchup(ctx)
 			if err != nil {

@@ -1110,14 +1110,9 @@ func getDecentralizedTimeboostSequencer(
 			log.Error("error getting seq inbox", "err", err)
 			return nil, err
 		}
-		addr, err := seqInbox.TimeboostKeyManager(&bind.CallOpts{})
-		if err != nil {
-			log.Error("error getting timeboost key manager addr", "err", err)
-			return nil, err
-		}
 		timeboostSequencer, err := gethexec.NewDecentralizedTimeboostSequencer(exec.ExecEngine, l1Reader, delayedSequencer, func() *gethexec.DecentralizedTimeboostSequencerConfig {
 			return &configFetcher.Get().DecentralizedTimeboostSequencer
-		}, addr)
+		}, seqInbox)
 		if err != nil {
 			return nil, err
 		}
@@ -1524,6 +1519,12 @@ func (n *Node) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error starting exec client: %w", err)
 	}
+	if n.DecentralizedTimeboostSequencer != nil {
+		err = n.DecentralizedTimeboostSequencer.Start(ctx)
+		if err != nil {
+			return fmt.Errorf("error starting decentralized timeboost sequencer: %w", err)
+		}
+	}
 	if n.BlobReader != nil {
 		err = n.BlobReader.Initialize(ctx)
 		if err != nil {
@@ -1641,12 +1642,6 @@ func (n *Node) Start(ctx context.Context) error {
 			return fmt.Errorf("error starting espresso caff node: %w", err)
 		}
 		return nil
-	}
-	if n.DecentralizedTimeboostSequencer != nil {
-		err = n.DecentralizedTimeboostSequencer.Start(ctx)
-		if err != nil {
-			return fmt.Errorf("error starting decentralized timeboost sequencer: %w", err)
-		}
 	}
 	// Also make sure to call initialize on the sync monitor after the inbox reader, tx streamer, and block validator are started.
 	// Else sync might call inbox reader or tx streamer before they are started, and it will lead to panic.
