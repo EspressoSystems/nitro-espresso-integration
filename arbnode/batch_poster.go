@@ -398,10 +398,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	AddressMonitorStep:                  100,
 	AddressMonitorStartL1:               1,
 	UseLatestHotshotBlock:               true,
-	EspressoTxSizeLimit:      900 * 1024,
-	UserDataAttestationFile:  "",
-	QuoteFile:                "",
-	AttestationServiceURL:    "",
+	AttestationServiceURL:               "",
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
