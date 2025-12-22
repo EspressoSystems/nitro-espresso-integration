@@ -126,7 +126,6 @@ func VerifyTimeboostBlock(
 
 func ParseTimeboostEspressoTransaction(
 	tx espressoTypes.Bytes,
-	l1Height uint64,
 	streamerCurrentPos uint64,
 	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
 ) ([]*DecentralizedTimeboostParsedMessage, error) {
@@ -157,10 +156,6 @@ func ParseTimeboostEspressoTransaction(
 			continue
 		}
 
-		if msg.Position < streamerCurrentPos {
-			log.Debug("timeboost message index is less than current pos, skipping", "messageIndex", streamerCurrentPos, "currentMessagePos", msg.Position)
-			continue
-		}
 		msgs = append(msgs, &DecentralizedTimeboostParsedMessage{
 			Message: messageWithMetadata,
 			Pos:     msg.Position,

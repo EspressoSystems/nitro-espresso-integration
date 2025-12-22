@@ -938,7 +938,7 @@ func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
 	// Stop the consensus node first and wait for it to fully stop
 	b.L2.ConsensusNode.StopAndWait()
 	// Give extra time for all goroutines and background tasks to finish
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 	// Now close the stack which will close all databases
 	if b.L2.Stack != nil {
 		err := b.L2.Stack.Close()
@@ -949,7 +949,7 @@ func (b *NodeBuilder) RestartTimeboostL2Node(t *testing.T) {
 	}
 	// Give the OS time to release file handles and locks
 	// This is critical in CI environments where file system operations are slower
-	time.Sleep(1 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	l2info, stack, chainDb, arbDb, blockchain := createNonL1BlockChainWithStackConfig(t, b.L2Info, b.dataDir, b.chainConfig, b.arbOSInit, b.initMessage, b.l2StackConfig, b.execConfig, nil, b.wasmCacheTag, b.useFreezer)
 	execConfigFetcher := func() *gethexec.Config { return b.execConfig }
@@ -1669,16 +1669,16 @@ func deployOnParentChain(
 				DelaySeconds:  big.NewInt(60 * 60 * 24),
 				FutureSeconds: big.NewInt(60 * 60),
 			},
-			LayerZeroBlockEdgeHeight:     new(big.Int).SetUint64(blockChallengeLeafHeight),
-			LayerZeroBigStepEdgeHeight:   new(big.Int).SetUint64(bigStepChallengeLeafHeight),
-			LayerZeroSmallStepEdgeHeight: new(big.Int).SetUint64(smallStepChallengeLeafHeight),
-			GenesisAssertionState:        genesisExecutionState,
-			GenesisInboxCount:            common.Big0,
-			AnyTrustFastConfirmer:        common.Address{},
-			NumBigStepLevel:              3,
-			ChallengeGracePeriodBlocks:   3,
-			BufferConfig:                 bufferConfig,
-			EspressoTEEVerifier:          timeboostAddr,
+			LayerZeroBlockEdgeHeight:         new(big.Int).SetUint64(blockChallengeLeafHeight),
+			LayerZeroBigStepEdgeHeight:       new(big.Int).SetUint64(bigStepChallengeLeafHeight),
+			LayerZeroSmallStepEdgeHeight:     new(big.Int).SetUint64(smallStepChallengeLeafHeight),
+			GenesisAssertionState:            genesisExecutionState,
+			GenesisInboxCount:                common.Big0,
+			AnyTrustFastConfirmer:            common.Address{},
+			NumBigStepLevel:                  3,
+			ChallengeGracePeriodBlocks:       3,
+			BufferConfig:                     bufferConfig,
+			DecentralizedTimeboostKeyManager: timeboostAddr,
 		}
 		wrappedClient := butil.NewBackendWrapper(parentChainReader.Client(), rpc.LatestBlockNumber)
 		boldAddresses, err := setup.DeployFullRollupStack(

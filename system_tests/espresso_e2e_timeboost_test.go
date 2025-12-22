@@ -671,6 +671,20 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
 	}
 
+	err = waitForWith(ctx, 2*time.Minute, 5*time.Second, func() bool {
+		sequencerInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
+		Require(t, err)
+		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		Require(t, err)
+
+		// wait for one batch to be posted before restart
+		// We are testing the node can restart and fetch hotshot height from contract
+		return batchCount.Uint64() > 1
+	})
+	Require(t, err)
+
+	log.Info("batch posted, restarting")
+
 	createAndSendBundleToTimeboostLoad(t, builder2, users, 2, builder4)
 
 	err = waitForWith(ctx, 10*time.Minute, 5*time.Second, func() bool {
@@ -684,7 +698,7 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 		// should make a lot of small batches
 		return batchCount.Uint64() > 5
 	})
-	time.Sleep(20 * time.Second)
+	time.Sleep(30 * time.Second)
 	Require(t, err)
 
 	blockNumberAfter, err := builder2.L2.Client.BlockNumber(ctx)

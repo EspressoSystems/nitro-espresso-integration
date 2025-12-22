@@ -237,17 +237,16 @@ type BatchPosterConfig struct {
 	QuoteFile                        string                                    `koanf:"quote-file"`
 
 	// Fetch messages from HotShot block
-	HotShotBlock                  uint64 `koanf:"hotshot-block"`
-	TimeboostHotShotBlockLookback uint64 `koanf:"timeboost-hotshot-block-lookback"`
-	EspressoEventPollingStep      uint64 `koanf:"espresso-event-polling-step"`
-	HotShotFirstPostingBlock      uint64 `koanf:"hotshot-first-posting-block"`
+	HotShotBlock             uint64 `koanf:"hotshot-block"`
+	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
+	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	AddressMonitorStartL1                      uint64                                                     `koanf:"address-monitor-start-l1"`
-	InitBatcherAddresses                       []string                                                   `koanf:"init-batcher-addresses"`
-	IsDecentralizedTimeboost                   bool                                                       `koanf:"is-decentralized-timeboost"`
-	DecentralizedTimeboostBatchVerifier        decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
-	DecentralizedTimeboostKeyManagementAddress string                                                     `koanf:"decentralized-timeboost-key-management-address"`
-	AddressMonitorStep                         uint64                                                     `koanf:"address-monitor-step"`
+	AddressMonitorStartL1               uint64                                                     `koanf:"address-monitor-start-l1"`
+	InitBatcherAddresses                []string                                                   `koanf:"init-batcher-addresses"`
+	IsDecentralizedTimeboost            bool                                                       `koanf:"is-decentralized-timeboost"`
+	UseLatestHotshotBlock               bool                                                       `koanf:"use-latest-hotshot-block"`
+	DecentralizedTimeboostBatchVerifier decentralized_timeboost_batch_verifier.BatchVerifierConfig `koanf:"decentralized-timeboost-batch-verifier"`
+	AddressMonitorStep                  uint64                                                     `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -305,7 +304,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
-	f.Uint64(prefix+".timeboost-hotshot-block-lookback", DefaultBatchPosterConfig.TimeboostHotShotBlockLookback, "specifies the hotshot block number to start from the current height")
 	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
@@ -324,7 +322,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
 	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.Bool(prefix+".is-decentralized-timeboost", DefaultBatchPosterConfig.IsDecentralizedTimeboost, "specifies if batch poster is running with decentralized timeboost")
-	f.String(prefix+".decentralized-timeboost-key-management-address", DefaultBatchPosterConfig.DecentralizedTimeboostKeyManagementAddress, "decentralized timeboost key management contract address")
+	f.Bool(prefix+".use-latest-hotshot-block", DefaultBatchPosterConfig.UseLatestHotshotBlock, "if batch poster should start from most recent hotshot block with decentralized timeboost")
 	decentralized_timeboost_batch_verifier.DecentralizedTimeboostBatchVerifierConfigAddOptions(prefix+".decentralized-timeboost-batch-verifier", f)
 	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
@@ -389,16 +387,15 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	UserDataAttestationFile: "",
 	QuoteFile:               "",
 
-	HotShotBlock:                               1,
-	HotShotFirstPostingBlock:                   1,
-	InitBatcherAddresses:                       []string{},
-	EspressoEventPollingStep:                   100,
-	IsDecentralizedTimeboost:                   false,
-	DecentralizedTimeboostBatchVerifier:        decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
-	DecentralizedTimeboostKeyManagementAddress: "",
-	AddressMonitorStep:                         100,
-	AddressMonitorStartL1:                      1,
-	TimeboostHotShotBlockLookback:              200,
+	HotShotBlock:                        1,
+	HotShotFirstPostingBlock:            1,
+	InitBatcherAddresses:                []string{},
+	EspressoEventPollingStep:            100,
+	IsDecentralizedTimeboost:            false,
+	DecentralizedTimeboostBatchVerifier: decentralized_timeboost_batch_verifier.DefaultBatchVerifierConfig,
+	AddressMonitorStep:                  100,
+	AddressMonitorStartL1:               1,
+	UseLatestHotshotBlock:               true,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -450,7 +447,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	AddressMonitorStartL1:               1,
 	AddressMonitorStep:                  100,
 	EspressoEventPollingStep:            100,
-	TimeboostHotShotBlockLookback:       0,
+	UseLatestHotshotBlock:               false,
 }
 
 type BatchPosterOpts struct {
@@ -608,9 +605,12 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		var decentralizedTimeboostKeyManager *decentralizedtimeboostgen.KeyManager
 		var committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error)
 		if opts.Config().IsDecentralizedTimeboost {
-			// TODO: This should read the address from sequencer inbox contract
+			addr, err := seqInbox.TimeboostKeyManager(&bind.CallOpts{})
+			if err != nil {
+				return nil, fmt.Errorf("failed to get timeboost key manager from contract: %w", err)
+			}
 			decentralizedTimeboostKeyManager, err = decentralizedtimeboostgen.NewKeyManager(
-				common.HexToAddress(opts.Config().DecentralizedTimeboostKeyManagementAddress),
+				addr,
 				opts.L1Reader.Client(),
 			)
 			if err != nil {
@@ -699,20 +699,31 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.Config().AddressMonitorStep,
 			)
 
-			hotshotBlock := opts.Config().HotShotBlock
+			hotshotBlock := uint64(0)
 			if opts.Config().IsDecentralizedTimeboost {
-				height, err := hotShotClient.FetchLatestBlockHeight(ctx)
-				if err != nil {
-					log.Warn("error fetching hotshot height for timeboost, defaulting to configured hotshot height", "height", hotshotBlock, "err", err)
-				} else {
-					lookback := uint64(100)
-					if height >= lookback {
-						hotshotBlock = height - lookback
-						log.Warn("batch poster starting from hotshot block", "height", hotshotBlock)
+				if !opts.Config().UseLatestHotshotBlock {
+					hotshotBlock = b.fetchHotshotBlockFromLastCheckpoint(ctx)
+					if hotshotBlock != 0 {
+						log.Info("streamer found checkpoint hotshot height", "hotshot height", hotshotBlock)
 					} else {
-						hotshotBlock = 0
+						curr, err := hotShotClient.FetchLatestBlockHeight(ctx)
+						if err != nil {
+							hotshotBlock = opts.Config().HotShotBlock
+							log.Warn("error fetching latest block", "err", err, "using config height", hotshotBlock)
+						} else {
+							hotshotBlock = curr
+						}
+					}
+				} else {
+					curr, err := hotShotClient.FetchLatestBlockHeight(ctx)
+					if err != nil {
+						hotshotBlock = opts.Config().HotShotBlock
+						log.Warn("error fetching latest block", "err", err, "using config height", hotshotBlock)
+					} else {
+						hotshotBlock = curr
 					}
 				}
+				log.Info("starting streamer with hotshot height", "hotshot height", hotshotBlock)
 			}
 
 			espressoStreamer := espressostreamer.NewEspressoStreamer(
@@ -751,7 +762,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			)
 
 			// Get the espressoTEEVerifier address for the sequencer inbox contract
-			espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+			espresssoTEEVerifierAddress, err := seqInbox.TimeboostKeyManager(&bind.CallOpts{})
 			if err != nil {
 				return nil, err
 			}
@@ -1585,7 +1596,6 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 
 func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 	l2MessageData []byte,
-	method abi.Method,
 	seqNum *big.Int,
 	prevMsgNum arbutil.MessageIndex,
 	newMsgNum arbutil.MessageIndex,
@@ -1595,6 +1605,10 @@ func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 	useBlobs := len(blobs) > 0
 	var signatures []byte
 	var err error
+	hotshotBlock, err := b.espressoStreamer.GetEarliestHotshotBlockForPosition(uint64(newMsgNum - 1))
+	if err != nil {
+		return nil, err
+	}
 	if useBlobs {
 		signatures, err = b.batchVerifier.SignAndSendBlobBatchIfLeader(
 			seqNum,
@@ -1604,27 +1618,24 @@ func (b *BatchPoster) createCalldataDecentralizedTimeboost(
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
 			blobs,
+			new(big.Int).SetUint64(hotshotBlock),
 		)
 		if err != nil {
 			return nil, err
 		}
 	} else {
 		signatures, err = b.batchVerifier.SignAndSendBatchIfLeader(
-			method.Inputs,
 			seqNum,
 			l2MessageData,
 			new(big.Int).SetUint64(delayedMsg),
 			b.config().gasRefunder,
 			new(big.Int).SetUint64(uint64(prevMsgNum)),
 			new(big.Int).SetUint64(uint64(newMsgNum)),
+			new(big.Int).SetUint64(hotshotBlock),
 		)
 	}
 	if err != nil {
 		return nil, err
-	}
-	b.batchVerifier.LatestVerified = &decentralized_timeboost_batch_verifier.VerifiedInfo{
-		HotshotHeight: b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(),
-		MessageCount:  newMsgNum,
 	}
 	log.Info("decentralized timeboost received enough signatures. attempting to post batch", "prevMsgCount", prevMsgNum, "newMsgNum", newMsgNum)
 	return signatures, nil
@@ -1733,7 +1744,7 @@ func (b *BatchPoster) createCalldata(
 	var signatures []byte
 	var err error
 	if b.config().IsDecentralizedTimeboost {
-		signatures, err = b.createCalldataDecentralizedTimeboost(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
+		signatures, err = b.createCalldataDecentralizedTimeboost(l2MessageData, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
 	} else {
 		signatures, err = b.createCalldataEspresso(l2MessageData, method, seqNum, prevMsgNum, newMsgNum, blobs, delayedMsg)
 	}
@@ -2026,11 +2037,10 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 
 	if b.config().IsDecentralizedTimeboost {
-		msgCount, err := b.streamer.GetMessageCount()
-		if err != nil {
-			log.Error("Error getting message count", "err", err)
-			return false, err
-		}
+		// This will advance the streamer only if msg count > streamer pos
+		// This means a batch was verified from leader
+		b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+		msgCount := arbutil.MessageIndex(b.espressoStreamer.GetMessageCount())
 
 		leader, err := b.batchVerifier.IsLeaderForBatch(batchPosition.NextSeqNum, msgCount, batchPosition.MessageCount)
 		if err != nil {
@@ -2050,18 +2060,10 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("attempting to post batch %v, but the local inbox tracker database already has %v batches", batchPosition.NextSeqNum, dbBatchCount)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
-		if b.espressoStreamer != nil {
+		// Don't reset for timeboost
+		if b.espressoStreamer != nil && !b.config().IsDecentralizedTimeboost {
 			if batchPosition.HotShotBlockNumber > 0 {
 				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
-			} else if b.config().IsDecentralizedTimeboost {
-				// If we havent verified a batch, this might mean we were restarted or are new to the protocol.
-				// Wait for the espresso streamer to catch up and verify a batch before we try constructing our own
-				// The espresso streamer starts from current hotshot height, so it will eventually verify a batch
-				b.batchVerifier.CheckLatestVerified(batchPosition.MessageCount, b.espressoStreamer)
-				// Check if we have the data we need in streamer to build the batch
-				if !b.batchVerifier.ShouldBuildBatch(ctx, batchPosition.MessageCount, b.espressoStreamer) {
-					return false, nil
-				}
 			} else {
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
@@ -2199,7 +2201,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Peek(ctx)
+			espressoMsg := b.espressoStreamer.GetMsg(b.building.msgCount)
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -2292,9 +2294,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
-		if b.espressoStreamer != nil {
-			b.espressoStreamer.Advance()
-		}
 	}
 
 	firstUsefulMsgTime := time.Now()
@@ -2741,7 +2740,7 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 			return nil, err
 		}
 	}
-	if err = b.batchVerifier.VerifySignedDataCorrectness(
+	calldata, err := b.batchVerifier.VerifySignedDataCorrectness(
 		signedData,
 		batchPosition.NextSeqNum,
 		b.gasRefunderAddr,
@@ -2749,7 +2748,8 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		args,
 		encodedBlobs,
 		b.espressoStreamer,
-	); err != nil {
+	)
+	if err != nil {
 		return nil, err
 	}
 
@@ -2757,29 +2757,17 @@ func (b *BatchPoster) CheckBatchCorrectnessAndSign(args decentralized_timeboost_
 		return nil, err
 	}
 
-	calldata := args.SignedData
-	if isBlob {
-		arguments, err := b.batchVerifier.GetBlobAbiArguments()
-		if err != nil {
-			return nil, err
-		}
-		calldata, err = arguments.Pack(
-			new(big.Int).SetUint64(signedData.SequencerNumber),
-			new(big.Int).SetUint64(signedData.AfterDelayedMessagesRead),
-			signedData.GasRefunder,
-			new(big.Int).SetUint64(uint64(signedData.PreviousMessageCount)),
-			new(big.Int).SetUint64(uint64(signedData.NewMessageCount)),
-			encodedBlobs,
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
 	data, err := b.batchVerifier.HashAndSignBatchData(calldata)
 	if err != nil {
 		return nil, err
 	}
-	log.Info("decentralized timeboost successfully verified batch!", "from key", "0x"+hex.EncodeToString(args.PubKey), "prevMsgCount", signedData.PreviousMessageCount, "newMsgCount", signedData.NewMessageCount)
+	log.Info(
+		"decentralized timeboost successfully verified batch!",
+		"from key", "0x"+hex.EncodeToString(args.PubKey),
+		"prevMsgCount", signedData.PreviousMessageCount,
+		"newMsgCount", signedData.NewMessageCount,
+		"hotshot block", signedData.HotshotBlock,
+	)
 	return data.Signature, nil
 }
 
@@ -2811,14 +2799,33 @@ func (b *BatchPoster) VerifiyBatchCorrectness(
 
 	var index arbutil.MessageIndex
 	for index = signedData.PreviousMessageCount; index < signedData.NewMessageCount; index++ {
-		message, err := b.streamer.getMessageWithMetadataAndBlockInfo(index)
+		streamerMsg := b.espressoStreamer.GetMsg(index)
+		if streamerMsg == nil {
+			return fmt.Errorf("error getting message at index from espresso streamer: %d", index)
+		}
+		dbMsg, err := b.streamer.getMessageWithMetadataAndBlockInfo(index)
 		if err != nil {
 			return fmt.Errorf("error getting message at index: %d, err: %w", index, err)
 		}
-		muxBackend.allMsgs[index] = &message.MessageWithMeta
-		if prevDelayedMessagesRead < message.MessageWithMeta.DelayedMessagesRead {
-			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &message.MessageWithMeta)
+		if dbMsg.MessageWithMeta.DelayedMessagesRead != streamerMsg.MessageWithMeta.DelayedMessagesRead {
+			return fmt.Errorf(
+				"message mismatch between espresso streamer and database for delayed messages! db: %d, espresso streamer: %d",
+				dbMsg.MessageWithMeta.DelayedMessagesRead,
+				streamerMsg.MessageWithMeta.DelayedMessagesRead,
+			)
+		}
+
+		muxBackend.allMsgs[index] = &streamerMsg.MessageWithMeta
+		if prevDelayedMessagesRead < streamerMsg.MessageWithMeta.DelayedMessagesRead {
+			muxBackend.delayedInbox = append(muxBackend.delayedInbox, &streamerMsg.MessageWithMeta)
 			prevDelayedMessagesRead += 1
+		} else if !dbMsg.MessageWithMeta.Message.Equals(streamerMsg.MessageWithMeta.Message) {
+			// Note for delayed messages we do not send full message to hotshot so only compare with non delayed messages
+			return fmt.Errorf(
+				"message mismatch between whats in espresso streamer and database! db: %v, espresso streamer: %v",
+				dbMsg.MessageWithMeta.Message,
+				streamerMsg.MessageWithMeta.Message,
+			)
 		}
 	}
 
@@ -2972,6 +2979,9 @@ func (b *BatchPoster) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.dataPoster.StopAndWait()
 	b.redisLock.StopAndWait()
+	if b.espressoStreamer != nil {
+		b.espressoStreamer.StopAndWait()
+	}
 }
 
 type BoolRing struct {

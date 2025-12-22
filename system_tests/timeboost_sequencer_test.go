@@ -60,7 +60,6 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.BatchPoster.IsDecentralizedTimeboost = true
 	priv := hex.EncodeToString(base58.Decode(privKey))
 	builder.nodeConfig.BatchPoster.ParentChainWallet.PrivateKey = priv
-	builder.nodeConfig.BatchPoster.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
 	builder.nodeConfig.BatchPoster.ErrorDelay = time.Second * 10
 	builder.nodeConfig.BatchPoster.DecentralizedTimeboostBatchVerifier.WaitForLeaderDelay = 60 * time.Second
 
@@ -92,7 +91,6 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
 	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
 	builder.nodeConfig.DecentralizedTimeboostSequencer.HotshotUrls = []string{hotShotUrl, hotShotUrl}
-	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostKeyManagementAddress = "0xC0d44eBf2024FAa79d5aa2F2b1a19329E53a8a77"
 	if nodeBuilder != nil && offset == 0 {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"

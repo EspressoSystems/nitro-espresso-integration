@@ -165,32 +165,30 @@ type DecentralizedTimeboostSequencerConfig struct {
 	BlockRetryDuration   time.Duration `koanf:"block-retry-duration"`
 	CatchupRetryDuration time.Duration `koanf:"catchup-retry-duration"`
 	// TODO: - should these be configurable or should it be hardcoded?
-	MaxTxDataSize                              int                                `koanf:"max-tx-data-size"`
-	NonceCacheSize                             int                                `koanf:"nonce-cache-size"`
-	MaxRevertGasReject                         uint64                             `koanf:"max-revert-gas-reject"`
-	ParentChainFinalizationTime                time.Duration                      `koanf:"parent-chain-finalization-time"`
-	MaxAcceptableTimestampDelta                time.Duration                      `koanf:"max-acceptable-timestamp-delta"`
-	EnableProfiling                            bool                               `koanf:"enable-profiling"`
-	DecentralizedTimeboostBridgeConfig         DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
-	MetricTimeForBlockCreation                 time.Duration                      `koanf:"metric-time-for-block-creation"`
-	HotshotUrls                                []string                           `koanf:"hotshot-urls"`
-	DecentralizedTimeboostKeyManagementAddress string                             `koanf:"decentralized-timeboost-key-management-address"`
+	MaxTxDataSize                      int                                `koanf:"max-tx-data-size"`
+	NonceCacheSize                     int                                `koanf:"nonce-cache-size"`
+	MaxRevertGasReject                 uint64                             `koanf:"max-revert-gas-reject"`
+	ParentChainFinalizationTime        time.Duration                      `koanf:"parent-chain-finalization-time"`
+	MaxAcceptableTimestampDelta        time.Duration                      `koanf:"max-acceptable-timestamp-delta"`
+	EnableProfiling                    bool                               `koanf:"enable-profiling"`
+	DecentralizedTimeboostBridgeConfig DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
+	MetricTimeForBlockCreation         time.Duration                      `koanf:"metric-time-for-block-creation"`
+	HotshotUrls                        []string                           `koanf:"hotshot-urls"`
 }
 
 var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
-	Enable:                                     false,
-	BlockRetryDuration:                         time.Millisecond * 5,
-	CatchupRetryDuration:                       time.Second * 5,
-	MaxTxDataSize:                              95000,
-	NonceCacheSize:                             1024,
-	MaxRevertGasReject:                         0,
-	ParentChainFinalizationTime:                64 * time.Second,
-	MaxAcceptableTimestampDelta:                time.Hour,
-	EnableProfiling:                            false,
-	DecentralizedTimeboostBridgeConfig:         DefaultDecentralizedTimeboostBridgeConfig,
-	MetricTimeForBlockCreation:                 time.Second * 5,
-	HotshotUrls:                                []string{},
-	DecentralizedTimeboostKeyManagementAddress: "",
+	Enable:                             false,
+	BlockRetryDuration:                 time.Millisecond * 5,
+	CatchupRetryDuration:               time.Second * 5,
+	MaxTxDataSize:                      95000,
+	NonceCacheSize:                     1024,
+	MaxRevertGasReject:                 0,
+	ParentChainFinalizationTime:        64 * time.Second,
+	MaxAcceptableTimestampDelta:        time.Hour,
+	EnableProfiling:                    false,
+	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
+	MetricTimeForBlockCreation:         time.Second * 5,
+	HotshotUrls:                        []string{},
 }
 
 func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -205,7 +203,6 @@ func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.Flag
 	f.Bool(prefix+".enable-profiling", DefaultDecentralizedTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 	f.Duration(prefix+".metric-time-for-block-creation", DefaultDecentralizedTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
 	f.StringArray(prefix+".hotshot-urls", DefaultDecentralizedTimeboostSequencerConfig.HotshotUrls, "hotshot urls to query")
-	f.String(prefix+".decentralized-timeboost-key-management-address", DefaultDecentralizedTimeboostSequencerConfig.DecentralizedTimeboostKeyManagementAddress, "timeboost keymanager contract address")
 	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
@@ -214,12 +211,13 @@ func NewDecentralizedTimeboostSequencer(
 	l1Reader *headerreader.HeaderReader,
 	delayedSequencer decentralized_timeboost.DecentralizedTimeboostDelayedSequencerInterface,
 	configFetcher DecentralizedTimeboostSequencerConfigFetcher,
+	keyManagerAddress common.Address,
 ) (*DecentralizedTimeboostSequencer, error) {
 	client, err := hotshotClient.NewMultipleNodesClient(configFetcher().HotshotUrls)
 	if err != nil {
 		return nil, err
 	}
-	timeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(common.HexToAddress(configFetcher().DecentralizedTimeboostKeyManagementAddress), l1Reader.Client())
+	timeboostKeyManager, err := decentralizedtimeboostgen.NewKeyManager(keyManagerAddress, l1Reader.Client())
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +400,7 @@ outer:
 	// It should be the same for all transactions in the queue because
 	// each transaction is a part of the same round
 	timestamp := firstQueueItem.consensusTimestamp
-	header, err := s.l1Reader.LatestFinalizedBlockHeader(ctx)
+	header, err := s.l1Reader.LastHeader(ctx)
 	if err != nil {
 		log.Error("failed to get latest finalized block header", "err", err)
 		s.txRetryQueue.enqueueItems(queueItems)
