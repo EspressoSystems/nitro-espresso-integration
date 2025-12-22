@@ -68,6 +68,9 @@ type EspressoCaffNodeConfig struct {
 	QuoteFile               string `koanf:"quote-file"`
 	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
 
+	// AWS Nitro Attestation Service URL
+	AttestationServiceURL string `koanf:"attestation-service-url"`
+
 	// Data poster config
 	DataPoster        dataposter.DataPosterConfig `koanf:"data-poster"`
 	ParentChainWallet genericconf.WalletConfig    `koanf:"parent-chain-wallet"`
@@ -126,6 +129,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	EspressoRegisterServiceConfig: espressotee.DefaultEspressoRegisterServiceConfig,
 	UserDataAttestationFile:       "",
 	QuoteFile:                     "",
+	AttestationServiceURL:         "",
 	EspressoTEEVerifierAddr:       "",
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:              "",
@@ -156,6 +160,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
+	f.String(prefix+".attestation-service-url", DefaultBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
@@ -370,7 +375,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile, configFetcher().AttestationServiceURL)
 
 	}
 	initializeCaffNodeTags := false
