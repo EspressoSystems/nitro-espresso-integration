@@ -2,10 +2,12 @@ package decentralized_timeboost
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
@@ -19,7 +21,9 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
+	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
 type DecentralizedTimeboostParsedMessage struct {
@@ -162,4 +166,56 @@ func ParseTimeboostEspressoTransaction(
 		})
 	}
 	return msgs, nil
+}
+
+func FetchLatestMessageNumber(
+	ctx context.Context,
+	seqInbox *bridgegen.SequencerInbox,
+	pollingStep uint64,
+	l1block uint64,
+	l1Reader *headerreader.HeaderReader,
+) (uint64, uint64) {
+	header, err := l1Reader.LastHeader(ctx)
+	if err != nil {
+		log.Error("Failed to fetch last header from parent chain", "err", err)
+		return 0, 0
+	}
+
+	var messageNum uint64 = 0
+	var batchNum uint64 = 0
+	// Prevent unsigned integer underflow: in Go, subtracting a larger value
+	// from a smaller uint64 will wrap around to a very large number.
+	for i := header.Number.Uint64(); i >= l1block; i -= min(i, pollingStep) {
+		start := i - min(i, pollingStep)
+		if start < l1block {
+			start = l1block
+		}
+		filterOpts := bind.FilterOpts{
+			Start:   start,
+			End:     &i,
+			Context: ctx,
+		}
+
+		logIterator, err := seqInbox.FilterDecentralizedTimeboostQuorumSignaturesVerified(&filterOpts, []*big.Int{}, []*big.Int{}, []*big.Int{})
+		if err != nil {
+			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i, "err", err)
+			continue
+		}
+
+		if logIterator == nil {
+			continue
+		}
+
+		for logIterator.Next() {
+			messageNum = logIterator.Event.NewMessageCount.Uint64()
+			batchNum = logIterator.Event.SequenceNumber.Uint64()
+		}
+
+		if messageNum > 0 {
+			return messageNum, batchNum
+		}
+	}
+
+	log.Warn("No logs found for Hotshot block")
+	return 0, 0
 }
