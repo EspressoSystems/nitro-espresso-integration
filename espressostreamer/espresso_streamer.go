@@ -80,6 +80,7 @@ type EspressoStreamer struct {
 
 	dangerousMinimumHotshotBlockNum uint64
 	highestPos                      uint64
+	committeeCache                  map[uint64]decentralizedtimeboostgen.KeyManagerCommittee
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -115,6 +116,7 @@ func NewEspressoStreamer(
 		committeeFetcher:                committeeFetcher,
 		dangerousMinimumHotshotBlockNum: dangerousMinimumHotshotBlockNum,
 		messageWithMetadataAndPos:       make(map[uint64]*MessageWithMetadataAndPos),
+		committeeCache:                  make(map[uint64]decentralizedtimeboostgen.KeyManagerCommittee),
 	}
 }
 
@@ -386,7 +388,7 @@ func (s *EspressoStreamer) RecordTimeDurationBetweenHotshotAndCurrentBlock(nextH
 }
 
 func (s *EspressoStreamer) parseDecentralizedTimeboostTransaction(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, s.currentMessagePos, s.committeeFetcher)
+	parsedMsgs, err := decentralized_timeboost.ParseTimeboostEspressoTransaction(tx, s.currentMessagePos, s.committeeFetcher, s.committeeCache)
 	if err != nil {
 		return nil, err
 	}

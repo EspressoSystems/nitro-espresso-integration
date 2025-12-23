@@ -726,6 +726,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 		return err
 	}
 	blocks := make(map[uint64]uint64)
+	committeeCache := make(map[uint64]decentralizedtimeboostgen.KeyManagerCommittee)
 	for {
 		// Look for certified timeboost blocks
 		txns, err := s.hotshotClient.FetchTransactionsInBlock(ctx, height, s.execEngine.bc.Config().ChainID.Uint64())
@@ -741,7 +742,7 @@ func (s *DecentralizedTimeboostSequencer) waitForCatchup(ctx context.Context) er
 			}
 
 			for _, block := range body.Blocks {
-				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManager.GetCommitteeById); err != nil {
+				if err := decentralized_timeboost_helpers.VerifyTimeboostBlock(&block, s.timeboostKeyManager.GetCommitteeById, committeeCache); err != nil {
 					log.Warn("catchup error verifying timeboost block", "err", err)
 					continue
 				}
@@ -787,7 +788,7 @@ func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) 
 	if s.execEngine == nil || s.execEngine.bc == nil {
 		panic("engine should not be nil")
 	}
-	backOff := 1 * time.Second
+	backOff := 2 * time.Second
 	for {
 		currentBlock := s.execEngine.bc.CurrentBlock()
 		if currentBlock == nil {
@@ -801,8 +802,8 @@ func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) 
 			time.Sleep(backOff)
 			continue
 		}
-		latestFinalizedMessage, batchNum := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 0, s.l1Reader)
-		if executedBlock+1 == latestFinalizedMessage && batch.Uint64() == batchNum+1 {
+		msg, batchNum := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 9900000, s.l1Reader)
+		if executedBlock+1 == msg && batch.Uint64() == batchNum+1 {
 			sent, err := daemon.SdNotify(false, daemon.SdNotifyReady)
 			if err != nil {
 				log.Warn("error sending notify", "err", err)
@@ -810,9 +811,10 @@ func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) 
 			if !sent {
 				time.Sleep(backOff)
 			}
+			log.Info("we are caught up and sent system d notification")
 			return
 		}
-		log.Info("not caught up", "b", batch, "n", batchNum, "f", latestFinalizedMessage, "e", executedBlock)
+		log.Info("wait for l1 catchup", "seqBatchNum", batch.Uint64(), "fetchedBatchNum", batchNum, "fetchedMsg", msg, "executedBlock", executedBlock)
 		time.Sleep(backOff)
 	}
 }
@@ -885,7 +887,7 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 			log.Warn("Detected sequencer was shutdown, entering catchup protocol", "lastBlockNum", lastHeader.Number.Uint64())
 			s.state = CatchUp
 		} else if err == nil && batchNum.Uint64() > 1 {
-			msgCount, foundBatch := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 0, s.l1Reader)
+			msgCount, foundBatch := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 9900000, s.l1Reader)
 			log.Warn("We are behind l1 state", "foundMsgCount", msgCount, "foundBatchCount", foundBatch)
 			s.state = Init
 		}
