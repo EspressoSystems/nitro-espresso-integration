@@ -916,7 +916,7 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 			if s.createBlock(ctx) {
 				return 0
 			}
-			log.Info("still waiting for first block production since catchup will retry", "retry in", s.config().CatchupRetryDuration)
+			log.Debug("still waiting for first block production since catchup will retry", "retry in", s.config().CatchupRetryDuration)
 			return s.config().CatchupRetryDuration
 		}
 		return s.config().BlockRetryDuration
