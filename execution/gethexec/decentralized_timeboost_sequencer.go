@@ -811,7 +811,7 @@ func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) 
 			if !sent {
 				time.Sleep(backOff)
 			}
-			log.Info("we are caught up and sent system d notification")
+			log.Info("we are caught up and sent systemd notification")
 			return
 		}
 		log.Info("wait for l1 catchup", "seqBatchNum", batch.Uint64(), "fetchedBatchNum", batchNum, "fetchedMsg", msg, "executedBlock", executedBlock)
@@ -891,6 +891,14 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 			log.Warn("We are behind l1 state", "foundMsgCount", msgCount, "foundBatchCount", foundBatch)
 			s.state = Init
 		}
+	}
+	if s.state != Init {
+		_, err := daemon.SdNotify(false, daemon.SdNotifyReady)
+		if err != nil {
+			log.Warn("error sending notify", "err", err)
+			return err
+		}
+		log.Info("sent systemd notification")
 	}
 
 	if err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
