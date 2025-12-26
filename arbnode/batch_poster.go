@@ -165,6 +165,7 @@ const (
 type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool   `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 	FixedGasLimit                                           uint64 `koanf:"fixed-gas-limit"`
+	MinimumHotshotBlockNum                                  uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 type BatchPosterConfig struct {
@@ -259,6 +260,7 @@ type BatchPosterConfigFetcher func() *BatchPosterConfig
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
 	f.Uint64(prefix+".fixed-gas-limit", DefaultBatchPosterConfig.Dangerous.FixedGasLimit, "use this gas limit for batch posting instead of estimating it")
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultBatchPosterConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 }
 
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
@@ -662,6 +664,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				false,
 				monitor.GetValidAddresses,
 				opts.Config().EspressoTxnsPollingInterval,
+				opts.Config().Dangerous.MinimumHotshotBlockNum,
 			)
 
 			b.espressoBatcherAddrMonitor = monitor
