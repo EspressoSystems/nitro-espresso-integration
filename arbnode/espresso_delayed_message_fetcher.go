@@ -41,10 +41,10 @@ type DelayedMessageFetcher struct {
 
 type DelayedMessageFetcherInterface interface {
 	Start(ctx context.Context) bool
-	storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error
-	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, error)
+	storeDelayedMessageLatestIndex(count uint64)
+	processDelayedMessage(messageWithMetadataAndPos *espressostreamer.MessageWithMetadataAndPos) (*espressostreamer.MessageWithMetadataAndPos, uint64, error)
 	getDelayedMessageLatestIndexAtBlock(blockNumber uint64) (uint64, error)
-	getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error)
+	StopAndWait()
 }
 
 var _ DelayedMessageFetcherInterface = new(DelayedMessageFetcher)
@@ -78,15 +78,6 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 			return err
 		}
 		fromBlock = toBlock + 1
-	}
-
-		// we need to write the batch after each iteration, otherwise the
-		// the last processed delayed index will not be read correctly in the next iteration
-		// of getting delayed messages in range
-		err = batch.Write()
-		if err != nil {
-			return err
-		}
 	}
 
 	log.Info("Backfilled delayed messages")
@@ -160,12 +151,7 @@ func (d *DelayedMessageFetcher) processDelayedMessage(messageWithMetadataAndPos 
 	delayedMessagesRead := messageWithMetadataAndPos.MessageWithMeta.DelayedMessagesRead
 
 	// Get the delayed message count store in the database
-	delayedCount, err := f.getDelayedMessageLatestIndex(f.db)
-	if err != nil {
-		log.Error("Failed to get delayed message count from db", "err", err)
-		return nil, err
-	}
-
+	delayedCount := d.delayedCount
 	// If this is delayed message, we need to get the message from L1
 	// and replace the message in the messageWithMetadataAndPos
 	delayedMessageToProcess := delayedMessagesRead - 1
@@ -243,9 +229,9 @@ func (f *DelayedMessageFetcher) getDelayedMessageLatestIndexAtBlock(blockNumber 
 	return count, nil
 }
 
-// getDelayedMessagedInRange fetches all the delayed messages in the range [startBlock, endBlock]
+// getDelayedMessagedInRange fetches all the delayed messages in the range [fromBlock, endBlock]
 // and stores them in the database
-func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, batch ethdb.Batch, startBlock uint64, toBlock uint64) error {
+func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, fromBlock uint64, toBlock uint64) error {
 
 	// Fetching the sequencer batches is important so that we can later parse the batch and get the sequencer batch data to store in the database
 	log.Debug("Looking for batches in range", "from", fromBlock, "to", toBlock)
@@ -290,7 +276,7 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 	log.Debug("sequencer delayed messages found", "delayedMessages", msgs)
 
 	// Get the delayed message index stored in the database
-	lastDelayedMessageIndex, err := d.getDelayedMessageLatestIndex(d.db)
+	lastDelayedMessageIndex := d.delayedCount
 	if err != nil {
 		log.Error("Failed to get delayed message index from db", "err", err)
 		return err
@@ -335,20 +321,6 @@ func (d *DelayedMessageFetcher) getDelayedMessagesInRange(ctx context.Context, b
 	return nil
 }
 
-// getDelayedMessageLatestIndex returns the delayed message index from the database
-func (d *DelayedMessageFetcher) getDelayedMessageLatestIndex(db ethdb.Database) (uint64, error) {
-	var delayedCount uint64
-	delayedCountBytes, err := db.Get([]byte(DelayedMessageCountKey))
-	if err != nil {
-		return 0, fmt.Errorf("failed to get delayed message count: %w", err)
-	}
-	err = rlp.DecodeBytes(delayedCountBytes, &delayedCount)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode delayed message count: %w", err)
-	}
-	return delayedCount, nil
-}
-
 /*
 getL1BlockWithinSafetyTolerance checks if the L1 block is within the safety tolerance of the rollup
   - if we need to wait for finalized block, then it returns the latest finalized block number
@@ -384,51 +356,9 @@ func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Cont
 	return header.Number.Uint64(), nil
 }
 
-/***** Setter Functions *****/
-
-/*
-Stores the current from block in the database.
-*/
-func storeCurrentFromBlock(batch ethdb.Batch, fromBlock uint64) error {
-	blockNumberBytes, err := rlp.EncodeToBytes(fromBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next from block: %w", err)
-	}
-
-	err = batch.Put([]byte(DelayedFetcherCurrentFromBlockKey), blockNumberBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next from block: %w", err)
-	}
-
-	return nil
-}
-
-/*
-Store the delayed message and delayed message count in the database
-*/
-func (f *DelayedMessageFetcher) storeDelayedMessage(batch ethdb.Batch, seqNum uint64, msg DelayedInboxMessage) error {
-	key := dbKey(DelayedMessagePrefix, seqNum)
-	encodedMsg, err := rlp.EncodeToBytes(msg)
-	if err != nil {
-		return fmt.Errorf("failed to encode delayed message: %w", err)
-	}
-	// Also update the delayed message count in the database
-	err = f.storeDelayedMessageLatestIndex(batch, seqNum)
-	if err != nil {
-		return err
-	}
-	log.Debug("stored delayed message", "seqNum", seqNum)
-
-	return batch.Put(key, encodedMsg)
-}
-
 // storeDelayedMessageLatestIndex stores the delayed message index in the database
-func (f *DelayedMessageFetcher) storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error {
-	countBytes, err := rlp.EncodeToBytes(count)
-	if err != nil {
-		return fmt.Errorf("failed to encode delayed message count: %w", err)
-	}
-	return batch.Put([]byte(DelayedMessageCountKey), countBytes)
+func (d *DelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
+	d.delayedCount = count
 }
 
 func NewDelayedMessageFetcher(

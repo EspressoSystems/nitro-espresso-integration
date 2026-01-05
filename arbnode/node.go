@@ -594,8 +594,8 @@ func createNodeImpl(
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
-				exec.ExecEngine,
 				exec.ChainDB,
+				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
 				config.EspressoCaffNode.RecordPerformance,

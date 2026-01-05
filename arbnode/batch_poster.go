@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -298,7 +299,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
-	espressotee.AddEspressoRegisterSignerConfigOptions(prefix+".espresso-register-signer-config", f)
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -1718,6 +1719,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		registered := espressoSubmitter.GetKeyManager().HasRegistered()
 		if !registered {
 			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
+			err := espressoSubmitter.RegisterService()
 			if err != nil {
 				return false, fmt.Errorf("unable to register signer: %w", err)
 			}

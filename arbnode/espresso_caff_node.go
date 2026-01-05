@@ -81,7 +81,6 @@ type EspressoCaffNodeConfig struct {
 	AddressMonitorStep      uint64 `koanf:"address-monitor-step"`
 	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 	AuthDBBatchSize         int    `koanf:"auth-db-batch-size"`
-	AddressMonitorStep    uint64                      `koanf:"address-monitor-step"`
 }
 
 func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
@@ -134,7 +133,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	AddressMonitorStep:            100,
 	GenerateSnapshot:              false,
 	AuthDBBatchSize:               10000,
-	AddressMonitorStep:   100,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -271,21 +269,6 @@ func NewEspressoCaffNode(
 		}
 	}
 
-	fromBlock := configFetcher().FromBlock
-	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
-		fromBlock, err = readCurrentFromBlockFromDb(db)
-		if err != nil {
-			log.Crit("failed to read l1 block from db", "err", err)
-		}
-	}
-
-	if fromBlock == 0 {
-		fromBlock = configFetcher().FromBlock
-		if fromBlock == 0 {
-			log.Crit("fromBlock is 0, please provide a valid block number")
-		}
-	}
-
 	batcherAddrMonitor := NewBatcherAddrMonitor(
 		[]common.Address{common.HexToAddress(configFetcher().BatchPosterAddr)},
 		&db,
@@ -305,7 +288,7 @@ func NewEspressoCaffNode(
 		configFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
 
-	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, db, blocksToRead,
+	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, blocksToRead,
 		configFetcher().WaitForFinalization, configFetcher().WaitForConfirmations, configFetcher().RequiredBlockDepth, fromBlock, sequencerInbox, fatalErrChan)
 
 	seqInbox, err := bridgegen.NewSequencerInbox(sequencerInbox.address, l1Reader.Client())
@@ -481,6 +464,7 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 		lastBlockHeader,
 		statedb,
 		n.executionEngine.Bc(),
+		n.executionEngine.Bc().Config(),
 		false,
 		core.MessageReplayMode)
 
@@ -613,26 +597,24 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	log.Info("Starting streamer at", "nextHotshotBlock", nextHotshotBlock, "currentMessagePos", currentMessagePos)
 	n.espressoStreamer.Reset(uint64(currentMessagePos), nextHotshotBlock)
 
-	_, err = n.delayedMessageFetcher.getDelayedMessageLatestIndex(n.db)
+	log.Warn("failed to get delayed message index, will retrieve from previous block's nonce", "err", err)
+	// Nonce of the previous block is the number of delayed messages read
+	// Check `NextDelayedMessageNumber` in execution node to confirm this
+	delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
+	// we store delayedmessagecount-1 because that is the index of the delayed message
+	// that needs to be read
+	batch := n.db.NewBatch()
+	n.delayedMessageFetcher.storeDelayedMessageLatestIndex(delayedMessagesRead - 1)
+
 	if err != nil {
-		log.Warn("failed to get delayed message index, will retrieve from previous block's nonce", "err", err)
-		// Nonce of the previous block is the number of delayed messages read
-		// Check `NextDelayedMessageNumber` in execution node to confirm this
-		delayedMessagesRead := n.executionEngine.Bc().CurrentBlock().Nonce.Uint64()
-		// we store delayedmessagecount-1 because that is the index of the delayed message
-		// that needs to be read
-		batch := n.db.NewBatch()
-		err = n.delayedMessageFetcher.storeDelayedMessageLatestIndex(batch, delayedMessagesRead-1)
-		if err != nil {
-			log.Error("failed to store delayed message count", "err", err)
-			return err
-		}
-		log.Debug("stored delayed message count", "delayedMessagesRead", delayedMessagesRead-1)
-		err = batch.Write()
-		if err != nil {
-			log.Error("failed to write batch", "err", err)
-			return err
-		}
+		log.Error("failed to store delayed message count", "err", err)
+		return err
+	}
+	log.Debug("stored delayed message count", "delayedMessagesRead", delayedMessagesRead-1)
+	err = batch.Write()
+	if err != nil {
+		log.Error("failed to write batch", "err", err)
+		return err
 	}
 
 	// Start the delayed message fetcher
