@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 func mkHash(s string) common.Hash { return common.BytesToHash([]byte(s)) }
@@ -83,9 +84,13 @@ func TestEspressoViewStoreInsert(t *testing.T) {
 
 		// Now insert a view which has the same view number but lower builder commitment
 		root = Insert(root, 5, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgA_", mkHash("4"))
-
+		if root == nil {
+			log.Info("root is nil")
+		}
 		viewStoreFor2ViewNumber := Search(root, 2, "BUILDER_COMMITMENT~tEvs0rxqOiMCvfe2R0omNNaphSlUiEDrb2q0IZpRcgB_")
-
+		if viewStoreFor2ViewNumber == nil {
+			log.Info("view store 2 is nil")
+		}
 		// Check that the lower builder commitment view store 5 exists on the left side of view store 7
 		if viewStoreFor2ViewNumber.Right.View.viewNumber != 5 {
 			t.Errorf("Expected right side of view store for view number 2 to have view number 5, got %d", viewStoreFor2ViewNumber.Left.View.viewNumber)

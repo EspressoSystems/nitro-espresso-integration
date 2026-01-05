@@ -25,7 +25,9 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test initial state
 	t.Run("initial state", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0, 100)
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, true)
+		Require(t, err)
+		b := NewBatcherAddrMonitor(initAddresses, &caffDb, nil, common.Address{}, 0, 0, 100)
 		b.SetL1Height(100)
 		result1 := b.GetValidAddresses(100)
 		assert.Equal(t, initAddresses, result1)
@@ -36,7 +38,9 @@ func TestBatcherAddrMonitor(t *testing.T) {
 
 	// Test AddEvent
 	t.Run("add events and get valid addresses", func(t *testing.T) {
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), nil, common.Address{}, 0, 0, 100)
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, true)
+		Require(t, err)
+		b := NewBatcherAddrMonitor(initAddresses, &caffDb, nil, common.Address{}, 0, 0, 100)
 		b.SetL1Height(100)
 		addr3 := common.HexToAddress("0x3456789012345678901234567890123456789012")
 		err = b.AddBatchPosterSetEvents([]BatcherAddrUpdate{
@@ -69,10 +73,13 @@ func TestBatcherAddrMonitor(t *testing.T) {
 	})
 
 	t.Run("store and restore", func(t *testing.T) {
+		caffDb, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, true)
+		Require(t, err)
+
 		dummyClient := &ethclient.Client{}
 		l1Reader, err := headerreader.New(context.Background(), dummyClient, nil, nil)
 		Require(t, err)
-		b := NewBatcherAddrMonitor(initAddresses, rawdb.NewMemoryDatabase(), l1Reader, common.Address{}, 0, 0, 100)
+		b := NewBatcherAddrMonitor(initAddresses, &caffDb, l1Reader, common.Address{}, 0, 0, 100)
 		b.lastProcessedParentHeight = 100
 		// only contain the init addresses
 		err = b.Store()

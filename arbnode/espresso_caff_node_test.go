@@ -114,8 +114,12 @@ func (m *MockDelayedMessageFetcher) Start(ctx context.Context) bool {
 	return true
 }
 
-func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(batch ethdb.Batch, count uint64) error {
-	return nil
+func (m *MockDelayedMessageFetcher) StopAndWait() {
+	// This function is just to make the compiler happy with the mock struct
+}
+
+func (m *MockDelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
+	// again a no-op to make the compiler happy
 }
 
 func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
@@ -138,13 +142,13 @@ func TestEspressoCaffNodeShouldReadDelayedMessageFromL1(t *testing.T) {
 	initReader := statetransfer.NewMemoryInitDataReader(&initData)
 
 	cacheConfig := core.DefaultCacheConfigWithScheme(env.GetTestStateScheme())
-	bc, err := gethexec.WriteOrTestBlockChain(chainDb, cacheConfig, initReader, chainConfig, nil, nil, arbostypes.TestInitMessage, gethexec.ConfigDefault.TxLookupLimit, 0)
+	bc, err := gethexec.WriteOrTestBlockChain(chainDb, cacheConfig, initReader, chainConfig, arbostypes.TestInitMessage, gethexec.ConfigDefault.TxLookupLimit, 0)
 
 	if err != nil {
 		Fail(t, err)
 	}
 
-	execEngine, err := gethexec.NewExecutionEngine(bc, 0)
+	execEngine, err := gethexec.NewExecutionEngine(bc)
 	if err != nil {
 		Fail(t, err)
 	}
