@@ -69,7 +69,7 @@ type EspressoCaffNodeConfig struct {
 	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
 
 	// Data poster config
-	DataPoster        dataposter.DataPosterConfig `koanf:"data-poster"`
+	DataPoster        dataposter.DataPosterConfig `koanf:"data-poster" reload:"hot"`
 	ParentChainWallet genericconf.WalletConfig    `koanf:"parent-chain-wallet"`
 
 	// Force Inclusion Checker
@@ -133,6 +133,9 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	AddressMonitorStep:            100,
 	GenerateSnapshot:              false,
 	AuthDBBatchSize:               10000,
+
+	ForceInclusionChecker: DefaultEspressoForceInclusionCheckerConfig,
+	StateChecker:          DefaultStateCheckerConfig,
 }
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -162,6 +165,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
+	f.Uint64(prefix+".address-monitor-step", DefaultEspressoCaffNodeConfig.AddressMonitorStep, "Configures the step size, in blocks, the address monitor uses")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)

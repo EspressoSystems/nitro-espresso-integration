@@ -299,7 +299,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
-	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-signer-config", f)
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)

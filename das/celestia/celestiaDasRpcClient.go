@@ -23,6 +23,11 @@ type CelestiaDASClient struct {
 	url  string
 }
 
+var DefaultCelestiaConfig = CelestiaConfig{
+	Enable: false,
+	URL:    "http://localhost:9876",
+}
+
 func CelestiaDAConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".enable", false, "Enable Celestia DA")
 	f.String(prefix+".url", "http://localhost:9876", "address to use against Celestia DA RPC service")

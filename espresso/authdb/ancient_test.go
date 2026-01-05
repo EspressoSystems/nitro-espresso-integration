@@ -224,7 +224,7 @@ func TestAuthDBAncientSuiteNoAuth(t *testing.T) {
 		freezerDir := t.TempDir()
 		freezer, err := rawdb.NewFreezer(freezerDir, "", false, 2049, tables)
 		Require(t, err)
-		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer, freezerDir: fr}
+		db := &testDatabase{KeyValueStore: memorydb.New(), Freezer: freezer, freezerDir: freezerDir}
 
 		authDB, err := NewAuthDB(db, nil, false)
 		Require(t, err)
