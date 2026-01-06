@@ -16,7 +16,6 @@ import (
 
 	"github.com/agglayer/aggkit/test/contracts/erc1967proxy"
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/prysmaticlabs/go-ssz"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -31,10 +30,11 @@ import (
 )
 
 var timeBoostHealth = "/i/health"
-var timeBoostSubmit = "/v1/submit/regular"
+var timeBoostSubmit = "/v1/"
 var timeboostUrls = []string{
-	"http://localhost:8004", "http://localhost:8014",
+	"http://localhost:8003", "http://localhost:8013",
 }
+var apiKey = "sEVxPYlY3Rwte9ZApZDZPd-K7TCiZnBlhZp7se8jVWM=" // #nosec G101
 
 var signingPubKeys = []string{
 	"eiwaGN1NNaQdbnR9FsjKzUeLghQZsTLPjiL4RcQgfLoX",
@@ -79,24 +79,6 @@ var membersTemplate = []decentralizedtimeboostgen.KeyManagerCommitteeMember{
 }
 
 var committeeMembers = []decentralizedtimeboostgen.KeyManagerCommitteeMember{}
-
-type Bundle struct {
-	Chain     int      `json:"chain"`
-	Epoch     uint64   `json:"epoch"`
-	Data      string   `json:"data"`
-	Encrypted bool     `json:"encrypted"`
-	Hash      [32]byte `json:"hash"`
-}
-
-func NewBundle(chain int, epoch uint64, data []byte, hash common.Hash) Bundle {
-	return Bundle{
-		Chain:     chain,
-		Epoch:     epoch,
-		Data:      "0x" + hex.EncodeToString(data),
-		Encrypted: false,
-		Hash:      hash,
-	}
-}
 
 func setTestCommitteeMembers(members uint64) error {
 	committeeMembers = []decentralizedtimeboostgen.KeyManagerCommitteeMember{}
@@ -162,7 +144,14 @@ func restartTimeboostNode(container string) func() {
 func waitForTimeboostNodes(ctx context.Context) error {
 	for _, timeboostUrl := range timeboostUrls {
 		if err := waitForWith(ctx, 1*time.Minute, 1*time.Second, func() bool {
-			resp, err := http.Get(timeboostUrl + timeBoostHealth)
+			req, err := http.NewRequest("GET", timeboostUrl+timeBoostHealth, nil)
+			if err != nil {
+				log.Warn("failed to create http req", "err", err)
+				return false
+			}
+			req.Header.Set("authorization", apiKey)
+			client := &http.Client{}
+			resp, err := client.Do(req)
 			if err != nil {
 				log.Warn("retry to check the timeboost health", "err", err)
 				return false
@@ -182,10 +171,17 @@ func waitForTimeboostNodes(ctx context.Context) error {
 }
 
 func waitForTimeboostNode(ctx context.Context, url string) error {
-	if err := waitForWith(ctx, 10*time.Second, 50*time.Millisecond, func() bool {
-		resp, err := http.Get(url + timeBoostHealth)
+	if err := waitForWith(ctx, 20*time.Second, 100*time.Millisecond, func() bool {
+		req, err := http.NewRequest("GET", url+timeBoostHealth, nil)
 		if err != nil {
-			log.Debug("retry to check the timeboost health", "err", err)
+			log.Warn("failed to create http req", "err", err)
+			return false
+		}
+		req.Header.Set("authorization", apiKey)
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Warn("retry to check the timeboost health", "err", err)
 			return false
 		}
 		defer resp.Body.Close()
@@ -207,44 +203,31 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 		Timeout: 5 * time.Second,
 	}
 	// Various test cases at a given index in the user loop
-	twoTxnsInBundleIdx := 8            // Send two txns in a bundle
 	sendTxnToOneTimeboostNodeIdx := 10 // Only send the bundle to one timeboost node
 	for i, userName := range users {
 		tx := builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(7000000000000001), nil)
 		expectedTxs = append(expectedTxs, tx)
 		txBytes, err := tx.MarshalBinary()
 		Require(t, err)
-		var encoded []byte
-		if i == twoTxnsInBundleIdx {
-			// Send 2 transactions in a bundle
-			tx = builder.L2Info.PrepareTx("Owner", userName, builder.L2Info.TransferGas, big.NewInt(2), nil)
-			expectedTxs = append(expectedTxs, tx)
-			txBytes2, err := tx.MarshalBinary()
-			Require(t, err)
-			encoded, err = ssz.Marshal([][]byte{txBytes, txBytes2})
-			Require(t, err)
-		} else {
-			encoded, err = ssz.Marshal([][]byte{txBytes})
-			Require(t, err)
+		payload := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"method":  "eth_sendRawTransaction",
+			"params":  []string{"0x" + hex.EncodeToString(txBytes)},
+			"id":      1,
 		}
 
-		current := time.Now().Unix()
-		if current < 0 {
-			t.Fatalf("Invalid time %d", current)
-		}
-		epoch := uint64(current)
-		bundle := NewBundle(0, epoch, encoded, tx.Hash())
-		jsonData, err := json.MarshalIndent(bundle, "", "  ")
+		jsonData, err := json.Marshal(payload)
 		Require(t, err)
 
 		// Send to both nodes
 		for _, timeboostUrl := range timeboostUrls {
 			url := timeboostUrl + timeBoostSubmit
-			req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+			req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 			Require(t, err)
 
 			req.Header.Set("Content-Type", "application/json")
 			req.Header.Set("Accept", "application/json")
+			req.Header.Set("authorization", apiKey)
 			_, err = client.Do(req)
 			Require(t, err)
 			if i == sendTxnToOneTimeboostNodeIdx {
@@ -258,20 +241,18 @@ func createAndSendBundleToTimeboost(t *testing.T, builder *NodeBuilder, users []
 	return expectedTxs
 }
 
-func prepareTxn(t *testing.T, builder *NodeBuilder, userName string) []byte {
-	tx := builder.L2Info.PrepareTx(userName, "Owner", builder.L2Info.TransferGas, big.NewInt(1), nil)
+func prepareTxn(t *testing.T, builder *NodeBuilder, from string, to string) []byte {
+	tx := builder.L2Info.PrepareTx(from, to, builder.L2Info.TransferGas, big.NewInt(1), nil)
 	txBytes, err := tx.MarshalBinary()
 	Require(t, err)
-	encoded, err := ssz.Marshal([][]byte{txBytes})
-	Require(t, err)
-
-	current := time.Now().Unix()
-	if current < 0 {
-		t.Fatalf("Invalid time %d", current)
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_sendRawTransaction",
+		"params":  []string{"0x" + hex.EncodeToString(txBytes)},
+		"id":      1,
 	}
-	epoch := uint64(current)
-	bundle := NewBundle(0, epoch, encoded, tx.Hash())
-	jsonData, err := json.MarshalIndent(bundle, "", "  ")
+
+	jsonData, err := json.Marshal(payload)
 	Require(t, err)
 	return jsonData
 }
@@ -284,31 +265,32 @@ func createAndSendBundleToTimeboostLoad(t *testing.T, builder *NodeBuilder, user
 	restart := true
 	for range txnsPerUser {
 		for _, userName := range users {
-			jsonData := prepareTxn(t, builder, userName)
+			jsonData := prepareTxn(t, builder, userName, "Owner")
 			// Send to both nodes
 			if restart && nodeToShutdown != nil {
 				go func() {
 					nodeToShutdown.RestartTimeboostL2Node(t)
 				}()
 				go func() {
-					for {
-						restartTimeboostNode("espresso-e2e-node3-1")
-						if err := waitForTimeboostNode(context.Background(), "http://localhost:8034"); err == nil {
-							log.Info("timeboost healthy after restart")
-							break
-						}
+					restartTimeboostNode("espresso-e2e-node3-1")
+					err := waitForTimeboostNode(context.Background(), "http://localhost:8033")
+					if err != nil {
+						log.Warn("timeboost unhealthy after restart", "err", err)
+						Require(t, err)
 					}
+					log.Info("timeboost healthy after restart")
 
 				}()
 				restart = false
 			}
 			for _, timeboostUrl := range timeboostUrls {
 				url := timeboostUrl + timeBoostSubmit
-				req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+				req, err := http.NewRequest("POST", url, bytes.NewReader(jsonData))
 				Require(t, err)
 
 				req.Header.Set("Content-Type", "application/json")
 				req.Header.Set("Accept", "application/json")
+				req.Header.Set("authorization", apiKey)
 				_, _ = client.Do(req)
 			}
 			total += 1
@@ -435,7 +417,7 @@ func TestEspressoTimeboostSequencerE2E(t *testing.T) {
 
 	expectedTxs := createAndSendBundleToTimeboost(t, builder, users)
 	// account 2 transactions in a bundle
-	if len(expectedTxs) != numUsers+1 {
+	if len(expectedTxs) != numUsers {
 		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
 	}
 
@@ -561,7 +543,7 @@ func TestEspressoTimeboostSequencerE2ELoad(t *testing.T) {
 	// Fund users
 	expectedTxs := createAndSendBundleToTimeboost(t, builder, users)
 	// account 2 transactions in a bundle
-	if len(expectedTxs) != numUsers+1 {
+	if len(expectedTxs) != numUsers {
 		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
 	}
 
@@ -667,7 +649,7 @@ func TestEspressoTimeboostSequencerE2ECatchup(t *testing.T) {
 	// Fund users
 	expectedTxs := createAndSendBundleToTimeboost(t, builder2, users)
 	// account 2 transactions in a bundle
-	if len(expectedTxs) != numUsers+1 {
+	if len(expectedTxs) != numUsers {
 		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
 	}
 
@@ -768,7 +750,7 @@ func TestEspressoTimeboostSequencerE2EWithBlobs(t *testing.T) {
 
 	expectedTxs := createAndSendBundleToTimeboost(t, builder, users)
 	// account 2 transactions in a bundle
-	if len(expectedTxs) != numUsers+1 {
+	if len(expectedTxs) != numUsers {
 		t.Fatalf("expected transactions should be num users + 1. num users %d, expected len %d", numUsers, len(expectedTxs))
 	}
 
