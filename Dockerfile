@@ -29,12 +29,8 @@ RUN apt-get update && \
     apt-get install -y git python3 make g++ curl
 RUN curl -L https://foundry.paradigm.xyz | bash && . ~/.bashrc && ~/.foundry/bin/foundryup -i 1.2.3
 WORKDIR /workspace
-COPY contracts-legacy/package.json contracts-legacy/yarn.lock contracts-legacy/
-RUN cd contracts-legacy && yarn install
 COPY contracts/package.json contracts/yarn.lock contracts/
 RUN cd contracts && yarn install
-COPY contracts-legacy contracts-legacy/
-COPY contracts-local contracts-local/
 COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
 RUN cd safe-smart-account && yarn install
@@ -91,11 +87,6 @@ COPY ./statetransfer ./statetransfer
 COPY ./util ./util
 COPY ./wavmio ./wavmio
 COPY ./zeroheavy ./zeroheavy
-COPY ./contracts-legacy/package.json ./contracts-legacy/yarn.lock ./contracts-legacy/
-COPY ./contracts-legacy/src/precompiles/ ./contracts-legacy/src/precompiles/
-COPY ./contracts-local/src/precompiles/ ./contracts-local/src/precompiles/
-COPY ./contracts-local/gas-dimensions/ ./contracts-local/gas-dimensions/
-COPY ./contracts-local/lib/ ./contracts-local/lib/
 COPY ./contracts/src/precompiles/ ./contracts/src/precompiles/
 COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
 COPY ./safe-smart-account ./safe-smart-account
@@ -219,8 +210,6 @@ COPY ./Makefile ./
 COPY ./arbitrator ./arbitrator
 COPY ./solgen ./solgen
 COPY ./contracts ./contracts
-COPY ./contracts-legacy ./contracts-legacy
-COPY ./contracts-local ./contracts-local
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
 COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
@@ -295,9 +284,6 @@ COPY . ./
 COPY --from=contracts-builder workspace/contracts/build/ contracts/build/
 COPY --from=contracts-builder workspace/contracts/out/ contracts/out/
 COPY --from=contracts-builder workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
-COPY --from=contracts-builder workspace/contracts-legacy/build/ contracts-legacy/build/
-COPY --from=contracts-builder workspace/contracts-legacy/out/ contracts-legacy/out/
-COPY --from=contracts-builder workspace/contracts-local/out/ contracts-local/out/
 COPY --from=contracts-builder workspace/safe-smart-account/build/ safe-smart-account/build/
 COPY --from=contracts-builder workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
 COPY --from=contracts-builder workspace/espresso-tee-contracts-legacy/out/ espresso-tee-contracts-legacy/out/
