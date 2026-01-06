@@ -83,6 +83,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		// We must return false then true to simulate a valid registration
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, registerOpts, nil, "", "")
 		registered := km.HasRegistered()
@@ -163,6 +165,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+		// Simulate registration occurring over one call.
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "")
 		registered := km.HasRegistered()
