@@ -670,7 +670,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	yarn --cwd safe-smart-account build
-	yarn --cwd contracts build
+	yarn --cwd contracts build:all
 	cd espresso-tee-contracts && forge build && cd ../
 	cd espresso-tee-contracts-legacy && forge build && cd ../
 	@touch $@
