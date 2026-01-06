@@ -2,10 +2,12 @@ package decentralized_timeboost
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
@@ -19,7 +21,9 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	decentralized_timeboost_types "github.com/offchainlabs/nitro/decentralized-timeboost/types"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/decentralizedtimeboostgen"
+	"github.com/offchainlabs/nitro/util/headerreader"
 )
 
 type DecentralizedTimeboostParsedMessage struct {
@@ -77,9 +81,29 @@ func ValidateTimeboostCertificate(
 	return nil
 }
 
+func getCommittee(
+	committeeId uint64,
+	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+	committeeCache map[uint64]decentralizedtimeboostgen.KeyManagerCommittee,
+) (decentralizedtimeboostgen.KeyManagerCommittee, error) {
+	if comm, found := committeeCache[committeeId]; found {
+		return comm, nil
+	}
+
+	comm, err := committeeFetcher(&bind.CallOpts{}, committeeId)
+	if err != nil {
+		return decentralizedtimeboostgen.KeyManagerCommittee{}, err
+	}
+
+	committeeCache[committeeId] = comm
+
+	return comm, nil
+}
+
 func VerifyTimeboostBlock(
 	block *decentralized_timeboost_types.CertifiedBlock,
 	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+	committeeCache map[uint64]decentralizedtimeboostgen.KeyManagerCommittee,
 ) error {
 	if block.Version != blockVersion {
 		return fmt.Errorf("block version mismatch! should be version 1, got %d", block.Version)
@@ -111,16 +135,16 @@ func VerifyTimeboostBlock(
 			hex.EncodeToString(block.Cert.Commitment),
 		)
 	}
-
-	// Validate the commitment against the committee signatures
-	committee, err := committeeFetcher(&bind.CallOpts{}, block.Cert.Data.Round.CommitteeId)
+	committee, err := getCommittee(block.Cert.Data.Round.CommitteeId, committeeFetcher, committeeCache)
 	if err != nil {
 		return fmt.Errorf("failed to get committee: committee id=%d, err=%w", block.Cert.Data.Round.CommitteeId, err)
 	}
 
 	if err = ValidateTimeboostCertificate(commitment[:], block.Cert.Signatures, committee.Members); err != nil {
+		delete(committeeCache, block.Cert.Data.Round.CommitteeId)
 		return fmt.Errorf("failed to validate timeboost certificate: committee id=%d, err=%w", block.Cert.Data.Round.CommitteeId, err)
 	}
+	committeeCache[block.Cert.Data.Round.CommitteeId] = committee
 	return nil
 }
 
@@ -128,6 +152,7 @@ func ParseTimeboostEspressoTransaction(
 	tx espressoTypes.Bytes,
 	streamerCurrentPos uint64,
 	committeeFetcher func(opts *bind.CallOpts, id uint64) (decentralizedtimeboostgen.KeyManagerCommittee, error),
+	committeeCache map[uint64]decentralizedtimeboostgen.KeyManagerCommittee,
 ) ([]*DecentralizedTimeboostParsedMessage, error) {
 	var body decentralized_timeboost_types.Body
 	if err := cbor.Unmarshal(tx, &body); err != nil {
@@ -139,7 +164,7 @@ func ParseTimeboostEspressoTransaction(
 	// Dont error out if one block fails to be parsed, verified, or we see an old block
 	// There can be new block later the response body from hotshot, so erroring out may miss this
 	for _, block := range body.Blocks {
-		err := VerifyTimeboostBlock(&block, committeeFetcher)
+		err := VerifyTimeboostBlock(&block, committeeFetcher, committeeCache)
 		if err != nil {
 			log.Warn("error parsing and verifying timeboost block", "err", err)
 			continue
@@ -162,4 +187,56 @@ func ParseTimeboostEspressoTransaction(
 		})
 	}
 	return msgs, nil
+}
+
+func FetchLatestMessageNumber(
+	ctx context.Context,
+	seqInbox *bridgegen.SequencerInbox,
+	pollingStep uint64,
+	l1block uint64,
+	l1Reader *headerreader.HeaderReader,
+) (uint64, uint64) {
+	header, err := l1Reader.LastHeader(ctx)
+	if err != nil {
+		log.Error("Failed to fetch last header from parent chain", "err", err)
+		return 0, 0
+	}
+
+	var messageNum uint64 = 0
+	var batchNum uint64 = 0
+	// Prevent unsigned integer underflow: in Go, subtracting a larger value
+	// from a smaller uint64 will wrap around to a very large number.
+	for i := header.Number.Uint64(); i >= l1block; i -= min(i, pollingStep) {
+		start := i - min(i, pollingStep)
+		if start < l1block {
+			start = l1block
+		}
+		filterOpts := bind.FilterOpts{
+			Start:   start,
+			End:     &i,
+			Context: ctx,
+		}
+
+		logIterator, err := seqInbox.FilterDecentralizedTimeboostQuorumSignaturesVerified(&filterOpts, []*big.Int{}, []*big.Int{}, []*big.Int{})
+		if err != nil {
+			log.Error("Failed to obtain iterator for logs for block", "blockNumber", i, "err", err)
+			continue
+		}
+
+		if logIterator == nil {
+			continue
+		}
+
+		for logIterator.Next() {
+			messageNum = logIterator.Event.NewMessageCount.Uint64()
+			batchNum = logIterator.Event.SequenceNumber.Uint64()
+		}
+
+		if messageNum > 0 {
+			return messageNum, batchNum
+		}
+	}
+
+	log.Warn("No logs found for Hotshot block")
+	return 0, 0
 }

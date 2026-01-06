@@ -87,6 +87,8 @@ require (
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
+	github.com/coreos/go-systemd/v22 v22.6.0 // indirect
+	github.com/ferranbt/fastssz v0.1.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/wlynxg/anet v0.0.4 // indirect
