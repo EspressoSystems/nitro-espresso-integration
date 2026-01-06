@@ -1,6 +1,6 @@
 services:
   node0:
-    image: ghcr.io/espressosystems/timeboost:contract3
+    image: ghcr.io/espressosystems/timeboost:proto
     command:
       [
         "/app/timeboost",
@@ -22,7 +22,7 @@ services:
     networks:
       - nitro-timeboost
   node1:
-    image: ghcr.io/espressosystems/timeboost:contract3
+    image: ghcr.io/espressosystems/timeboost:proto
     command:
       [
         "/app/timeboost",
@@ -44,7 +44,7 @@ services:
     networks:
       - nitro-timeboost
   node2:
-    image: ghcr.io/espressosystems/timeboost:contract3
+    image: ghcr.io/espressosystems/timeboost:proto
     command:
       [
         "/app/timeboost",
@@ -66,7 +66,7 @@ services:
     networks:
       - nitro-timeboost
   node3:
-    image: ghcr.io/espressosystems/timeboost:contract3
+    image: ghcr.io/espressosystems/timeboost:proto
     command:
       [
         "/app/timeboost",

@@ -89,17 +89,17 @@ func createL1AndL2NodeForTimeboost(
 	builder.nodeConfig.DecentralizedTimeboostSequencer.ParentChainFinalizationTime = 20 * 32 * time.Second
 	builder.nodeConfig.DecentralizedTimeboostSequencer.MaxAcceptableTimestampDelta = time.Hour
 	builder.nodeConfig.DecentralizedTimeboostSequencer.EnableProfiling = false
-	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8003"
+	builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8004"
 	builder.nodeConfig.DecentralizedTimeboostSequencer.HotshotUrls = []string{hotShotUrl, hotShotUrl}
 	if nodeBuilder != nil && offset == 0 {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55001
-		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8013"
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8014"
 	} else if offset == 100 {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55002
-		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8023"
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8024"
 	} else if offset == 200 {
 		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.ListenPort = 55003
-		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8033"
+		builder.nodeConfig.DecentralizedTimeboostSequencer.DecentralizedTimeboostBridgeConfig.InternalTimeboostGrpcUrl = "localhost:8034"
 	}
 	if blobsEnabled {
 		builder.nodeConfig.BatchPoster.Post4844Blobs = true
@@ -126,22 +126,12 @@ func createL1AndL2NodeForTimeboost(
 	return builder, cleanup
 }
 
-func ConvertTxsToGethexecTxs(t *testing.T, txs []*types.Transaction) []*protos.Transaction {
-	var txns []*protos.Transaction
+func ConvertTxsToGethexecTxs(t *testing.T, txs []*types.Transaction) [][]byte {
+	var txns [][]byte
 	for _, tx := range txs {
 		txBytes, err := tx.MarshalBinary()
 		Require(t, err)
-
-		time := tx.Time().Unix()
-		if time < 0 {
-			t.Fatalf("Invalid timestamp %d", time)
-		}
-		protoTx := protos.Transaction{
-			EncodedTxn: txBytes,
-			Address:    []byte{0x00},
-			Timestamp:  uint64(time),
-		}
-		txns = append(txns, &protoTx)
+		txns = append(txns, txBytes)
 	}
 	return txns
 }
@@ -195,10 +185,12 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 	defer valNodeCleanup()
 	// In future, we also need to create a version of
 	// delayed sequencer for timeboost
+	err := setTestCommitteeMembers(1)
+	Require(t, err)
 	builder, cleanup := createL1AndL2NodeForTimeboost(ctx, t, true, false, "3hzb3bRzn3dXSV1iEVE6mU4BF2aS725s8AboRxLwULPp", nil, false, 0)
 	defer cleanup()
 
-	err := waitForL1Node(ctx)
+	err = waitForL1Node(ctx)
 	Require(t, err)
 
 	var users []string
@@ -271,7 +263,7 @@ func TestEspressoTimeboostSequencer(t *testing.T) {
 			for _, protoTxn := range incl.EncodedTxns {
 				tx := transactions[count]
 				var expected types.Transaction
-				err = expected.UnmarshalBinary(protoTxn.EncodedTxn)
+				err = expected.UnmarshalBinary(protoTxn)
 				Require(t, err)
 				if tx.Hash() != expected.Hash() {
 					t.Fatalf("txHash doesn't match, got %s, want %s.", tx.Hash().Hex(), expected.Hash().Hex())

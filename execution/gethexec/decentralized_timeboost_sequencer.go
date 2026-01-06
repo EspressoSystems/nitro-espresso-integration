@@ -776,15 +776,15 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 		log.Info("processing inclusion list", "round", inclusionList.Round, "len", len(inclusionList.EncodedTxns), "delayed messages read", inclusionList.DelayedMessagesRead)
 	}
 	var items []timeboostTransactionQueueItem
-	for _, protoTx := range inclusionList.EncodedTxns {
+	for _, encodedTx := range inclusionList.EncodedTxns {
 		var tx types.Transaction
-		if err := tx.UnmarshalBinary(protoTx.EncodedTxn); err != nil {
+		if err := tx.UnmarshalBinary(encodedTx); err != nil {
 			log.Warn("error unmarshalling encoded transaction", "err", err)
 			return err
 		}
 		txQueueItem := timeboostTransactionQueueItem{
 			tx:                 &tx,
-			txSize:             len(protoTx.EncodedTxn),
+			txSize:             len(encodedTx),
 			options:            options,
 			roundId:            inclusionList.Round,
 			consensusTimestamp: inclusionList.ConsensusTimestamp,
