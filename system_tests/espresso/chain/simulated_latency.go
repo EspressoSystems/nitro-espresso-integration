@@ -145,7 +145,8 @@ func (c *EspressoClientSimulatedLatency) FetchExplorerTransactionByHash(ctx cont
 }
 
 // FetchNamespaceTransactionsInRange implements espresso_client.EspressoClient
-func (c *EspressoClientSimulatedLatency) FetchNamespaceTransactionsInRange(ctx context.Context, namespace uint64, fromBlock uint64, toBlock uint64) ([]espresso_types.NamespaceTransactionsRangeData, error) {
+func (c *EspressoClientSimulatedLatency) FetchNamespaceTransactionsInRange(ctx context.Context, fromBlock uint64, toBlock uint64, namespace uint64) ([]espresso_types.NamespaceTransactionsRangeData, error) {
 	time.Sleep(c.transactionsInBlockDelay)
-	return c.EspressoClient.FetchNamespaceTransactionsInRange(ctx, namespace, fromBlock, toBlock)
+	time.Sleep(c.transactionsInBlockDelay)
+	return c.EspressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
 }

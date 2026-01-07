@@ -50,7 +50,7 @@ func (m *MockEspressoChain) FetchHeadersByRange(ctx context.Context, from uint64
 }
 
 // FetchNamespaceTransactionsInRange implements client.EspressoClient.
-func (m *MockEspressoChain) FetchNamespaceTransactionsInRange(ctx context.Context, namespace uint64, fromHeight uint64, toHeight uint64) ([]espresso_types.NamespaceTransactionsRangeData, error) {
+func (m *MockEspressoChain) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espresso_types.NamespaceTransactionsRangeData, error) {
 	panic("unimplemented")
 }
 

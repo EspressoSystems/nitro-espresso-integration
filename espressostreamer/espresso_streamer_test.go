@@ -335,7 +335,7 @@ func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context,
 }
 
 // FetchNamespaceTransactionsInRange implements client.EspressoClient.
-func (m *mockEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, namespace uint64, fromHeight uint64, toHeight uint64) ([]espressoTypes.NamespaceTransactionsRangeData, error) {
+func (m *mockEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoTypes.NamespaceTransactionsRangeData, error) {
 	args := m.Called(ctx, namespace, fromHeight, toHeight)
 	//nolint:errcheck
 	return args.Get(0).([]espressoTypes.NamespaceTransactionsRangeData), args.Error(1)

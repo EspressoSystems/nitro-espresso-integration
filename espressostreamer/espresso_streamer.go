@@ -371,13 +371,15 @@ func fetchNextHotshotBlock(
 		return []*MessageWithMetadataAndPos{}, toBlock, nil
 	}
 
-	// here we are fetching transactions in range [fromBlock, toBlock) exlusive, by default FetchNamespaceTransactionsInRange is exclusive of the last element
-	namepsapceTransactionsRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
+	// here we are fetching transactions in range [fromBlock, toBlock) exclusive
+	//  by default FetchNamespaceTransactionsInRange is exclusive of the last element
+	namespaceTransactionRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
-	if len(namepsapceTransactionsRangeData) == 0 {
-		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: no transactions found in the last namespace transaction range data", ErrFailedToFetchTransactions)
+	if len(namespaceTransactionRangeData) == 0 {
+		// no transactions found in this range is a valid state (e.g., empty blocks), not an error
+		return []*MessageWithMetadataAndPos{}, toBlock, nil
 	}
 
 	// we are subtracting 1 here because FetchNamespaceTransactionsInRange is exclusive of the last element
@@ -393,7 +395,7 @@ func fetchNextHotshotBlock(
 	}
 	result := []*MessageWithMetadataAndPos{}
 
-	for _, namespaceTransactionData := range namepsapceTransactionsRangeData {
+	for _, namespaceTransactionData := range namespaceTransactionRangeData {
 		for _, tx := range namespaceTransactionData.Transactions {
 			txPayloadBytes := tx.Payload
 			messages, err := parseHotShotPayloadFn(txPayloadBytes, l1Height)
