@@ -185,7 +185,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 
-	messages, err := fetchNextHotshotBlock(
+	messages, toBlock, err := fetchNextHotshotBlock(
 		ctx,
 		s.espressoClient,
 		s.nextHotshotBlockNum,
@@ -199,7 +199,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	if len(messages) > 0 {
 		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
 	}
-	s.nextHotshotBlockNum += 1
+	s.nextHotshotBlockNum = toBlock + 1
 	return nil
 }
 
@@ -348,16 +348,36 @@ func fetchNextHotshotBlock(
 	nextHotshotBlockNum uint64,
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error),
 	namespace uint64,
-) ([]*MessageWithMetadataAndPos, error) {
-	arbTxns, err := espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, namespace)
+) ([]*MessageWithMetadataAndPos, uint64, error) {
+
+	// get the current hotshot block
+	latestBlockHeight, err := espressoClient.FetchLatestBlockHeight(ctx)
 	if err != nil {
-		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
-	header, err := espressoClient.FetchHeaderByHeight(ctx, nextHotshotBlockNum)
+	fromBlock := nextHotshotBlockNum
+	toBlock := latestBlockHeight
+
+	// limit to fetching 100 hotshot blocks at a time
+	if latestBlockHeight-nextHotshotBlockNum > 100 {
+		toBlock = nextHotshotBlockNum + 100
+	}
+
+	// here we are fetching transactions in range [fromBlock, toBlock] inclusive, by default FetchNamespaceTransactionsInRange is exclusive of the last element
+	// thats why we are adding +1 to toBlock
+	namepsapceTransactionsRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, namespace, fromBlock, toBlock+1)
+	if err != nil {
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+	}
+	if len(namepsapceTransactionsRangeData) == 0 {
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: no transactions found in the last namespace transaction range data", ErrFailedToFetchTransactions)
+	}
+
+	header, err := espressoClient.FetchHeaderByHeight(ctx, toBlock)
 	l1Height := uint64(0)
 	if err != nil {
-		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
 	finalized := header.Header.GetL1Finalized()
@@ -366,18 +386,21 @@ func fetchNextHotshotBlock(
 	}
 	result := []*MessageWithMetadataAndPos{}
 
-	for _, tx := range arbTxns.Transactions {
-		messages, err := parseHotShotPayloadFn(tx, l1Height)
-		if err != nil && !strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
-			log.Warn("failed to verify espresso transaction", "err", err)
-			continue
+	for _, namespaceTransactionData := range namepsapceTransactionsRangeData {
+		for _, tx := range namespaceTransactionData.Transactions {
+			txPayloadBytes := tx.Payload
+			messages, err := parseHotShotPayloadFn(txPayloadBytes, l1Height)
+			if err != nil && !strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
+				log.Warn("failed to verify espresso transaction", "err", err)
+				continue
+			}
+			if err != nil {
+				return nil, 0, err
+			}
+			result = append(result, messages...)
 		}
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, messages...)
 	}
-	return result, nil
+	return result, toBlock, nil
 }
 
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
@@ -385,7 +408,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 
 	ephemeralErrorHandler := util.NewEphemeralErrorHandler(3*time.Minute, ErrFailedToFetchTransactions.Error(), 1*time.Minute)
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		if s.nextHotshotBlockNum%100 == 0 {
+		if s.nextHotshotBlockNum%1000 == 0 {
 			log.Info("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
 		} else {
 			log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
