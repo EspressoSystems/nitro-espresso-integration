@@ -25,6 +25,8 @@ import (
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
+const HOTSHOT_RANGE_LIMIT = 100
+
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
 	ErrPayloadHadNoMessages       = errors.New("ParseHotShotPayload found no messages, the transaction may be empty")
@@ -199,7 +201,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	if len(messages) > 0 {
 		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
 	}
-	s.nextHotshotBlockNum = toBlock + 1
+	s.nextHotshotBlockNum = toBlock
 	return nil
 }
 
@@ -360,13 +362,18 @@ func fetchNextHotshotBlock(
 	toBlock := latestBlockHeight
 
 	// limit to fetching 100 hotshot blocks at a time
-	if latestBlockHeight-nextHotshotBlockNum > 100 {
-		toBlock = nextHotshotBlockNum + 100
+	if latestBlockHeight-nextHotshotBlockNum > HOTSHOT_RANGE_LIMIT {
+		toBlock = nextHotshotBlockNum + HOTSHOT_RANGE_LIMIT
 	}
 
-	// here we are fetching transactions in range [fromBlock, toBlock] inclusive, by default FetchNamespaceTransactionsInRange is exclusive of the last element
+	// this means we have no blocks to process and we are all caught up
+	if fromBlock == toBlock {
+		return []*MessageWithMetadataAndPos{}, toBlock, nil
+	}
+
+	// here we are fetching transactions in range [fromBlock, toBlock) exlusive, by default FetchNamespaceTransactionsInRange is exclusive of the last element
 	// thats why we are adding +1 to toBlock
-	namepsapceTransactionsRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, namespace, fromBlock, toBlock+1)
+	namepsapceTransactionsRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
@@ -374,7 +381,7 @@ func fetchNextHotshotBlock(
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: no transactions found in the last namespace transaction range data", ErrFailedToFetchTransactions)
 	}
 
-	header, err := espressoClient.FetchHeaderByHeight(ctx, toBlock)
+	header, err := espressoClient.FetchHeaderByHeight(ctx, toBlock-1)
 	l1Height := uint64(0)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
@@ -400,6 +407,7 @@ func fetchNextHotshotBlock(
 			result = append(result, messages...)
 		}
 	}
+
 	return result, toBlock, nil
 }
 

@@ -214,7 +214,7 @@ type BatchPosterConfig struct {
 	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
 	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
 	LightClientAddress               string                                    `koanf:"light-client-address"`
-	HotShotUrls                      []string                                  `koanf:"hotshot-urls"`
+	HotShotUrl                       string                                    `koanf:"hotshot-url"`
 	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
 	EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
 	EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
@@ -287,7 +287,7 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
 	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
-	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
+	f.String(prefix+".hotshot-url", DefaultBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
 	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
@@ -362,7 +362,7 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	ResubmitEspressoTxDeadline:       10 * time.Minute,
 	LightClientAddress:               "",
-	HotShotUrls:                      []string{},
+	HotShotUrl:                       "",
 	EspressoTeeType:                  "NITRO",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
@@ -416,7 +416,7 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
 	LightClientAddress:               "",
 	ResubmitEspressoTxDeadline:       10 * time.Second,
-	HotShotUrls:                      []string{},
+	HotShotUrl:                       "",
 	EspressoTeeType:                  "TESTS",
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
@@ -573,19 +573,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	// Espresso Config Round 2
 	{
-		hotShotUrls := opts.Config().HotShotUrls
+		hotShotUrl := opts.Config().HotShotUrl
 
 		lightClientAddr := opts.Config().LightClientAddress
-		hotShotUrlsLen := len(hotShotUrls)
 
 		submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
 		// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
-		if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
-			hotShotClient, err := hotshotClient.NewMultipleNodesClient(hotShotUrls)
-			if err != nil {
-				log.Crit("Failed to create hotshot client", "err", err)
-			}
+		if hotShotUrl != "" {
+			hotShotClient := hotshotClient.NewClient(hotShotUrl)
 			submitterOptions = append(submitterOptions, submitter.WithEspressoClient(hotShotClient))
 
 			if err != nil {
