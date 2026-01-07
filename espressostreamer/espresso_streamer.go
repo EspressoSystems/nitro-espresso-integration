@@ -372,7 +372,6 @@ func fetchNextHotshotBlock(
 	}
 
 	// here we are fetching transactions in range [fromBlock, toBlock) exlusive, by default FetchNamespaceTransactionsInRange is exclusive of the last element
-	// thats why we are adding +1 to toBlock
 	namepsapceTransactionsRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
 	if err != nil {
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
@@ -381,6 +380,7 @@ func fetchNextHotshotBlock(
 		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: no transactions found in the last namespace transaction range data", ErrFailedToFetchTransactions)
 	}
 
+	// we are subtracting 1 here because FetchNamespaceTransactionsInRange is exclusive of the last element
 	header, err := espressoClient.FetchHeaderByHeight(ctx, toBlock-1)
 	l1Height := uint64(0)
 	if err != nil {
