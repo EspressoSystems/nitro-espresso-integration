@@ -2,6 +2,7 @@
 // For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 //go:build challengetest && !race
 package arbtest
+
 import (
 	"context"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter/storage"
 	"github.com/offchainlabs/nitro/staker/bold"
 )
+
 type incorrectBlockStateProvider struct {
 	honest              BoldStateProviderInterface
 	chain               protocol.AssertionChain
@@ -38,6 +40,7 @@ type incorrectBlockStateProvider struct {
 	honestMachineHash   common.Hash
 	evilMachineHash     common.Hash
 }
+
 func (s *incorrectBlockStateProvider) ExecutionStateAfterPreviousState(
 	ctx context.Context,
 	maxInboxCount uint64,
@@ -254,12 +257,14 @@ func TestChallengeProtocolBOLDFirstVirtualBlock(t *testing.T) {
 	t.Skip("This test is flaky and needs to be fixed")
 	testChallengeProtocolBOLDVirtualBlocks(t, true)
 }
+
 type BoldStateProviderInterface interface {
 	l2stateprovider.L2MessageStateCollector
 	l2stateprovider.MachineHashCollector
 	l2stateprovider.ProofCollector
 	l2stateprovider.ExecutionProvider
 }
+
 func startBoldChallengeManager(t *testing.T, ctx context.Context, builder *NodeBuilder, node *TestClient, addressName string, mockStateProvider func(BoldStateProviderInterface) BoldStateProviderInterface) (*solimpl.AssertionChain, func()) {
 	if !builder.deployBold {
 		t.Fatal("bold deployment not enabled")
@@ -278,9 +283,6 @@ func startBoldChallengeManager(t *testing.T, ctx context.Context, builder *NodeB
 			CheckBatchFinality:     false,
 		},
 		cacheDir,
-		node.ConsensusNode.InboxTracker,
-		node.ConsensusNode.TxStreamer,
-		node.ConsensusNode.InboxReader,
 	)
 	Require(t, err)
 
