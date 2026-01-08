@@ -16,7 +16,7 @@ require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/EspressoSystems/espresso-network/sdks/go v0.3.0
-	github.com/EspressoSystems/timeboost-proto/go-generated v0.0.0-20260106134726-3869c4970bd2
+	github.com/EspressoSystems/timeboost-proto/go-generated v0.0.0-20260108192943-920d01be55b8
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/agglayer/aggkit v0.5.1
@@ -33,6 +33,7 @@ require (
 	github.com/ccoveille/go-safecast v1.1.0
 	github.com/cockroachdb/pebble v1.1.4
 	github.com/codeclysm/extract/v3 v3.0.2
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/dgraph-io/badger/v4 v4.2.0
 	github.com/distributed-lab/enclave-extras/attestation v0.2.0
 	github.com/distributed-lab/enclave-extras/attestedkms v0.1.1
@@ -87,8 +88,6 @@ require (
 
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
-	github.com/coreos/go-systemd/v22 v22.6.0 // indirect
-	github.com/ferranbt/fastssz v0.1.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/wlynxg/anet v0.0.4 // indirect

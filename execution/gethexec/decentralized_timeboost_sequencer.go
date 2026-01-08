@@ -179,6 +179,7 @@ type DecentralizedTimeboostSequencerConfig struct {
 	DecentralizedTimeboostBridgeConfig DecentralizedTimeboostBridgeConfig `koanf:"decentralized-timeboost-bridge-config"`
 	MetricTimeForBlockCreation         time.Duration                      `koanf:"metric-time-for-block-creation"`
 	HotshotUrls                        []string                           `koanf:"hotshot-urls"`
+	HotShotFirstPostingBlock           uint64                             `koanf:"hotshot-first-posting-block"`
 }
 
 var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequencerConfig{
@@ -194,6 +195,7 @@ var DefaultDecentralizedTimeboostSequencerConfig = DecentralizedTimeboostSequenc
 	DecentralizedTimeboostBridgeConfig: DefaultDecentralizedTimeboostBridgeConfig,
 	MetricTimeForBlockCreation:         time.Second * 5,
 	HotshotUrls:                        []string{},
+	HotShotFirstPostingBlock:           10003510,
 }
 
 func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.FlagSet) {
@@ -208,6 +210,7 @@ func DecentralizedTimeboostSequencerConfigAddOptions(prefix string, f *flag.Flag
 	f.Bool(prefix+".enable-profiling", DefaultDecentralizedTimeboostSequencerConfig.EnableProfiling, "enable CPU profiling and tracing")
 	f.Duration(prefix+".metric-time-for-block-creation", DefaultDecentralizedTimeboostSequencerConfig.MetricTimeForBlockCreation, "time to measure the time it takes to create a block")
 	f.StringArray(prefix+".hotshot-urls", DefaultDecentralizedTimeboostSequencerConfig.HotshotUrls, "hotshot urls to query")
+	f.Uint64(prefix+".hotshot-first-posting-block", DefaultDecentralizedTimeboostSequencerConfig.HotShotFirstPostingBlock, "start polling for hotshot block")
 	DecentralizedTimeboostBridgeConfigAddOptions(prefix+".decentralized-timeboost-bridge-config", f)
 }
 
@@ -802,7 +805,7 @@ func (s *DecentralizedTimeboostSequencer) waitForL1Catchup(ctx context.Context) 
 			time.Sleep(backOff)
 			continue
 		}
-		msg, batchNum := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 9900000, s.l1Reader)
+		msg, batchNum := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, s.config().HotShotFirstPostingBlock, s.l1Reader)
 		if executedBlock+1 == msg && batch.Uint64() == batchNum+1 {
 			sent, err := daemon.SdNotify(false, daemon.SdNotifyReady)
 			if err != nil {
@@ -864,13 +867,33 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	return nil
 }
 
+func (s *DecentralizedTimeboostSequencer) ProcessCatchup(ctx context.Context, catchupRound *protos.CatchupRound) {
+	log.Warn("received catchup from timeboost. clearing queues", "round", catchupRound.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+	s.state = CatchUp
+	for {
+		txn := s.txRetryQueue.Peek()
+		if txn == nil || txn.roundId > catchupRound.Round {
+			break
+		}
+		s.txRetryQueue.dequeue()
+	}
+	for {
+		txn := s.txQueue.Peek()
+		if txn == nil || txn.roundId > catchupRound.Round {
+			break
+		}
+		s.txQueue.dequeue()
+	}
+	log.Warn("queues cleared", "round", catchupRound.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+}
+
 func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 	s.StopWaiter.Start(ctx, s)
 	if s.l1Reader == nil {
 		return errors.New("l1Reader is nil")
 	}
 
-	if err := s.timeboostBridge.Start(ctx, s.ProcessInclusionList); err != nil {
+	if err := s.timeboostBridge.Start(ctx, s.ProcessInclusionList, s.ProcessCatchup); err != nil {
 		return err
 	}
 
