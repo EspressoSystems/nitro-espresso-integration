@@ -361,7 +361,6 @@ func fetchNextHotshotBlock(
 	fromBlock := nextHotshotBlockNum
 	toBlock := latestBlockHeight
 
-	// limit to fetching 100 hotshot blocks at a time
 	if latestBlockHeight-nextHotshotBlockNum > HOTSHOT_RANGE_LIMIT {
 		toBlock = nextHotshotBlockNum + HOTSHOT_RANGE_LIMIT
 	}
