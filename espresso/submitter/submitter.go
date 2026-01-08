@@ -360,7 +360,6 @@ func WithInitialNitroMessageToSubmit(pos arbutil.MessageIndex) EspressoSubmitter
 // It returns an error if any of the following required fields are set to their
 // zero value:
 // - EspressoClient
-// - LightClientReader
 // - MessageGetter
 // - Db
 // - KeyManager
@@ -371,10 +370,6 @@ func WithInitialNitroMessageToSubmit(pos arbutil.MessageIndex) EspressoSubmitter
 func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 	if config.EspressoClient == nil {
 		return fmt.Errorf("espresso client is not set")
-	}
-
-	if config.LightClientReader == nil {
-		return fmt.Errorf("light client reader is not set")
 	}
 
 	if config.MessageGetter == nil {
