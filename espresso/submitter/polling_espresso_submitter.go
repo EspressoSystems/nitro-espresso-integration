@@ -532,7 +532,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 // NOTE: This method does not acquire any locks, so its state may change
 // when running concurrently with other methods.
 func (s *PollingEspressoSubmitter) shouldSubmitEspressoTransaction(pos *uint64) bool {
-	if s.espressoClient == nil && s.lightClientReader == nil {
+	if s.espressoClient == nil {
 		return false
 	}
 	if pos != nil {
@@ -585,7 +585,7 @@ func (s *PollingEspressoSubmitter) RegisterService() error {
 }
 
 func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
-	if s.lightClientReader != nil && s.espressoClient != nil {
+	if s.espressoClient != nil {
 		err := stopwaiter.CallIterativelyWith[struct{}](sw, s.pollSubmittedTransactionForFinality, nil)
 		if err != nil {
 			return err
