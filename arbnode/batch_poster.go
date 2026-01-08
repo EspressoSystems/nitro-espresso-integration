@@ -574,10 +574,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		hotShotClient := hotshotClient.NewClient(hotshotUrl)
 		submitterOptions = append(submitterOptions, submitter.WithEspressoClient(hotShotClient))
 
-		if err != nil {
-			return nil, fmt.Errorf("failed to create espresso original submitter: %w", err)
-		}
-
 		// If hotshot url is set, also set the sequencer inbox
 		if seqInbox == nil {
 			log.Error("espresso mode enabled without a sequencer inbox address")
