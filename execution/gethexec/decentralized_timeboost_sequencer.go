@@ -910,8 +910,7 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 			log.Warn("Detected sequencer was shutdown, entering catchup protocol", "lastBlockNum", lastHeader.Number.Uint64())
 			s.state = CatchUp
 		} else if err == nil && batchNum.Uint64() > 1 {
-			msgCount, foundBatch := decentralized_timeboost_helpers.FetchLatestMessageNumber(ctx, s.sequencerInbox, 100, 9900000, s.l1Reader)
-			log.Warn("We are behind l1 state", "foundMsgCount", msgCount, "foundBatchCount", foundBatch)
+			log.Warn("Last executed block is 0. We are behind l1 state", "batchNum", batchNum.Uint64())
 			s.state = Init
 		}
 	}
