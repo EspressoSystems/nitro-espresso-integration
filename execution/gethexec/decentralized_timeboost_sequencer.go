@@ -928,6 +928,10 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		switch s.state {
 		case Init:
 			s.waitForL1Catchup(ctx)
+			if s.state == CatchUp {
+				log.Warn("we are in sync with latest batch but we received catchup request from timeboost, entering catchup")
+				return 0
+			}
 			s.state = WaitingForBlockProduction
 			return 0
 		case CatchUp:
