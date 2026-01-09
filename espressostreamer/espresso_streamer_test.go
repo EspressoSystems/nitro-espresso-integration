@@ -283,7 +283,7 @@ func TestEspressoStreamer(t *testing.T) {
 			}}, nil
 		}
 
-		messages, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
+		messages, _, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(messages), "Expected to process two messages")
@@ -344,6 +344,16 @@ type mockEspressoClient struct {
 	mock.Mock
 }
 
+// StreamTransactions implements client.EspressoClient.
+func (m *mockEspressoClient) StreamTransactions(ctx context.Context, height uint64) (espressoClient.Stream[espressoTypes.TransactionQueryData], error) {
+	panic("unimplemented")
+}
+
+// StreamTransactionsInNamespace implements client.EspressoClient.
+func (m *mockEspressoClient) StreamTransactionsInNamespace(ctx context.Context, height uint64, namespace uint64) (espressoClient.Stream[espressoTypes.TransactionQueryData], error) {
+	panic("unimplemented")
+}
+
 func (m *mockEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	args := m.Called(ctx)
 	//nolint:errcheck
@@ -354,6 +364,13 @@ func (m *mockEspressoClient) FetchExplorerTransactionByHash(ctx context.Context,
 	args := m.Called(ctx, hash)
 	//nolint:errcheck
 	return args.Get(0).(types.ExplorerTransactionQueryData), args.Error(1)
+}
+
+// FetchNamespaceTransactionsInRange implements client.EspressoClient.
+func (m *mockEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoTypes.NamespaceTransactionsRangeData, error) {
+	args := m.Called(ctx, namespace, fromHeight, toHeight)
+	//nolint:errcheck
+	return args.Get(0).([]espressoTypes.NamespaceTransactionsRangeData), args.Error(1)
 }
 
 func (m *mockEspressoClient) FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error) {
