@@ -867,24 +867,44 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 	return nil
 }
 
-func (s *DecentralizedTimeboostSequencer) ProcessCatchup(ctx context.Context, catchupRound *protos.CatchupRound) {
-	log.Warn("received catchup from timeboost. clearing queues", "round", catchupRound.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
-	s.state = CatchUp
-	for {
-		txn := s.txRetryQueue.Peek()
-		if txn == nil || txn.roundId > catchupRound.Round {
-			break
+func (s *DecentralizedTimeboostSequencer) ProcessTimeboostState(ctx context.Context, state *protos.TimeboostState) {
+	if catchup := state.GetCatchup(); catchup != nil {
+		log.Warn("timeboost is in catchup state. clearing queues", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+		s.state = CatchUp
+		for {
+			txn := s.txRetryQueue.Peek()
+			if txn == nil || txn.roundId > catchup.Round {
+				break
+			}
+			s.txRetryQueue.dequeue()
 		}
-		s.txRetryQueue.dequeue()
-	}
-	for {
-		txn := s.txQueue.Peek()
-		if txn == nil || txn.roundId > catchupRound.Round {
-			break
+		for {
+			txn := s.txQueue.Peek()
+			if txn == nil || txn.roundId > catchup.Round {
+				break
+			}
+			s.txQueue.dequeue()
 		}
-		s.txQueue.dequeue()
+		log.Warn("queues cleared", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+	} else if awaitingHandover := state.GetAwaitingHandover(); awaitingHandover {
+		log.Warn("timeboost is awaiting handover")
+		s.state = CatchUp
+		for {
+			txn := s.txRetryQueue.Peek()
+			if txn == nil {
+				break
+			}
+			s.txRetryQueue.dequeue()
+		}
+		for {
+			txn := s.txQueue.Peek()
+			if txn == nil {
+				break
+			}
+			s.txQueue.dequeue()
+		}
+		log.Warn("queues cleared", "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
 	}
-	log.Warn("queues cleared", "round", catchupRound.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
 }
 
 func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
@@ -893,7 +913,7 @@ func (s *DecentralizedTimeboostSequencer) Start(ctx context.Context) error {
 		return errors.New("l1Reader is nil")
 	}
 
-	if err := s.timeboostBridge.Start(ctx, s.ProcessInclusionList, s.ProcessCatchup); err != nil {
+	if err := s.timeboostBridge.Start(ctx, s.ProcessInclusionList, s.ProcessTimeboostState); err != nil {
 		return err
 	}
 

@@ -13,8 +13,8 @@ import (
 
 type ForwardService struct {
 	protos.UnimplementedForwardApiServer
-	ProcessInclusionList func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error
-	ProcessCatchup       func(context.Context, *protos.CatchupRound)
+	ProcessInclusionList  func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error
+	ProcessTimeboostState func(context.Context, *protos.TimeboostState)
 }
 
 // Implement the SubmitInclusionList RPC
@@ -26,7 +26,7 @@ func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *protos.In
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ForwardService) Catchup(ctx context.Context, req *protos.CatchupRound) (*emptypb.Empty, error) {
-	s.ProcessCatchup(ctx, req)
+func (s *ForwardService) UpdateTimeboostState(ctx context.Context, req *protos.TimeboostState) (*emptypb.Empty, error) {
+	s.ProcessTimeboostState(ctx, req)
 	return &emptypb.Empty{}, nil
 }
