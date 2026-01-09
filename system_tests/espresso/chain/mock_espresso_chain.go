@@ -37,6 +37,45 @@ type MockEspressoChain struct {
 	TxnHashStore     map[string]TransactionDetail
 }
 
+// FetchHeaderByHeight implements client.EspressoClient.
+// Subtle: this method shadows the method (UnimplementedEspressoClient).FetchHeaderByHeight of MockEspressoChain.UnimplementedEspressoClient.
+func (m *MockEspressoChain) FetchHeaderByHeight(ctx context.Context, height uint64) (espresso_types.HeaderImpl, error) {
+	panic("unimplemented")
+}
+
+// FetchHeadersByRange implements client.EspressoClient.
+// Subtle: this method shadows the method (UnimplementedEspressoClient).FetchHeadersByRange of MockEspressoChain.UnimplementedEspressoClient.
+func (m *MockEspressoChain) FetchHeadersByRange(ctx context.Context, from uint64, until uint64) ([]espresso_types.HeaderImpl, error) {
+	panic("unimplemented")
+}
+
+// FetchNamespaceTransactionsInRange implements client.EspressoClient.
+func (m *MockEspressoChain) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espresso_types.NamespaceTransactionsRangeData, error) {
+	panic("unimplemented")
+}
+
+// FetchRawHeaderByHeight implements client.EspressoClient.
+// Subtle: this method shadows the method (UnimplementedEspressoClient).FetchRawHeaderByHeight of MockEspressoChain.UnimplementedEspressoClient.
+func (m *MockEspressoChain) FetchRawHeaderByHeight(ctx context.Context, height uint64) (json.RawMessage, error) {
+	panic("unimplemented")
+}
+
+// FetchVidCommonByHeight implements client.EspressoClient.
+// Subtle: this method shadows the method (UnimplementedEspressoClient).FetchVidCommonByHeight of MockEspressoChain.UnimplementedEspressoClient.
+func (m *MockEspressoChain) FetchVidCommonByHeight(ctx context.Context, blockHeight uint64) (espresso_types.VidCommon, error) {
+	panic("unimplemented")
+}
+
+// StreamTransactions implements client.EspressoClient.
+func (m *MockEspressoChain) StreamTransactions(ctx context.Context, height uint64) (espresso_client.Stream[espresso_types.TransactionQueryData], error) {
+	panic("unimplemented")
+}
+
+// StreamTransactionsInNamespace implements client.EspressoClient.
+func (m *MockEspressoChain) StreamTransactionsInNamespace(ctx context.Context, height uint64, namespace uint64) (espresso_client.Stream[espresso_types.TransactionQueryData], error) {
+	panic("unimplemented")
+}
+
 // Ensure MockEspressoChain implements the EspressoClient interface.
 var _ espresso_client.EspressoClient = &MockEspressoChain{}
 

@@ -1,7 +1,7 @@
 version: "3.9"
 services:
   espresso-dev-node:
-    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:release-fix-cors
+    image: ghcr.io/espressosystems/espresso-sequencer/espresso-dev-node:release-20251120-lip2p-tcp-3855
     ports:
       - "$ESPRESSO_SEQUENCER_API_PORT:$ESPRESSO_SEQUENCER_API_PORT"
       - "$ESPRESSO_BUILDER_PORT:$ESPRESSO_BUILDER_PORT"
