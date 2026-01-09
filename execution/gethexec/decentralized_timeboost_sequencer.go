@@ -868,25 +868,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessTimeboostState(ctx context.Context, state *protos.TimeboostState) {
-	if catchup := state.GetCatchup(); catchup != nil {
-		log.Warn("timeboost is in catchup state. clearing queues", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
-		s.state = CatchUp
-		for {
-			txn := s.txRetryQueue.Peek()
-			if txn == nil || txn.roundId > catchup.Round {
-				break
-			}
-			s.txRetryQueue.dequeue()
-		}
-		for {
-			txn := s.txQueue.Peek()
-			if txn == nil || txn.roundId > catchup.Round {
-				break
-			}
-			s.txQueue.dequeue()
-		}
-		log.Warn("queues cleared", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
-	} else if awaitingHandover := state.GetAwaitingHandover(); awaitingHandover {
+	if awaitingHandover := state.GetAwaitingHandover(); awaitingHandover {
 		log.Warn("timeboost is awaiting handover")
 		s.state = CatchUp
 		for {
@@ -904,6 +886,24 @@ func (s *DecentralizedTimeboostSequencer) ProcessTimeboostState(ctx context.Cont
 			s.txQueue.dequeue()
 		}
 		log.Warn("queues cleared", "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+	} else if catchup := state.GetCatchup(); catchup != nil {
+		log.Warn("timeboost is in catchup state. clearing queues", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
+		s.state = CatchUp
+		for {
+			txn := s.txRetryQueue.Peek()
+			if txn == nil || txn.roundId > catchup.Round {
+				break
+			}
+			s.txRetryQueue.dequeue()
+		}
+		for {
+			txn := s.txQueue.Peek()
+			if txn == nil || txn.roundId > catchup.Round {
+				break
+			}
+			s.txQueue.dequeue()
+		}
+		log.Warn("queues cleared", "round", catchup.Round, "txns", s.txQueue.Len(), "retry", s.txRetryQueue.Len())
 	}
 }
 
