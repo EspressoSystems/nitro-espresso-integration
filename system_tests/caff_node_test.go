@@ -77,7 +77,7 @@ func createCaffNode(
 
 	nodeConfig.EspressoCaffNode.ForceInclusionChecker = arbnode.ForceInclusionCheckerConfig{
 		RetryTime:                time.Second * 2,
-		PollingInterval:          time.Second * 1,
+		PollingInterval:          time.Second * 100,
 		BlockThresholdTolerance:  20,
 		SecondThresholdTolerance: 200,
 		ErrorToleranceDuration:   time.Minute * 10,
