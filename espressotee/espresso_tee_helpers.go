@@ -91,6 +91,14 @@ func BaseFeeCheck(
 			continue
 		}
 
+		if latestBaseFee == nil {
+			log.Error(msg, "base fee is nil", "delay", retryDelay, "attempt", attempt+1)
+			if attempt < maxRetries-1 {
+				time.Sleep(retryDelay)
+			}
+			continue
+		}
+
 		if latestBaseFee.Uint64() > maxBaseFee {
 			log.Error(
 				msg,
