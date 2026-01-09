@@ -31,6 +31,11 @@ func (e ErrorEspressoClientUnimplementedMethod) Error() string {
 // implementing all methods of the interface.
 type UnimplementedEspressoClient struct{}
 
+// FetchNamespaceTransactionsInRange implements client.EspressoClient.
+func (u UnimplementedEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, namespace uint64, fromHeight uint64, toHeight uint64) ([]types.NamespaceTransactionsRangeData, error) {
+	panic("unimplemented")
+}
+
 // StreamTransactions implements client.EspressoClient.
 func (u UnimplementedEspressoClient) StreamTransactions(ctx context.Context, height uint64) (espresso_client.Stream[types.TransactionQueryData], error) {
 	panic("unimplemented")
