@@ -594,9 +594,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			initAddresses = []common.Address{addr}
 		}
 
+		// We dont need auth reads here because batch poster is not reliant on the
+		// database for determining which messages to post, it gets the messages
+		// from Espresso directly
+		db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, true)
+		if err != nil {
+			return nil, err
+		}
 		monitor := NewBatcherAddrMonitor(
 			initAddresses,
-			opts.DataPosterDB,
+			&db,
 			opts.L1Reader,
 			opts.DeployInfo.SequencerInbox,
 			opts.DeployInfo.DeployedAt,
@@ -615,23 +622,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			opts.Config().Dangerous.MinimumHotshotBlockNum,
 		)
 
-		// We dont need auth reads here because batch poster is not reliant on the
-		// database for determining which messages to post, it gets the messages
-		// from Espresso directly
-		db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, true)
-		if err != nil {
-			return nil, err
-		}
-		monitor := NewBatcherAddrMonitor(
-			initAddresses,
-			&db,
-			opts.L1Reader,
-			opts.DeployInfo.SequencerInbox,
-      opts.DeployInfo.DeployedAt,
-			opts.Config().AddressMonitorStartL1,
-			opts.Config().AddressMonitorStep,
-		)
-  }
+		b.espressoBatcherAddrMonitor = monitor
+		b.espressoStreamer = espressoStreamer
+	}
 
 	if b.espressoStreamer != nil {
 
@@ -648,6 +641,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		// Get the espressoTEEVerifier address for the sequencer inbox contract
 		espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+		if err != nil {
+			return nil, err
+		}
+
+		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
+			espresssoTEEVerifierAddress,
+			opts.L1Reader.Client())
 		if err != nil {
 			return nil, err
 		}
