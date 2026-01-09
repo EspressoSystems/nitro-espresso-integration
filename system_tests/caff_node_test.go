@@ -92,6 +92,7 @@ func createCaffNode(
 
 	builder.l2StackConfig.HTTPPort = getRandomPort(t)
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
+	builder.useL2StackConfig = true
 
 	if dangerous {
 		nodeConfig.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
