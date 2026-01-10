@@ -72,6 +72,22 @@ TestRedisForwarder
 TestRedisForwarderFallbackNoRedis
 TestStaticForwarder
 
+TestReloads
+TestAllowPostingFirstBatchWhenSequencerMessageCountMismatchDisabled
+TestBlockValidatorSimpleOnchainUpgradeArbOs
+TestBlockValidatorSimpleOnchainWithRedisStreams
+TestBloom
+TestContractTxDeploy
+TestDASComplexConfigAndRestMirror
+TestAllowPostingFirstBatchWhenSequencerMessageCountMismatchEnabled
+TestBlockValidatorSimpleOnchain
+TestBlockValidatorSimpleLocalDAS
+TestSendRawTransactionConditionalPreCheck
+TestDatabaseConversion
+TestAliasing
+TestBatchPosterLargeTx
+TestClassicRedirectURLNotLeaked
+
 # This test is failing and it is a bit complicated.
 
 # Since BOLD is an alpha feature, we will fix it later
