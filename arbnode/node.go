@@ -56,6 +56,11 @@ import (
 	"github.com/offchainlabs/nitro/wsbroadcastserver"
 )
 
+type EspressoConfig struct {
+	EspressoCaffNode    EspressoCaffNodeConfig    `koanf:"espresso-caff-node"`
+	EspressoBatchPoster EspressoBatchPosterConfig `koanf:"espresso-batch-poster"`
+}
+
 type Config struct {
 	Sequencer                bool                           `koanf:"sequencer"`
 	ParentChainReader        headerreader.Config            `koanf:"parent-chain-reader" reload:"hot"`
@@ -80,7 +85,8 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
+	// EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
+	Espresso EspressoConfig `koanf:"espresso"`
 }
 
 func (c *Config) Validate() error {
@@ -97,7 +103,7 @@ func (c *Config) Validate() error {
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
 	}
-	if c.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+	if c.Espresso.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
 		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
@@ -161,7 +167,13 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
-	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso.espresso-caff-node", f)
+	EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
+}
+
+var EspressoConfigDefault = EspressoConfig{
+	EspressoCaffNode:    DefaultEspressoCaffNodeConfig,
+	EspressoBatchPoster: DefaultEspressoBatchPosterConfig,
 }
 
 var ConfigDefault = Config{
@@ -187,7 +199,7 @@ var ConfigDefault = Config{
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
 
-	EspressoCaffNode: DefaultEspressoCaffNodeConfig,
+	Espresso: EspressoConfigDefault,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -997,6 +1009,8 @@ func getBatchPoster(
 			DAPReaders:    dapReaders,
 
 			DataSigner: dataSigner,
+
+			EspressoConfig: func() *EspressoBatchPosterConfig { return &configFetcher.Get().Espresso.EspressoBatchPoster },
 		})
 		if err != nil {
 			return nil, err
@@ -1030,18 +1044,18 @@ func getEspressoCaffNode(
 	fatalErrChan chan error,
 	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
-	if config.EspressoCaffNode.Enable {
+	if config.Espresso.EspressoCaffNode.Enable {
 
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
-				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				func() *EspressoCaffNodeConfig { return &config.Espresso.EspressoCaffNode },
 				chainDb,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				config.EspressoCaffNode.RecordPerformance,
-				config.EspressoCaffNode.BlocksToRead,
+				config.Espresso.EspressoCaffNode.RecordPerformance,
+				config.Espresso.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,

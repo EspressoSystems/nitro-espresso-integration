@@ -16,7 +16,7 @@ func (b *BatchPoster) resetStreamerToParentChainOrConfigHotshotBlock(messageCoun
 	hotshotBlock := b.fetchHotshotBlockFromLastCheckpoint(ctx)
 	if hotshotBlock == 0 {
 		// if there hasn't been a batch posted, or we encountered an error, start reading from the configured hotshot block number.
-		hotshotBlock = b.config().HotShotBlock
+		hotshotBlock = b.espressoConfig().HotShotBlock
 	}
 	b.espressoStreamer.Reset(uint64(messageCount), hotshotBlock)
 }
@@ -28,7 +28,7 @@ func (b *BatchPoster) resetStreamerToParentChainOrConfigHotshotBlock(messageCoun
 // returns the Hotshot height of the last event in the iterator returned from FilterTEESignatureVerified()
 // representing the most recently emitted hotshotblock height. Any errors encountered will result in 0 being returned.
 func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) uint64 {
-	pollingStep := b.config().EspressoEventPollingStep
+	pollingStep := b.espressoConfig().EspressoEventPollingStep
 	header, err := b.l1Reader.LastHeader(ctx)
 	if err != nil {
 		log.Error("Failed to fetch last header from parent chain", "err", err)
@@ -38,10 +38,10 @@ func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) u
 	var lastHotshotHeight uint64 = 0
 	// Prevent unsigned integer underflow: in Go, subtracting a larger value
 	// from a smaller uint64 will wrap around to a very large number.
-	for i := header.Number.Uint64(); i >= b.config().HotShotFirstPostingBlock; i -= min(i, pollingStep) {
+	for i := header.Number.Uint64(); i >= b.espressoConfig().HotShotFirstPostingBlock; i -= min(i, pollingStep) {
 		start := i - min(i, pollingStep)
-		if start < b.config().HotShotFirstPostingBlock {
-			start = b.config().HotShotFirstPostingBlock
+		if start < b.espressoConfig().HotShotFirstPostingBlock {
+			start = b.espressoConfig().HotShotFirstPostingBlock
 		}
 		filterOpts := bind.FilterOpts{
 			Start:   start,

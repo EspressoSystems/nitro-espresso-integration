@@ -141,6 +141,7 @@ type BatchPoster struct {
 	checkEip7623 bool
 	useEip7623   bool
 
+	espressoConfig             EspressoBatchConfigFetcher
 	bytesType                  abi.Type
 	bytes32ArrayType           abi.Type
 	blobsAttestationArguments  abi.Arguments
@@ -166,6 +167,31 @@ type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool   `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 	FixedGasLimit                                           uint64 `koanf:"fixed-gas-limit"`
 	MinimumHotshotBlockNum                                  uint64 `koanf:"minimum-hotshot-block-num"`
+}
+
+type EspressoBatchPosterConfig struct {
+	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
+	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
+	HotShotUrl                       string                                    `koanf:"hotshot-url"`
+	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
+	EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
+	EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
+	ResubmitEspressoTxDeadline       time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
+	EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
+	UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
+	QuoteFile                        string                                    `koanf:"quote-file"`
+	AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
+
+	// Fetch messages from HotShot block
+	HotShotBlock             uint64 `koanf:"hotshot-block"`
+	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
+	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
+	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
+	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
+	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
+	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
+
+	AddressValidRanges []AddressValidRangeConfig `koanf:"address-valid-ranges"`
 }
 
 type BatchPosterConfig struct {
@@ -208,28 +234,26 @@ type BatchPosterConfig struct {
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
 	// Espresso specific flags
-	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
-	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
-	HotShotUrl                       string                                    `koanf:"hotshot-url"`
-	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
-	EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
-	EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
-	ResubmitEspressoTxDeadline       time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
-	EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
-	UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
-	QuoteFile                        string                                    `koanf:"quote-file"`
-	AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
+	// EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
+	// EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
+	// HotShotUrls                      []string                                  `koanf:"hotshot-urls"`
+	// EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
+	// EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
+	// EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
+	// ResubmitEspressoTxDeadline       time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
+	// EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
+	// UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
+	// QuoteFile                        string                                    `koanf:"quote-file"`
+	// AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
 
-	// Fetch messages from HotShot block
-	HotShotBlock             uint64 `koanf:"hotshot-block"`
-	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
-	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
-	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
-	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
-
-	AddressValidRanges []AddressValidRangeConfig `koanf:"address-valid-ranges"`
+	// // Fetch messages from HotShot block
+	// HotShotBlock             uint64 `koanf:"hotshot-block"`
+	// EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
+	// HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
+	// // Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
+	// AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
+	// InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
+	// AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -257,6 +281,7 @@ func (c *BatchPosterConfig) Validate() error {
 }
 
 type BatchPosterConfigFetcher func() *BatchPosterConfig
+type EspressoBatchConfigFetcher func() *EspressoBatchPosterConfig
 
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
@@ -283,34 +308,53 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
-	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
-	f.String(prefix+".hotshot-url", DefaultBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
-	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
-	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
-	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	f.Uint64(prefix+".delay-buffer-threshold-margin", DefaultBatchPosterConfig.DelayBufferThresholdMargin, "the number of blocks to post the batch before reaching the delay buffer threshold")
-	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
-	f.Duration(prefix+".espresso-txns-sending-interval", DefaultBatchPosterConfig.EspressoTxnsSendingInterval, "interval between sending transactions to Espresso Network")
-	f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
-	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
-	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
-	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
-	f.String(prefix+".attestation-service-url", DefaultBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
-	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
-	f.StringSlice(prefix+".init-batcher-addresses", DefaultBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
-	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
-	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
+	// f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
+	// f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
+	// f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+	// f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
+	// f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
+	// f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	// f.Duration(prefix+".espresso-txns-sending-interval", DefaultBatchPosterConfig.EspressoTxnsSendingInterval, "interval between sending transactions to Espresso Network")
+	// f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
+	// f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
+	// f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
+	// f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
+	// f.String(prefix+".attestation-service-url", DefaultBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
+	// f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
+	// f.StringSlice(prefix+".init-batcher-addresses", DefaultBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
+	// f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
+	// f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig, dataposter.DataPosterUsageBatchPoster)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	DangerousBatchPosterConfigAddOptions(prefix+".dangerous", f)
+}
+
+func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
+	f.String(prefix+".espresso-tee-type", DefaultEspressoBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
+	f.String(prefix+".hotshot-url", DefaultEspressoBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
+	f.Uint64(prefix+".hotshot-block", DefaultEspressoBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+	f.Uint64(prefix+".hotshot-first-posting-block", DefaultEspressoBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
+	f.Uint64(prefix+".espresso-event-polling-step", DefaultEspressoBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
+	f.Duration(prefix+".espresso-txns-polling-interval", DefaultEspressoBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
+	f.Duration(prefix+".espresso-txns-sending-interval", DefaultEspressoBatchPosterConfig.EspressoTxnsSendingInterval, "interval between sending transactions to Espresso Network")
+	f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultEspressoBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
+	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
+	f.String(prefix+".user-data-attestation-file", DefaultEspressoBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
+	f.String(prefix+".quote-file", DefaultEspressoBatchPosterConfig.QuoteFile, "path to SGX quote file")
+	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
+	f.Int64(prefix+".espresso-tx-size-limit", DefaultEspressoBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
+	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
+	f.Uint64(prefix+".address-monitor-step", DefaultEspressoBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
+	f.Uint64(prefix+".address-monitor-start-l1", DefaultEspressoBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 }
 
 var DefaultBatchPosterConfig = BatchPosterConfig{
@@ -348,6 +392,30 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 
 	// Espresso Specific config //
 
+	// // Hotshot currently produces blocks at average of 2 seconds
+	// // We set it to 1 second to get updates more often than blocks are produced
+	// EspressoTxnsPollingInterval: time.Second,
+	// // We should send to espresso at a speed faster than the speed nitro is producing messages
+	// EspressoTxnsSendingInterval:      125 * time.Millisecond,
+	// EspressoTxnsResubmissionInterval: 2 * time.Second,
+	// ResubmitEspressoTxDeadline:       10 * time.Minute,
+	// HotShotUrls:                      []string{},
+	// EspressoTeeType:                  "NITRO",
+	// EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
+	// // EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
+	// EspressoTxSizeLimit:      900 * 1024,
+	// UserDataAttestationFile:  "",
+	// QuoteFile:                "",
+	// AttestationServiceURL:    "",
+	// HotShotBlock:             1,
+	// HotShotFirstPostingBlock: 1,
+	// InitBatcherAddresses:     []string{},
+	// EspressoEventPollingStep: 100,
+	// AddressMonitorStep:       100,
+	// AddressMonitorStartL1:    1,
+}
+
+var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	// Hotshot currently produces blocks at average of 2 seconds
 	// We set it to 1 second to get updates more often than blocks are produced
 	EspressoTxnsPollingInterval: time.Second,
@@ -406,6 +474,24 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	DelayBufferAlwaysUpdatable:         true,
 	ParentChainEip7623:                 "auto",
 
+	// EspressoTxnsPollingInterval:      time.Second,
+	// EspressoTxnsSendingInterval:      time.Second,
+	// EspressoTxnsResubmissionInterval: 2 * time.Second,
+	// ResubmitEspressoTxDeadline:       10 * time.Second,
+	// HotShotUrls:                      []string{},
+	// EspressoTeeType:                  "TESTS",
+	// EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
+	// EspressoTxSizeLimit:              200 * 1024,
+
+	// HotShotBlock:             1,
+	// HotShotFirstPostingBlock: 1,
+	// InitBatcherAddresses:     []string{},
+	// EspressoEventPollingStep: 100,
+	// AddressMonitorStartL1:    1,
+	// AddressMonitorStep:       100,
+}
+
+var TestEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	EspressoTxnsPollingInterval:      time.Second,
 	EspressoTxnsSendingInterval:      time.Second,
 	EspressoTxnsResubmissionInterval: 2 * time.Second,
@@ -439,6 +525,8 @@ type BatchPosterOpts struct {
 	DAPReaders    *daprovider.ReaderRegistry
 
 	DataSigner signature.DataSignerFunc
+
+	EspressoConfig EspressoBatchConfigFetcher
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -518,6 +606,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		checkEip7623:       checkEip7623,
 		useEip7623:         useEip7623,
 
+		espressoConfig:            opts.EspressoConfig,
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
@@ -567,7 +656,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
-	hotshotUrl := opts.Config().HotShotUrl
+	hotshotUrl := opts.EspressoConfig().HotShotUrl
 	// If the hotshot URL is non-empty, create the Espresso client.
 	if hotshotUrl != "" {
 		hotShotClient := hotshotClient.NewClient(hotshotUrl)
@@ -609,7 +698,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-		initStringAddresses := opts.Config().InitBatcherAddresses
+		initStringAddresses := opts.EspressoConfig().InitBatcherAddresses
 		// Convert the init addresses to common.Address
 		initAddresses := []common.Address{}
 		for _, addr := range initStringAddresses {
@@ -637,30 +726,30 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		var monitor BatcherAddrMonitorInterface
-		if len(opts.Config().AddressValidRanges) == 0 {
+		if len(opts.EspressoConfig().AddressValidRanges) == 0 {
 			monitor = NewBatcherAddrMonitor(
 				initAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
-				opts.Config().AddressMonitorStartL1,
-				opts.Config().AddressMonitorStep,
+				opts.EspressoConfig().AddressMonitorStartL1,
+				opts.EspressoConfig().AddressMonitorStep,
 			)
 		} else {
-			monitor = NewBatcherAddrSimpleMonitor(opts.Config().AddressValidRanges)
+			monitor = NewBatcherAddrSimpleMonitor(opts.EspressoConfig().AddressValidRanges)
 		}
 
 		espressoStreamer := espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
-			opts.Config().HotShotBlock,
+			opts.EspressoConfig().HotShotBlock,
 			nil,
 			hotShotClient,
 			false,
 			func(l1Height uint64, addr common.Address) (bool, error) {
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
-			opts.Config().EspressoTxnsPollingInterval,
+			opts.EspressoConfig().EspressoTxnsPollingInterval,
 			opts.Config().Dangerous.MinimumHotshotBlockNum,
 		)
 
@@ -669,7 +758,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if b.espressoStreamer != nil {
-		cfg := opts.Config()
+		cfg := opts.EspressoConfig()
 
 		submitterOptions = append(
 			submitterOptions,
@@ -717,7 +806,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile, opts.Config().AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.EspressoConfig().UserDataAttestationFile, opts.EspressoConfig().QuoteFile, opts.EspressoConfig().AttestationServiceURL),
 			),
 		)
 

@@ -218,11 +218,11 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   DefaultBatchPosterConfig.EspressoTxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultBatchPosterConfig.EspressoTxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultBatchPosterConfig.EspressoTxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultBatchPosterConfig.ResubmitEspressoTxDeadline,
+		TxnsPollingInterval:                   DefaultEspressoBatchPosterConfig.EspressoTxnsPollingInterval,
+		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.EspressoTxnsSendingInterval,
+		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.EspressoTxnsResubmissionInterval,
+		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.EspressoTxSizeLimit,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
 
 		SubmitterCreator: submitter.NewPollingEspressoSubmitter,
 	}
