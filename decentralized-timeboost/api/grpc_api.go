@@ -2,6 +2,7 @@ package decentralized_timeboost
 
 import (
 	"context"
+	"fmt"
 
 	// Protobuf imports for grpc calls
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
@@ -27,6 +28,10 @@ func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *protos.In
 }
 
 func (s *ForwardService) UpdateTimeboostState(ctx context.Context, req *protos.TimeboostState) (*emptypb.Empty, error) {
+	if req == nil {
+		log.Error("received nil request from timeboost")
+		return nil, fmt.Errorf("received nil state request from timeboost, ignoring.")
+	}
 	s.ProcessTimeboostState(ctx, req)
 	return &emptypb.Empty{}, nil
 }

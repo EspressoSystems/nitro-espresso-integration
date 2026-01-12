@@ -868,7 +868,7 @@ func (s *DecentralizedTimeboostSequencer) ProcessInclusionList(ctx context.Conte
 }
 
 func (s *DecentralizedTimeboostSequencer) ProcessTimeboostState(ctx context.Context, state *protos.TimeboostState) {
-	if awaitingHandover := state.GetAwaitingHandover(); awaitingHandover {
+	if handover := state.GetAwaitingHandover(); handover != nil {
 		log.Warn("timeboost is awaiting handover")
 		s.state = CatchUp
 		for {
