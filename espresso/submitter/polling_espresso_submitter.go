@@ -11,7 +11,6 @@ import (
 	"time"
 
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	espresso_light_client "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
@@ -63,7 +62,6 @@ type PollingEspressoSubmitter struct {
 	db                 ethdb.Database
 	messageGetter      MessageGetter
 	espressoClient     espresso_client.EspressoClient
-	lightClientReader  espresso_light_client.LightClientReaderInterface
 	espressoKeyManager espresso_key_manager.EspressoKeyManagerInterface
 
 	userDataAttestationFile string
@@ -100,7 +98,6 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		db:                 config.Db,
 		messageGetter:      config.MessageGetter,
 		espressoClient:     config.EspressoClient,
-		lightClientReader:  config.LightClientReader,
 		espressoKeyManager: config.KeyManager,
 
 		userDataAttestationFile: config.UserDataAttestationFile,
@@ -537,7 +534,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 // are not met, we will not submit the transaction to Espresso.
 //
 // The necessary conditions are:
-//   - The Espresso Client and Light Client Reader must be set
+//   - The Espresso Client must be set
 //   - The given `pos` parameter must be after our recorded finalized sequencer
 //     message count
 //
@@ -619,7 +616,7 @@ func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
 			return err
 		}
 	} else {
-		log.Warn("light client reader or espresso client not set, skipping espresso verification")
+		log.Warn("espresso client not set, skipping espresso verification")
 	}
 
 	return nil
