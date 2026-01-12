@@ -30,7 +30,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, 0)
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second, 0)
 
 		streamer.Reset(1, 3)
 
@@ -62,7 +62,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
-		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, 0)
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second, 0)
 
 		streamer.Reset(1, 3)
 
@@ -125,7 +125,7 @@ func TestEspressoStreamer(t *testing.T) {
 		mockEspressoClient.On("FetchLatestBlockHeight", ctx).Return(uint64(7), nil).Once()
 		mockEspressoClient.On("FetchNamespaceTransactionsInRange", ctx, uint64(6), uint64(7), namespace).Return([]types.NamespaceTransactionsRangeData{}, errors.New("test error")).Once()
 
-		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, 0)
+		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second, 0)
 
 		testParseFn := func(tx types.Bytes, l1 uint64) ([]*MessageWithMetadataAndPos, error) {
 			return nil, nil
@@ -179,7 +179,7 @@ func TestEspressoStreamer(t *testing.T) {
 			},
 		}, nil).Once()
 
-		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, 1*time.Second, 0)
+		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second, 0)
 
 		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
 
@@ -295,7 +295,7 @@ func ExpectErr(t *testing.T, err error, expectedError error) {
 func TestEspressoEmptyTransaction(t *testing.T) {
 	mockEspressoClient := new(mockEspressoClient)
 	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
-	streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64) []common.Address { return []common.Address{} }, time.Millisecond, 0)
+	streamer := NewEspressoStreamer(1, 1, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, time.Millisecond, 0)
 	// This determines the contents of the message. For this test the contents of the message needs to be empty (not 0's) to properly test the behavior
 	msgFetcher := func(arbutil.MessageIndex) ([]byte, error) {
 		return []byte{}, nil

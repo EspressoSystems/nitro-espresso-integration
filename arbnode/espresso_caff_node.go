@@ -288,7 +288,9 @@ func NewEspressoCaffNode(
 		sgxVerifier,
 		client,
 		recordPerformance,
-		batcherAddrMonitor.GetValidAddresses,
+		func(l1Height uint64, addr common.Address) (bool, error) {
+			return batcherAddrMonitor.IsValid(ctx, addr, l1Height)
+		},
 		configFetcher().RetryTime,
 		configFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
