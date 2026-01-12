@@ -45,7 +45,7 @@ type EspressoCaffNodeInitArgs struct {
 
 type EspressoCaffNodeConfig struct {
 	Enable                        bool                                      `koanf:"enable"`
-	HotShotUrls                   []string                                  `koanf:"hotshot-urls"`
+	HotShotUrl                    string                                    `koanf:"hotshot-url"`
 	NextHotshotBlock              uint64                                    `koanf:"next-hotshot-block"`
 	FromBlock                     uint64                                    `koanf:"from-block"`
 	Namespace                     uint64                                    `koanf:"namespace"`
@@ -67,6 +67,9 @@ type EspressoCaffNodeConfig struct {
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
 	EspressoTEEVerifierAddr string `koanf:"espresso-tee-verifier-addr"`
+
+	// AWS Nitro Attestation Service URL
+	AttestationServiceURL string `koanf:"attestation-service-url"`
 
 	// Data poster config
 	DataPoster        dataposter.DataPosterConfig `koanf:"data-poster"`
@@ -104,7 +107,7 @@ var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	Enable:                  false,
-	HotShotUrls:             []string{},
+	HotShotUrl:              "",
 	NextHotshotBlock:        1,
 	Namespace:               0,
 	RetryTime:               time.Second * 2,
@@ -126,6 +129,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	EspressoRegisterServiceConfig: espressotee.DefaultEspressoRegisterServiceConfig,
 	UserDataAttestationFile:       "",
 	QuoteFile:                     "",
+	AttestationServiceURL:         "",
 	EspressoTEEVerifierAddr:       "",
 	DataPoster:                    dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:              "",
@@ -137,7 +141,7 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultEspressoCaffNodeConfig.Enable, "enable espresso Caff node")
-	f.StringSlice(prefix+".hotshot-urls", DefaultEspressoCaffNodeConfig.HotShotUrls, "Hotshot urls")
+	f.String(prefix+".hotshot-url", DefaultEspressoCaffNodeConfig.HotShotUrl, "Hotshot url")
 	f.Uint64(prefix+".next-hotshot-block", DefaultEspressoCaffNodeConfig.NextHotshotBlock, "the Hotshot block number from which the Caff node will read")
 	f.Uint64(prefix+".namespace", DefaultEspressoCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
@@ -156,6 +160,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
+	f.String(prefix+".attestation-service-url", DefaultBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
@@ -249,10 +254,7 @@ func NewEspressoCaffNode(
 	if err != nil {
 		return nil, fmt.Errorf("failed to create espressoTEEVerifier: %w", err)
 	}
-	client, err := espressoClient.NewMultipleNodesClient(configFetcher().HotShotUrls)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create hotshot client: %w", err)
-	}
+	client := espressoClient.NewClient(configFetcher().HotShotUrl)
 
 	fromBlock := configFetcher().FromBlock
 
@@ -373,7 +375,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().EspressoRegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile, configFetcher().AttestationServiceURL)
 
 	}
 

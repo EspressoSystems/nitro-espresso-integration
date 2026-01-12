@@ -24,6 +24,8 @@ github.com/DataDog/zstd v1.5.2 h1:vUG4lAyuPCXO0TLbXvPv7EB7cNK1QV/luu55UHLrrn8=
 github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
 github.com/EspressoSystems/espresso-network/sdks/go v0.2.5 h1:ZC5LEdf7mrLEAbSmxln+5wQ7q+fnNaUB+lLr5A69gNA=
 github.com/EspressoSystems/espresso-network/sdks/go v0.2.5/go.mod h1:nX/JxG1/Kog2T0B0Gq/KhL0xZJi2GFuanGO8bxka0vM=
+github.com/EspressoSystems/espresso-network/sdks/go v0.3.4 h1:1hf/k2rGqIGEGQW8O3fQFltPIyxSmumph8aKIa6AjCk=
+github.com/EspressoSystems/espresso-network/sdks/go v0.3.4/go.mod h1:kaxR08mJb5Mijy7a2RhWCIWOevFI4PcXwDkzoEbsVTk=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible h1:1G1pk05UrOh0NlF1oeaaix1x8XzrfjIDK47TY0Zehcw=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Microsoft/go-winio v0.6.1 h1:9/kr64B9VUZrLm5YYwbGtUJnMgqWVOdUAXu6Migciow=
@@ -153,6 +155,8 @@ github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 h1:zuQyyAK
 github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06/go.mod h1:7nc4anLGjupUW/PeY5qiNYsdNXj7zopG+eqsS7To5IQ=
 github.com/codeclysm/extract/v3 v3.0.2 h1:sB4LcE3Php7LkhZwN0n2p8GCwZe92PEQutdbGURf5xc=
 github.com/codeclysm/extract/v3 v3.0.2/go.mod h1:NKsw+hqua9H+Rlwy/w/3Qgt9jDonYEgB6wJu+25eOKw=
+github.com/coder/websocket v1.8.13 h1:f3QZdXy7uGVz+4uCJy2nTZyM0yTBj8yANEHhqlXZ9FE=
+github.com/coder/websocket v1.8.13/go.mod h1:LNVeNrXQZfe5qhS9ALED3uA+l5pPqvwXg3CKoDBB2gs=
 github.com/consensys/bavard v0.1.13 h1:oLhMLOFGTLdlda/kma4VOJazblc7IM5y5QPd2A/YjhQ=
 github.com/consensys/bavard v0.1.13/go.mod h1:9ItSMtA/dXMAiL7BG6bqW2m3NdSEObYWoH223nGHukI=
 github.com/consensys/gnark-crypto v0.12.1 h1:lHH39WuuFgVHONRl3J0LRBtuYdQTumFSDtJF7HpyG8M=

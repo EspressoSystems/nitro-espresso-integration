@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   free-disk-space:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-8core
     steps:
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
@@ -110,7 +110,7 @@ jobs:
           toolchain: "1.81.0"
           targets: "wasm32-wasi, wasm32-unknown-unknown"
           components: "llvm-tools-preview, rustfmt, clippy"
-  
+
       - name: Install rust nightly
         uses: dtolnay/rust-toolchain@nightly
         id: install-rust-nightly
