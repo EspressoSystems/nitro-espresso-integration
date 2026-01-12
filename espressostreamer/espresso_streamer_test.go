@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	"github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
@@ -338,13 +337,5 @@ func (m *mockEspressoClient) FetchVidCommonByHeight(ctx context.Context, blockHe
 }
 
 func (m *mockEspressoClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
-	panic("not implemented")
-}
-
-func (m *mockEspressoClient) StreamTransactions(ctx context.Context, height uint64) (client.Stream[types.TransactionQueryData], error) {
-	panic("not implemented")
-}
-
-func (m *mockEspressoClient) StreamTransactionsInNamespace(ctx context.Context, height uint64, namespace uint64) (client.Stream[types.TransactionQueryData], error) {
 	panic("not implemented")
 }
