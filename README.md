@@ -124,12 +124,6 @@ gotestsum --format=testname --packages="./system_tests/..." -- -v -timeout 15m -
 
 Shows all output including linker warnings.
 
-Alternatively to steps 3 and 4 you can run:
-
-```bash
-just espresso-tests
-```
-
 Note: The E2E tests typically take around 10-15 minutes to complete.
 
 ## License
