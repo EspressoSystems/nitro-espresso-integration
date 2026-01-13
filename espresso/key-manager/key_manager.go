@@ -121,10 +121,6 @@ func NewEspressoKeyManager(
 		panic("Retry read contract delay cannot be more than 20 seconds")
 	}
 
-	if registerSignerConfig.RetryBaseFeeDelay > 3*time.Minute {
-		panic("Retry getting base fee delay cannot be more than 3 minutes")
-	}
-
 	if teeType == NITRO && zkAttestationServiceURL == "" {
 		if serviceType != espressotee.Test {
 			panic("zk attestation service URL must be provided for nitro TEE type")
@@ -146,10 +142,8 @@ func NewEspressoKeyManager(
 		registerSignerOpts: espressotee.EspressoRegisterServiceOpts{
 			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
 			MaxRetries:                    int(registerSignerConfig.MaxRetries),
-			RetryBaseFeeDelay:             registerSignerConfig.RetryBaseFeeDelay,
 			RetryReadContractDelay:        registerSignerConfig.RetryReadContractDelay,
 			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
-			MaxBaseFee:                    registerSignerConfig.MaxBaseFee,
 		},
 		userDataAttestationFile:                userDataAttestationFile,
 		quoteFile:                              quoteFile,
