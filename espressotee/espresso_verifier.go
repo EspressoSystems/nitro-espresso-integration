@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -72,20 +71,6 @@ func (e *EspressoTEEVerifier) registerService(
 	serviceType ServiceType,
 	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
-	// First check base fee is low enough
-	err := BaseFeeCheck(
-		registerSignerOpts.MaxBaseFee,
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryBaseFeeDelay,
-		func() (*big.Int, error) {
-			return dataPoster.BaseFee()
-		},
-		"register signer: latest base fee is greater than max base fee",
-	)
-	if err != nil {
-		return err
-	}
-
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
@@ -191,20 +176,6 @@ func (e *EspressoTEEVerifier) registerSigner(
 	teeType uint8,
 	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
-	// First check base fee is low enough
-	err := BaseFeeCheck(
-		registerSignerOpts.MaxBaseFee,
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryBaseFeeDelay,
-		func() (*big.Int, error) {
-			return dataPoster.BaseFee()
-		},
-		"register signer: latest base fee is greater than max base fee",
-	)
-	if err != nil {
-		return err
-	}
-
 	contractABI, err := legacy_espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
