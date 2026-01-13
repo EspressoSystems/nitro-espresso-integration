@@ -26,9 +26,6 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 	err = WriteFromBlock(plainDB, 456)
 	Assert(t, err != nil, "expected error when writing FromBlock to plain db, but got nil")
 
-	err = WriteInitAddresses(plainDB, []common.Address{{0x01}})
-	Assert(t, err != nil, "expected error when writing InitAddresses to plain db, but got nil")
-
 	err = WriteLastProcessedHeight(plainDB, 789)
 	Assert(t, err != nil, "expected error when writing LastProcessedHeight to plain db, but got nil")
 
@@ -42,11 +39,17 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 	_, err = ReadFromBlock(plainDB)
 	Assert(t, err != nil, "expected error when reading FromBlock from plain db, but got nil")
 
-	_, err = ReadInitAddresses(plainDB)
-	Assert(t, err != nil, "expected error when reading InitAddresses from plain db, but got nil")
-
 	_, err = ReadLastProcessedHeight(plainDB)
 	Assert(t, err != nil, "expected error when reading LastProcessedHeight from plain db, but got nil")
+
+	// Test WriteAddresses with plain DB - should fail
+	plainAddrs := []map[common.Address]bool{
+		{
+			common.HexToAddress("0x1000000000000000000000000000000000000001"): true,
+		},
+	}
+	err = WriteAddresses(plainDB, plainAddrs)
+	Assert(t, err != nil, "expected error when writing addresses to plain db, but got nil")
 
 	// Test with plain batch - should fail
 	plainBatch := plainDB.NewBatch()
@@ -60,11 +63,12 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 	err = WriteFromBlock(plainBatch, 456)
 	Assert(t, err != nil, "expected error when writing FromBlock to plain batch, but got nil")
 
-	err = WriteInitAddresses(plainBatch, []common.Address{{0x01}})
-	Assert(t, err != nil, "expected error when writing InitAddresses to plain batch, but got nil")
-
 	err = WriteLastProcessedHeight(plainBatch, 789)
 	Assert(t, err != nil, "expected error when writing LastProcessedHeight to plain batch, but got nil")
+
+	// Test WriteAddresses with plain batch - should fail
+	err = WriteAddresses(plainBatch, plainAddrs)
+	Assert(t, err != nil, "expected error when writing addresses to plain batch, but got nil")
 
 	hmac, err := espresso_tee_utils.HmacForTest()
 	Require(t, err)
@@ -91,8 +95,6 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 
 	err = WriteFromBlock(batch, 456)
 	Require(t, err)
-	err = WriteInitAddresses(batch, []common.Address{{0x01}, {0x02}, {0x03}})
-	Require(t, err)
 	err = WriteLastProcessedHeight(batch, 789)
 	Require(t, err)
 	err = batch.Write()
@@ -104,15 +106,85 @@ func TestAuthCaffNodeOperations(t *testing.T) {
 		t.Fatalf("expected fromBlk 456, got %d", fromBlk)
 	}
 
-	initAddrs, err := ReadInitAddresses(&authdb)
-	Require(t, err)
-	if len(initAddrs) != 3 || initAddrs[0] != (common.Address{0x01}) || initAddrs[1] != (common.Address{0x02}) || initAddrs[2] != (common.Address{0x03}) {
-		t.Fatalf("unexpected initAddrs: %v", initAddrs)
-	}
-
 	lastBlk, err := ReadLastProcessedHeight(&authdb)
 	Require(t, err)
 	if lastBlk != 789 {
 		t.Fatalf("expected lastBlk 789, got %d", lastBlk)
+	}
+
+	// Test WriteAddresses / ReadAddresses with AuthDB and AuthBatch
+	a1 := common.HexToAddress("0x2000000000000000000000000000000000000001")
+	a2 := common.HexToAddress("0x2000000000000000000000000000000000000002")
+	a3 := common.HexToAddress("0x2000000000000000000000000000000000000003")
+
+	authAddrs := []map[common.Address]bool{
+		{
+			a1: true,
+			a2: false,
+		},
+		{
+			a3: true,
+		},
+	}
+
+	// Before writing, ReadAddresses on AuthDB should return nil, nil (no data)
+	addrRes, err := ReadAddresses(&authdb)
+	Require(t, err)
+	if addrRes != nil {
+		t.Fatalf("expected nil addresses before write, got %v", addrRes)
+	}
+
+	// Write using AuthDB
+	err = WriteAddresses(&authdb, authAddrs)
+	Require(t, err)
+
+	// Read back and compare
+	addrRes, err = ReadAddresses(&authdb)
+	Require(t, err)
+	if len(addrRes) != len(authAddrs) {
+		t.Fatalf("expected %d address lists, got %d", len(authAddrs), len(addrRes))
+	}
+	for i, expectedMap := range authAddrs {
+		gotMap := addrRes[i]
+		if len(gotMap) != len(expectedMap) {
+			t.Fatalf("index %d: expected %d addrs, got %d", i, len(expectedMap), len(gotMap))
+		}
+		for addr, flag := range expectedMap {
+			gotFlag, ok := gotMap[addr]
+			if !ok {
+				t.Fatalf("index %d: missing addr %s", i, addr.Hex())
+			}
+			if gotFlag != flag {
+				t.Fatalf("index %d: addr %s flag mismatch: expected %v, got %v", i, addr.Hex(), flag, gotFlag)
+			}
+		}
+	}
+
+	// Now test writing via AuthBatch
+	addrBatch := authdb.NewBatch()
+	err = WriteAddresses(addrBatch, authAddrs)
+	Require(t, err)
+	err = addrBatch.Write()
+	Require(t, err)
+
+	addrRes, err = ReadAddresses(&authdb)
+	Require(t, err)
+	if len(addrRes) != len(authAddrs) {
+		t.Fatalf("(batch) expected %d address lists, got %d", len(authAddrs), len(addrRes))
+	}
+	for i, expectedMap := range authAddrs {
+		gotMap := addrRes[i]
+		if len(gotMap) != len(expectedMap) {
+			t.Fatalf("(batch) index %d: expected %d addrs, got %d", i, len(expectedMap), len(gotMap))
+		}
+		for addr, flag := range expectedMap {
+			gotFlag, ok := gotMap[addr]
+			if !ok {
+				t.Fatalf("(batch) index %d: missing addr %s", i, addr.Hex())
+			}
+			if gotFlag != flag {
+				t.Fatalf("(batch) index %d: addr %s flag mismatch: expected %v, got %v", i, addr.Hex(), flag, gotFlag)
+			}
+		}
 	}
 }

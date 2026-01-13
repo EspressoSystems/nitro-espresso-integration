@@ -146,8 +146,9 @@ type BatchPoster struct {
 	bytes32ArrayType           abi.Type
 	blobsAttestationArguments  abi.Arguments
 	espressoStreamer           *espressostreamer.EspressoStreamer
-	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
+	signerAddr                 common.Address
 }
 
 type l1BlockBound int
@@ -229,6 +230,8 @@ type BatchPosterConfig struct {
 	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
 	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
 	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
+
+	AddressValidRanges []AddressValidRangeConfig `koanf:"address-valid-ranges"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -627,6 +630,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 			initAddresses = []common.Address{addr}
 		}
+		addr, err := recoverAddressFromSigner(opts.DataSigner)
+		if err != nil {
+			return nil, err
+		}
+		b.signerAddr = addr
 
 		// We dont need auth reads here because batch poster is not reliant on the
 		// database for determining which messages to post, it gets the messages
@@ -635,15 +643,20 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if err != nil {
 			return nil, err
 		}
-		monitor := NewBatcherAddrMonitor(
-			initAddresses,
-			&db,
-			opts.L1Reader,
-			opts.DeployInfo.SequencerInbox,
-			opts.DeployInfo.DeployedAt,
-			opts.Config().AddressMonitorStartL1,
-			opts.Config().AddressMonitorStep,
-		)
+		var monitor BatcherAddrMonitorInterface
+		if len(opts.Config().AddressValidRanges) == 0 {
+			monitor = NewBatcherAddrMonitor(
+				initAddresses,
+				&db,
+				opts.L1Reader,
+				opts.DeployInfo.SequencerInbox,
+				opts.DeployInfo.DeployedAt,
+				opts.Config().AddressMonitorStartL1,
+				opts.Config().AddressMonitorStep,
+			)
+		} else {
+			monitor = NewBatcherAddrSimpleMonitor(opts.Config().AddressValidRanges)
+		}
 
 		espressoStreamer := espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
@@ -651,7 +664,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			nil,
 			hotShotClient,
 			false,
-			monitor.GetValidAddresses,
+			func(l1Height uint64, addr common.Address) (bool, error) {
+				return monitor.IsValid(ctx, addr, l1Height)
+			},
 			opts.Config().EspressoTxnsPollingInterval,
 			opts.Config().Dangerous.MinimumHotshotBlockNum,
 		)
@@ -670,6 +685,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitter.WithTxnsResubmissionInterval(cfg.EspressoTxnsResubmissionInterval),
 			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
 			submitter.WithMaxTransactionSize(cfg.EspressoTxSizeLimit),
+			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
+				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
+			}),
 		)
 
 		// Get the espressoTEEVerifier address for the sequencer inbox contract
