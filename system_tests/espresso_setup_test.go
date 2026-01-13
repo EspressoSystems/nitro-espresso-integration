@@ -36,7 +36,6 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
 	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.BatchPoster.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
 	builder.nodeConfig.BatchPoster.EspressoTeeType = "SGX"
 	builder.nodeConfig.BatchPoster.MaxEmptyBatchDelay = 10 * time.Second
 

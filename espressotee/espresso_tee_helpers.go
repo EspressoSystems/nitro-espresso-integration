@@ -3,7 +3,6 @@ package espressotee
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -70,59 +69,6 @@ func ContractVerification(
 	return false, nil
 }
 
-type BaseFeeCheckFunc func() (*big.Int, error)
-
-func BaseFeeCheck(
-	maxBaseFee uint64,
-	maxRetries int,
-	retryDelay time.Duration,
-	fn BaseFeeCheckFunc,
-	msg string,
-) error {
-	lowBaseFee := false
-	var latestBaseFeeVal uint64
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		latestBaseFee, err := fn()
-		if err != nil && attempt < maxRetries-1 {
-			log.Error(msg, "err", err, "delay", retryDelay, "attempt", attempt+1)
-			if attempt < maxRetries-1 {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-
-		if latestBaseFee == nil {
-			log.Error(msg, "base fee is nil", "delay", retryDelay, "attempt", attempt+1)
-			if attempt < maxRetries-1 {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-
-		if latestBaseFee.Uint64() > maxBaseFee {
-			log.Error(
-				msg,
-				"base fee", latestBaseFee.Uint64(),
-				"max base fee", maxBaseFee,
-				"delay", retryDelay,
-				"attempt", attempt+1,
-			)
-			if attempt < maxRetries-1 {
-				time.Sleep(retryDelay)
-			}
-			continue
-		}
-
-		lowBaseFee = true
-		latestBaseFeeVal = latestBaseFee.Uint64()
-		break
-	}
-	if !lowBaseFee {
-		return fmt.Errorf("base fee: %d is not low enough to attempt to register signer with max base fee: %d", latestBaseFeeVal, maxBaseFee)
-	}
-	return nil
-}
-
 /**
  * This functions checks the dataposter nonce and the parent chains nonce
  * If these two differ, dont send a transaction as registering the signer is costly and we dont want to send multiple transactions.
@@ -149,36 +95,28 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 
 type EspressoRegisterServiceConfig struct {
 	MaxTxnWaitTime                time.Duration `koanf:"max-txn-wait-time"`
-	RetryBaseFeeDelay             time.Duration `koanf:"retry-base-fee-delay"`
 	RetryReadContractDelay        time.Duration `koanf:"retry-read-contract-delay"`
 	MaxRetries                    uint8         `koanf:"max-retries"`
 	GasLimitBufferIncreasePercent uint64        `koanf:"gas-limit-buffer-increase-percent"`
-	MaxBaseFee                    uint64        `koanf:"max-base-fee"`
 }
 
 var DefaultEspressoRegisterServiceConfig = EspressoRegisterServiceConfig{
 	MaxTxnWaitTime:                3 * time.Minute,
-	RetryBaseFeeDelay:             1 * time.Minute,
 	RetryReadContractDelay:        5 * time.Second,
 	MaxRetries:                    5,
 	GasLimitBufferIncreasePercent: 20,
-	MaxBaseFee:                    70000000,
 }
 
 type EspressoRegisterServiceOpts struct {
 	MaxTxnWaitTime                time.Duration
-	RetryBaseFeeDelay             time.Duration
 	RetryReadContractDelay        time.Duration
 	MaxRetries                    int
 	GasLimitBufferIncreasePercent uint64
-	MaxBaseFee                    uint64
 }
 
 func AddEspressoRegisterServiceConfigOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".max-txn-wait-time", DefaultEspressoRegisterServiceConfig.MaxTxnWaitTime, "max transaction wait time when calling espresso tee verifier contracts")
-	f.Duration(prefix+".retry-base-fee-delay", DefaultEspressoRegisterServiceConfig.RetryBaseFeeDelay, "delay in calls to check the base fee")
 	f.Duration(prefix+".retry-read-contract-delay", DefaultEspressoRegisterServiceConfig.RetryReadContractDelay, "delay in calls to read from contract for verification")
 	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterServiceConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
 	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterServiceConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
-	f.Uint64(prefix+".max-base-fee", DefaultEspressoRegisterServiceConfig.MaxBaseFee, "max base fee to use when calling espresso tee contracts")
 }
