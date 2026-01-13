@@ -437,6 +437,7 @@ var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	EspressoEventPollingStep: 100,
 	AddressMonitorStep:       100,
 	AddressMonitorStartL1:    1,
+	AddressValidRanges:       []AddressValidRangeConfig{},
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -507,6 +508,7 @@ var TestEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	EspressoEventPollingStep: 100,
 	AddressMonitorStartL1:    1,
 	AddressMonitorStep:       100,
+	AddressValidRanges:       []AddressValidRangeConfig{},
 }
 
 type BatchPosterOpts struct {
