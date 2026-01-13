@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ethereum/go-ethereum/common"
+	espressobatchposter "github.com/offchainlabs/nitro/espresso/batch_poster"
 )
 
 func TestBatcherAddrSimpleMonitor_IsValid(t *testing.T) {
@@ -15,7 +16,7 @@ func TestBatcherAddrSimpleMonitor_IsValid(t *testing.T) {
 	addr1Str := "0x1234567890123456789012345678901234567890"
 	addr2Str := "0x2345678901234567890123456789012345678901"
 
-	cfgs := []AddressValidRangeConfig{
+	cfgs := []espressobatchposter.AddressValidRangeConfig{
 		{
 			Address: addr1Str,
 			From:    0,

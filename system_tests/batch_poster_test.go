@@ -26,6 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/externalsignertest"
 	"github.com/offchainlabs/nitro/arbutil"
+	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -162,7 +163,7 @@ func testBatchPosterParallel(t *testing.T, useRedis bool, useRedisLock bool) {
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
 
-				EspressoConfig: func() *arbnode.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoConfig: func() *espresso_batch_poster.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
 			},
 		)
 		Require(t, err)
@@ -305,7 +306,7 @@ func TestRedisBatchPosterHandoff(t *testing.T) {
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
 
-				EspressoConfig: func() *arbnode.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoConfig: func() *espresso_batch_poster.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
 			},
 		)
 		Require(t, err)

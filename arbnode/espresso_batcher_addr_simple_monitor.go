@@ -4,13 +4,8 @@ import (
 	"context"
 
 	"github.com/ethereum/go-ethereum/common"
+	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
 )
-
-type AddressValidRangeConfig struct {
-	Address string `koanf:"address"`
-	From    uint64 `koanf:"from"`
-	To      uint64 `koanf:"to"`
-}
 
 type AddressValidRange struct {
 	Address common.Address `koanf:"address"`
@@ -22,7 +17,7 @@ type BatcherAddrSimpleMonitor struct {
 	addressValidRanges []AddressValidRange
 }
 
-func NewBatcherAddrSimpleMonitor(addressValidRanges []AddressValidRangeConfig) *BatcherAddrSimpleMonitor {
+func NewBatcherAddrSimpleMonitor(addressValidRanges []espresso_batch_poster.AddressValidRangeConfig) *BatcherAddrSimpleMonitor {
 	converted := make([]AddressValidRange, 0, len(addressValidRanges))
 	for _, cfg := range addressValidRanges {
 		converted = append(converted, AddressValidRange{

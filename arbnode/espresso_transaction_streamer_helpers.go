@@ -12,6 +12,7 @@ import (
 
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espresso_light_client "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
 
 	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
@@ -218,12 +219,11 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   DefaultEspressoBatchPosterConfig.EspressoTxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.EspressoTxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.EspressoTxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.EspressoTxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
-
+		TxnsPollingInterval:                   espresso_batch_poster.DefaultEspressoBatchPosterConfig.EspressoTxnsPollingInterval,
+		TxnsSendingInterval:                   espresso_batch_poster.DefaultEspressoBatchPosterConfig.EspressoTxnsSendingInterval,
+		TxnsResubmissionInterval:              espresso_batch_poster.DefaultEspressoBatchPosterConfig.EspressoTxnsResubmissionInterval,
+		MaxTransactionSize:                    espresso_batch_poster.DefaultEspressoBatchPosterConfig.EspressoTxSizeLimit,
+		ResubmitEspressoTxDeadline:            espresso_batch_poster.DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
 		SubmitterCreator: submitter.NewPollingEspressoSubmitter,
 	}
 

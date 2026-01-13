@@ -38,6 +38,7 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/data_streaming"
 	"github.com/offchainlabs/nitro/daprovider/factory"
+	espressobatchposter "github.com/offchainlabs/nitro/espresso/batch_poster"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -57,8 +58,8 @@ import (
 )
 
 type EspressoConfig struct {
-	EspressoCaffNode    EspressoCaffNodeConfig    `koanf:"espresso-caff-node"`
-	EspressoBatchPoster EspressoBatchPosterConfig `koanf:"espresso-batch-poster"`
+	EspressoCaffNode    EspressoCaffNodeConfig                        `koanf:"espresso-caff-node"`
+	EspressoBatchPoster espressobatchposter.EspressoBatchPosterConfig `koanf:"espresso-batch-poster"`
 }
 
 type Config struct {
@@ -168,12 +169,12 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
 	EspressoCaffNodeConfigAddOptions(prefix+".espresso.espresso-caff-node", f)
-	EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
+	espressobatchposter.EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
 }
 
 var EspressoConfigDefault = EspressoConfig{
 	EspressoCaffNode:    DefaultEspressoCaffNodeConfig,
-	EspressoBatchPoster: DefaultEspressoBatchPosterConfig,
+	EspressoBatchPoster: espressobatchposter.DefaultEspressoBatchPosterConfig,
 }
 
 var ConfigDefault = Config{
@@ -1010,7 +1011,9 @@ func getBatchPoster(
 
 			DataSigner: dataSigner,
 
-			EspressoConfig: func() *EspressoBatchPosterConfig { return &configFetcher.Get().Espresso.EspressoBatchPoster },
+			EspressoConfig: func() *espressobatchposter.EspressoBatchPosterConfig {
+				return &configFetcher.Get().Espresso.EspressoBatchPoster
+			},
 		})
 		if err != nil {
 			return nil, err
