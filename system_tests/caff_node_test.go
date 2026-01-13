@@ -342,6 +342,8 @@ func mockTrustedNode(t *testing.T, ctx context.Context, port int) func() {
 	builder := NewNodeBuilder(ctx).DefaultConfig(t, false)
 	builder.l2StackConfig.HTTPPort = port
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
+	builder.useL2StackConfig = true // Some earlier part of the test overrides this value even when it's set at the beginning in
+	// createCaffNode()
 	return builder.BuildL2(t)
 }
 
