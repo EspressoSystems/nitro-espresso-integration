@@ -44,9 +44,8 @@ type EspressoCaffNodeInitArgs struct {
 }
 
 type EspressoCaffNodeConfig struct {
-	Enable     bool   `koanf:"enable"`
-	HotShotUrl string `koanf:"hotshot-url"`
-	// NextHotshotBlock              uint64                                    `koanf:"next-hotshot-block"`
+	Enable                        bool                                      `koanf:"enable"`
+	HotShotUrl                    string                                    `koanf:"hotshot-url"`
 	FromBlock                     uint64                                    `koanf:"from-block"`
 	Namespace                     uint64                                    `koanf:"namespace"`
 	RetryTime                     time.Duration                             `koanf:"retry-time"`
@@ -96,21 +95,18 @@ func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
 type DangerousCaffNodeConfig struct {
 	IgnoreDatabaseHotshotBlock bool `koanf:"ignore-database-hotshot-block"`
 	IgnoreDatabaseFromBlock    bool `koanf:"ignore-database-from-block"`
-	// MinimumHotshotBlockNum     uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 	IgnoreDatabaseHotshotBlock: false,
 	IgnoreDatabaseFromBlock:    false,
-	// MinimumHotshotBlockNum:     0,
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
-	Enable:     false,
-	HotShotUrl: "",
-	// NextHotshotBlock:        1,
-	Namespace: 0,
-	// RetryTime:               time.Second * 2,
+	Enable:                  false,
+	HotShotUrl:              "",
+	Namespace:               0,
+	RetryTime:               time.Second * 2,
 	HotshotPollingInterval:  time.Millisecond * 100,
 	HotshotPollingTimeout:   time.Minute * 2,
 	EspressoSGXVerifierAddr: "",
