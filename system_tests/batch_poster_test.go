@@ -26,7 +26,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbnode/dataposter/externalsignertest"
 	"github.com/offchainlabs/nitro/arbutil"
-	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/upgrade_executorgen"
@@ -148,7 +148,9 @@ func testBatchPosterParallel(t *testing.T, useRedis bool, useRedisLock bool) {
 	for i := 0; i < parallelBatchPosters; i++ {
 		// Make a copy of the batch poster config so NewBatchPoster calling Validate() on it doesn't race
 		batchPosterConfig := builder.nodeConfig.BatchPoster
-		espressoBatchPosterConfig := builder.nodeConfig.Espresso.EspressoBatchPoster
+		espressoBatchPosterConfig := builder.nodeConfig.Espresso.BatchPoster
+		espressoStreamerConfig := builder.nodeConfig.Espresso.StreamerConfig
+
 		batchPoster, err := arbnode.NewBatchPoster(ctx,
 			&arbnode.BatchPosterOpts{
 				DataPosterDB:  nil,
@@ -163,7 +165,8 @@ func testBatchPosterParallel(t *testing.T, useRedis bool, useRedisLock bool) {
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
 
-				EspressoConfig: func() *espresso_batch_poster.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoConfig:         func() *arbnode.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoStreamerConfig: func() *espressostreamer.EspressoStreamerConfig { return &espressoStreamerConfig },
 			},
 		)
 		Require(t, err)
@@ -291,7 +294,9 @@ func TestRedisBatchPosterHandoff(t *testing.T) {
 	newBatchPoster := func() *arbnode.BatchPoster {
 		// Make a copy of the batch poster config so NewBatchPoster calling Validate() on it doesn't race
 		batchPosterConfig := builder.nodeConfig.BatchPoster
-		espressoBatchPosterConfig := builder.nodeConfig.Espresso.EspressoBatchPoster
+		espressoBatchPosterConfig := builder.nodeConfig.Espresso.BatchPoster
+		espressoStreamerConfig := builder.nodeConfig.Espresso.StreamerConfig
+
 		batchPoster, err := arbnode.NewBatchPoster(ctx,
 			&arbnode.BatchPosterOpts{
 				DataPosterDB:  nil,
@@ -306,7 +311,8 @@ func TestRedisBatchPosterHandoff(t *testing.T) {
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
 
-				EspressoConfig: func() *espresso_batch_poster.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoConfig:         func() *arbnode.EspressoBatchPosterConfig { return &espressoBatchPosterConfig },
+				EspressoStreamerConfig: func() *espressostreamer.EspressoStreamerConfig { return &espressoStreamerConfig },
 			},
 		)
 		Require(t, err)

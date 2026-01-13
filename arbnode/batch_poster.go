@@ -47,7 +47,6 @@ import (
 	"github.com/offchainlabs/nitro/daprovider"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
-	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
 	"github.com/offchainlabs/nitro/espressostreamer"
@@ -150,6 +149,8 @@ type BatchPoster struct {
 	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
 	signerAddr                 common.Address
+
+	espressoStreamerConfig EspressoStreamerConfigFetcher
 }
 
 type l1BlockBound int
@@ -167,7 +168,6 @@ const (
 type BatchPosterDangerousConfig struct {
 	AllowPostingFirstBatchWhenSequencerMessageCountMismatch bool   `koanf:"allow-posting-first-batch-when-sequencer-message-count-mismatch"`
 	FixedGasLimit                                           uint64 `koanf:"fixed-gas-limit"`
-	MinimumHotshotBlockNum                                  uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 type BatchPosterConfig struct {
@@ -236,12 +236,12 @@ func (c *BatchPosterConfig) Validate() error {
 }
 
 type BatchPosterConfigFetcher func() *BatchPosterConfig
-type EspressoBatchConfigFetcher func() *espresso_batch_poster.EspressoBatchPosterConfig
+type EspressoBatchConfigFetcher func() *EspressoBatchPosterConfig
+type EspressoStreamerConfigFetcher func() *espressostreamer.EspressoStreamerConfig
 
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
 	f.Uint64(prefix+".fixed-gas-limit", DefaultBatchPosterConfig.Dangerous.FixedGasLimit, "use this gas limit for batch posting instead of estimating it")
-	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultBatchPosterConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 }
 
 func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
@@ -365,6 +365,8 @@ type BatchPosterOpts struct {
 	DataSigner signature.DataSignerFunc
 
 	EspressoConfig EspressoBatchConfigFetcher
+
+	EspressoStreamerConfig EspressoStreamerConfigFetcher
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -449,6 +451,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
 		espressoRestarting:        true,
+
+		espressoStreamerConfig: opts.EspressoStreamerConfig,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -580,7 +584,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		espressoStreamer := espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
-			opts.EspressoConfig().HotShotBlock,
+			opts.EspressoStreamerConfig().HotShotBlock,
 			nil,
 			hotShotClient,
 			false,
@@ -588,7 +592,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
 			opts.EspressoConfig().EspressoTxnsPollingInterval,
-			opts.Config().Dangerous.MinimumHotshotBlockNum,
+			opts.EspressoStreamerConfig().Dangerous.MinimumHotshotBlockNum,
 		)
 
 		b.espressoBatcherAddrMonitor = monitor

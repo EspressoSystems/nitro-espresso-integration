@@ -1,4 +1,4 @@
-package batch_poster
+package arbnode
 
 import (
 	"time"
@@ -7,12 +7,6 @@ import (
 
 	"github.com/offchainlabs/nitro/espressotee"
 )
-
-type AddressValidRangeConfig struct {
-	Address string `koanf:"address"`
-	From    uint64 `koanf:"from"`
-	To      uint64 `koanf:"to"`
-}
 
 type EspressoBatchPosterConfig struct {
 	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
@@ -28,7 +22,7 @@ type EspressoBatchPosterConfig struct {
 	AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
 
 	// Fetch messages from HotShot block
-	HotShotBlock             uint64 `koanf:"hotshot-block"`
+	// HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
@@ -42,7 +36,6 @@ type EspressoBatchPosterConfig struct {
 func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
 	f.String(prefix+".hotshot-url", DefaultEspressoBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
-	f.Uint64(prefix+".hotshot-block", DefaultEspressoBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
 	f.Uint64(prefix+".hotshot-first-posting-block", DefaultEspressoBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".espresso-event-polling-step", DefaultEspressoBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.Duration(prefix+".espresso-txns-polling-interval", DefaultEspressoBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
@@ -74,7 +67,6 @@ var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	UserDataAttestationFile:  "",
 	QuoteFile:                "",
 	AttestationServiceURL:    "",
-	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,
@@ -93,7 +85,6 @@ var TestEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
 	EspressoTxSizeLimit:              200 * 1024,
 
-	HotShotBlock:             1,
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EspressoEventPollingStep: 100,

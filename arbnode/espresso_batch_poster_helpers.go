@@ -16,7 +16,7 @@ func (b *BatchPoster) resetStreamerToParentChainOrConfigHotshotBlock(messageCoun
 	hotshotBlock := b.fetchHotshotBlockFromLastCheckpoint(ctx)
 	if hotshotBlock == 0 {
 		// if there hasn't been a batch posted, or we encountered an error, start reading from the configured hotshot block number.
-		hotshotBlock = b.espressoConfig().HotShotBlock
+		hotshotBlock = b.espressoStreamerConfig().HotShotBlock
 	}
 	b.espressoStreamer.Reset(uint64(messageCount), hotshotBlock)
 }

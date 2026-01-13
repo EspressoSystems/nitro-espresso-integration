@@ -27,7 +27,6 @@ import (
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
-	espresso_batch_poster "github.com/offchainlabs/nitro/espresso/batch_poster"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
@@ -45,9 +44,9 @@ type EspressoCaffNodeInitArgs struct {
 }
 
 type EspressoCaffNodeConfig struct {
-	Enable                        bool                                      `koanf:"enable"`
-	HotShotUrl                    string                                    `koanf:"hotshot-url"`
-	NextHotshotBlock              uint64                                    `koanf:"next-hotshot-block"`
+	Enable     bool   `koanf:"enable"`
+	HotShotUrl string `koanf:"hotshot-url"`
+	// NextHotshotBlock              uint64                                    `koanf:"next-hotshot-block"`
 	FromBlock                     uint64                                    `koanf:"from-block"`
 	Namespace                     uint64                                    `koanf:"namespace"`
 	RetryTime                     time.Duration                             `koanf:"retry-time"`
@@ -95,23 +94,23 @@ func (c *EspressoCaffNodeConfig) ResolveDirectoryNames(chain string) {
 }
 
 type DangerousCaffNodeConfig struct {
-	IgnoreDatabaseHotshotBlock bool   `koanf:"ignore-database-hotshot-block"`
-	IgnoreDatabaseFromBlock    bool   `koanf:"ignore-database-from-block"`
-	MinimumHotshotBlockNum     uint64 `koanf:"minimum-hotshot-block-num"`
+	IgnoreDatabaseHotshotBlock bool `koanf:"ignore-database-hotshot-block"`
+	IgnoreDatabaseFromBlock    bool `koanf:"ignore-database-from-block"`
+	// MinimumHotshotBlockNum     uint64 `koanf:"minimum-hotshot-block-num"`
 }
 
 var DefaultDangerousCaffNodeConfig = DangerousCaffNodeConfig{
 	IgnoreDatabaseHotshotBlock: false,
 	IgnoreDatabaseFromBlock:    false,
-	MinimumHotshotBlockNum:     0,
+	// MinimumHotshotBlockNum:     0,
 }
 
 var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
-	Enable:                  false,
-	HotShotUrl:              "",
-	NextHotshotBlock:        1,
-	Namespace:               0,
-	RetryTime:               time.Second * 2,
+	Enable:     false,
+	HotShotUrl: "",
+	// NextHotshotBlock:        1,
+	Namespace: 0,
+	// RetryTime:               time.Second * 2,
 	HotshotPollingInterval:  time.Millisecond * 100,
 	HotshotPollingTimeout:   time.Minute * 2,
 	EspressoSGXVerifierAddr: "",
@@ -145,7 +144,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".enable", DefaultEspressoCaffNodeConfig.Enable, "enable espresso Caff node")
 	f.String(prefix+".hotshot-url", DefaultEspressoCaffNodeConfig.HotShotUrl, "Hotshot url")
-	f.Uint64(prefix+".next-hotshot-block", DefaultEspressoCaffNodeConfig.NextHotshotBlock, "the Hotshot block number from which the Caff node will read")
 	f.Uint64(prefix+".namespace", DefaultEspressoCaffNodeConfig.Namespace, "the namespace of the chain in Espresso Network, usually the chain id")
 	f.Duration(prefix+".retry-time", DefaultEspressoCaffNodeConfig.RetryTime, "retry time after a failure")
 	f.Duration(prefix+".hotshot-polling-interval", DefaultEspressoCaffNodeConfig.HotshotPollingInterval, "time after a success")
@@ -163,7 +161,7 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.EspressoTeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
-	f.String(prefix+".attestation-service-url", espresso_batch_poster.DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
+	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	f.String(prefix+".espresso-tee-verifier-addr", DefaultEspressoCaffNodeConfig.EspressoTEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
@@ -206,6 +204,8 @@ type EspressoCaffNode struct {
 	keyManager         *espresso_key_manager.EspressoKeyManager
 	dataPoster         *dataposter.DataPoster
 	caffNodePrivateKey *ecdsa.PrivateKey
+
+	streamerConfigFetcher EspressoStreamerConfigFetcher
 }
 
 func NewEspressoCaffNode(
@@ -222,6 +222,7 @@ func NewEspressoCaffNode(
 	stack *node.Node,
 	dataPosterDB ethdb.Database,
 	caffNodeInitArgs *EspressoCaffNodeInitArgs,
+	streamerConfigFetcher EspressoStreamerConfigFetcher,
 ) (*EspressoCaffNode, error) {
 	if !configFetcher().Enable {
 		return nil, nil
@@ -285,7 +286,7 @@ func NewEspressoCaffNode(
 		configFetcher().AddressMonitorStep,
 	)
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
-		configFetcher().NextHotshotBlock,
+		streamerConfigFetcher().HotShotBlock,
 		sgxVerifier,
 		client,
 		recordPerformance,
@@ -293,7 +294,7 @@ func NewEspressoCaffNode(
 			return batcherAddrMonitor.IsValid(ctx, addr, l1Height)
 		},
 		configFetcher().RetryTime,
-		configFetcher().Dangerous.MinimumHotshotBlockNum,
+		streamerConfigFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, blocksToRead,
@@ -407,6 +408,7 @@ func NewEspressoCaffNode(
 		keyManager:            keyManager,
 		dataPoster:            dataPoster,
 		caffNodePrivateKey:    caffNodePrivateKey,
+		streamerConfigFetcher: streamerConfigFetcher,
 	}, nil
 }
 
@@ -600,7 +602,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 	if nextHotshotBlock == 0 {
 		// No next hotshot block found, so we need to start from config.CaffNodeConfig.NextHotshotBlock
-		nextHotshotBlock = n.configFetcher().NextHotshotBlock
+		nextHotshotBlock = n.streamerConfigFetcher().HotShotBlock
 		if nextHotshotBlock == 0 {
 			return errors.New("no next hotshot block found in database or dangerous.ignore-database-hotshot-block is set to true, please set config.CaffNodeConfig.NextHotshotBlock")
 		}

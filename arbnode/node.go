@@ -38,7 +38,7 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/data_streaming"
 	"github.com/offchainlabs/nitro/daprovider/factory"
-	espressobatchposter "github.com/offchainlabs/nitro/espresso/batch_poster"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -58,8 +58,9 @@ import (
 )
 
 type EspressoConfig struct {
-	EspressoCaffNode    EspressoCaffNodeConfig                        `koanf:"espresso-caff-node"`
-	EspressoBatchPoster espressobatchposter.EspressoBatchPosterConfig `koanf:"espresso-batch-poster"`
+	StreamerConfig espressostreamer.EspressoStreamerConfig `koanf:"streamer"`
+	CaffNode       EspressoCaffNodeConfig                  `koanf:"caff-node"`
+	BatchPoster    EspressoBatchPosterConfig               `koanf:"batch-poster"`
 }
 
 type Config struct {
@@ -104,7 +105,7 @@ func (c *Config) Validate() error {
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
 	}
-	if c.Espresso.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+	if c.Espresso.CaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
 		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
@@ -169,12 +170,14 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
 	EspressoCaffNodeConfigAddOptions(prefix+".espresso.espresso-caff-node", f)
-	espressobatchposter.EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
+	EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
+	espressostreamer.EspressoStreamerConfigAddOptions(prefix+".espresso.espresso-streamer", f)
 }
 
 var EspressoConfigDefault = EspressoConfig{
-	EspressoCaffNode:    DefaultEspressoCaffNodeConfig,
-	EspressoBatchPoster: espressobatchposter.DefaultEspressoBatchPosterConfig,
+	CaffNode:       DefaultEspressoCaffNodeConfig,
+	BatchPoster:    DefaultEspressoBatchPosterConfig,
+	StreamerConfig: espressostreamer.DefaultEspressoStreamerConfig,
 }
 
 var ConfigDefault = Config{
@@ -1011,8 +1014,11 @@ func getBatchPoster(
 
 			DataSigner: dataSigner,
 
-			EspressoConfig: func() *espressobatchposter.EspressoBatchPosterConfig {
-				return &configFetcher.Get().Espresso.EspressoBatchPoster
+			EspressoConfig: func() *EspressoBatchPosterConfig {
+				return &configFetcher.Get().Espresso.BatchPoster
+			},
+			EspressoStreamerConfig: func() *espressostreamer.EspressoStreamerConfig {
+				return &configFetcher.Get().Espresso.StreamerConfig
 			},
 		})
 		if err != nil {
@@ -1047,23 +1053,26 @@ func getEspressoCaffNode(
 	fatalErrChan chan error,
 	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
-	if config.Espresso.EspressoCaffNode.Enable {
+	if config.Espresso.CaffNode.Enable {
 
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
-				func() *EspressoCaffNodeConfig { return &config.Espresso.EspressoCaffNode },
+				func() *EspressoCaffNodeConfig { return &config.Espresso.CaffNode },
 				chainDb,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				config.Espresso.EspressoCaffNode.RecordPerformance,
-				config.Espresso.EspressoCaffNode.BlocksToRead,
+				config.Espresso.CaffNode.RecordPerformance,
+				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				caffNodeInitArgs,
+				func() *espressostreamer.EspressoStreamerConfig {
+					return &configFetcher.Get().Espresso.StreamerConfig
+				},
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)

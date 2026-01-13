@@ -55,30 +55,30 @@ func createCaffNode(
 	execConfig.Sequencer.Enable = false
 	execConfig.ForwardingTarget = existing.l2StackConfig.IPCPath
 	execConfig.SecondaryForwardingTarget = []string{}
-	nodeConfig.Espresso.EspressoCaffNode.Enable = true
-	nodeConfig.Espresso.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	nodeConfig.Espresso.EspressoCaffNode.NextHotshotBlock = 1
-	nodeConfig.Espresso.EspressoCaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	nodeConfig.Espresso.CaffNode.Enable = true
+	nodeConfig.Espresso.CaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
+	nodeConfig.Espresso.StreamerConfig.HotShotBlock = 1
+	nodeConfig.Espresso.CaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 
 	// reuse the caff node settings so we can set them outside this function.
-	nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = existing.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization
-	nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations = existing.nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations
-	nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth = existing.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth
-	nodeConfig.Espresso.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
-	nodeConfig.Espresso.EspressoCaffNode.FromBlock = 1
-	nodeConfig.Espresso.EspressoCaffNode.EspressoTeeType = ""
-	nodeConfig.Espresso.EspressoCaffNode.DataPoster = dataposter.DefaultDataPosterConfig
-	nodeConfig.Espresso.EspressoCaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
-	nodeConfig.Espresso.EspressoCaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
-	nodeConfig.Espresso.EspressoCaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
+	nodeConfig.Espresso.CaffNode.WaitForFinalization = existing.nodeConfig.Espresso.CaffNode.WaitForFinalization
+	nodeConfig.Espresso.CaffNode.WaitForConfirmations = existing.nodeConfig.Espresso.CaffNode.WaitForConfirmations
+	nodeConfig.Espresso.CaffNode.RequiredBlockDepth = existing.nodeConfig.Espresso.CaffNode.RequiredBlockDepth
+	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
+	nodeConfig.Espresso.CaffNode.FromBlock = 1
+	nodeConfig.Espresso.CaffNode.EspressoTeeType = ""
+	nodeConfig.Espresso.CaffNode.DataPoster = dataposter.DefaultDataPosterConfig
+	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
+	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
+	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
 
-	nodeConfig.Espresso.EspressoCaffNode.StateChecker = arbnode.StateCheckerConfig{
+	nodeConfig.Espresso.CaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,
 		ErrorToleranceDuration: time.Hour * 1, // Set it to a larger value. That makes the state checker not shut down
 		TrustedNodeUrl:         fmt.Sprintf("http://bad-url:%d", 8945),
 	}
 
-	nodeConfig.Espresso.EspressoCaffNode.ForceInclusionChecker = arbnode.ForceInclusionCheckerConfig{
+	nodeConfig.Espresso.CaffNode.ForceInclusionChecker = arbnode.ForceInclusionCheckerConfig{
 		RetryTime:                time.Second * 2,
 		PollingInterval:          time.Second * 1,
 		BlockThresholdTolerance:  20,
@@ -87,24 +87,24 @@ func createCaffNode(
 	}
 
 	// for testing, we can use the same hotshot url for both
-	nodeConfig.Espresso.EspressoCaffNode.HotShotUrl = hotShotUrl
-	nodeConfig.Espresso.EspressoCaffNode.RetryTime = time.Second * 1
-	nodeConfig.Espresso.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
+	nodeConfig.Espresso.CaffNode.HotShotUrl = hotShotUrl
+	nodeConfig.Espresso.CaffNode.RetryTime = time.Second * 1
+	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
-	nodeConfig.Espresso.EspressoCaffNode.BlocksToRead = 10000
+	nodeConfig.Espresso.CaffNode.BlocksToRead = 10000
 
 	builder.l2StackConfig.HTTPPort = getRandomPort(t)
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
 
 	if dangerous {
-		nodeConfig.Espresso.EspressoCaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
-		nodeConfig.Espresso.EspressoCaffNode.NextHotshotBlock = 0
+		nodeConfig.Espresso.CaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
+		nodeConfig.Espresso.StreamerConfig.HotShotBlock = 0
 	}
 
-	nodeConfig.Espresso.EspressoCaffNode.EspressoTeeType = existing.nodeConfig.Espresso.EspressoCaffNode.EspressoTeeType
-	nodeConfig.Espresso.EspressoCaffNode.SnapshotChecksum = existing.nodeConfig.Espresso.EspressoCaffNode.SnapshotChecksum
-	nodeConfig.Espresso.EspressoCaffNode.GenerateSnapshot = existing.nodeConfig.Espresso.EspressoCaffNode.GenerateSnapshot
-	nodeConfig.Espresso.EspressoCaffNode.EspressoTEEVerifierAddr = existing.nodeConfig.Espresso.EspressoCaffNode.EspressoTEEVerifierAddr
+	nodeConfig.Espresso.CaffNode.EspressoTeeType = existing.nodeConfig.Espresso.CaffNode.EspressoTeeType
+	nodeConfig.Espresso.CaffNode.SnapshotChecksum = existing.nodeConfig.Espresso.CaffNode.SnapshotChecksum
+	nodeConfig.Espresso.CaffNode.GenerateSnapshot = existing.nodeConfig.Espresso.CaffNode.GenerateSnapshot
+	nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr = existing.nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
@@ -125,16 +125,16 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.Dangerous.NoSequencerCoordinator = true
 	execConfig.Sequencer.Enable = false
 	execConfig.SecondaryForwardingTarget = []string{}
-	nodeConfig.Espresso.EspressoCaffNode.Enable = true
-	nodeConfig.Espresso.EspressoCaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	nodeConfig.Espresso.EspressoCaffNode.NextHotshotBlock = 1
-	nodeConfig.Espresso.EspressoCaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
+	nodeConfig.Espresso.CaffNode.Enable = true
+	nodeConfig.Espresso.CaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
+	nodeConfig.Espresso.StreamerConfig.HotShotBlock = 1
+	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 
 	// for testing, we can use the same hotshot url for both
-	nodeConfig.Espresso.EspressoCaffNode.HotShotUrl = hotShotUrl
-	nodeConfig.Espresso.EspressoCaffNode.RetryTime = time.Second * 1
-	nodeConfig.Espresso.EspressoCaffNode.HotshotPollingInterval = time.Millisecond * 100
-	nodeConfig.Espresso.EspressoCaffNode.FromBlock = 1
+	nodeConfig.Espresso.CaffNode.HotShotUrl = hotShotUrl
+	nodeConfig.Espresso.CaffNode.RetryTime = time.Second * 1
+	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
+	nodeConfig.Espresso.CaffNode.FromBlock = 1
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder
@@ -238,7 +238,7 @@ func TestEspressoCaffNode(t *testing.T) {
 	Require(t, err)
 
 	// don't make the caff node wait for finalization during the default test.
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 	// start the node
 	builder, _, err = createCaffNode(ctx, t, builder, false)
 	Require(t, err)
@@ -379,9 +379,9 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	defer cleanEspresso()
 
 	// Set caff node config variables
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations = true
-	builder.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = true
+	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 
 	// start the node
 	log.Info("Starting the caff node")
@@ -408,7 +408,7 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 			AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 10)
 			header, err := builder.L1.Client.HeaderByNumber(ctx, nil) // get the latest header to check tx block depth
 			Require(t, err)
-			return header.Number.Uint64() >= tx[0].BlockNumber.Uint64()+builder.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
+			return header.Number.Uint64() >= tx[0].BlockNumber.Uint64()+builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth // check that the tx is at least RequiredBlockDepth blocks deep in the parent chains state.
 		})
 		return err
 	}
@@ -440,9 +440,9 @@ func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 	Require(t, err)
 
 	// Set caff node config vars
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations = false
-	builder.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = true
+	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = false
+	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = true
 	// start the node
 	log.Info("Starting the caff node")
 	builder2, cleanupCaffNode, err := createCaffNode(ctx, t, builder, false)
@@ -492,9 +492,9 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	defer cleanup()
 	defer cleanEspresso()
 	// set caff node config vars
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations = false
-	builder.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = false
+	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = false
+	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 
 	// start the node
 	log.Info("Starting the caff node")
@@ -535,10 +535,10 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	defer cleanEspresso()
 
 	// Set caff node config variables
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForConfirmations = true
-	builder.nodeConfig.Espresso.EspressoCaffNode.RequiredBlockDepth = 6
-	builder.nodeConfig.Espresso.EspressoCaffNode.WaitForFinalization = false
-	builder.nodeConfig.Espresso.EspressoCaffNode.GenerateSnapshot = true
+	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = true
+	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
+	builder.nodeConfig.Espresso.CaffNode.GenerateSnapshot = true
 
 	// start the node
 	log.Info("Starting the caff node initially")
@@ -576,14 +576,14 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 
 	// now we need to restart the caff node in Snapshot mode such and it will use this snapshot,
 	// verify it and re-initialize the tags with tmac
-	builderCaffNode.nodeConfig.Espresso.EspressoCaffNode.SnapshotChecksum = base64SnapshotFileContent
-	builderCaffNode.nodeConfig.Espresso.EspressoCaffNode.EspressoTeeType = "TESTS"
-	builderCaffNode.nodeConfig.Espresso.EspressoCaffNode.GenerateSnapshot = false
+	builderCaffNode.nodeConfig.Espresso.CaffNode.SnapshotChecksum = base64SnapshotFileContent
+	builderCaffNode.nodeConfig.Espresso.CaffNode.EspressoTeeType = "TESTS"
+	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
 
 	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
 	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
 	Require(t, err)
-	builderCaffNode.nodeConfig.Espresso.EspressoCaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
+	builderCaffNode.nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
 	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
 	_ = logHandler

@@ -11,6 +11,7 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -57,6 +58,32 @@ type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
 	Pos             uint64
 	HotshotHeight   uint64
+}
+
+type DangerousEspressoStreamerConfig struct {
+	MinimumHotshotBlockNum uint64 `koanf:"minimum-hotshot-block-num"`
+}
+
+var DefaultDangerousEspressoStreamerConfig = DangerousEspressoStreamerConfig{
+	MinimumHotshotBlockNum: 0,
+}
+
+type EspressoStreamerConfig struct {
+	HotShotBlock uint64                          `koanf:"hotshot-block"`
+	Dangerous    DangerousEspressoStreamerConfig `koanf:"dangerous"`
+}
+
+var DefaultEspressoStreamerConfig = EspressoStreamerConfig{
+	// Hotshot currently produces blocks at average of 2 seconds
+	// We set it to 1 second to get updates more often than blocks are produced
+	HotShotBlock: 1,
+	// By default, no minimum hotshot block number is enforced
+	Dangerous: DefaultDangerousEspressoStreamerConfig,
+}
+
+func EspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
+	f.Uint64(prefix+".hotshot-block", DefaultEspressoStreamerConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultEspressoStreamerConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 }
 
 type EspressoStreamer struct {
