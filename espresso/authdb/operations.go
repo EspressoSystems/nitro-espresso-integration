@@ -1,7 +1,9 @@
 package authdb
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -76,43 +78,6 @@ func ReadFromBlock(db ethdb.KeyValueReader) (uint64, error) {
 	return DecodeUint64(numBytes)
 }
 
-// WriteInitAddresses writes the batcher address monitor's InitAddresses info
-func WriteInitAddresses(db ethdb.KeyValueWriter, addrs []common.Address) error {
-	if err := enforceAuthenticatedWriter(db); err != nil {
-		return err
-	}
-	if len(addrs) == 0 {
-		return nil
-	}
-	addrsBytes, err := rlp.EncodeToBytes(addrs)
-	if err != nil {
-		return fmt.Errorf("failed to encode addrs: %w", err)
-	}
-	return db.Put(initAddressesKey, addrsBytes)
-}
-
-// ReadInitAddresses reads the batcher address monitor's InitAddresses info
-func ReadInitAddresses(db ethdb.KeyValueReader) ([]common.Address, error) {
-	if err := enforceAuthenticatedReader(db); err != nil {
-		return nil, err
-	}
-	addrsBytes, err := db.Get(initAddressesKey)
-	if err != nil {
-		if dbutil.IsErrNotFound(err) {
-			// on batcher monitor first run, there may be no init addrs, thus not found is fine
-			return nil, nil // nolint:nilerr
-		}
-		return nil, fmt.Errorf("failed to get init addrs: %w", err)
-	}
-
-	var addrs []common.Address
-	err = rlp.DecodeBytes(addrsBytes, &addrs)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode addrs: %w", err)
-	}
-	return addrs, nil
-}
-
 // WriteEvents writes the batcher address monitor's Events info
 // We accept RLP-encoded events to avoid cyclic dependency since `BatcherAddrUpdate struct`
 // is defined in `arbnode` which will depend on this function
@@ -160,4 +125,76 @@ func ReadLastProcessedHeight(db ethdb.KeyValueReader) (uint64, error) {
 		return 0, fmt.Errorf("failed to get last processed height: %w", err)
 	}
 	return DecodeUint64(heightBytes)
+}
+
+type AddrFlag struct {
+	Addr common.Address
+	Flag bool
+}
+
+type AddrFlagList []AddrFlag
+
+func WriteAddresses(db ethdb.KeyValueWriter, addrs []map[common.Address]bool) error {
+	if err := enforceAuthenticatedWriter(db); err != nil {
+		return err
+	}
+
+	outer := make([]AddrFlagList, 0, len(addrs))
+
+	for _, m := range addrs {
+		list := make(AddrFlagList, 0, len(m))
+		for addr, flag := range m {
+			list = append(list, AddrFlag{
+				Addr: addr,
+				Flag: flag,
+			})
+		}
+
+		sort.Slice(list, func(i, j int) bool {
+			return bytes.Compare(
+				list[i].Addr.Bytes(),
+				list[j].Addr.Bytes(),
+			) < 0
+		})
+
+		outer = append(outer, list)
+	}
+
+	// Encode as RLP
+	encoded, err := rlp.EncodeToBytes(outer)
+	if err != nil {
+		return fmt.Errorf("failed to encode addresses: %w", err)
+	}
+
+	return db.Put(addressesKey, encoded)
+}
+
+func ReadAddresses(db ethdb.KeyValueReader) ([]map[common.Address]bool, error) {
+	// Read raw bytes
+	data, err := db.Get(addressesKey)
+	if err != nil {
+		if dbutil.IsErrNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Decode RLP -> [][]AddrFlag
+	var outer []AddrFlagList
+	if err := rlp.DecodeBytes(data, &outer); err != nil {
+		return nil, fmt.Errorf("failed to decode addresses: %w", err)
+	}
+
+	// Convert back to []map[Address]bool
+	result := make([]map[common.Address]bool, 0, len(outer))
+
+	for _, list := range outer {
+		m := make(map[common.Address]bool, len(list))
+		for _, af := range list {
+			m[af.Addr] = af.Flag
+		}
+		result = append(result, m)
+	}
+
+	return result, nil
 }

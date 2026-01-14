@@ -58,6 +58,8 @@ type PollingEspressoSubmitter struct {
 	espressoClient     espresso_client.EspressoClient
 	espressoKeyManager espresso_key_manager.EspressoKeyManagerInterface
 
+	canSubmit func(ctx context.Context) (bool, error)
+
 	chainID                               uint64
 	espressoTxnsPollingInterval           time.Duration
 	espressoTxnsSendingInterval           time.Duration
@@ -99,6 +101,7 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
 		InitialFinalizedSequencerMessageCount: config.InitialFinalizedSequencerMessageCount,
+		canSubmit:                             config.CanSubmit,
 	}, nil
 }
 
@@ -478,6 +481,15 @@ func (s *PollingEspressoSubmitter) pollSubmittedTransactionForFinality(ctx conte
 func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
 	retryRate := s.espressoTxnsSendingInterval * 2
+
+	ok, err := s.canSubmit(ctx)
+	if err != nil {
+		return s.espressoTxnsSendingInterval
+	}
+
+	if !ok {
+		return retryRate
+	}
 	shouldSubmit := s.shouldSubmitEspressoTransaction(nil)
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
