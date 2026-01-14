@@ -143,7 +143,7 @@ func TestEspressoStreamer(t *testing.T) {
 					log.Info("msg is nil")
 					count += 1
 					logger <- count
-				} else {
+				} else if msg != nil {
 					log.Info("msg is non nil", "msg", msg)
 					shouldStop = true
 					return msg
