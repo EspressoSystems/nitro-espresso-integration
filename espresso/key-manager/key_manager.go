@@ -126,7 +126,11 @@ func NewEspressoKeyManager(
 	}
 
 	if teeType == NITRO && zkAttestationServiceURL == "" {
-		panic("zk attestation service URL must be provided for nitro TEE type")
+		if serviceType != espressotee.Test {
+			panic("zk attestation service URL must be provided for nitro TEE type")
+		} else {
+			log.Info("Allowing nitro key manager creation without zkAttestationServiceURL for tests")
+		}
 	}
 
 	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)

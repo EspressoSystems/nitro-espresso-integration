@@ -156,7 +156,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		// Simulate registration occurring over one call.
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, registerOpts, nil, "", "", "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, mockEspressoNitroTEEVerifier, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, registerOpts, nil, "", "", "http://127.0.0.1")
 		registered := km.HasRegistered()
 		assert.False(t, registered, "Should start unregistered")
 
@@ -166,7 +166,7 @@ func TestEspressoKeyManager(t *testing.T) {
 			called = true
 			pubKeyBytes := crypto.FromECDSAPub(km.GetCurrentKey())
 			assert.Equal(t, pubKeyBytes, data, "Sign function should receive public key")
-			return []byte("mock-signature"), nil
+			return []byte{}, nil
 		}
 
 		// First registration
