@@ -141,7 +141,7 @@ type BatchPoster struct {
 	checkEip7623 bool
 	useEip7623   bool
 
-	espressoConfig             EspressoBatchConfigFetcher
+	espressoConfig             *EspressoConfig
 	bytesType                  abi.Type
 	bytes32ArrayType           abi.Type
 	blobsAttestationArguments  abi.Arguments
@@ -150,7 +150,7 @@ type BatchPoster struct {
 	espressoRestarting         bool
 	signerAddr                 common.Address
 
-	espressoStreamerConfig EspressoStreamerConfigFetcher
+	// espressoStreamerConfig EspressoStreamerConfigFetcher
 }
 
 type l1BlockBound int
@@ -235,6 +235,7 @@ func (c *BatchPosterConfig) Validate() error {
 	return nil
 }
 
+type EspressoConfigFetcher func() *EspressoConfig
 type BatchPosterConfigFetcher func() *BatchPosterConfig
 type EspressoBatchConfigFetcher func() *EspressoBatchPosterConfig
 type EspressoStreamerConfigFetcher func() *espressostreamer.EspressoStreamerConfig
@@ -364,9 +365,7 @@ type BatchPosterOpts struct {
 
 	DataSigner signature.DataSignerFunc
 
-	EspressoConfig EspressoBatchConfigFetcher
-
-	EspressoStreamerConfig EspressoStreamerConfigFetcher
+	EspressoConfigFetcher EspressoConfigFetcher
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -446,13 +445,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		checkEip7623:       checkEip7623,
 		useEip7623:         useEip7623,
 
-		espressoConfig:            opts.EspressoConfig,
+		espressoConfig:            opts.EspressoConfigFetcher(),
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
 		espressoRestarting:        true,
-
-		espressoStreamerConfig: opts.EspressoStreamerConfig,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -498,7 +495,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 	submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
-	hotshotUrl := opts.EspressoConfig().HotShotUrl
+	hotshotUrl := opts.EspressoConfigFetcher().BatchPoster.HotShotUrl
 	// If the hotshot URL is non-empty, create the Espresso client.
 	if hotshotUrl != "" {
 		hotShotClient := hotshotClient.NewClient(hotshotUrl)
@@ -540,7 +537,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 
 		submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
 
-		initStringAddresses := opts.EspressoConfig().InitBatcherAddresses
+		initStringAddresses := opts.EspressoConfigFetcher().BatchPoster.InitBatcherAddresses
 		// Convert the init addresses to common.Address
 		initAddresses := []common.Address{}
 		for _, addr := range initStringAddresses {
@@ -568,31 +565,31 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		var monitor BatcherAddrMonitorInterface
-		if len(opts.EspressoConfig().AddressValidRanges) == 0 {
+		if len(opts.EspressoConfigFetcher().BatchPoster.AddressValidRanges) == 0 {
 			monitor = NewBatcherAddrMonitor(
 				initAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
-				opts.EspressoConfig().AddressMonitorStartL1,
-				opts.EspressoConfig().AddressMonitorStep,
+				opts.EspressoConfigFetcher().BatchPoster.AddressMonitorStartL1,
+				opts.EspressoConfigFetcher().BatchPoster.AddressMonitorStep,
 			)
 		} else {
-			monitor = NewBatcherAddrSimpleMonitor(opts.EspressoConfig().AddressValidRanges)
+			monitor = NewBatcherAddrSimpleMonitor(opts.EspressoConfigFetcher().BatchPoster.AddressValidRanges)
 		}
 
 		espressoStreamer := espressostreamer.NewEspressoStreamer(
 			opts.ChainID,
-			opts.EspressoStreamerConfig().HotShotBlock,
+			opts.EspressoConfigFetcher().Streamer.HotShotBlock,
 			nil,
 			hotShotClient,
 			false,
 			func(l1Height uint64, addr common.Address) (bool, error) {
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
-			opts.EspressoConfig().EspressoTxnsPollingInterval,
-			opts.EspressoStreamerConfig().Dangerous.MinimumHotshotBlockNum,
+			opts.EspressoConfigFetcher().BatchPoster.EspressoTxnsPollingInterval,
+			opts.EspressoConfigFetcher().Streamer.Dangerous.MinimumHotshotBlockNum,
 		)
 
 		b.espressoBatcherAddrMonitor = monitor
@@ -600,7 +597,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if b.espressoStreamer != nil {
-		cfg := opts.EspressoConfig()
+		cfg := opts.EspressoConfigFetcher().BatchPoster
 
 		submitterOptions = append(
 			submitterOptions,
@@ -648,7 +645,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.EspressoConfig().UserDataAttestationFile, opts.EspressoConfig().QuoteFile, opts.EspressoConfig().AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.EspressoConfigFetcher().BatchPoster.UserDataAttestationFile, opts.EspressoConfigFetcher().BatchPoster.QuoteFile, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
 			),
 		)
 

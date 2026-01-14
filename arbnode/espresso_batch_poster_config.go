@@ -21,8 +21,6 @@ type EspressoBatchPosterConfig struct {
 	QuoteFile                        string                                    `koanf:"quote-file"`
 	AttestationServiceURL            string                                    `koanf:"attestation-service-url"`
 
-	// Fetch messages from HotShot block
-	// HotShotBlock             uint64 `koanf:"hotshot-block"`
 	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`

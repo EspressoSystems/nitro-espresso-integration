@@ -58,9 +58,9 @@ import (
 )
 
 type EspressoConfig struct {
-	StreamerConfig espressostreamer.EspressoStreamerConfig `koanf:"streamer"`
-	CaffNode       EspressoCaffNodeConfig                  `koanf:"caff-node"`
-	BatchPoster    EspressoBatchPosterConfig               `koanf:"batch-poster"`
+	CaffNode    EspressoCaffNodeConfig                  `koanf:"caff-node"`
+	BatchPoster EspressoBatchPosterConfig               `koanf:"batch-poster"`
+	Streamer    espressostreamer.EspressoStreamerConfig `koanf:"streamer"`
 }
 
 type Config struct {
@@ -87,8 +87,7 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	// EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
-	Espresso EspressoConfig `koanf:"espresso"`
+	Espresso EspressoConfig `koanf:"espresso" reload:"hot"`
 }
 
 func (c *Config) Validate() error {
@@ -175,9 +174,9 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 }
 
 var EspressoConfigDefault = EspressoConfig{
-	CaffNode:       DefaultEspressoCaffNodeConfig,
-	BatchPoster:    DefaultEspressoBatchPosterConfig,
-	StreamerConfig: espressostreamer.DefaultEspressoStreamerConfig,
+	CaffNode:    DefaultEspressoCaffNodeConfig,
+	BatchPoster: DefaultEspressoBatchPosterConfig,
+	Streamer:    espressostreamer.DefaultEspressoStreamerConfig,
 }
 
 var ConfigDefault = Config{
@@ -1014,11 +1013,8 @@ func getBatchPoster(
 
 			DataSigner: dataSigner,
 
-			EspressoConfig: func() *EspressoBatchPosterConfig {
-				return &configFetcher.Get().Espresso.BatchPoster
-			},
-			EspressoStreamerConfig: func() *espressostreamer.EspressoStreamerConfig {
-				return &configFetcher.Get().Espresso.StreamerConfig
+			EspressoConfigFetcher: func() *EspressoConfig {
+				return &configFetcher.Get().Espresso
 			},
 		})
 		if err != nil {
@@ -1071,7 +1067,7 @@ func getEspressoCaffNode(
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				caffNodeInitArgs,
 				func() *espressostreamer.EspressoStreamerConfig {
-					return &configFetcher.Get().Espresso.StreamerConfig
+					return &configFetcher.Get().Espresso.Streamer
 				},
 			)
 			if err != nil {

@@ -57,7 +57,7 @@ func createCaffNode(
 	execConfig.SecondaryForwardingTarget = []string{}
 	nodeConfig.Espresso.CaffNode.Enable = true
 	nodeConfig.Espresso.CaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	nodeConfig.Espresso.StreamerConfig.HotShotBlock = 1
+	nodeConfig.Espresso.Streamer.HotShotBlock = 1
 	nodeConfig.Espresso.CaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 
 	// reuse the caff node settings so we can set them outside this function.
@@ -98,7 +98,7 @@ func createCaffNode(
 
 	if dangerous {
 		nodeConfig.Espresso.CaffNode.Dangerous.IgnoreDatabaseHotshotBlock = true
-		nodeConfig.Espresso.StreamerConfig.HotShotBlock = 0
+		nodeConfig.Espresso.Streamer.HotShotBlock = 0
 	}
 
 	nodeConfig.Espresso.CaffNode.EspressoTeeType = existing.nodeConfig.Espresso.CaffNode.EspressoTeeType
@@ -127,7 +127,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	execConfig.SecondaryForwardingTarget = []string{}
 	nodeConfig.Espresso.CaffNode.Enable = true
 	nodeConfig.Espresso.CaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
-	nodeConfig.Espresso.StreamerConfig.HotShotBlock = 1
+	nodeConfig.Espresso.Streamer.HotShotBlock = 1
 	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 
 	// for testing, we can use the same hotshot url for both
