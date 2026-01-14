@@ -35,7 +35,26 @@ jobs:
           echo "github.event.workflow_run.ref=${{ github.event.workflow_run.ref }}"
           echo "github.event.workflow_run.head_branch=${{ github.event.workflow_run.head_branch }}"
 
-  test:
+  throughput:
+    runs-on: ubuntu-24.04-8core
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup CI
+        uses: ./.github/actions/ci-setup
+
+      - name: Build
+        run: make build build-replay-env -j
+
+      - name: Transaction Streamer regression test
+        run: |
+          bash scripts/run-transaction-streamer-regression-ci-tests
+
+
+  nitro-testnode:
     name: Espresso Regression test
     runs-on: ubuntu-24.04-8core
     if: github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && startsWith(github.event.workflow_run.head_branch, 'v'))
@@ -51,20 +70,10 @@ jobs:
             echo "ESPRESSO_DEV=true" >> $GITHUB_ENV
           fi
 
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: v1.0.0
-          cache: false
-
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
-
-      - name: Transaction Streamer regression test
-        run: |
-          bash scripts/run-transaction-streamer-regression-ci-tests
 
       - name: Run regression test
         run: |
