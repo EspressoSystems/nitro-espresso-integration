@@ -56,7 +56,10 @@ TestEmptyCliConfig
 TestBatchPosterDelayBufferDisabled
 TestLatestConsensusRelease
 
-# These tests are failing with celestia integration
+TestTimeboostExpressLaneTxsHandlingDuringSequencerSwapDueToPriorities
+TestTimeboostExpressLaneTxsHandlingDuringSequencerSwapDueToActiveSequencerCrashing
+
+# These tests are skipped because of invalid long paths of temporary directory
 
 TestEmptyCliConfig
 TestChallengeToTooFar

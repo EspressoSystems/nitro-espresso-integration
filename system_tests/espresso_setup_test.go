@@ -29,14 +29,14 @@ func createL1AndL2Node(
 
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = true
-	builder.nodeConfig.BatchPoster.EspressoTxnsPollingInterval = 2 * time.Second
+	builder.nodeConfig.Espresso.Streamer.TxnsPollingInterval = 2 * time.Second
 	builder.nodeConfig.BatchPoster.ErrorDelay = 5 * time.Second
 	builder.nodeConfig.BatchPoster.MaxSize = 1000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.BatchPoster.EspressoTeeType = "SGX"
+	builder.nodeConfig.BatchPoster.MaxEmptyBatchDelay = 10 * time.Second
+	builder.nodeConfig.Espresso.BatchPoster.HotShotUrl = hotShotUrl
+	builder.nodeConfig.Espresso.BatchPoster.TeeType = "SGX"
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true

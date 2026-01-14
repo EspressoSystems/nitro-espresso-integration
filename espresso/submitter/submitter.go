@@ -1,6 +1,7 @@
 package submitter
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"time"
@@ -57,6 +58,8 @@ type EspressoSubmitterConfig struct {
 	KeyManager        espresso_key_manager.EspressoKeyManagerInterface
 	MessageGetter     MessageGetter
 	Db                ethdb.Database
+
+	CanSubmit func(ctx context.Context) (bool, error)
 
 	// These are specific to the Multi Worker Queue Espresso Submitter
 	// and governs how many workers / buffering is used for the
@@ -131,6 +134,12 @@ func applyEspressoSubmitterConfigOptions(
 func WithMultipleOptions(options ...EspressoSubmitterConfigOption) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		applyEspressoSubmitterConfigOptions(config, options...)
+	}
+}
+
+func WithCanSubmit(canSubmit func(ctx context.Context) (bool, error)) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.CanSubmit = canSubmit
 	}
 }
 
@@ -397,6 +406,10 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 
 	if config.EspressoTxnSendingInterval <= 0 {
 		return fmt.Errorf("espresso transactions submission interval must be greater than 0")
+	}
+
+	if config.CanSubmit == nil {
+		return fmt.Errorf("espresso can submit is not set")
 	}
 
 	return nil
