@@ -69,8 +69,6 @@ func createCaffNode(
 	nodeConfig.Espresso.CaffNode.EspressoTeeType = ""
 	nodeConfig.Espresso.CaffNode.DataPoster = dataposter.DefaultDataPosterConfig
 	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
-	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
-	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig.MaxRetries = 5
 
 	nodeConfig.Espresso.CaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,
