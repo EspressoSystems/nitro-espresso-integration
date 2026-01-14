@@ -38,7 +38,11 @@ func (m *MockEspressoStreamer) StopAndWait() {
 var _ espressostreamer.EspressoStreamerInterface = (*MockEspressoStreamer)(nil)
 
 // SetBatcherAddressesFetcher implements espressostreamer.EspressoStreamerInterface.
-func (m *MockEspressoStreamer) SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address) {
+func (m *MockEspressoStreamer) SetBatcherAddressesFetcher(fetcher func(l1Height uint64, address common.Address) (bool, error)) {
+	panic("unimplemented")
+}
+
+func (m *MockEspressoStreamer) CanBatcherAddressSend(ctx context.Context, address common.Address) (bool, error) {
 	panic("unimplemented")
 }
 

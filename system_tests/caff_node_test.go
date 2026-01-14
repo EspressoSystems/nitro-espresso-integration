@@ -398,6 +398,7 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	// Check the caff node RPC for tx. assert that it is not there.
 	_, _, err = builderCaffNode.Client.TransactionByHash(ctx, tx[0].TxHash)
 	ExpectErr(t, err, ethereum.NotFound)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 
 	// Create the event function closures for the assert statement.
 	firstEvent := func() error {
@@ -743,7 +744,7 @@ func TestEspressoCaffNodeSGXVerifierShouldRetryWhenEncounterRPCError(t *testing.
 
 	espressoStreamer.SetSGXVerifier(NewMockSgxTeeVerifier())
 	// Set this will cause the caff node to use the sgx verifier
-	espressoStreamer.SetBatcherAddressesFetcher(func(l1Height uint64) []common.Address { return []common.Address{{}} })
+	espressoStreamer.SetBatcherAddressesFetcher(func(l1Height uint64, addr common.Address) (bool, error) { return false, nil })
 
 	err = waitForWith(ctx, 10*time.Minute, 10*time.Second, func() bool {
 		balance1 := builder2.L2.GetBalance(t, builder.L2Info.GetAddress("User16"))
