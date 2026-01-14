@@ -101,7 +101,7 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
 		InitialFinalizedSequencerMessageCount: config.InitialFinalizedSequencerMessageCount,
-		canSubmit:                             config.CanSubmit,
+		canSubmit:                             func(ctx context.Context) (bool, error) { return true, nil },
 	}, nil
 }
 
