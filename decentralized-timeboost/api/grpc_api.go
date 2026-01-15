@@ -2,6 +2,7 @@ package decentralized_timeboost
 
 import (
 	"context"
+	"fmt"
 
 	// Protobuf imports for grpc calls
 	protos "github.com/EspressoSystems/timeboost-proto/go-generated"
@@ -13,7 +14,8 @@ import (
 
 type ForwardService struct {
 	protos.UnimplementedForwardApiServer
-	ProcessInclusionList func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error
+	ProcessInclusionList  func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error
+	ProcessTimeboostState func(context.Context, *protos.TimeboostState)
 }
 
 // Implement the SubmitInclusionList RPC
@@ -22,5 +24,14 @@ func (s *ForwardService) SubmitInclusionList(ctx context.Context, req *protos.In
 		log.Error("failed to process inclusion list", "err", err)
 		return nil, err
 	}
+	return &emptypb.Empty{}, nil
+}
+
+func (s *ForwardService) UpdateTimeboostState(ctx context.Context, req *protos.TimeboostState) (*emptypb.Empty, error) {
+	if req == nil {
+		log.Error("received nil request from timeboost")
+		return nil, fmt.Errorf("received nil state request from timeboost, ignoring.")
+	}
+	s.ProcessTimeboostState(ctx, req)
 	return &emptypb.Empty{}, nil
 }

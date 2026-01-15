@@ -95,6 +95,7 @@ func (b *DecentralizedTimeboostBridge) blockSubmitter(timeout *time.Duration) ti
 func (b *DecentralizedTimeboostBridge) Start(
 	ctx context.Context,
 	processInclusionList func(context.Context, *protos.InclusionList, *arbitrum_types.ConditionalOptions) error,
+	processTimeboostState func(ctx context.Context, catchupRound *protos.TimeboostState),
 ) error {
 	if _, err := url.ParseRequestURI(b.config.InternalTimeboostGrpcUrl); err != nil {
 		panic("timeboost grpc url must be a valid url")
@@ -135,7 +136,8 @@ func (b *DecentralizedTimeboostBridge) Start(
 			grpc.ConnectionTimeout(b.config.ConnectionTimeout),
 		)
 		protos.RegisterForwardApiServer(server, &decentralized_timeboost_api.ForwardService{
-			ProcessInclusionList: processInclusionList,
+			ProcessInclusionList:  processInclusionList,
+			ProcessTimeboostState: processTimeboostState,
 		})
 		go func() {
 			<-ctx.Done()
