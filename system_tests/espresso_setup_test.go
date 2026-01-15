@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func createL1AndL2Node(
@@ -29,15 +31,14 @@ func createL1AndL2Node(
 
 	// poster config
 	builder.nodeConfig.BatchPoster.Enable = true
-	builder.nodeConfig.BatchPoster.EspressoTxnsPollingInterval = 2 * time.Second
+	builder.nodeConfig.Espresso.Streamer.TxnsPollingInterval = 2 * time.Second
 	builder.nodeConfig.BatchPoster.ErrorDelay = 5 * time.Second
 	builder.nodeConfig.BatchPoster.MaxSize = 1000
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.BatchPoster.HotShotUrl = hotShotUrl
+	builder.nodeConfig.Espresso.BatchPoster.HotShotUrl = hotShotUrl
 	builder.nodeConfig.BatchPoster.EspressoRegisterServiceConfig.MaxBaseFee = 10000000000 // 100 GWEI for tests
-	builder.nodeConfig.BatchPoster.EspressoTeeType = "SGX"
+	builder.nodeConfig.Espresso.BatchPoster.TeeType = "SGX"
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
@@ -75,4 +76,14 @@ func createL1AndL2Node(
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
 
 	return builder, cleanup
+}
+
+func TestCreateEspressoCaffNode(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	valNodeCleanup := createValidationNode(ctx, t, true)
+	defer valNodeCleanup()
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
+	defer cleanup()
+	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxSizeLimit, int64(0), "EspressoTxSizeLimit should be greater than 0")
 }
