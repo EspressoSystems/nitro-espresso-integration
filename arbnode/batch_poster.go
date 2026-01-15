@@ -570,8 +570,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
-				opts.EspressoConfigFetcher().BatchPoster.AddressMonitorStartL1,
-				opts.EspressoConfigFetcher().BatchPoster.AddressMonitorStep,
+				opts.EspressoConfigFetcher().Streamer.AddressMonitorStartL1,
+				opts.EspressoConfigFetcher().Streamer.AddressMonitorStep,
 			)
 		} else {
 			monitor = NewBatcherAddrSimpleMonitor(opts.EspressoConfigFetcher().BatchPoster.AddressValidRanges)

@@ -23,9 +23,7 @@ type EspressoBatchPosterConfig struct {
 	EventPollingStep         uint64 `koanf:"event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
 	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
-	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
-	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
+	InitBatcherAddresses []string `koanf:"init-batcher-addresses"`
 
 	AddressValidRanges []AddressValidRangeConfig `koanf:"address-valid-ranges"`
 }
@@ -43,8 +41,6 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.Int64(prefix+".tx-size-limit", DefaultEspressoBatchPosterConfig.TxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
-	f.Uint64(prefix+".address-monitor-step", DefaultEspressoBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
-	f.Uint64(prefix+".address-monitor-start-l1", DefaultEspressoBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 }
 
 var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
@@ -63,8 +59,6 @@ var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EventPollingStep:         100,
-	AddressMonitorStep:       100,
-	AddressMonitorStartL1:    1,
 	AddressValidRanges:       []AddressValidRangeConfig{},
 }
 
@@ -80,7 +74,5 @@ var TestEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},
 	EventPollingStep:         100,
-	AddressMonitorStartL1:    1,
-	AddressMonitorStep:       100,
 	AddressValidRanges:       []AddressValidRangeConfig{},
 }

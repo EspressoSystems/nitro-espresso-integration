@@ -46,7 +46,6 @@ type EspressoCaffNodeInitArgs struct {
 type EspressoCaffNodeConfig struct {
 	Enable                 bool                                      `koanf:"enable"`
 	HotShotUrl             string                                    `koanf:"hotshot-url"`
-	FromBlock              uint64                                    `koanf:"from-block"`
 	Namespace              uint64                                    `koanf:"namespace"`
 	HotshotPollingInterval time.Duration                             `koanf:"hotshot-polling-interval"`
 	HotshotPollingTimeout  time.Duration                             `koanf:"hotshot-polling-timeout"`
@@ -64,7 +63,7 @@ type EspressoCaffNodeConfig struct {
 	// SGX specific config, leave empty if not using SGX
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
 	QuoteFile               string `koanf:"quote-file"`
-	TEEVerifierAddr         string `koanf:"espresso-tee-verifier-addr"`
+	TEEVerifierAddr         string `koanf:"tee-verifier-addr"`
 
 	// AWS Nitro Attestation Service URL
 	AttestationServiceURL string `koanf:"attestation-service-url"`
@@ -79,7 +78,6 @@ type EspressoCaffNodeConfig struct {
 
 	KeyPairAttestationsPath string `koanf:"key-pair-attestations-path"`
 	SnapshotChecksum        string `koanf:"snapshot-checksum"`
-	AddressMonitorStep      uint64 `koanf:"address-monitor-step"`
 	GenerateSnapshot        bool   `koanf:"generate-snapshot"`
 	AuthDBBatchSize         int    `koanf:"auth-db-batch-size"`
 }
@@ -117,7 +115,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	RequiredBlockDepth:      20,
 	BlocksToRead:            10000,
 	Dangerous:               DefaultDangerousCaffNodeConfig,
-	FromBlock:               1,
 	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
 	TeeType:                 "",
 	RegisterServiceConfig:   espressotee.DefaultEspressoRegisterServiceConfig,
@@ -128,7 +125,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	DataPoster:              dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:        "",
 	ParentChainWallet:       DefaultBatchPosterL1WalletConfig,
-	AddressMonitorStep:      100,
 	GenerateSnapshot:        false,
 	AuthDBBatchSize:         10000,
 	StateChecker:            DefaultStateCheckerConfig,
@@ -148,10 +144,9 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.Bool(prefix+".wait-for-confirmations", DefaultEspressoCaffNodeConfig.WaitForConfirmations, "Configures the Caff node to only produce blocks from delayed messages if they have atleast requiredBlockDepth confirmations on the parent chain")
 	f.Uint64(prefix+".required-block-depth", DefaultEspressoCaffNodeConfig.RequiredBlockDepth, "Configures the required block depth/number of confirmations on the parent chain that a delayed message is required to have before this Caff node will add it to it's state")
 	f.Uint64(prefix+".blocks-to-read", DefaultEspressoCaffNodeConfig.BlocksToRead, "Configures the number of blocks to read from the parent chain for delayed messages")
-	f.Uint64(prefix+".from-block", DefaultEspressoCaffNodeConfig.FromBlock, "Configures the block number to start reading delayed messages from")
 	f.String(prefix+".key-pair-attestations-path", DefaultEspressoCaffNodeConfig.KeyPairAttestationsPath, "Path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
 	f.String(prefix+".snapshot-checksum", DefaultEspressoCaffNodeConfig.SnapshotChecksum, "Configures the snapshot checksum")
-	f.String(prefix+".espresso-tee-type", DefaultEspressoCaffNodeConfig.TeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
+	f.String(prefix+".tee-type", DefaultEspressoCaffNodeConfig.TeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".user-data-attestation-file", DefaultEspressoCaffNodeConfig.UserDataAttestationFile, "path to SGX user data attestation file")
 	f.String(prefix+".quote-file", DefaultEspressoCaffNodeConfig.QuoteFile, "path to SGX quote file")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
@@ -161,7 +156,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".register-service-config", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
-	f.Uint64(prefix+".address-monitor-step", DefaultEspressoCaffNodeConfig.AddressMonitorStep, "Step size to use when monitoring addresses")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig, dataposter.DataPosterUsageCaffNode)
 
 	EspressoForceInclusionConfigAddOptions(prefix+".force-inclusion-checker", f)
@@ -254,7 +248,7 @@ func NewEspressoCaffNode(
 	}
 	client := espressoClient.NewClient(configFetcher().HotShotUrl)
 
-	fromBlock := configFetcher().FromBlock
+	fromBlock := streamerConfigFetcher().AddressMonitorStartL1
 
 	if !configFetcher().Dangerous.IgnoreDatabaseFromBlock {
 		fromBlock, err = authdb.ReadFromBlock(&db)
@@ -263,7 +257,7 @@ func NewEspressoCaffNode(
 		}
 	}
 	if fromBlock == 0 {
-		fromBlock = configFetcher().FromBlock
+		fromBlock = streamerConfigFetcher().AddressMonitorStartL1
 		if fromBlock == 0 {
 			return nil, fmt.Errorf("fromBlock is 0, please provide a valid block number")
 		}
@@ -276,7 +270,7 @@ func NewEspressoCaffNode(
 		sequencerInbox.address,
 		delayedBridge.fromBlock,
 		fromBlock,
-		configFetcher().AddressMonitorStep,
+		streamerConfigFetcher().AddressMonitorStep,
 	)
 	espressoStreamer := espressostreamer.NewEspressoStreamer(configFetcher().Namespace,
 		streamerConfigFetcher().HotShotBlock,

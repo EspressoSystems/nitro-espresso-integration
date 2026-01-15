@@ -7,6 +7,8 @@ from pathlib import Path
 ESPRESSO_FIELD_MAP = {
     "hotshot-block": ("streamer", "hotshot-block"),
     "espresso-txns-polling-interval": ("streamer", "txns-polling-interval"),
+    "address-monitor-step": ("streamer", "address-monitor-step"),
+    "address-monitor-start-l1": ("streamer", "address-monitor-start-l1"),
 
     # [espresso][batch-poster]
     "espresso-tee-type": ("batch-poster", "tee-type"),
@@ -21,11 +23,11 @@ ESPRESSO_FIELD_MAP = {
     "attestation-service-url": ("batch-poster", "attestation-service-url"),
     "espresso-event-polling-step": ("batch-poster", "event-polling-step"),
     "hotshot-first-posting-block": ("batch-poster", "hotshot-first-posting-block"),
-    "address-monitor-start-l1": ("batch-poster", "address-monitor-start-l1"),
     "init-batcher-addresses": ("batch-poster", "init-batcher-addresses"),
-    "address-monitor-step": ("batch-poster", "address-monitor-step"),
     "address-valid-ranges": ("batch-poster", "address-valid-ranges"),
 
+    # "address-monitor-step": ("batch-poster", "address-monitor-step"),
+    # "address-monitor-start-l1": ("batch-poster", "address-monitor-start-l1"),
 }
 
 OLD_CAFF_NODE_KEY = "espresso-caff-node"
@@ -34,6 +36,8 @@ STREAMER_KEY = "streamer"
 DANGEROUS_KEY = "dangerous"
 MIN_BLOCK_KEY = "minimum-hotshot-block-num"
 TX_POLLING_INTERVAL_KEY = "txns-polling-interval"
+ADDRESS_MONITOR_STEP_KEY = "address-monitor-step"
+ADDRESS_MONITOR_START_L1_KEY = "address-monitor-start-l1"
 
 def migrate_config(cfg: dict) -> dict:
     cfg = copy.deepcopy(cfg)
@@ -75,6 +79,22 @@ def migrate_config(cfg: dict) -> dict:
     if not caff:
         return
 
+    streamer = espresso.setdefault("streamer", {})
+
+    if ADDRESS_MONITOR_STEP_KEY in caff:
+        streamer.setdefault(
+            ADDRESS_MONITOR_STEP_KEY,
+            caff[ADDRESS_MONITOR_STEP_KEY],
+        )
+        caff.pop(ADDRESS_MONITOR_STEP_KEY, None)
+    
+    if ADDRESS_MONITOR_START_L1_KEY in caff:
+        streamer.setdefault(
+            ADDRESS_MONITOR_START_L1_KEY,
+            caff[ADDRESS_MONITOR_START_L1_KEY],
+        )
+        caff.pop(ADDRESS_MONITOR_START_L1_KEY, None)
+
     dangerous = caff.get("dangerous")
     if not dangerous:
         return
@@ -83,7 +103,7 @@ def migrate_config(cfg: dict) -> dict:
         return
 
     #  ---- Migrate streamer  ----
-    streamer = espresso.setdefault("streamer", {})
+   
     streamer_dangerous = streamer.setdefault("dangerous", {})
 
     streamer_dangerous.setdefault(

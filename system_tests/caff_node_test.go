@@ -65,7 +65,7 @@ func createCaffNode(
 	nodeConfig.Espresso.CaffNode.WaitForConfirmations = existing.nodeConfig.Espresso.CaffNode.WaitForConfirmations
 	nodeConfig.Espresso.CaffNode.RequiredBlockDepth = existing.nodeConfig.Espresso.CaffNode.RequiredBlockDepth
 	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
-	nodeConfig.Espresso.CaffNode.FromBlock = 1
+	nodeConfig.Espresso.Streamer.AddressMonitorStartL1 = 1
 	nodeConfig.Espresso.CaffNode.TeeType = ""
 	nodeConfig.Espresso.CaffNode.DataPoster = dataposter.DefaultDataPosterConfig
 	nodeConfig.Espresso.CaffNode.RegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
@@ -132,7 +132,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 	nodeConfig.Espresso.CaffNode.HotShotUrl = hotShotUrl
 	nodeConfig.Espresso.Streamer.TxnsPollingInterval = time.Second * 1
 	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
-	nodeConfig.Espresso.CaffNode.FromBlock = 1
+	nodeConfig.Espresso.Streamer.AddressMonitorStartL1 = 1
 	nodeConfig.ParentChainReader.Enable = true
 
 	return builder

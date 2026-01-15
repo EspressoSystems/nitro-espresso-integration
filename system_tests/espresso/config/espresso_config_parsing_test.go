@@ -33,6 +33,7 @@ func TestEspressoConfigParsing(t *testing.T) {
 					"minimum-hotshot-block-num": int64(50),
 				},
 				"txns-polling-interval": "3s",
+				"address-monitor-step":  uint64(100),
 			},
 		},
 	}
@@ -53,6 +54,7 @@ func TestEspressoConfigParsing(t *testing.T) {
 	assert.Equal(t, uint64(100), parsedConfig.Espresso.Streamer.HotShotBlock)
 	assert.Equal(t, uint64(50), parsedConfig.Espresso.Streamer.Dangerous.MinimumHotshotBlockNum)
 	assert.Equal(t, 3*time.Second, parsedConfig.Espresso.Streamer.TxnsPollingInterval)
+	assert.Equal(t, uint64(100), parsedConfig.Espresso.Streamer.AddressMonitorStep)
 }
 
 func TestEspressoConfigMigration(t *testing.T) {
@@ -94,5 +96,10 @@ func TestEspressoConfigMigration(t *testing.T) {
 	require.Equal(t,
 		time.Duration(2*time.Second),
 		cfg.Espresso.Streamer.TxnsPollingInterval,
+	)
+
+	require.Equal(t,
+		uint64(100),
+		cfg.Espresso.Streamer.AddressMonitorStep,
 	)
 }

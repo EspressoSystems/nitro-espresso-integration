@@ -6,7 +6,6 @@
   },
   "espresso": {
     "batch-poster": {
-      "address-monitor-start-l1": 1,
       "address-valid-ranges": [
         {
           "address": "${address1}",
@@ -34,10 +33,13 @@
         "ignore-database-hotshot-block": true
       },
       "enable": false,
+      "from-block": 5,
       "namespace": 23,
       "tee-type": "${espresso_tee_type}"
     },
     "streamer": {
+      "address-monitor-start-l1": 1,
+      "address-monitor-step": 100,
       "dangerous": {
         "minimum-hotshot-block-num": 56
       },
