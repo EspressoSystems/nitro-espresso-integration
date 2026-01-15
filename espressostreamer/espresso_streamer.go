@@ -11,6 +11,7 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
+	"github.com/spf13/pflag"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -57,6 +58,41 @@ type MessageWithMetadataAndPos struct {
 	MessageWithMeta arbostypes.MessageWithMetadata
 	Pos             uint64
 	HotshotHeight   uint64
+}
+
+type DangerousEspressoStreamerConfig struct {
+	MinimumHotshotBlockNum uint64 `koanf:"minimum-hotshot-block-num"`
+}
+
+var DefaultDangerousEspressoStreamerConfig = DangerousEspressoStreamerConfig{
+	MinimumHotshotBlockNum: 0,
+}
+
+type EspressoStreamerConfig struct {
+	HotShotBlock          uint64                          `koanf:"hotshot-block"`
+	TxnsPollingInterval   time.Duration                   `koanf:"txns-polling-interval"`
+	AddressMonitorStartL1 uint64                          `koanf:"address-monitor-start-l1"`
+	AddressMonitorStep    uint64                          `koanf:"address-monitor-step"`
+	Dangerous             DangerousEspressoStreamerConfig `koanf:"dangerous"`
+}
+
+var DefaultEspressoStreamerConfig = EspressoStreamerConfig{
+	HotShotBlock: 1,
+	// By default, no minimum hotshot block number is enforced
+	Dangerous: DefaultDangerousEspressoStreamerConfig,
+	// Hotshot currently produces blocks at average of 2 seconds
+	// We set it to 1 second to get updates more often than blocks are produced
+	TxnsPollingInterval:   time.Second,
+	AddressMonitorStartL1: 1,
+	AddressMonitorStep:    100,
+}
+
+func EspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
+	f.Uint64(prefix+".hotshot-block", DefaultEspressoStreamerConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultEspressoStreamerConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
+	f.Uint64(prefix+".address-monitor-step", DefaultEspressoStreamerConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
+	f.Uint64(prefix+".address-monitor-start-l1", DefaultEspressoStreamerConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
+	f.Duration(prefix+".txns-polling-interval", DefaultEspressoStreamerConfig.TxnsPollingInterval, "interval between polling for transactions to be included in the block")
 }
 
 type EspressoStreamer struct {

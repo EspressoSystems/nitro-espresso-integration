@@ -15,6 +15,7 @@ import (
 
 	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
+	"github.com/offchainlabs/nitro/espressostreamer"
 )
 
 // TransactionStreamerEspressoConfig is a configuration struct for the
@@ -218,13 +219,12 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   DefaultBatchPosterConfig.EspressoTxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultBatchPosterConfig.EspressoTxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultBatchPosterConfig.EspressoTxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultBatchPosterConfig.ResubmitEspressoTxDeadline,
-
-		SubmitterCreator: submitter.NewPollingEspressoSubmitter,
+		TxnsPollingInterval:                   espressostreamer.DefaultEspressoStreamerConfig.TxnsPollingInterval,
+		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.TxnsSendingInterval,
+		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval,
+		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.TxSizeLimit,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
+		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
 	}
 
 	applyEspressoOptions(&config, options...)
