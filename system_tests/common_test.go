@@ -709,15 +709,20 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 
 	fatalErrChan := make(chan error, 10)
 
-	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+	b.L1Info = existing.L1Info
+
+	teeHMAC, err := espresso_tee_utils.HmacForTest()
+	Require(t, err)
+	// For tests, we set the dataSigner == snapshotSigner because we are not running these tests in TEE mode.
+	caffNodeTxopts := existing.L1Info.GetDefaultTransactOpts("User", context.Background())
+	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
+
+	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
+	if existing.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		initializeTags := false
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
 		}
-		teeHMAC, err := espresso_tee_utils.HmacForTest()
-		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
-		Require(t, err)
-		caffNodePrivateKey := b.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
 			TeeHMAC:                teeHMAC,
@@ -733,7 +738,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 			return nil, err
 		}
 	} else {
-		espressoCaffNodeInitArgs := &arbnode.EspressoCaffNodeInitArgs{
+		espressoCaffNodeInitArgs = &arbnode.EspressoCaffNodeInitArgs{
 			InitializeCaffNodeTags: false,
 		}
 		b.L2.ConsensusNode, err = arbnode.CreateNode(
@@ -795,7 +800,8 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	feedErrChan := make(chan error, 10)
 
 	var currentNode *arbnode.Node
-	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+	var caffDB *authdb.AuthDB
+	if b.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		teeHMAC, err := espresso_tee_utils.HmacForTest()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)
@@ -830,6 +836,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 	l2.ConsensusNode = currentNode
 	l2.Client = client
 	l2.ExecNode = execNode
+	l2.caffDB = caffDB
 	l2.cleanup = func() {
 		currentNode.StopAndWait()
 		if stack != nil {
@@ -1657,9 +1664,9 @@ func createNonL1BlockChainWithStackConfig(
 
 	var chainData ethdb.Database
 	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if nodeConfig != nil && nodeConfig.EspressoCaffNode.SnapshotChecksum != "" {
+	if nodeConfig != nil && nodeConfig.Espresso.CaffNode.SnapshotChecksum != "" {
 		log.Info("Snapshot mode enabled in Caff node")
-		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
+		if nodeConfig.Espresso.CaffNode.SnapshotChecksum == "" {
 			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
 		}
 		privKey := os.Getenv("CAFF_NODE_PRIV_KEY")
@@ -1672,7 +1679,7 @@ func createNonL1BlockChainWithStackConfig(
 			Fatal(t, "Invalid CAFF_NODE_PRIV_KEY format")
 		}
 		t.Setenv("INITIALIZE_TAGS", "")
-		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
+		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.Espresso.CaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
 		Require(t, err)
 		if initializeTags {
 			t.Setenv("INITIALIZE_TAGS", "true")
