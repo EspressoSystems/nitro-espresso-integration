@@ -925,7 +925,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
-	if existing.nodeConfig.Espresso.CaffNode.EspressoTeeType != "" {
+	if existing.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		initializeTags := false
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
@@ -1001,7 +1001,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 
 	var currentNode *arbnode.Node
 	var caffDB *authdb.AuthDB
-	if b.nodeConfig.Espresso.CaffNode.EspressoTeeType != "" {
+	if b.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		teeHMAC, err := espresso_tee_utils.HmacForTest()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)

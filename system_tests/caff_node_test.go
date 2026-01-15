@@ -58,7 +58,7 @@ func createCaffNode(
 	nodeConfig.Espresso.CaffNode.Enable = true
 	nodeConfig.Espresso.CaffNode.Namespace = builder.chainConfig.ChainID.Uint64()
 	nodeConfig.Espresso.Streamer.HotShotBlock = 1
-	nodeConfig.Espresso.CaffNode.EspressoSGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
+	nodeConfig.Espresso.CaffNode.SGXVerifierAddr = existing.L1Info.GetAddress("EspressoTEEVerifierMock").Hex()
 
 	// reuse the caff node settings so we can set them outside this function.
 	nodeConfig.Espresso.CaffNode.WaitForFinalization = existing.nodeConfig.Espresso.CaffNode.WaitForFinalization
@@ -66,9 +66,9 @@ func createCaffNode(
 	nodeConfig.Espresso.CaffNode.RequiredBlockDepth = existing.nodeConfig.Espresso.CaffNode.RequiredBlockDepth
 	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.Espresso.CaffNode.FromBlock = 1
-	nodeConfig.Espresso.CaffNode.EspressoTeeType = ""
+	nodeConfig.Espresso.CaffNode.TeeType = ""
 	nodeConfig.Espresso.CaffNode.DataPoster = dataposter.DefaultDataPosterConfig
-	nodeConfig.Espresso.CaffNode.EspressoRegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
+	nodeConfig.Espresso.CaffNode.RegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
 
 	nodeConfig.Espresso.CaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,
@@ -86,7 +86,7 @@ func createCaffNode(
 
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.Espresso.CaffNode.HotShotUrl = hotShotUrl
-	nodeConfig.Espresso.CaffNode.RetryTime = time.Second * 1
+	nodeConfig.Espresso.Streamer.TxnsPollingInterval = time.Second * 1
 	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
 	nodeConfig.Espresso.CaffNode.BlocksToRead = 10000
@@ -99,10 +99,10 @@ func createCaffNode(
 		nodeConfig.Espresso.Streamer.HotShotBlock = 0
 	}
 
-	nodeConfig.Espresso.CaffNode.EspressoTeeType = existing.nodeConfig.Espresso.CaffNode.EspressoTeeType
+	nodeConfig.Espresso.CaffNode.TeeType = existing.nodeConfig.Espresso.CaffNode.TeeType
 	nodeConfig.Espresso.CaffNode.SnapshotChecksum = existing.nodeConfig.Espresso.CaffNode.SnapshotChecksum
 	nodeConfig.Espresso.CaffNode.GenerateSnapshot = existing.nodeConfig.Espresso.CaffNode.GenerateSnapshot
-	nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr = existing.nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr
+	nodeConfig.Espresso.CaffNode.TEEVerifierAddr = existing.nodeConfig.Espresso.CaffNode.TEEVerifierAddr
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
@@ -130,7 +130,7 @@ func createCaffNodeConfig(ctx context.Context, t *testing.T) *NodeBuilder {
 
 	// for testing, we can use the same hotshot url for both
 	nodeConfig.Espresso.CaffNode.HotShotUrl = hotShotUrl
-	nodeConfig.Espresso.CaffNode.RetryTime = time.Second * 1
+	nodeConfig.Espresso.Streamer.TxnsPollingInterval = time.Second * 1
 	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.Espresso.CaffNode.FromBlock = 1
 	nodeConfig.ParentChainReader.Enable = true
@@ -575,13 +575,13 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	// now we need to restart the caff node in Snapshot mode such and it will use this snapshot,
 	// verify it and re-initialize the tags with tmac
 	builderCaffNode.nodeConfig.Espresso.CaffNode.SnapshotChecksum = base64SnapshotFileContent
-	builderCaffNode.nodeConfig.Espresso.CaffNode.EspressoTeeType = "TESTS"
+	builderCaffNode.nodeConfig.Espresso.CaffNode.TeeType = "TESTS"
 	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
 
 	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
 	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
 	Require(t, err)
-	builderCaffNode.nodeConfig.Espresso.CaffNode.EspressoTEEVerifierAddr = espressoTEEVerifierAddress.Hex()
+	builderCaffNode.nodeConfig.Espresso.CaffNode.TEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
 	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
 	_ = logHandler

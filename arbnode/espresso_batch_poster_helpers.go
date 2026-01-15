@@ -28,7 +28,7 @@ func (b *BatchPoster) resetStreamerToParentChainOrConfigHotshotBlock(messageCoun
 // returns the Hotshot height of the last event in the iterator returned from FilterTEESignatureVerified()
 // representing the most recently emitted hotshotblock height. Any errors encountered will result in 0 being returned.
 func (b *BatchPoster) fetchHotshotBlockFromLastCheckpoint(ctx context.Context) uint64 {
-	pollingStep := b.espressoConfig.BatchPoster.EspressoEventPollingStep
+	pollingStep := b.espressoConfig.BatchPoster.EventPollingStep
 	header, err := b.l1Reader.LastHeader(ctx)
 	if err != nil {
 		log.Error("Failed to fetch last header from parent chain", "err", err)

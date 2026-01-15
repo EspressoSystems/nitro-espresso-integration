@@ -6,20 +6,20 @@ from pathlib import Path
     # old_key: (espresso_section, new_key)
 ESPRESSO_FIELD_MAP = {
     "hotshot-block": ("streamer", "hotshot-block"),
+    "espresso-txns-polling-interval": ("streamer", "txns-polling-interval"),
 
     # [espresso][batch-poster]
-    "espresso-tee-type": ("batch-poster", "espresso-tee-type"),
-    "espresso-register-service-config": ("batch-poster", "espresso-register-service-config"),
+    "espresso-tee-type": ("batch-poster", "tee-type"),
+    "espresso-register-service-config": ("batch-poster", "register-service-config"),
     "hotshot-url": ("batch-poster", "hotshot-url"),
-    "espresso-txns-polling-interval": ("batch-poster", "espresso-txns-polling-interval"),
-    "espresso-txns-sending-interval": ("batch-poster", "espresso-txns-sending-interval"),
-    "espresso-txns-resubmission-interval": ("batch-poster", "espresso-txns-resubmission-interval"),
+    "espresso-txns-sending-interval": ("batch-poster", "txns-sending-interval"),
+    "espresso-txns-resubmission-interval": ("batch-poster", "txns-resubmission-interval"),
     "resubmit-espresso-tx-deadline": ("batch-poster", "resubmit-espresso-tx-deadline"),
-    "espresso-tx-size-limit": ("batch-poster", "espresso-tx-size-limit"),
+    "espresso-tx-size-limit": ("batch-poster", "tx-size-limit"),
     "user-data-attestation-file": ("batch-poster", "user-data-attestation-file"),
     "quote-file": ("batch-poster", "quote-file"),
     "attestation-service-url": ("batch-poster", "attestation-service-url"),
-    "espresso-event-polling-step": ("batch-poster", "espresso-event-polling-step"),
+    "espresso-event-polling-step": ("batch-poster", "event-polling-step"),
     "hotshot-first-posting-block": ("batch-poster", "hotshot-first-posting-block"),
     "address-monitor-start-l1": ("batch-poster", "address-monitor-start-l1"),
     "init-batcher-addresses": ("batch-poster", "init-batcher-addresses"),
@@ -33,6 +33,7 @@ NEW_CAFF_NODE_PATH = ("espresso", "caff-node")
 STREAMER_KEY = "streamer"
 DANGEROUS_KEY = "dangerous"
 MIN_BLOCK_KEY = "minimum-hotshot-block-num"
+TX_POLLING_INTERVAL_KEY = "txns-polling-interval"
 
 def migrate_config(cfg: dict) -> dict:
     cfg = copy.deepcopy(cfg)
@@ -61,8 +62,14 @@ def migrate_config(cfg: dict) -> dict:
 
     # ---- Migrate caff-node  ----
     if OLD_CAFF_NODE_KEY in node:
-        espresso.setdefault("caff-node", node[OLD_CAFF_NODE_KEY])
-        node.pop(OLD_CAFF_NODE_KEY, None)
+        old_caff_data = node.pop(OLD_CAFF_NODE_KEY)
+        
+        clean_caff = {}
+        for k, v in old_caff_data.items():
+            new_k = k.replace("espresso-", "") if k.startswith("espresso-") else k
+            clean_caff[new_k] = v
+            
+        espresso["caff-node"] = clean_caff
     
     caff = espresso.get("caff-node")
     if not caff:

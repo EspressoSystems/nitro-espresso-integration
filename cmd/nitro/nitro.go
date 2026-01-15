@@ -251,7 +251,7 @@ func mainImpl() int {
 
 	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
 
-	if nodeConfig.Node.Espresso.CaffNode.Enable && nodeConfig.Node.Espresso.CaffNode.EspressoTeeType != "" {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && nodeConfig.Node.Espresso.CaffNode.TeeType != "" {
 		caffNodePrivateKey, err := espresso_tee_utils.ReadEnclavePrivateKey(nodeConfig.Node.Espresso.CaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
@@ -495,7 +495,7 @@ func mainImpl() int {
 	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
 	if nodeConfig.Node.Espresso.CaffNode.Enable && nodeConfig.Node.Espresso.CaffNode.SnapshotChecksum != "" {
 		// Check that TEE is enabled
-		if nodeConfig.Node.Espresso.CaffNode.EspressoTeeType == "" {
+		if nodeConfig.Node.Espresso.CaffNode.TeeType == "" {
 			log.Error("snapshot verification requires TEE, but no TEE type was specified")
 			return 1
 		}

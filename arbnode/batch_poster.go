@@ -149,8 +149,6 @@ type BatchPoster struct {
 	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
 	signerAddr                 common.Address
-
-	// espressoStreamerConfig EspressoStreamerConfigFetcher
 }
 
 type l1BlockBound int
@@ -588,7 +586,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			func(l1Height uint64, addr common.Address) (bool, error) {
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
-			opts.EspressoConfigFetcher().BatchPoster.EspressoTxnsPollingInterval,
+			opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval,
 			opts.EspressoConfigFetcher().Streamer.Dangerous.MinimumHotshotBlockNum,
 		)
 
@@ -597,15 +595,16 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if b.espressoStreamer != nil {
+		txPollingInterval := opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval
 		cfg := opts.EspressoConfigFetcher().BatchPoster
 
 		submitterOptions = append(
 			submitterOptions,
-			submitter.WithTxnsPollingInterval(cfg.EspressoTxnsPollingInterval),
-			submitter.WithTxnsSendingInterval(cfg.EspressoTxnsSendingInterval),
-			submitter.WithTxnsResubmissionInterval(cfg.EspressoTxnsResubmissionInterval),
+			submitter.WithTxnsPollingInterval(txPollingInterval),
+			submitter.WithTxnsSendingInterval(cfg.TxnsSendingInterval),
+			submitter.WithTxnsResubmissionInterval(cfg.TxnsResubmissionInterval),
 			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
-			submitter.WithMaxTransactionSize(cfg.EspressoTxSizeLimit),
+			submitter.WithMaxTransactionSize(cfg.TxSizeLimit),
 			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
 				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
 			}),
@@ -624,9 +623,9 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 		verifier := espressotee.NewEspressoTEEVerifier(espresssoTEEVerifierAddress.Hex(), opts.L1Reader.Client(), espresssoTEEVerifierAddress)
-		teeType, err := espressotee.FromString(cfg.EspressoTeeType)
+		teeType, err := espressotee.FromString(cfg.TeeType)
 		if err != nil {
-			return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)
+			return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.TeeType)
 		}
 
 		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
@@ -645,7 +644,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.EspressoConfigFetcher().BatchPoster.UserDataAttestationFile, opts.EspressoConfigFetcher().BatchPoster.QuoteFile, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.RegisterServiceConfig, nil, opts.EspressoConfigFetcher().BatchPoster.UserDataAttestationFile, opts.EspressoConfigFetcher().BatchPoster.QuoteFile, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
 			),
 		)
 

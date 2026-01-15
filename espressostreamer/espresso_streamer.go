@@ -69,21 +69,24 @@ var DefaultDangerousEspressoStreamerConfig = DangerousEspressoStreamerConfig{
 }
 
 type EspressoStreamerConfig struct {
-	HotShotBlock uint64                          `koanf:"hotshot-block"`
-	Dangerous    DangerousEspressoStreamerConfig `koanf:"dangerous"`
+	HotShotBlock        uint64                          `koanf:"hotshot-block"`
+	TxnsPollingInterval time.Duration                   `koanf:"txns-polling-interval"`
+	Dangerous           DangerousEspressoStreamerConfig `koanf:"dangerous"`
 }
 
 var DefaultEspressoStreamerConfig = EspressoStreamerConfig{
-	// Hotshot currently produces blocks at average of 2 seconds
-	// We set it to 1 second to get updates more often than blocks are produced
 	HotShotBlock: 1,
 	// By default, no minimum hotshot block number is enforced
 	Dangerous: DefaultDangerousEspressoStreamerConfig,
+	// Hotshot currently produces blocks at average of 2 seconds
+	// We set it to 1 second to get updates more often than blocks are produced
+	TxnsPollingInterval: time.Second,
 }
 
 func EspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".hotshot-block", DefaultEspressoStreamerConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
 	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultEspressoStreamerConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
+	f.Duration(prefix+".txns-polling-interval", DefaultEspressoStreamerConfig.TxnsPollingInterval, "interval between polling for transactions to be included in the block")
 }
 
 type EspressoStreamer struct {
