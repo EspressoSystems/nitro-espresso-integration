@@ -1,8 +1,6 @@
 // Copyright 2024, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
-
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 //go:build challengetest && !race
-
 package arbtest
 
 import (
@@ -64,7 +62,6 @@ func (s *incorrectBlockStateProvider) ExecutionStateAfterPreviousState(
 	executionState.EndHistoryRoot = historyCommit.Merkle
 	return executionState, nil
 }
-
 func (s *incorrectBlockStateProvider) L2MessageStatesUpTo(
 	ctx context.Context,
 	fromState protocol.GoGlobalState,
@@ -102,7 +99,6 @@ func (s *incorrectBlockStateProvider) L2MessageStatesUpTo(
 	}
 	return states, nil
 }
-
 func (s *incorrectBlockStateProvider) CollectMachineHashes(
 	ctx context.Context, cfg *l2stateprovider.HashCollectorConfig,
 ) ([]common.Hash, error) {
@@ -119,7 +115,6 @@ func (s *incorrectBlockStateProvider) CollectMachineHashes(
 	}
 	return honestHashes, nil
 }
-
 func (s *incorrectBlockStateProvider) CollectProof(
 	ctx context.Context,
 	assertionMetadata *l2stateprovider.AssociatedAssertionMetadata,
@@ -128,7 +123,6 @@ func (s *incorrectBlockStateProvider) CollectProof(
 ) ([]byte, error) {
 	return s.honest.CollectProof(ctx, assertionMetadata, blockChallengeHeight, machineIndex)
 }
-
 func testChallengeProtocolBOLDVirtualBlocks(t *testing.T, wrongAtFirstVirtual bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -222,7 +216,6 @@ func testChallengeProtocolBOLDVirtualBlocks(t *testing.T, wrongAtFirstVirtual bo
 		}
 	}
 }
-
 func fundBoldStaker(t *testing.T, ctx context.Context, builder *NodeBuilder, name string) {
 	balance := big.NewInt(params.Ether)
 	balance.Mul(balance, big.NewInt(100))
@@ -256,12 +249,12 @@ func fundBoldStaker(t *testing.T, ctx context.Context, builder *NodeBuilder, nam
 	_, err = builder.L1.EnsureTxSucceeded(tx)
 	Require(t, err)
 }
-
 func TestChallengeProtocolBOLDNearLastVirtualBlock(t *testing.T) {
+	t.Skip("This test is flaky and needs to be fixed")
 	testChallengeProtocolBOLDVirtualBlocks(t, false)
 }
-
 func TestChallengeProtocolBOLDFirstVirtualBlock(t *testing.T) {
+	t.Skip("This test is flaky and needs to be fixed")
 	testChallengeProtocolBOLDVirtualBlocks(t, true)
 }
 

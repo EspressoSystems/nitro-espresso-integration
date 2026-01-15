@@ -10,6 +10,7 @@ node_modules
 .DS_Store
 .idea
 .vscode
+.cursor
 cmd/node/data
 cmd/node/node
 solgen/go/
@@ -24,5 +25,5 @@ system_tests/test-data/*
 system_tests/testdata/*
 arbos/testdata/*
 
-.direnv
 /.pre-commit-config.yaml
+.direnv

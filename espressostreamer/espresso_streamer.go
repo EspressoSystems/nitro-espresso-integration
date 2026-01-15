@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -22,11 +22,10 @@ import (
 	"github.com/offchainlabs/nitro/arbutil"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util"
-	"github.com/offchainlabs/nitro/util/dbutil"
 	"github.com/offchainlabs/nitro/util/stopwaiter"
 )
 
-const NextHotshotBlockKey = "nextHotshotBlock"
+const HOTSHOT_RANGE_LIMIT = 100
 
 var (
 	ErrFailedToFetchTransactions  = errors.New("failed to fetch transactions")
@@ -48,11 +47,10 @@ type EspressoStreamerInterface interface {
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
-	StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error
-	ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error)
 	GetCurrentEarliestHotShotBlockNumber() uint64
 
 	SetBatcherAddressesFetcher(fetcher func(l1Height uint64) []common.Address)
+	StopAndWait()
 }
 
 type MessageWithMetadataAndPos struct {
@@ -70,9 +68,8 @@ type EspressoStreamer struct {
 	messageWithMetadataAndPos []*MessageWithMetadataAndPos
 	espressoSGXVerifier       espressotee.EspressoSGXVerifierInterface
 
-	messageLock            sync.Mutex
-	retryTime              time.Duration
-	hotshotPollingInterval time.Duration
+	messageLock sync.Mutex
+	retryTime   time.Duration
 
 	PerfRecorder *PerfRecorder
 
@@ -190,7 +187,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 
-	messages, err := fetchNextHotshotBlock(
+	messages, toBlock, err := fetchNextHotshotBlock(
 		ctx,
 		s.espressoClient,
 		s.nextHotshotBlockNum,
@@ -204,7 +201,7 @@ func (s *EspressoStreamer) QueueMessagesFromHotshot(
 	if len(messages) > 0 {
 		s.messageWithMetadataAndPos = append(s.messageWithMetadataAndPos, messages...)
 	}
-	s.nextHotshotBlockNum += 1
+	s.nextHotshotBlockNum = toBlock
 	return nil
 }
 
@@ -214,19 +211,15 @@ func (s *EspressoStreamer) verifyBatchPosterSignature(signature []byte, userData
 		return fmt.Errorf("failed to convert signature to public key: %w", err)
 	}
 	addr := crypto.PubkeyToAddress(*publicKey)
-	found := false
 	validAddresses := s.batcherAddressesFetcher(l1Height)
 	if len(validAddresses) == 0 {
-		log.Warn("no valid address right now, need to catch up")
+		log.Warn("no valid addresses found", "validAddresses", validAddresses)
+		// No valid addresses right now. Need to catch up
 		return ErrRetryParsingHotShotPayload
 	}
-	for _, allowed := range validAddresses {
-		if allowed == addr {
-			found = true
-			break
-		}
-	}
-	if !found {
+	// if the list of valid addresses doesn't contain the address from the signature, this signature is invalid,
+	// and we must return an error.
+	if !slices.Contains(validAddresses, addr) {
 		log.Warn("batch poster address", "addr", addr, "expected one of", validAddresses)
 		return fmt.Errorf("batch poster address does not match")
 	}
@@ -244,6 +237,9 @@ func (s *EspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
 
 /* Verify the attestation quote */
 func (s *EspressoStreamer) verifyLegacy(attestation []byte, signature [32]byte) error {
+	// as of 02/10/2025 there has never been an sgx TEE Caff Node that has signed a transaction meant to be checked by the verify function.
+	// Therefore we can hard code espressotee.BatchPoster as we will only ever need to check batch poster pcr0 values
+	// to verify the signature on messages.
 	_, err := s.espressoSGXVerifier.Verify(nil, attestation, signature)
 	if err == nil {
 		return nil
@@ -315,36 +311,6 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	return result, nil
 }
 
-func (s *EspressoStreamer) ReadNextHotshotBlockFromDb(db ethdb.Database) (uint64, error) {
-	var nextHotshotBlock uint64
-	nextHotshotBytes, err := db.Get([]byte(NextHotshotBlockKey))
-	if err != nil && !dbutil.IsErrNotFound(err) {
-		return 0, fmt.Errorf("failed to get next hotshot block: %w", err)
-	}
-	if nextHotshotBytes != nil {
-		err = rlp.DecodeBytes(nextHotshotBytes, &nextHotshotBlock)
-		if err != nil {
-			return 0, fmt.Errorf("failed to decode next hotshot block: %w", err)
-		}
-	}
-
-	return nextHotshotBlock, nil
-}
-
-func (s *EspressoStreamer) StoreHotshotBlock(db ethdb.Database, nextHotshotBlock uint64) error {
-	nextHotshotBytes, err := rlp.EncodeToBytes(nextHotshotBlock)
-	if err != nil {
-		return fmt.Errorf("failed to encode next hotshot block: %w", err)
-	}
-
-	err = db.Put([]byte(NextHotshotBlockKey), nextHotshotBytes)
-	if err != nil {
-		return fmt.Errorf("failed to put next hotshot block: %w", err)
-	}
-
-	return nil
-}
-
 func (s *EspressoStreamer) getEspressoBlockTimestamp(ctx context.Context, blockHeight uint64) (time.Time, error) {
 	header, err := s.espressoClient.FetchHeaderByHeight(ctx, blockHeight)
 	if err != nil {
@@ -384,16 +350,42 @@ func fetchNextHotshotBlock(
 	nextHotshotBlockNum uint64,
 	parseHotShotPayloadFn func(tx espressoTypes.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error),
 	namespace uint64,
-) ([]*MessageWithMetadataAndPos, error) {
-	arbTxns, err := espressoClient.FetchTransactionsInBlock(ctx, nextHotshotBlockNum, namespace)
+) ([]*MessageWithMetadataAndPos, uint64, error) {
+
+	// get the current hotshot block
+	latestBlockHeight, err := espressoClient.FetchLatestBlockHeight(ctx)
 	if err != nil {
-		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
-	header, err := espressoClient.FetchHeaderByHeight(ctx, nextHotshotBlockNum)
+	fromBlock := nextHotshotBlockNum
+	toBlock := latestBlockHeight
+
+	if latestBlockHeight-nextHotshotBlockNum > HOTSHOT_RANGE_LIMIT {
+		toBlock = nextHotshotBlockNum + HOTSHOT_RANGE_LIMIT
+	}
+
+	// this means we have no blocks to process and we are all caught up
+	if fromBlock == toBlock {
+		return []*MessageWithMetadataAndPos{}, toBlock, nil
+	}
+
+	// here we are fetching transactions in range [fromBlock, toBlock) exclusive
+	//  by default FetchNamespaceTransactionsInRange is exclusive of the last element
+	namespaceTransactionRangeData, err := espressoClient.FetchNamespaceTransactionsInRange(ctx, fromBlock, toBlock, namespace)
+	if err != nil {
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+	}
+	if len(namespaceTransactionRangeData) == 0 {
+		// no transactions found in this range is a valid state (e.g., empty blocks), not an error
+		return []*MessageWithMetadataAndPos{}, toBlock, nil
+	}
+
+	// we are subtracting 1 here because FetchNamespaceTransactionsInRange is exclusive of the last element
+	header, err := espressoClient.FetchHeaderByHeight(ctx, toBlock-1)
 	l1Height := uint64(0)
 	if err != nil {
-		return []*MessageWithMetadataAndPos{}, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
+		return []*MessageWithMetadataAndPos{}, 0, fmt.Errorf("%w: %w", ErrFailedToFetchTransactions, err)
 	}
 
 	finalized := header.Header.GetL1Finalized()
@@ -402,18 +394,22 @@ func fetchNextHotshotBlock(
 	}
 	result := []*MessageWithMetadataAndPos{}
 
-	for _, tx := range arbTxns.Transactions {
-		messages, err := parseHotShotPayloadFn(tx, l1Height)
-		if err != nil && !strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
-			log.Warn("failed to verify espresso transaction", "err", err)
-			continue
+	for _, namespaceTransactionData := range namespaceTransactionRangeData {
+		for _, tx := range namespaceTransactionData.Transactions {
+			txPayloadBytes := tx.Payload
+			messages, err := parseHotShotPayloadFn(txPayloadBytes, l1Height)
+			if err != nil && !strings.Contains(err.Error(), ErrRetryParsingHotShotPayload.Error()) {
+				log.Warn("failed to verify espresso transaction", "err", err)
+				continue
+			}
+			if err != nil {
+				return nil, 0, err
+			}
+			result = append(result, messages...)
 		}
-		if err != nil {
-			return nil, err
-		}
-		result = append(result, messages...)
 	}
-	return result, nil
+
+	return result, toBlock, nil
 }
 
 func (s *EspressoStreamer) Start(ctxIn context.Context) error {
@@ -421,7 +417,7 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 
 	ephemeralErrorHandler := util.NewEphemeralErrorHandler(3*time.Minute, ErrFailedToFetchTransactions.Error(), 1*time.Minute)
 	err := s.CallIterativelySafe(func(ctx context.Context) time.Duration {
-		if s.nextHotshotBlockNum%100 == 0 {
+		if s.nextHotshotBlockNum%1000 == 0 {
 			log.Info("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
 		} else {
 			log.Debug("Now processing hotshot block", "block number", s.nextHotshotBlockNum)
@@ -438,4 +434,8 @@ func (s *EspressoStreamer) Start(ctxIn context.Context) error {
 		return 0
 	})
 	return err
+}
+
+func (s *EspressoStreamer) StopAndWait() {
+	s.StopWaiter.StopAndWait()
 }

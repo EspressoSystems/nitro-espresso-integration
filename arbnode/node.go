@@ -108,7 +108,7 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node"`
+	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
 }
 
 func (c *Config) Validate() error {
@@ -205,6 +205,7 @@ var ConfigDefault = Config{
 	BlockMetadataFetcher: DefaultBlockMetadataFetcherConfig,
 	SnapSyncTest:         DefaultSnapSyncConfig,
 	EspressoCaffNode:     DefaultEspressoCaffNodeConfig,
+	Celestia:             celestia.DefaultCelestiaConfig,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -449,6 +450,7 @@ func createNodeImpl(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
+	espressoCaffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
 	config := configFetcher.Get()
 
@@ -590,18 +592,25 @@ func createNodeImpl(
 
 	if config.EspressoCaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
-			espressoCaffNode := NewEspressoCaffNode(
+			espressoCaffNode, err := NewEspressoCaffNode(
+				ctx,
 				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				exec.ChainDB,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				arbDb,
 				config.EspressoCaffNode.RecordPerformance,
 				config.EspressoCaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
-				stack.Config().HTTPPort,
+				stack,
+				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
+				espressoCaffNodeInitArgs,
 			)
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to create espresso caff node: %w", err)
+			}
 
 			return &Node{
 				ArbDB:                   arbDb,
@@ -983,8 +992,9 @@ func CreateNode(
 	fatalErrChan chan error,
 	parentChainID *big.Int,
 	blobReader daprovider.BlobReader,
+	espressoCaffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
-	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader)
+	currentNode, err := createNodeImpl(ctx, stack, exec, arbDb, configFetcher, l2Config, l1client, deployInfo, txOptsValidator, txOptsBatchPoster, dataSigner, fatalErrChan, parentChainID, blobReader, espressoCaffNodeInitArgs)
 	if err != nil {
 		return nil, err
 	}
@@ -1225,6 +1235,11 @@ func (n *Node) StopAndWait() {
 	if n.Execution != nil {
 		n.Execution.StopAndWait()
 	}
+
+	if n.EspressoCaffNode != nil {
+		n.EspressoCaffNode.StopAndWait()
+	}
+
 	if err := n.Stack.Close(); err != nil {
 		log.Error("error on stack close", "err", err)
 	}

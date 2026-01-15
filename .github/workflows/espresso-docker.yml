@@ -13,20 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  free-disk-space:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
   docker_build:
-    needs: free-disk-space
     strategy:
       matrix:
         platform: [linux/amd64]
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-8core
 
     steps:
       - uses: cargo-bins/cargo-binstall@main

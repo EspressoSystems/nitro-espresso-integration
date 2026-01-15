@@ -1,4 +1,4 @@
-name: Espresso E2E test CI
+name: Espresso E2E Batch Poster test CI
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   test:
     name: Espresso E2E
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-8core
 
     steps:
       - name: Checkout
@@ -153,4 +153,4 @@ jobs:
 
       - name: Run Espresso tests
         run: |
-          scripts/run-espresso-ci-job
+          bash scripts/run-espresso-batch-poster-ci-tests

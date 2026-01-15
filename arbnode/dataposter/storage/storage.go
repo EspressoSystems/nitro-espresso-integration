@@ -1,5 +1,5 @@
 // Copyright 2021-2023, Offchain Labs, Inc.
-// For license information, see https://github.com/nitro/blob/master/LICENSE
+// For license information, see https://github.com/OffchainLabs/nitro/blob/master/LICENSE.md
 
 package storage
 
@@ -22,6 +22,7 @@ var (
 	BlockValidatorPrefix string = "v" // the prefix for all block validator keys
 	StakerPrefix         string = "S" // the prefix for all staker keys
 	BatchPosterPrefix    string = "b" // the prefix for all batch poster keys
+	CaffNodePrefix       string = "c" // the prefix for all caffnode keys
 	// TODO(anodar): move everything else from schema.go file to here once
 	// execution split is complete.
 )

@@ -56,11 +56,11 @@ func runEspresso() func() {
 		"espresso-dev-node",
 	}
 	invocation = append(invocation, nodes...)
-	procees := exec.Command("docker", invocation...)
-	procees.Dir = workingDir
+	proceeds := exec.Command("docker", invocation...)
+	proceeds.Dir = workingDir
 
 	go func() {
-		if err := procees.Run(); err != nil {
+		if err := proceeds.Run(); err != nil {
 			panic(err)
 		}
 	}()
@@ -171,6 +171,7 @@ func waitForL1Node(ctx context.Context) error {
 			"{'jsonrpc':'2.0','id':45678,'method':'eth_chainId','params':[]}",
 			"http://localhost:8545",
 		).Run(); e != nil {
+			log.Warn("retry to check the l1 node", "err", e)
 			return false
 		}
 		return true
