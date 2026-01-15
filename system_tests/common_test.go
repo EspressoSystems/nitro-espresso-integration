@@ -737,7 +737,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	caffNodePrivateKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
-	if existing.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+	if existing.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		initializeTags := false
 		if os.Getenv("INITIALIZE_TAGS") != "" {
 			initializeTags = true
@@ -812,7 +812,7 @@ func (b *NodeBuilder) RestartCaffNode(t *testing.T) {
 
 	var currentNode *arbnode.Node
 	var caffDB *authdb.AuthDB
-	if b.nodeConfig.EspressoCaffNode.EspressoTeeType != "" {
+	if b.nodeConfig.Espresso.CaffNode.TeeType != "" {
 		teeHMAC, err := espresso_tee_utils.HmacForTest()
 		caffNodeTxopts := b.L1Info.GetDefaultTransactOpts("User", context.Background())
 		Require(t, err)
@@ -1696,9 +1696,9 @@ func createNonL1BlockChainWithStackConfig(
 
 	var chainData ethdb.Database
 	// If snapshot mode is enabled, check if the snapshot hash matches the one in the config before opening the database in write mode
-	if nodeConfig != nil && nodeConfig.EspressoCaffNode.SnapshotChecksum != "" {
+	if nodeConfig != nil && nodeConfig.Espresso.CaffNode.SnapshotChecksum != "" {
 		log.Info("Snapshot mode enabled in Caff node")
-		if nodeConfig.EspressoCaffNode.SnapshotChecksum == "" {
+		if nodeConfig.Espresso.CaffNode.SnapshotChecksum == "" {
 			Fatal(t, "snapshot checksum should not be empty when snapshot mode is enabled")
 		}
 		privKey := os.Getenv("CAFF_NODE_PRIV_KEY")
@@ -1711,7 +1711,7 @@ func createNonL1BlockChainWithStackConfig(
 			Fatal(t, "Invalid CAFF_NODE_PRIV_KEY format")
 		}
 		t.Setenv("INITIALIZE_TAGS", "")
-		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
+		initializeTags, err := arbutil.VerifySnapshot(nodeConfig.Espresso.CaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", conf.PersistentConfigDefault.Ancient), caffPrivKey)
 		Require(t, err)
 		if initializeTags {
 			t.Setenv("INITIALIZE_TAGS", "true")
