@@ -2559,6 +2559,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		nonceTooHighEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
 	}
+	registrationFailCount := 0
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
@@ -2598,6 +2599,15 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				// Shutting down. No need to print the context canceled error.
 				return 0
 			}
+			if strings.Contains(err.Error(), "unable to register signer") {
+				registrationFailCount++
+				if registrationFailCount > 5 {
+					log.Crit("Espresso signer registration failed 5 times consecutively. Panicking.", "err", err)
+					panic(err)
+				}
+				log.Warn("Espresso signer registration failed", "attempt", registrationFailCount, "err", err)
+			}
+
 			b.building = nil
 			logLevel := log.Error
 			// Likely the inbox tracker just isn't caught up.
