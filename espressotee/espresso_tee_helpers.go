@@ -6,8 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spf13/pflag"
-
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -25,6 +23,13 @@ const (
 	// Define the empty string, which coudld be useful in certain circumstances
 	// Also define empty and test related contents at the end of the types range to make room
 	// for other sequential TEE types.
+)
+
+const (
+	EspressoMaxTxnWaitTime                = 3 * time.Minute
+	EspressoRetryReadContractDelay        = 5 * time.Second
+	EspressoMaxRetries                    = 5
+	EspressoGasLimitBufferIncreasePercent = 20
 )
 
 func FromString(s string) (TEE, error) {
@@ -45,14 +50,12 @@ func FromString(s string) (TEE, error) {
 type ContractVerificationFunc func() (bool, error)
 
 func ContractVerification(
-	maxRetries int,
-	retryDelay time.Duration,
 	fn ContractVerificationFunc,
 	msg string,
 ) (bool, error) {
 	var err error
 	success := false
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := 0; attempt < EspressoMaxRetries; attempt++ {
 		success, err = fn()
 		if err != nil {
 			log.Error(msg, "err", err)
@@ -61,9 +64,9 @@ func ContractVerification(
 			return true, nil
 		}
 
-		if attempt < maxRetries-1 {
-			log.Error(msg, "attempt", attempt, "retry delay", retryDelay)
-			time.Sleep(retryDelay)
+		if attempt < EspressoMaxRetries-1 {
+			log.Error(msg, "attempt", attempt, "retry delay", EspressoRetryReadContractDelay)
+			time.Sleep(EspressoRetryReadContractDelay)
 		}
 	}
 	return false, nil
@@ -91,32 +94,4 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 		return err
 	}
 	return nil
-}
-
-type EspressoRegisterServiceConfig struct {
-	MaxTxnWaitTime                time.Duration `koanf:"max-txn-wait-time"`
-	RetryReadContractDelay        time.Duration `koanf:"retry-read-contract-delay"`
-	MaxRetries                    uint8         `koanf:"max-retries"`
-	GasLimitBufferIncreasePercent uint64        `koanf:"gas-limit-buffer-increase-percent"`
-}
-
-var DefaultEspressoRegisterServiceConfig = EspressoRegisterServiceConfig{
-	MaxTxnWaitTime:                3 * time.Minute,
-	RetryReadContractDelay:        5 * time.Second,
-	MaxRetries:                    5,
-	GasLimitBufferIncreasePercent: 20,
-}
-
-type EspressoRegisterServiceOpts struct {
-	MaxTxnWaitTime                time.Duration
-	RetryReadContractDelay        time.Duration
-	MaxRetries                    int
-	GasLimitBufferIncreasePercent uint64
-}
-
-func AddEspressoRegisterServiceConfigOptions(prefix string, f *pflag.FlagSet) {
-	f.Duration(prefix+".max-txn-wait-time", DefaultEspressoRegisterServiceConfig.MaxTxnWaitTime, "max transaction wait time when calling espresso tee verifier contracts")
-	f.Duration(prefix+".retry-read-contract-delay", DefaultEspressoRegisterServiceConfig.RetryReadContractDelay, "delay in calls to read from contract for verification")
-	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterServiceConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
-	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterServiceConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
 }

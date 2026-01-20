@@ -27,7 +27,6 @@ import (
 	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
-	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
@@ -68,7 +67,6 @@ func createCaffNode(
 	nodeConfig.Espresso.Streamer.AddressMonitorStartL1 = 1
 	nodeConfig.Espresso.CaffNode.TeeType = ""
 	nodeConfig.Espresso.CaffNode.DataPoster = dataposter.DefaultDataPosterConfig
-	nodeConfig.Espresso.CaffNode.RegisterServiceConfig = espressotee.DefaultEspressoRegisterServiceConfig
 
 	nodeConfig.Espresso.CaffNode.StateChecker = arbnode.StateCheckerConfig{
 		PollingInterval:        time.Second * 100,

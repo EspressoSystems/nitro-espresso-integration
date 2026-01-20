@@ -44,21 +44,20 @@ type EspressoCaffNodeInitArgs struct {
 }
 
 type EspressoCaffNodeConfig struct {
-	Enable                 bool                                      `koanf:"enable"`
-	HotShotUrl             string                                    `koanf:"hotshot-url"`
-	Namespace              uint64                                    `koanf:"namespace"`
-	HotshotPollingInterval time.Duration                             `koanf:"hotshot-polling-interval"`
-	HotshotPollingTimeout  time.Duration                             `koanf:"hotshot-polling-timeout"`
-	SGXVerifierAddr        string                                    `koanf:"sgx-verifier-addr"`
-	BatchPosterAddr        string                                    `koanf:"batch-poster-addr"`
-	RecordPerformance      bool                                      `koanf:"record-performance"`
-	WaitForFinalization    bool                                      `koanf:"wait-for-finalization"`
-	WaitForConfirmations   bool                                      `koanf:"wait-for-confirmations"`
-	RequiredBlockDepth     uint64                                    `koanf:"required-block-depth"`
-	BlocksToRead           uint64                                    `koanf:"blocks-to-read"`
-	Dangerous              DangerousCaffNodeConfig                   `koanf:"dangerous"`
-	RegisterServiceConfig  espressotee.EspressoRegisterServiceConfig `koanf:"register-service-config"`
-	TeeType                string                                    `koanf:"tee-type"`
+	Enable                 bool                    `koanf:"enable"`
+	HotShotUrl             string                  `koanf:"hotshot-url"`
+	Namespace              uint64                  `koanf:"namespace"`
+	HotshotPollingInterval time.Duration           `koanf:"hotshot-polling-interval"`
+	HotshotPollingTimeout  time.Duration           `koanf:"hotshot-polling-timeout"`
+	SGXVerifierAddr        string                  `koanf:"sgx-verifier-addr"`
+	BatchPosterAddr        string                  `koanf:"batch-poster-addr"`
+	RecordPerformance      bool                    `koanf:"record-performance"`
+	WaitForFinalization    bool                    `koanf:"wait-for-finalization"`
+	WaitForConfirmations   bool                    `koanf:"wait-for-confirmations"`
+	RequiredBlockDepth     uint64                  `koanf:"required-block-depth"`
+	BlocksToRead           uint64                  `koanf:"blocks-to-read"`
+	Dangerous              DangerousCaffNodeConfig `koanf:"dangerous"`
+	TeeType                string                  `koanf:"tee-type"`
 
 	// SGX specific config, leave empty if not using SGX
 	UserDataAttestationFile string `koanf:"user-data-attestation-file"`
@@ -117,7 +116,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	Dangerous:               DefaultDangerousCaffNodeConfig,
 	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
 	TeeType:                 "",
-	RegisterServiceConfig:   espressotee.DefaultEspressoRegisterServiceConfig,
 	UserDataAttestationFile: "",
 	QuoteFile:               "",
 	AttestationServiceURL:   "",
@@ -153,7 +151,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
 	f.String(prefix+".tee-verifier-addr", DefaultEspressoCaffNodeConfig.TEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
-	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".register-service-config", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig, dataposter.DataPosterUsageCaffNode)
@@ -369,7 +366,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, configFetcher().RegisterServiceConfig, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile, configFetcher().AttestationServiceURL)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, dataPoster, nil, teeType, espressotee.CaffNode, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().UserDataAttestationFile, configFetcher().QuoteFile, configFetcher().AttestationServiceURL)
 
 	}
 	initializeCaffNodeTags := false

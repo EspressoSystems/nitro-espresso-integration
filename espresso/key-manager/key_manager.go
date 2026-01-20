@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
@@ -54,7 +53,6 @@ type EspressoKeyManager struct {
 	dataPoster              *dataposter.DataPoster
 	teeType                 espressotee.TEE
 	serviceType             espressotee.ServiceType
-	registerSignerOpts      espressotee.EspressoRegisterServiceOpts
 	userDataAttestationFile string
 	quoteFile               string
 
@@ -69,7 +67,6 @@ func NewEspressoKeyManager(
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
 	serviceType espressotee.ServiceType,
-	registerSignerConfig espressotee.EspressoRegisterServiceConfig,
 	servicePersistentPrivateKey *ecdsa.PrivateKey,
 	userDataAttestationFile string,
 	quoteFile string,
@@ -104,22 +101,6 @@ func NewEspressoKeyManager(
 		panic("DataSigner is nil")
 	}
 
-	if registerSignerConfig.GasLimitBufferIncreasePercent > 20 {
-		panic("Gas limit buffer increase should not be greater than 20 percent")
-	}
-
-	if registerSignerConfig.MaxRetries > 10 {
-		panic("Max retries cannot be more than 10")
-	}
-
-	if registerSignerConfig.MaxTxnWaitTime > 5*time.Minute {
-		panic("Max txn wait time cannot be more than 5 minutes")
-	}
-
-	if registerSignerConfig.RetryReadContractDelay > 20*time.Second {
-		panic("Retry read contract delay cannot be more than 20 seconds")
-	}
-
 	if teeType == NITRO && zkAttestationServiceURL == "" {
 		panic("zk attestation service URL must be provided for nitro TEE type")
 	}
@@ -127,19 +108,13 @@ func NewEspressoKeyManager(
 	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
 
 	return &EspressoKeyManager{
-		pubKey:                    pubKey,
-		privKey:                   privKey,
-		signer:                    signerFunc,
-		espressoTEEVerifierCaller: espressoTEEVerifierCaller,
-		espressoNitroTEEVerifier:  espressoNitroTEEVerifier,
-		dataPoster:                dataPoster,
-		teeType:                   teeType,
-		registerSignerOpts: espressotee.EspressoRegisterServiceOpts{
-			MaxTxnWaitTime:                registerSignerConfig.MaxTxnWaitTime,
-			MaxRetries:                    int(registerSignerConfig.MaxRetries),
-			RetryReadContractDelay:        registerSignerConfig.RetryReadContractDelay,
-			GasLimitBufferIncreasePercent: registerSignerConfig.GasLimitBufferIncreasePercent,
-		},
+		pubKey:                                 pubKey,
+		privKey:                                privKey,
+		signer:                                 signerFunc,
+		espressoTEEVerifierCaller:              espressoTEEVerifierCaller,
+		espressoNitroTEEVerifier:               espressoNitroTEEVerifier,
+		dataPoster:                             dataPoster,
+		teeType:                                teeType,
 		userDataAttestationFile:                userDataAttestationFile,
 		quoteFile:                              quoteFile,
 		serviceType:                            serviceType,
@@ -160,7 +135,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return false, err
 	}
@@ -243,7 +218,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType, k.registerSignerOpts)
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return err
 	}

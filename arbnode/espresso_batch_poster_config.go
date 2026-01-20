@@ -4,21 +4,18 @@ import (
 	"time"
 
 	"github.com/spf13/pflag"
-
-	"github.com/offchainlabs/nitro/espressotee"
 )
 
 type EspressoBatchPosterConfig struct {
-	TeeType                    string                                    `koanf:"tee-type"`
-	RegisterServiceConfig      espressotee.EspressoRegisterServiceConfig `koanf:"register-service-config"`
-	HotShotUrl                 string                                    `koanf:"hotshot-url"`
-	TxnsSendingInterval        time.Duration                             `koanf:"txns-sending-interval"`
-	TxnsResubmissionInterval   time.Duration                             `koanf:"txns-resubmission-interval"`
-	ResubmitEspressoTxDeadline time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
-	TxSizeLimit                int64                                     `koanf:"tx-size-limit"`
-	UserDataAttestationFile    string                                    `koanf:"user-data-attestation-file"`
-	QuoteFile                  string                                    `koanf:"quote-file"`
-	AttestationServiceURL      string                                    `koanf:"attestation-service-url"`
+	TeeType                    string        `koanf:"tee-type"`
+	HotShotUrl                 string        `koanf:"hotshot-url"`
+	TxnsSendingInterval        time.Duration `koanf:"txns-sending-interval"`
+	TxnsResubmissionInterval   time.Duration `koanf:"txns-resubmission-interval"`
+	ResubmitEspressoTxDeadline time.Duration `koanf:"resubmit-espresso-tx-deadline"`
+	TxSizeLimit                int64         `koanf:"tx-size-limit"`
+	UserDataAttestationFile    string        `koanf:"user-data-attestation-file"`
+	QuoteFile                  string        `koanf:"quote-file"`
+	AttestationServiceURL      string        `koanf:"attestation-service-url"`
 
 	EventPollingStep         uint64 `koanf:"event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
@@ -50,7 +47,6 @@ var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	ResubmitEspressoTxDeadline: 10 * time.Minute,
 	HotShotUrl:                 "",
 	TeeType:                    "NITRO",
-	RegisterServiceConfig:      espressotee.DefaultEspressoRegisterServiceConfig,
 	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
 	TxSizeLimit:              900 * 1024,
 	UserDataAttestationFile:  "",
@@ -68,7 +64,6 @@ var TestEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	ResubmitEspressoTxDeadline: 10 * time.Second,
 	HotShotUrl:                 "",
 	TeeType:                    "TESTS",
-	RegisterServiceConfig:      espressotee.DefaultEspressoRegisterServiceConfig,
 	TxSizeLimit:                200 * 1024,
 
 	HotShotFirstPostingBlock: 1,
