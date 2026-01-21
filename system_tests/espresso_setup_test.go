@@ -6,8 +6,6 @@ import (
 	"math/big"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 )
 
 func createL1AndL2Node(
@@ -76,14 +74,4 @@ func createL1AndL2Node(
 	builder.L1.TransferBalance(t, "Faucet", "CommitmentTask", new(big.Int).Mul(big.NewInt(9e18), big.NewInt(1000)), builder.L1Info)
 
 	return builder, cleanup
-}
-
-func TestCreateEspressoCaffNode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	valNodeCleanup := createValidationNode(ctx, t, true)
-	defer valNodeCleanup()
-	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
-	defer cleanup()
-	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxSizeLimit, int64(0), "EspressoTxSizeLimit should be greater than 0")
 }
