@@ -278,7 +278,6 @@ func NewEspressoCaffNode(
 			return batcherAddrMonitor.IsValid(ctx, addr, l1Height)
 		},
 		streamerConfigFetcher().TxnsPollingInterval,
-		streamerConfigFetcher().Dangerous.MinimumHotshotBlockNum,
 	)
 
 	delayedMessageFetcher := NewDelayedMessageFetcher(delayedBridge, l1Reader, blocksToRead,

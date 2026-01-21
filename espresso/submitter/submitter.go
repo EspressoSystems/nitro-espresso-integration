@@ -37,9 +37,8 @@ type EspressoSubmitterConfig struct {
 	// values set for them, but can be overridden by the user.
 
 	ChainID                               uint64
-	EspressoTxnsPollingInterval           time.Duration
+	EspressoTxnsMoniteringInterval        time.Duration
 	EspressoTxnSendingInterval            time.Duration
-	EspressoTxnsResubmissionInterval      time.Duration
 	EspressoMaxTransactionSize            int64
 	ResubmitEspressoTxDeadline            time.Duration
 	InitialFinalizedSequencerMessageCount *big.Int
@@ -92,7 +91,7 @@ type EspressoSubmitterConfig struct {
 // - LightClientReader
 // - MessageGetter
 var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
-	EspressoTxnsPollingInterval:           time.Second,
+	EspressoTxnsMoniteringInterval:        time.Second,
 	EspressoTxnSendingInterval:            time.Second,
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
@@ -220,17 +219,9 @@ func WithTxnsSendingInterval(interval time.Duration) EspressoSubmitterConfigOpti
 
 // WithTxnsPollingInterval is an [EspressoSubmitterConfigOption] that sets the
 // transaction polling interval in the [EspressoSubmitterConfig].
-func WithTxnsPollingInterval(interval time.Duration) EspressoSubmitterConfigOption {
+func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnsPollingInterval = interval
-	}
-}
-
-// WithTxnsResubmissionInterval is an [EspressoSubmitterConfigOption] that sets
-// the transaction resubmission interval in the [EspressoSubmitterConfig].
-func WithTxnsResubmissionInterval(interval time.Duration) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnsResubmissionInterval = interval
+		config.EspressoTxnsMoniteringInterval = interval
 	}
 }
 
@@ -400,7 +391,7 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 		return fmt.Errorf("espresso max transaction size must be greater than 0")
 	}
 
-	if config.EspressoTxnsPollingInterval <= 0 {
+	if config.EspressoTxnsMoniteringInterval <= 0 {
 		return fmt.Errorf("espresso transactions polling interval must be greater than 0")
 	}
 

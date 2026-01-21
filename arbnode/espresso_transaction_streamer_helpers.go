@@ -202,9 +202,9 @@ func ConfigureEspressoFields(
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
 		TxnsPollingInterval:                   espressostreamer.DefaultEspressoStreamerConfig.TxnsPollingInterval,
 		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.TxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.TxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
+		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
+		MaxTransactionSize:                    EspressoTxSizeLimit,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
 		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
 	}
 
@@ -219,9 +219,8 @@ func ConfigureEspressoFields(
 		submitter.WithEspressoClient(config.EspressoClient),
 		submitter.WithLightClientReader(config.LightClientReader),
 		submitter.WithKeyManager(config.KeyManager),
-		submitter.WithTxnsPollingInterval(config.TxnsPollingInterval),
+		submitter.WithTxnsMonitoringInterval(config.TxnsPollingInterval),
 		submitter.WithTxnsSendingInterval(config.TxnsSendingInterval),
-		submitter.WithTxnsResubmissionInterval(config.TxnsResubmissionInterval),
 		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
 		submitter.WithMaxTransactionSize(config.MaxTransactionSize),
 		submitter.WithInitialFinalizedSequencerMessageCount(config.InitialFinalizedSequencerMessageCount),

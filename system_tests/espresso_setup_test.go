@@ -92,5 +92,5 @@ func TestCreateEspressoCaffNode(t *testing.T) {
 	defer valNodeCleanup()
 	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
-	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxSizeLimit, int64(0), "EspressoTxSizeLimit should be greater than 0")
+	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxnsSendingInterval, 0*time.Second, "TxnsSendingInterval should be greater than 0")
 }

@@ -150,6 +150,7 @@ type BatchPoster struct {
 	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
 	signerAddr                 common.Address
+	fatalErrChan               chan error
 }
 
 type l1BlockBound int
@@ -364,6 +365,7 @@ type BatchPosterOpts struct {
 	DataSigner signature.DataSignerFunc
 
 	EspressoConfigFetcher EspressoConfigFetcher
+	FatalErrChan          chan error
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -448,6 +450,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
 		espressoRestarting:        true,
+		fatalErrChan:              opts.FatalErrChan,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -587,7 +590,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
 			opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval,
-			opts.EspressoConfigFetcher().Streamer.Dangerous.MinimumHotshotBlockNum,
 		)
 
 		b.espressoBatcherAddrMonitor = monitor
@@ -595,16 +597,13 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if b.espressoStreamer != nil {
-		txPollingInterval := opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval
 		cfg := opts.EspressoConfigFetcher().BatchPoster
 
 		submitterOptions = append(
 			submitterOptions,
-			submitter.WithTxnsPollingInterval(txPollingInterval),
+			submitter.WithTxnsMonitoringInterval(cfg.TxnsMonitoringInterval),
 			submitter.WithTxnsSendingInterval(cfg.TxnsSendingInterval),
-			submitter.WithTxnsResubmissionInterval(cfg.TxnsResubmissionInterval),
-			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
-			submitter.WithMaxTransactionSize(cfg.TxSizeLimit),
+			submitter.WithMaxTransactionSize(EspressoTxSizeLimit),
 			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
 				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
 			}),
@@ -2601,12 +2600,11 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			}
 			if errors.Is(err, FatalErrUnableToRegisterSigner) {
 				registrationFailCount++
-				if registrationFailCount > int(b.espressoConfig.BatchPoster.RegisterServiceConfig.MaxRegisterRetries) {
-					log.Crit("Espresso signer registration failed 5 times consecutively. Panicking.", "err", err)
-					panic(err)
+				if registrationFailCount > espressotee.EspressoMaxRetries {
+					log.Crit("Espresso signer registration failed 5 times consecutively. Stopping.", "err", err)
+					b.fatalErrChan <- err
 				}
 				log.Warn("Espresso signer registration failed", "attempt", registrationFailCount, "err", err)
-				return b.espressoConfig.BatchPoster.RegisterServiceConfig.RegisterRetryDelay
 			}
 
 			b.building = nil
@@ -2641,6 +2639,9 @@ func (b *BatchPoster) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.dataPoster.StopAndWait()
 	b.redisLock.StopAndWait()
+	if b.espressoStreamer != nil {
+		b.espressoStreamer.StopAndWait()
+	}
 }
 
 type BoolRing struct {

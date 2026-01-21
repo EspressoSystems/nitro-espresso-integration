@@ -60,30 +60,15 @@ type MessageWithMetadataAndPos struct {
 	HotshotHeight   uint64
 }
 
-type DangerousEspressoStreamerConfig struct {
-	MinimumHotshotBlockNum uint64 `koanf:"minimum-hotshot-block-num"`
-}
-
-var DefaultDangerousEspressoStreamerConfig = DangerousEspressoStreamerConfig{
-	MinimumHotshotBlockNum: 0,
-}
-
-func DangerousEspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
-	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultDangerousEspressoStreamerConfig.MinimumHotshotBlockNum, "minimum hotshot block number")
-}
-
 type EspressoStreamerConfig struct {
-	HotShotBlock          uint64                          `koanf:"hotshot-block"`
-	TxnsPollingInterval   time.Duration                   `koanf:"txns-polling-interval"`
-	AddressMonitorStartL1 uint64                          `koanf:"address-monitor-start-l1"`
-	AddressMonitorStep    uint64                          `koanf:"address-monitor-step"`
-	Dangerous             DangerousEspressoStreamerConfig `koanf:"dangerous"`
+	HotShotBlock          uint64        `koanf:"hotshot-block"`
+	TxnsPollingInterval   time.Duration `koanf:"txns-monitoring-interval"`
+	AddressMonitorStartL1 uint64        `koanf:"address-monitor-start-l1"`
+	AddressMonitorStep    uint64        `koanf:"address-monitor-step"`
 }
 
 var DefaultEspressoStreamerConfig = EspressoStreamerConfig{
 	HotShotBlock: 1,
-	// By default, no minimum hotshot block number is enforced
-	Dangerous: DefaultDangerousEspressoStreamerConfig,
 	// Hotshot currently produces blocks at average of 2 seconds
 	// We set it to 1 second to get updates more often than blocks are produced
 	TxnsPollingInterval:   time.Second,
@@ -96,8 +81,6 @@ func EspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".address-monitor-step", DefaultEspressoStreamerConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultEspressoStreamerConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	f.Duration(prefix+".txns-polling-interval", DefaultEspressoStreamerConfig.TxnsPollingInterval, "interval between polling for transactions to be included in the block")
-
-	DangerousEspressoStreamerConfigAddOptions(prefix+".dangerous", f)
 }
 
 type EspressoStreamer struct {
@@ -114,8 +97,7 @@ type EspressoStreamer struct {
 
 	PerfRecorder *PerfRecorder
 
-	batcherAddressesFetcher         func(l1Height uint64, address common.Address) (bool, error)
-	dangerousMinimumHotshotBlockNum uint64
+	batcherAddressesFetcher func(l1Height uint64, address common.Address) (bool, error)
 }
 
 var _ EspressoStreamerInterface = (*EspressoStreamer)(nil)
@@ -128,7 +110,6 @@ func NewEspressoStreamer(
 	recordPerformance bool,
 	batcherAddressesFetcher func(l1Height uint64, address common.Address) (bool, error),
 	retryTime time.Duration,
-	dangerousMinimumHotshotBlockNum uint64,
 ) *EspressoStreamer {
 
 	var PerfRecorder *PerfRecorder
@@ -137,15 +118,14 @@ func NewEspressoStreamer(
 	}
 
 	return &EspressoStreamer{
-		espressoClient:                  espressoClient,
-		nextHotshotBlockNum:             nextHotshotBlockNum,
-		namespace:                       namespace,
-		espressoSGXVerifier:             espressoSGXVerifier,
-		PerfRecorder:                    PerfRecorder,
-		batcherAddressesFetcher:         batcherAddressesFetcher,
-		retryTime:                       retryTime,
-		currentMessagePos:               1,
-		dangerousMinimumHotshotBlockNum: dangerousMinimumHotshotBlockNum,
+		espressoClient:          espressoClient,
+		nextHotshotBlockNum:     nextHotshotBlockNum,
+		namespace:               namespace,
+		espressoSGXVerifier:     espressoSGXVerifier,
+		PerfRecorder:            PerfRecorder,
+		batcherAddressesFetcher: batcherAddressesFetcher,
+		retryTime:               retryTime,
+		currentMessagePos:       1,
 	}
 }
 
@@ -193,10 +173,6 @@ func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHotshotBlock u
 	defer s.messageLock.Unlock()
 
 	hotshotBlockNum := currentHotshotBlock
-
-	if currentHotshotBlock < s.dangerousMinimumHotshotBlockNum {
-		hotshotBlockNum = s.dangerousMinimumHotshotBlockNum
-	}
 
 	s.currentMessagePos = currentMessagePos
 	s.nextHotshotBlockNum = hotshotBlockNum
