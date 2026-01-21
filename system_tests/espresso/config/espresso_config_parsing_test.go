@@ -26,6 +26,10 @@ func TestEspressoConfigParsing(t *testing.T) {
 				"tee-type":      "NITRO",
 				"hotshot-url":   "http://localhost:8080",
 				"tx-size-limit": int64(900000),
+				"register-service-config": map[string]interface{}{
+					"max-register-retries": 5,
+					"register-retry-delay": "10ms",
+				},
 			},
 			"streamer": map[string]interface{}{
 				"hotshot-block": uint64(100),
@@ -55,6 +59,8 @@ func TestEspressoConfigParsing(t *testing.T) {
 	assert.Equal(t, uint64(50), parsedConfig.Espresso.Streamer.Dangerous.MinimumHotshotBlockNum)
 	assert.Equal(t, 3*time.Second, parsedConfig.Espresso.Streamer.TxnsPollingInterval)
 	assert.Equal(t, uint64(100), parsedConfig.Espresso.Streamer.AddressMonitorStep)
+	assert.Equal(t, uint8(5), parsedConfig.Espresso.BatchPoster.RegisterServiceConfig.MaxRegisterRetries)
+	assert.Equal(t, 10*time.Millisecond, parsedConfig.Espresso.BatchPoster.RegisterServiceConfig.RegisterRetryDelay)
 }
 
 func TestEspressoConfigMigration(t *testing.T) {

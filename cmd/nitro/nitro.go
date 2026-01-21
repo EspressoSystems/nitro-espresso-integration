@@ -220,11 +220,11 @@ func mainImpl() int {
 	if nodeConfig.Execution.Sequencer.Enable && !nodeConfig.Execution.Sequencer.Timeboost.Enable && nodeConfig.Node.TransactionStreamer.TrackBlockMetadataFrom != 0 {
 		log.Warn("Sequencer node's track-block-metadata-from is set but timeboost is not enabled")
 	}
-	if nodeConfig.Node.EspressoCaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Timeboost.Enable) {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Timeboost.Enable) {
 		log.Error("the caff node cannot have any type of sequencer enabled, run without a config that enables any form of sequencer.")
 		return 1
 	}
-	if nodeConfig.Node.EspressoCaffNode.Enable && (len(nodeConfig.Execution.ForwardingTarget) == 0 || nodeConfig.Execution.ForwardingTarget == "null") {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && (len(nodeConfig.Execution.ForwardingTarget) == 0 || nodeConfig.Execution.ForwardingTarget == "null") {
 		log.Error("Cannot start Caff node with no forwarding target")
 		return 1
 	}
@@ -573,7 +573,7 @@ func mainImpl() int {
 	}
 
 	// Data availability committee can be enabled only if the node is not an espresso caff node
-	if l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee != nodeConfig.Node.DataAvailability.Enable && !nodeConfig.Node.EspressoCaffNode.Enable {
+	if l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee != nodeConfig.Node.DataAvailability.Enable && !nodeConfig.Node.Espresso.CaffNode.Enable {
 		flag.Usage()
 		log.Error(fmt.Sprintf("data availability service usage for this chain is set to %v but --node.data-availability.enable is set to %v", l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee, nodeConfig.Node.DataAvailability.Enable))
 		return 1
