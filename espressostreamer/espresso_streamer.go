@@ -68,6 +68,10 @@ var DefaultDangerousEspressoStreamerConfig = DangerousEspressoStreamerConfig{
 	MinimumHotshotBlockNum: 0,
 }
 
+func DangerousEspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
+	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultDangerousEspressoStreamerConfig.MinimumHotshotBlockNum, "minimum hotshot block number")
+}
+
 type EspressoStreamerConfig struct {
 	HotShotBlock          uint64                          `koanf:"hotshot-block"`
 	TxnsPollingInterval   time.Duration                   `koanf:"txns-polling-interval"`
@@ -89,10 +93,11 @@ var DefaultEspressoStreamerConfig = EspressoStreamerConfig{
 
 func EspressoStreamerConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".hotshot-block", DefaultEspressoStreamerConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
-	f.Uint64(prefix+".minimum-hotshot-block-num", DefaultEspressoStreamerConfig.Dangerous.MinimumHotshotBlockNum, "minimum hotshot block number")
 	f.Uint64(prefix+".address-monitor-step", DefaultEspressoStreamerConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
 	f.Uint64(prefix+".address-monitor-start-l1", DefaultEspressoStreamerConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
 	f.Duration(prefix+".txns-polling-interval", DefaultEspressoStreamerConfig.TxnsPollingInterval, "interval between polling for transactions to be included in the block")
+
+	DangerousEspressoStreamerConfigAddOptions(prefix+".dangerous", f)
 }
 
 type EspressoStreamer struct {
