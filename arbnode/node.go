@@ -38,12 +38,14 @@ import (
 	"github.com/offchainlabs/nitro/das"
 	"github.com/offchainlabs/nitro/das/celestia"
 	celestiaTypes "github.com/offchainlabs/nitro/das/celestia/types"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/precompilesgen"
 	"github.com/offchainlabs/nitro/solgen/go/rollupgen"
 	"github.com/offchainlabs/nitro/staker"
+	"github.com/offchainlabs/nitro/staker/bold"
 	boldstaker "github.com/offchainlabs/nitro/staker/bold"
 	legacystaker "github.com/offchainlabs/nitro/staker/legacy"
 	multiprotocolstaker "github.com/offchainlabs/nitro/staker/multi_protocol"
@@ -84,6 +86,12 @@ func GenerateRollupConfig(prod bool, wasmModuleRoot common.Hash, rollupOwner com
 	}
 }
 
+type EspressoConfig struct {
+	CaffNode    EspressoCaffNodeConfig                  `koanf:"caff-node"`
+	BatchPoster EspressoBatchPosterConfig               `koanf:"batch-poster"`
+	Streamer    espressostreamer.EspressoStreamerConfig `koanf:"streamer"`
+}
+
 type Config struct {
 	Sequencer            bool                           `koanf:"sequencer"`
 	ParentChainReader    headerreader.Config            `koanf:"parent-chain-reader" reload:"hot"`
@@ -108,7 +116,7 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
+	Espresso EspressoConfig `koanf:"espresso" reload:"hot"`
 }
 
 func (c *Config) Validate() error {
@@ -125,7 +133,7 @@ func (c *Config) Validate() error {
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
 	}
-	if c.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+	if c.Espresso.CaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
 		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
@@ -180,8 +188,17 @@ func ConfigAddOptions(prefix string, f *flag.FlagSet, feedInputEnable bool, feed
 	TransactionStreamerConfigAddOptions(prefix+".transaction-streamer", f)
 	MaintenanceConfigAddOptions(prefix+".maintenance", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
+
 	celestia.CelestiaDAConfigAddOptions(prefix+".celestia-cfg", f)
-	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso.caff-node", f)
+	EspressoBatchPosterConfigAddOptions(prefix+".espresso.batch-poster", f)
+	espressostreamer.EspressoStreamerConfigAddOptions(prefix+".espresso.streamer", f)
+}
+
+var EspressoConfigDefault = EspressoConfig{
+	CaffNode:    DefaultEspressoCaffNodeConfig,
+	BatchPoster: DefaultEspressoBatchPosterConfig,
+	Streamer:    espressostreamer.DefaultEspressoStreamerConfig,
 }
 
 var ConfigDefault = Config{
@@ -194,18 +211,19 @@ var ConfigDefault = Config{
 	BlockValidator:       staker.DefaultBlockValidatorConfig,
 	Feed:                 broadcastclient.FeedConfigDefault,
 	Staker:               legacystaker.DefaultL1ValidatorConfig,
-	Bold:                 boldstaker.DefaultBoldConfig,
+	Bold:                 bold.DefaultBoldConfig,
 	SeqCoordinator:       DefaultSeqCoordinatorConfig,
 	DataAvailability:     das.DefaultDataAvailabilityConfig,
 	SyncMonitor:          DefaultSyncMonitorConfig,
 	Dangerous:            DefaultDangerousConfig,
 	TransactionStreamer:  DefaultTransactionStreamerConfig,
 	ResourceMgmt:         resourcemanager.DefaultConfig,
-	Maintenance:          DefaultMaintenanceConfig,
 	BlockMetadataFetcher: DefaultBlockMetadataFetcherConfig,
+	Maintenance:          DefaultMaintenanceConfig,
 	SnapSyncTest:         DefaultSnapSyncConfig,
-	EspressoCaffNode:     DefaultEspressoCaffNodeConfig,
+
 	Celestia:             celestia.DefaultCelestiaConfig,
+	Espresso: EspressoConfigDefault,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -590,22 +608,23 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	if config.EspressoCaffNode.Enable {
+	if config.Espresso.CaffNode.Enable {
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
-				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				func() *EspressoCaffNodeConfig { return &config.Espresso.CaffNode },
 				exec.ChainDB,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				config.EspressoCaffNode.RecordPerformance,
-				config.EspressoCaffNode.BlocksToRead,
+				config.Espresso.CaffNode.RecordPerformance,
+				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				espressoCaffNodeInitArgs,
+				func() *espressostreamer.EspressoStreamerConfig { return &config.Espresso.Streamer },
 			)
 
 			if err != nil {
@@ -880,6 +899,10 @@ func createNodeImpl(
 			DAPReaders:    dapReaders,
 
 			DataSigner: dataSigner,
+
+			EspressoConfigFetcher: func() *EspressoConfig {
+				return &configFetcher.Get().Espresso
+			},
 		})
 		if err != nil {
 			return nil, err

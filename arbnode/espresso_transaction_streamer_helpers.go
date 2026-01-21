@@ -15,6 +15,7 @@ import (
 
 	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
+	"github.com/offchainlabs/nitro/espressostreamer"
 )
 
 // TransactionStreamerEspressoConfig is a configuration struct for the
@@ -28,10 +29,8 @@ type TransactionStreamerEspressoConfig struct {
 	TxnsSendingInterval                   time.Duration
 	TxnsResubmissionInterval              time.Duration
 	ResubmitEspressoTxDeadline            time.Duration
-	UseEscapeHatch                        bool
 	EscapeHatchEnabled                    bool
 	MaxTransactionSize                    int64
-	MaxBlockLagBeforeEscapeHatch          uint64
 	InitialFinalizedSequencerMessageCount *big.Int
 
 	SubmitterCreator       func(options ...submitter.EspressoSubmitterConfigOption) (submitter.EspressoSubmitter, error)
@@ -98,14 +97,6 @@ func WithResubmitEspressoTxDeadline(deadline time.Duration) TransactionStreamerE
 	}
 }
 
-// WithUseEscapeHatch is a functional option to enable or disable the use of the
-// escape hatch in the TransactionStreamerEspressoConfig.
-func WithUseEscapeHatch(enable bool) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.UseEscapeHatch = enable
-	}
-}
-
 // WithMaxTransactionSize is a functional option to set the maximum transaction
 // size in the TransactionStreamerEspressoConfig.
 func WithEscapeHatchEnabled(enable bool) TransactionStreamerEspressoOption {
@@ -120,15 +111,6 @@ func WithEscapeHatchEnabled(enable bool) TransactionStreamerEspressoOption {
 func WithMaxTransactionSize(size int64) TransactionStreamerEspressoOption {
 	return func(config *TransactionStreamerEspressoConfig) {
 		config.MaxTransactionSize = size
-	}
-}
-
-// WithMaxBlockLagBeforeEscapeHatch is a functional option to set the maximum
-// block lag before the escape hatch is triggered in the
-// TransactionStreamerEspressoConfig.
-func WithMaxBlockLagBeforeEscapeHatch(maxBlockLag uint64) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.MaxBlockLagBeforeEscapeHatch = maxBlockLag
 	}
 }
 
@@ -218,13 +200,12 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   DefaultBatchPosterConfig.EspressoTxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultBatchPosterConfig.EspressoTxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultBatchPosterConfig.EspressoTxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultBatchPosterConfig.ResubmitEspressoTxDeadline,
-
-		SubmitterCreator: submitter.NewPollingEspressoSubmitter,
+		TxnsPollingInterval:                   espressostreamer.DefaultEspressoStreamerConfig.TxnsPollingInterval,
+		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.TxnsSendingInterval,
+		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval,
+		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.TxSizeLimit,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
+		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
 	}
 
 	applyEspressoOptions(&config, options...)

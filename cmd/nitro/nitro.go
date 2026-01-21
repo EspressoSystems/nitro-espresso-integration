@@ -241,11 +241,11 @@ func mainImpl() int {
 	if nodeConfig.Execution.Sequencer.Enable && !nodeConfig.Execution.Sequencer.Timeboost.Enable && nodeConfig.Node.TransactionStreamer.TrackBlockMetadataFrom != 0 {
 		log.Warn("Sequencer node's track-block-metadata-from is set but timeboost is not enabled")
 	}
-	if nodeConfig.Node.EspressoCaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Timeboost.Enable) {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && (nodeConfig.Execution.Sequencer.Enable || nodeConfig.Node.Sequencer || nodeConfig.Node.SeqCoordinator.Enable || nodeConfig.Node.DelayedSequencer.Enable || nodeConfig.Execution.Sequencer.Timeboost.Enable) {
 		log.Error("The Caff node cannot have any type of sequencer enabled, run without a config that enables any form of sequencer.")
 		return 1
 	}
-	if nodeConfig.Node.EspressoCaffNode.Enable && (len(nodeConfig.Execution.ForwardingTarget) == 0 || nodeConfig.Execution.ForwardingTarget == "null") {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && (len(nodeConfig.Execution.ForwardingTarget) == 0 || nodeConfig.Execution.ForwardingTarget == "null") {
 		log.Error("Cannot start Caff node with no forwarding target")
 		return 1
 	}
@@ -272,18 +272,18 @@ func mainImpl() int {
 	defaultBatchPosterL1WalletConfig := arbnode.DefaultBatchPosterL1WalletConfig
 	defaultBatchPosterL1WalletConfig.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
-	nodeConfig.Node.EspressoCaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
+	nodeConfig.Node.Espresso.CaffNode.ResolveDirectoryNames(nodeConfig.Persistent.Chain)
 
 	var espressoCaffNodeInitArgs *arbnode.EspressoCaffNodeInitArgs
 
-	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.EspressoTeeType != "" {
-		caffNodePrivateKey, err := espresso_tee_utils.ReadEnclavePrivateKey(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+	if nodeConfig.Node.Espresso.CaffNode.Enable && nodeConfig.Node.Espresso.CaffNode.TeeType != "" {
+		caffNodePrivateKey, err := espresso_tee_utils.ReadEnclavePrivateKey(nodeConfig.Node.Espresso.CaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
-			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, "err", err)
+			log.Crit("error reading enclave private key for Espresso Caff node", "path", nodeConfig.Node.Espresso.CaffNode.KeyPairAttestationsPath, "err", err)
 		}
 
-		teeHMAC, err = espresso_tee_utils.DeriveHmac(nodeConfig.Node.EspressoCaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
+		teeHMAC, err = espresso_tee_utils.DeriveHmac(nodeConfig.Node.Espresso.CaffNode.KeyPairAttestationsPath, nodeConfig.Chain.ID)
 		if err != nil {
 			flag.Usage()
 			log.Crit("error generating HMAC key for Espresso Caff node", "err", err)
@@ -496,14 +496,14 @@ func mainImpl() int {
 
 	var initializeCaffNodeTags bool
 	// If snapshot mode is enabled, verify the extracted snapshot hash matches the config
-	if nodeConfig.Node.EspressoCaffNode.Enable && nodeConfig.Node.EspressoCaffNode.SnapshotChecksum != "" {
+	if nodeConfig.Node.Espresso.CaffNode.Enable && nodeConfig.Node.Espresso.CaffNode.SnapshotChecksum != "" {
 		// Check that TEE is enabled
-		if nodeConfig.Node.EspressoCaffNode.EspressoTeeType == "" {
+		if nodeConfig.Node.Espresso.CaffNode.TeeType == "" {
 			log.Error("snapshot verification requires TEE, but no TEE type was specified")
 			return 1
 		}
-		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.EspressoCaffNode.SnapshotChecksum)
-		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.EspressoCaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), espressoCaffNodeInitArgs.CaffNodePrivateKey)
+		log.Info("Verifying the snapshot", "snapshot checksum", nodeConfig.Node.Espresso.CaffNode.SnapshotChecksum)
+		initializeCaffNodeTags, err = arbutil.VerifySnapshot(nodeConfig.Node.Espresso.CaffNode.SnapshotChecksum, stack.InstanceDir(), stack.ResolvePath("l2chaindata"), stack.ResolveAncient("l2chaindata", nodeConfig.Persistent.Ancient), espressoCaffNodeInitArgs.CaffNodePrivateKey)
 		if err != nil {
 			log.Error("failed to verify snapshot", "err", err)
 			return 1
@@ -577,7 +577,7 @@ func mainImpl() int {
 	}
 
 	// Data availability committee can be enabled only if the node is not an espresso caff node
-	if l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee != nodeConfig.Node.DataAvailability.Enable && !nodeConfig.Node.EspressoCaffNode.Enable {
+	if l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee != nodeConfig.Node.DataAvailability.Enable && !nodeConfig.Node.Espresso.CaffNode.Enable {
 		flag.Usage()
 		log.Error(fmt.Sprintf("data availability service usage for this chain is set to %v but --node.data-availability.enable is set to %v", l2BlockChain.Config().ArbitrumChainParams.DataAvailabilityCommittee, nodeConfig.Node.DataAvailability.Enable))
 		return 1

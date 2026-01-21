@@ -137,6 +137,8 @@ func testBatchPosterParallel(t *testing.T, useRedis bool) {
 	for i := 0; i < parallelBatchPosters; i++ {
 		// Make a copy of the batch poster config so NewBatchPoster calling Validate() on it doesn't race
 		batchPosterConfig := builder.nodeConfig.BatchPoster
+		espressoConfig := builder.nodeConfig.Espresso
+
 		batchPoster, err := arbnode.NewBatchPoster(ctx,
 			&arbnode.BatchPosterOpts{
 				DataPosterDB:  nil,
@@ -150,6 +152,8 @@ func testBatchPosterParallel(t *testing.T, useRedis bool) {
 				TransactOpts:  &seqTxOpts,
 				DAPWriters:    []daprovider.Writer{},
 				ParentChainID: parentChainID,
+
+				EspressoConfigFetcher: func() *arbnode.EspressoConfig { return &espressoConfig },
 			},
 		)
 		Require(t, err)
