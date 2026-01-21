@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 import json
-import copy
 import sys
-from pathlib import Path
-    # old_key: (espresso_section, new_key)
+from collections import OrderedDict
+
 ESPRESSO_FIELD_MAP = {
     "hotshot-block": ("streamer", "hotshot-block"),
     "espresso-txns-polling-interval": ("streamer", "txns-polling-interval"),
     "address-monitor-step": ("streamer", "address-monitor-step"),
     "address-monitor-start-l1": ("streamer", "address-monitor-start-l1"),
 
-    # [espresso][batch-poster]
     "espresso-tee-type": ("batch-poster", "tee-type"),
     "espresso-register-service-config": ("batch-poster", "register-service-config"),
     "hotshot-url": ("batch-poster", "hotshot-url"),
@@ -25,117 +23,94 @@ ESPRESSO_FIELD_MAP = {
     "hotshot-first-posting-block": ("batch-poster", "hotshot-first-posting-block"),
     "init-batcher-addresses": ("batch-poster", "init-batcher-addresses"),
     "address-valid-ranges": ("batch-poster", "address-valid-ranges"),
-
-    # "address-monitor-step": ("batch-poster", "address-monitor-step"),
-    # "address-monitor-start-l1": ("batch-poster", "address-monitor-start-l1"),
 }
 
 OLD_CAFF_NODE_KEY = "espresso-caff-node"
-NEW_CAFF_NODE_PATH = ("espresso", "caff-node")
-STREAMER_KEY = "streamer"
-DANGEROUS_KEY = "dangerous"
 MIN_BLOCK_KEY = "minimum-hotshot-block-num"
-TX_POLLING_INTERVAL_KEY = "txns-polling-interval"
-ADDRESS_MONITOR_STEP_KEY = "address-monitor-step"
-ADDRESS_MONITOR_START_L1_KEY = "address-monitor-start-l1"
+ADDRESS_MONITOR_KEYS = ["address-monitor-step", "address-monitor-start-l1"]
+REMOVE_KEYS = ["from-block"]
 
 def migrate_config(cfg: dict) -> dict:
-    cfg = copy.deepcopy(cfg)
-
-    node = cfg.get("node")
-    if not node:
+    if "node" not in cfg or not isinstance(cfg["node"], dict):
         return cfg
 
-    espresso = cfg.setdefault("espresso", {})
+    old_node = cfg["node"]
+    new_node = {}
+    espresso = {}
 
-    # ---- Migrate batch-poster ----
-    batch_poster = node.get("batch-poster")
-    if not batch_poster:
-        return cfg
-
-
-    for old_key, (section, new_key) in ESPRESSO_FIELD_MAP.items():
-        if old_key in batch_poster:
-            section_cfg = espresso.setdefault(section, {})
-            section_cfg.setdefault(new_key, batch_poster[old_key])
-            batch_poster.pop(old_key, None)
-
-    if not batch_poster:
-        node.pop("batch-poster", None)
-
-
-    # ---- Migrate caff-node  ----
-    if OLD_CAFF_NODE_KEY in node:
-        old_caff_data = node.pop(OLD_CAFF_NODE_KEY)
+    batch_poster = old_node.get("batch-poster", {})
+    if isinstance(batch_poster, dict):
+        remaining_batch_poster = {}
+        for k, v in batch_poster.items():
+            if k in ESPRESSO_FIELD_MAP:
+                section, new_key = ESPRESSO_FIELD_MAP[k]
+                espresso.setdefault(section, {})[new_key] = v
+            else:
+                remaining_batch_poster[k] = v
         
-        clean_caff = {}
-        for k, v in old_caff_data.items():
-            new_k = k.replace("espresso-", "") if k.startswith("espresso-") else k
-            clean_caff[new_k] = v
+
+    if OLD_CAFF_NODE_KEY in old_node:
+        old_caff = old_node.get(OLD_CAFF_NODE_KEY, {})
+        if isinstance(old_caff, dict):
+            caff_node = espresso.setdefault("caff-node", {})
+            for k, v in old_caff.items():
+                if k == "from-block":
+                    if "streamer" not in espresso:
+                        espresso["streamer"] = OrderedDict()
+                    espresso["streamer"]["hotshot-block"] = v
+                if k in REMOVE_KEYS:
+                    continue
+                if k in ADDRESS_MONITOR_KEYS:
+                    espresso.setdefault("streamer", {})[k] = v
+                elif k == "dangerous" and isinstance(v, dict):
+                    streamer_dangerous = espresso.setdefault("streamer", {}).setdefault("dangerous", {})
+                    if MIN_BLOCK_KEY in v:
+                        streamer_dangerous[MIN_BLOCK_KEY] = v[MIN_BLOCK_KEY]
+
+                    remaining = {kk: vv for kk, vv in v.items() if kk != MIN_BLOCK_KEY}
+                    if remaining:
+                        caff_node["dangerous"] = remaining
+                else:
+                    new_k = k.replace("espresso-", "") if k.startswith("espresso-") else k
+                    caff_node[new_k] = v
             
-        espresso["caff-node"] = clean_caff
-    
-    caff = espresso.get("caff-node")
-    if not caff:
-        return
+            if not caff_node: espresso.pop("caff-node", None)
 
-    streamer = espresso.setdefault("streamer", {})
+    for key, value in old_node.items():
+        if key == "batch-poster":
+            if remaining_batch_poster:
+                new_node[key] = remaining_batch_poster
+        elif key == OLD_CAFF_NODE_KEY:
+            continue
+        else:
+            new_node[key] = value
 
-    if ADDRESS_MONITOR_STEP_KEY in caff:
-        streamer.setdefault(
-            ADDRESS_MONITOR_STEP_KEY,
-            caff[ADDRESS_MONITOR_STEP_KEY],
-        )
-        caff.pop(ADDRESS_MONITOR_STEP_KEY, None)
-    
-    if ADDRESS_MONITOR_START_L1_KEY in caff:
-        streamer.setdefault(
-            ADDRESS_MONITOR_START_L1_KEY,
-            caff[ADDRESS_MONITOR_START_L1_KEY],
-        )
-        caff.pop(ADDRESS_MONITOR_START_L1_KEY, None)
+    if espresso:
+        new_node["espresso"] = espresso
 
-    dangerous = caff.get("dangerous")
-    if not dangerous:
-        return
-
-    if MIN_BLOCK_KEY not in dangerous:
-        return
-
-    #  ---- Migrate streamer  ----
-   
-    streamer_dangerous = streamer.setdefault("dangerous", {})
-
-    streamer_dangerous.setdefault(
-        MIN_BLOCK_KEY,
-        dangerous[MIN_BLOCK_KEY],
-    )
-
-    dangerous.pop(MIN_BLOCK_KEY, None)
-
-    if not dangerous:
-        caff.pop("dangerous", None)
-
-    if not node:
-        cfg.pop("node", None)
-
+    cfg["node"] = new_node
     return cfg
 
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python3 migrate.py <input.json> <output.json>")
+        sys.exit(1)
 
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
 
-if len(sys.argv) < 3:
-    print("Usage: python3 migrate-config-file.py <old_config.json> <new_config.json>")
-    sys.exit(1)
+    try:
+        with open(input_file, 'r') as f:
+            cfg = json.load(f, object_pairs_hook=OrderedDict)
 
-old_config = sys.argv[1]
-new_config = sys.argv[2]
+        new_cfg = migrate_config(cfg)
 
-with open(old_config, 'r') as f:
-    cfg = json.load(f)
+        with open(output_file, "w") as f:
+            json.dump(new_cfg, f, indent=2, sort_keys=False)
 
-new_cfg = migrate_config(cfg)
+        print(f"Migration successful: {output_file}")
+    except Exception as e:
+        print(f"Critical Error: {e}")
 
-with open(new_config, "w") as f:
-    json.dump(new_cfg, f, indent=2, sort_keys=True)
-
-print(f"Converted config written to {new_config}")
+if __name__ == "__main__":
+    main()
