@@ -62,7 +62,7 @@ type MessageWithMetadataAndPos struct {
 
 type EspressoStreamerConfig struct {
 	HotShotBlock          uint64        `koanf:"hotshot-block"`
-	TxnsPollingInterval   time.Duration `koanf:"txns-monitoring-interval"`
+	TxnsPollingInterval   time.Duration `koanf:"txns-polling-interval"`
 	AddressMonitorStartL1 uint64        `koanf:"address-monitor-start-l1"`
 	AddressMonitorStep    uint64        `koanf:"address-monitor-step"`
 }
