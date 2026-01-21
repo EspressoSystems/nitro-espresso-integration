@@ -97,6 +97,8 @@ type EspressoRegisterServiceConfig struct {
 	MaxTxnWaitTime                time.Duration `koanf:"max-txn-wait-time"`
 	RetryReadContractDelay        time.Duration `koanf:"retry-read-contract-delay"`
 	MaxRetries                    uint8         `koanf:"max-retries"`
+	MaxRegisterRetries            uint8         `koanf:"max-register-retries"`
+	RegisterRetryDelay            time.Duration `koanf:"register-retry-delay"`
 	GasLimitBufferIncreasePercent uint64        `koanf:"gas-limit-buffer-increase-percent"`
 }
 
@@ -104,6 +106,8 @@ var DefaultEspressoRegisterServiceConfig = EspressoRegisterServiceConfig{
 	MaxTxnWaitTime:                3 * time.Minute,
 	RetryReadContractDelay:        5 * time.Second,
 	MaxRetries:                    5,
+	MaxRegisterRetries:            5,
+	RegisterRetryDelay:            time.Millisecond * 10,
 	GasLimitBufferIncreasePercent: 20,
 }
 
@@ -111,6 +115,8 @@ type EspressoRegisterServiceOpts struct {
 	MaxTxnWaitTime                time.Duration
 	RetryReadContractDelay        time.Duration
 	MaxRetries                    int
+	MaxRegisterRetries            int
+	RegisterRetryDelay            time.Duration
 	GasLimitBufferIncreasePercent uint64
 }
 
@@ -119,4 +125,6 @@ func AddEspressoRegisterServiceConfigOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".retry-read-contract-delay", DefaultEspressoRegisterServiceConfig.RetryReadContractDelay, "delay in calls to read from contract for verification")
 	f.Int(prefix+".max-retries", int(DefaultEspressoRegisterServiceConfig.MaxRetries), "how many times to check if we have data in our espresso tee contracts")
 	f.Uint64(prefix+".gas-limit-buffer-increase-percent", DefaultEspressoRegisterServiceConfig.GasLimitBufferIncreasePercent, "buffer increase to gas limit in espresso tee contracts")
+	f.Int(prefix+".max-register-retries", int(DefaultEspressoRegisterServiceConfig.MaxRegisterRetries), "maximum number of retries for registering with the Espresso Network")
+	f.Duration(prefix+".register-retry-delay", DefaultEspressoRegisterServiceConfig.RegisterRetryDelay, "delay between retries for registering with the Espresso Network")
 }
