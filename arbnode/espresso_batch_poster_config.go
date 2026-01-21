@@ -14,7 +14,6 @@ type EspressoBatchPosterConfig struct {
 	HotShotUrl              string        `koanf:"hotshot-url"`
 	TxnsSendingInterval     time.Duration `koanf:"txns-sending-interval"`
 	TxnsMonitoringInterval  time.Duration `koanf:"txns-monitoring-interval"`
-	ReEspressoTxDeadline    time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
 	QuoteFile               string        `koanf:"quote-file"`
 	AttestationServiceURL   string        `koanf:"attestation-service-url"`
