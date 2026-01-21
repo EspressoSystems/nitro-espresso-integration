@@ -81,8 +81,9 @@ var (
 
 	batchPosterFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/failure", nil)
 
-	usableBytesInBlob    = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
-	blobTxBlobGasPerBlob = big.NewInt(params.BlobTxBlobGasPerBlob)
+	usableBytesInBlob              = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
+	blobTxBlobGasPerBlob           = big.NewInt(params.BlobTxBlobGasPerBlob)
+	FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
 )
 
 const (
@@ -1653,7 +1654,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
 			err := espressoSubmitter.RegisterService()
 			if err != nil {
-				return false, fmt.Errorf("unable to register signer: %w", err)
+				return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
 			}
 		}
 	}
@@ -2289,6 +2290,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		accumulatorNotFoundEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
 	}
+	registrationFailCount := 0
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
@@ -2328,6 +2330,16 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				// Shutting down. No need to print the context canceled error.
 				return 0
 			}
+			if errors.Is(err, FatalErrUnableToRegisterSigner) {
+				registrationFailCount++
+				if registrationFailCount > int(b.espressoConfig.BatchPoster.RegisterServiceConfig.MaxRegisterRetries) {
+					log.Crit("Espresso signer registration failed 5 times consecutively. Panicking.", "err", err)
+					panic(err)
+				}
+				log.Warn("Espresso signer registration failed", "attempt", registrationFailCount, "err", err)
+				return b.espressoConfig.BatchPoster.RegisterServiceConfig.RegisterRetryDelay
+			}
+
 			b.building = nil
 			logLevel := log.Error
 			// Likely the inbox tracker just isn't caught up.
