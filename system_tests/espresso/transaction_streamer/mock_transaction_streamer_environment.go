@@ -248,6 +248,11 @@ func NewMockTransactionStreamerEnvironment(ctx context.Context, options ...MockT
 		arbnode.WithEspressoClient(espressoClient),
 		arbnode.WithLightClientReader(light_client.NewMockAlwaysLiveLightClientReader()),
 		arbnode.WithKeyManager(key_manager.NewMockEspressoKeyManager()),
+		arbnode.AddSubmitterConfigurationOptions(
+			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
+				return true, nil
+			}),
+		),
 
 		// Add the passed in options to the Espresso Transaction Streamer
 		arbnode.WithMultipleEspressoOptions(

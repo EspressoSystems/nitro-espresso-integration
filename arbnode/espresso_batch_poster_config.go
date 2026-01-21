@@ -38,6 +38,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.Int64(prefix+".tx-size-limit", DefaultEspressoBatchPosterConfig.TxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
 	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
+	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".register-service-config", f)
 }
 
 var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
