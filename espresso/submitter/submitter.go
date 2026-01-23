@@ -217,6 +217,15 @@ func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigO
 	}
 }
 
+// WithResubmitEspressoTxDeadline is an [EspressoSubmitterConfigOption] that
+// sets the deadline for resubmitting Espresso transactions in the
+// [EspressoSubmitterConfig].
+func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.ResubmitEspressoTxDeadline = deadline
+	}
+}
+
 // WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
 // to use the escape hatch in the [EspressoSubmitterConfig].
 func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitterConfigOption {

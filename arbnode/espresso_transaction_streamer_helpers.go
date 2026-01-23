@@ -25,6 +25,7 @@ type TransactionStreamerEspressoConfig struct {
 	LightClientReader                     espresso_light_client.LightClientReaderInterface
 	KeyManager                            key_manager.EspressoKeyManagerInterface
 	TxnsMonitoringInterval                time.Duration
+	ResubmitEspressoTxDeadline            time.Duration
 	EscapeHatchEnabled                    bool
 	MaxTransactionSize                    int64
 	InitialFinalizedSequencerMessageCount *big.Int
@@ -75,6 +76,14 @@ func WithEscapeHatchEnabled(enable bool) TransactionStreamerEspressoOption {
 func WithMaxTransactionSize(size int64) TransactionStreamerEspressoOption {
 	return func(config *TransactionStreamerEspressoConfig) {
 		config.MaxTransactionSize = size
+	}
+}
+
+// WithResubmitEspressoTxDeadline is a functional option to set the deadline for
+// resubmitting Espresso transactions in the TransactionStreamerEspressoConfig.
+func WithResubmitEspressoTxDeadline(deadline time.Duration) TransactionStreamerEspressoOption {
+	return func(config *TransactionStreamerEspressoConfig) {
+		config.ResubmitEspressoTxDeadline = deadline
 	}
 }
 
@@ -167,6 +176,7 @@ func ConfigureEspressoFields(
 		MaxTransactionSize:                    EspressoTxSizeLimit,
 		TxnsMonitoringInterval:                DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
 		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
 	}
 
 	applyEspressoOptions(&config, options...)
@@ -183,6 +193,7 @@ func ConfigureEspressoFields(
 		submitter.WithTxnsMonitoringInterval(config.TxnsMonitoringInterval),
 		submitter.WithMaxTransactionSize(config.MaxTransactionSize),
 		submitter.WithInitialFinalizedSequencerMessageCount(config.InitialFinalizedSequencerMessageCount),
+		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
 		submitter.WithMultipleOptions(config.SubmitterConfiguration...),
 	)
 

@@ -602,6 +602,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions,
 			submitter.WithTxnsMonitoringInterval(cfg.TxnsMonitoringInterval),
 			submitter.WithMaxTransactionSize(EspressoTxSizeLimit),
+			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
 			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
 				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
 			}),
