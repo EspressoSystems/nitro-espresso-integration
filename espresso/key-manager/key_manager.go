@@ -116,11 +116,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	teeType := k.teeType
-	if k.teeType == TESTS {
-		teeType = SGX
-	}
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(teeType), k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return false, err
 	}
@@ -204,11 +200,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	teeType := k.teeType
-	if k.teeType == TESTS {
-		teeType = SGX
-	}
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(teeType), k.serviceType)
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return err
 	}
@@ -226,9 +218,6 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
