@@ -10,13 +10,11 @@ import (
 const EspressoTxSizeLimit int64 = 900 * 1024
 
 type EspressoBatchPosterConfig struct {
-	TeeType                 string        `koanf:"tee-type"`
-	HotShotUrl              string        `koanf:"hotshot-url"`
-	TxnsSendingInterval     time.Duration `koanf:"txns-sending-interval"`
-	TxnsMonitoringInterval  time.Duration `koanf:"txns-monitoring-interval"`
-	UserDataAttestationFile string        `koanf:"user-data-attestation-file"`
-	QuoteFile               string        `koanf:"quote-file"`
-	AttestationServiceURL   string        `koanf:"attestation-service-url"`
+	TeeType                string        `koanf:"tee-type"`
+	HotShotUrl             string        `koanf:"hotshot-url"`
+	TxnsSendingInterval    time.Duration `koanf:"txns-sending-interval"`
+	TxnsMonitoringInterval time.Duration `koanf:"txns-monitoring-interval"`
+	AttestationServiceURL  string        `koanf:"attestation-service-url"`
 
 	EventPollingStep         uint64 `koanf:"event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
@@ -33,8 +31,6 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".event-polling-step", DefaultEspressoBatchPosterConfig.EventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.Duration(prefix+".txns-sending-interval", DefaultEspressoBatchPosterConfig.TxnsSendingInterval, "interval between sending transactions to Espresso Network")
 	f.Duration(prefix+".txns-monitoring-interval", DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval, "time threshold after which a transaction will be automatically resubmitted if no response is received")
-	f.String(prefix+".user-data-attestation-file", DefaultEspressoBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
-	f.String(prefix+".quote-file", DefaultEspressoBatchPosterConfig.QuoteFile, "path to SGX quote file")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
 }
@@ -45,8 +41,6 @@ var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	TxnsMonitoringInterval:   2 * time.Second,
 	HotShotUrl:               "",
 	TeeType:                  "NITRO",
-	UserDataAttestationFile:  "",
-	QuoteFile:                "",
 	AttestationServiceURL:    "",
 	HotShotFirstPostingBlock: 1,
 	InitBatcherAddresses:     []string{},

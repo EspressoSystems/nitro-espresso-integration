@@ -11,14 +11,11 @@ import (
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -30,6 +27,9 @@ const (
 	TESTS = espressotee.TESTS
 	EMPTY = espressotee.EMPTY
 )
+
+const quoteFile = "/dev/attestation/quote"
+const userDataAttestationFile = "/dev/attestation/user_report_data"
 
 type EspressoKeyManagerInterface interface {
 	HasRegistered() bool
@@ -45,16 +45,12 @@ var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
 
 type EspressoKeyManager struct {
 	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface
-	espressoNitroTEEVerifier  espressotee.EspressoNitroTEEVerifierInterface
-	pubKey                    *ecdsa.PublicKey
 	privKey                   *ecdsa.PrivateKey
 
-	signer                  signature.DataSignerFunc
-	dataPoster              *dataposter.DataPoster
-	teeType                 espressotee.TEE
-	serviceType             espressotee.ServiceType
-	userDataAttestationFile string
-	quoteFile               string
+	signer      signature.DataSignerFunc
+	dataPoster  *dataposter.DataPoster
+	teeType     espressotee.TEE
+	serviceType espressotee.ServiceType
 
 	hasRegistered                          bool
 	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
@@ -62,20 +58,15 @@ type EspressoKeyManager struct {
 
 func NewEspressoKeyManager(
 	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface,
-	espressoNitroTEEVerifier espressotee.EspressoNitroTEEVerifierInterface,
 	dataPoster *dataposter.DataPoster,
 	signerFunc signature.DataSignerFunc,
 	teeType espressotee.TEE,
 	serviceType espressotee.ServiceType,
 	servicePersistentPrivateKey *ecdsa.PrivateKey,
-	userDataAttestationFile string,
-	quoteFile string,
 	zkAttestationServiceURL string,
 ) *EspressoKeyManager {
-	var pubKey *ecdsa.PublicKey
 	var err error
 	var privKey *ecdsa.PrivateKey
-	var ok bool
 
 	// If the node supports persistent private key, we use that one otherwise we generate a
 	// new ephemeral key. Currently only the cafff node supports persistent private key.
@@ -85,14 +76,8 @@ func NewEspressoKeyManager(
 		if err != nil {
 			panic(err)
 		}
-
-		pubKey, ok = privKey.Public().(*ecdsa.PublicKey)
-		if !ok {
-			panic("failed to get public key")
-		}
 	} else {
 		privKey = servicePersistentPrivateKey
-		pubKey = &servicePersistentPrivateKey.PublicKey
 	}
 
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
@@ -108,15 +93,11 @@ func NewEspressoKeyManager(
 	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
 
 	return &EspressoKeyManager{
-		pubKey:                                 pubKey,
 		privKey:                                privKey,
 		signer:                                 signerFunc,
 		espressoTEEVerifierCaller:              espressoTEEVerifierCaller,
-		espressoNitroTEEVerifier:               espressoNitroTEEVerifier,
 		dataPoster:                             dataPoster,
 		teeType:                                teeType,
-		userDataAttestationFile:                userDataAttestationFile,
-		quoteFile:                              quoteFile,
 		serviceType:                            serviceType,
 		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
 	}
@@ -135,7 +116,11 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
+	teeType := k.teeType
+	if k.teeType == TESTS {
+		teeType = SGX
+	}
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(teeType), k.serviceType)
 	if err != nil {
 		return false, err
 	}
@@ -146,7 +131,8 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
  * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
  */
 func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
-	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	pubKey := k.privKey.PublicKey
+	signerAddr := crypto.PubkeyToAddress(pubKey)
 	switch k.teeType {
 	case SGX:
 		addr := signerAddr.Bytes()
@@ -160,7 +146,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		return attestationQuote, addr, nil
 
 	case NITRO:
-		pubKeyBytes := crypto.FromECDSAPub(k.pubKey)
+		pubKeyBytes := crypto.FromECDSAPub(&pubKey)
 		log.Info("nitro signing address", "addr", signerAddr)
 
 		attestationBytes, err := getAttestationFunc(pubKeyBytes)
@@ -218,12 +204,16 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
+	teeType := k.teeType
+	if k.teeType == TESTS {
+		teeType = SGX
+	}
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(teeType), k.serviceType)
 	if err != nil {
 		return err
 	}
 
-	signerAddr := crypto.PubkeyToAddress(*k.pubKey)
+	signerAddr := crypto.PubkeyToAddress(k.privKey.PublicKey)
 	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
@@ -236,12 +226,15 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
+	if k.teeType == TESTS {
+		k.teeType = SGX
+	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
 
 func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
-	return k.pubKey
+	return &k.privKey.PublicKey
 }
 
 func (k *EspressoKeyManager) TeeType() espressotee.TEE {
@@ -278,9 +271,6 @@ func (k *EspressoKeyManager) RegisterService() error {
 // The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
 func (k *EspressoKeyManager) getAttestationQuote(userData []byte) ([]byte, error) {
 
-	if (k.userDataAttestationFile == "") || (k.quoteFile == "") {
-		return []byte{}, nil
-	}
 	// keccak256 hash of userData
 	userDataHash := crypto.Keccak256(userData)
 
@@ -291,13 +281,13 @@ func (k *EspressoKeyManager) getAttestationQuote(userData []byte) ([]byte, error
 	}
 
 	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(k.userDataAttestationFile, userDataHash, 0600)
+	err := os.WriteFile(userDataAttestationFile, userDataHash, 0600)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
 	}
 
 	// Read the quote from "/dev/attestation/quote" in SGX
-	attestationQuote, err := os.ReadFile(k.quoteFile)
+	attestationQuote, err := os.ReadFile(quoteFile)
 	if err != nil {
 		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
 	}
@@ -340,19 +330,6 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 
 // No-Op Signauture
 // This is a function designed to replace a signing function for functionality that depends on operating in a TEE
-
 func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
-	return payload, nil
-}
-
-func SetupNitroVerifier(teeVerifier *espressogen.IEspressoTEEVerifier, l1Client *ethclient.Client, serviceType espressotee.ServiceType) (espressotee.EspressoNitroTEEVerifierInterface, error) {
-	// Setup nitro contract interface
-	nitroAddr, err := teeVerifier.EspressoNitroTEEVerifier(&bind.CallOpts{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to get nitro tee verifier address from caller: %w", err)
-	}
-	log.Info("successfully retrieved nitro contract verifier address", "address", nitroAddr)
-	nitroVerifier := espressotee.NewEspressoNitroTEEVerifier(l1Client, nitroAddr)
-
-	return nitroVerifier, nil
+	return []byte{}, nil
 }
