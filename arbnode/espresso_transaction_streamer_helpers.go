@@ -15,7 +15,6 @@ import (
 
 	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
-	"github.com/offchainlabs/nitro/espressostreamer"
 )
 
 // TransactionStreamerEspressoConfig is a configuration struct for the
@@ -25,10 +24,7 @@ type TransactionStreamerEspressoConfig struct {
 	EspressoClient                        espresso_client.EspressoClient
 	LightClientReader                     espresso_light_client.LightClientReaderInterface
 	KeyManager                            key_manager.EspressoKeyManagerInterface
-	TxnsPollingInterval                   time.Duration
-	TxnsSendingInterval                   time.Duration
-	TxnsResubmissionInterval              time.Duration
-	ResubmitEspressoTxDeadline            time.Duration
+	TxnsMonitoringInterval                time.Duration
 	EscapeHatchEnabled                    bool
 	MaxTransactionSize                    int64
 	InitialFinalizedSequencerMessageCount *big.Int
@@ -62,38 +58,6 @@ func WithLightClientReader(lightClientReader espresso_light_client.LightClientRe
 func WithKeyManager(keyManager key_manager.EspressoKeyManagerInterface) TransactionStreamerEspressoOption {
 	return func(config *TransactionStreamerEspressoConfig) {
 		config.KeyManager = keyManager
-	}
-}
-
-// WithTxnsPollingInterval is a functional option to set the transaction polling
-// interval in the TransactionStreamerEspressoConfig.
-func WithTxnsPollingInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsPollingInterval = interval
-	}
-}
-
-// WithTxnSendingInterval is a functional option to set the transaction sending
-// interval in the TransactionStreamerEspressoConfig.
-func WithTxnSendingInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsSendingInterval = interval
-	}
-}
-
-// WithTxnResubmissionInterval is a functional option to set the transaction
-// resubmission interval in the TransactionStreamerEspressoConfig.
-func WithTxnResubmissionInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsResubmissionInterval = interval
-	}
-}
-
-// WithResubmitEspressoTxDeadline is a functional option to set the deadline for
-// resubmitting Espresso transactions in the TransactionStreamerEspressoConfig.
-func WithResubmitEspressoTxDeadline(deadline time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.ResubmitEspressoTxDeadline = deadline
 	}
 }
 
@@ -200,11 +164,8 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   espressostreamer.DefaultEspressoStreamerConfig.TxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.TxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
 		MaxTransactionSize:                    EspressoTxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
+		TxnsMonitoringInterval:                DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
 		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
 	}
 
@@ -219,9 +180,7 @@ func ConfigureEspressoFields(
 		submitter.WithEspressoClient(config.EspressoClient),
 		submitter.WithLightClientReader(config.LightClientReader),
 		submitter.WithKeyManager(config.KeyManager),
-		submitter.WithTxnsMonitoringInterval(config.TxnsPollingInterval),
-		submitter.WithTxnsSendingInterval(config.TxnsSendingInterval),
-		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
+		submitter.WithTxnsMonitoringInterval(config.TxnsMonitoringInterval),
 		submitter.WithMaxTransactionSize(config.MaxTransactionSize),
 		submitter.WithInitialFinalizedSequencerMessageCount(config.InitialFinalizedSequencerMessageCount),
 		submitter.WithMultipleOptions(config.SubmitterConfiguration...),

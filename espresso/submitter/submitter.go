@@ -209,16 +209,8 @@ func WithMaxTransactionSize(size int64) EspressoSubmitterConfigOption {
 	}
 }
 
-// WithTxnsSendingInterval is an [EspressoSubmitterConfigOption] that sets the
-// transaction sending interval in the [EspressoSubmitterConfig].
-func WithTxnsSendingInterval(interval time.Duration) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnSendingInterval = interval
-	}
-}
-
-// WithTxnsPollingInterval is an [EspressoSubmitterConfigOption] that sets the
-// transaction polling interval in the [EspressoSubmitterConfig].
+// WithTxnsMonitoringInterval is an [EspressoSubmitterConfigOption] that sets the
+// transaction polling, resubmission, and submission interval
 func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.EspressoTxnsMoniteringInterval = interval
@@ -230,15 +222,6 @@ func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigO
 func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.InitialFinalizedSequencerMessageCount = count
-	}
-}
-
-// WithResubmitEspressoTxDeadline is an [EspressoSubmitterConfigOption] that
-// sets the deadline for resubmitting Espresso transactions in the
-// [EspressoSubmitterConfig].
-func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.ResubmitEspressoTxDeadline = deadline
 	}
 }
 

@@ -61,7 +61,6 @@ func createCaffNode(
 
 	// reuse the caff node settings so we can set them outside this function.
 	nodeConfig.Espresso.CaffNode.WaitForFinalization = existing.nodeConfig.Espresso.CaffNode.WaitForFinalization
-	nodeConfig.Espresso.CaffNode.WaitForConfirmations = existing.nodeConfig.Espresso.CaffNode.WaitForConfirmations
 	nodeConfig.Espresso.CaffNode.RequiredBlockDepth = existing.nodeConfig.Espresso.CaffNode.RequiredBlockDepth
 	nodeConfig.Espresso.CaffNode.BatchPosterAddr = "0xb386a74Dcab67b66F8AC07B4f08365d37495Dd23"
 	nodeConfig.Espresso.Streamer.AddressMonitorStartL1 = 1
@@ -87,7 +86,6 @@ func createCaffNode(
 	nodeConfig.Espresso.Streamer.TxnsPollingInterval = time.Second * 1
 	nodeConfig.Espresso.CaffNode.HotshotPollingInterval = time.Millisecond * 100
 	nodeConfig.ParentChainReader.Enable = true
-	nodeConfig.Espresso.CaffNode.BlocksToRead = 10000
 
 	builder.l2StackConfig.HTTPPort = getRandomPort(t)
 	builder.l2StackConfig.HTTPHost = "0.0.0.0"
@@ -375,7 +373,6 @@ func TestEspressoCaffNodeDelayedMessagesConfirmations(t *testing.T) {
 	defer cleanEspresso()
 
 	// Set caff node config variables
-	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = true
 	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
 	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 
@@ -436,7 +433,6 @@ func TestEspressoCaffNodeDelayedMessagesFinalized(t *testing.T) {
 	Require(t, err)
 
 	// Set caff node config vars
-	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = false
 	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
 	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = true
 	// start the node
@@ -488,8 +484,7 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	defer cleanup()
 	defer cleanEspresso()
 	// set caff node config vars
-	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = false
-	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
+	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 0
 	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 
 	// start the node
@@ -531,7 +526,6 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	defer cleanEspresso()
 
 	// Set caff node config variables
-	builder.nodeConfig.Espresso.CaffNode.WaitForConfirmations = true
 	builder.nodeConfig.Espresso.CaffNode.RequiredBlockDepth = 6
 	builder.nodeConfig.Espresso.CaffNode.WaitForFinalization = false
 	builder.nodeConfig.Espresso.CaffNode.GenerateSnapshot = true
@@ -801,8 +795,6 @@ func TestEspressoCaffNodeForceInclusionChecker(t *testing.T) {
 	delayedMessageFetcher := arbnode.NewDelayedMessageFetcher(
 		delayedBridge,
 		reader,
-		100,
-		false,
 		false,
 		10,
 		0,

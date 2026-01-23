@@ -1062,7 +1062,6 @@ func getEspressoCaffNode(
 				delayedBridge,
 				l1Reader,
 				config.Espresso.CaffNode.RecordPerformance,
-				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
