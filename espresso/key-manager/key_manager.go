@@ -218,6 +218,9 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
+	if k.teeType == TESTS {
+		k.teeType = SGX
+	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
