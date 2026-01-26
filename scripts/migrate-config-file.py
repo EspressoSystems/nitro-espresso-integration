@@ -60,7 +60,7 @@ def migrate_batch_poster(old_node: dict, espresso: dict) -> dict:
     for key, value in batch_poster.items():
         if key in ESPRESSO_FIELD_MAP:
             section, new_key = ESPRESSO_FIELD_MAP[key]
-            espresso.setdefault(section, {})[new_key] = value
+            espresso.setdefault(section, OrderedDict())[new_key] = value
         else:
             remaining[key] = value
 
@@ -77,22 +77,23 @@ def migrate_caff_node(old_node: dict, espresso: dict) -> None:
     if not isinstance(old_caff, dict):
         return
 
-    caff_node = espresso.setdefault("caff-node", {})
+    caff_node = espresso.setdefault("caff-node", OrderedDict())
+    streamer = espresso.setdefault("streamer", OrderedDict())
 
     for key, value in old_caff.items():
         # from-block → streamer.hotshot-block
         if key == "from-block":
-            espresso.setdefault("streamer", OrderedDict())["hotshot-block"] = value
+            streamer["hotshot-block"] = value
 
         if key == "retry-time":
-            espresso.setdefault("streamer", OrderedDict())["txns-polling-interval"] = value
+            streamer["txns-polling-interval"] = value
 
         if key in REMOVE_KEYS:
             continue
 
         # address monitor keys → streamer
         if key in ADDRESS_MONITOR_KEYS:
-            espresso.setdefault("streamer", {})[key] = value
+            streamer[key] = value
             continue
 
         # dangerous handling
@@ -184,7 +185,7 @@ def migrate_config(cfg: dict) -> dict:
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python3 migrate.py <input.json> <output.json>")
+        print("Usage: python3 migrate-config-file.py <input.json> <output.json>")
         sys.exit(1)
 
     input_file = sys.argv[1]
@@ -202,7 +203,8 @@ def main():
         print(f"Migration successful: {output_file}")
 
     except Exception as e:
-        print(f"Critical Error: {e}")
+        print(f"Critical Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
