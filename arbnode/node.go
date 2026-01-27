@@ -168,9 +168,9 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
-	EspressoCaffNodeConfigAddOptions(prefix+".espresso.espresso-caff-node", f)
-	EspressoBatchPosterConfigAddOptions(prefix+".espresso.espresso-batch-poster", f)
-	espressostreamer.EspressoStreamerConfigAddOptions(prefix+".espresso.espresso-streamer", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso.caff-node", f)
+	EspressoBatchPosterConfigAddOptions(prefix+".espresso.batch-poster", f)
+	espressostreamer.EspressoStreamerConfigAddOptions(prefix+".espresso.streamer", f)
 }
 
 var EspressoConfigDefault = EspressoConfig{
