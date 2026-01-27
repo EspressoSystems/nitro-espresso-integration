@@ -38,6 +38,7 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das"
 	"github.com/offchainlabs/nitro/daprovider/data_streaming"
 	"github.com/offchainlabs/nitro/daprovider/factory"
+	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/execution"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -55,6 +56,12 @@ import (
 	"github.com/offchainlabs/nitro/util/signature"
 	"github.com/offchainlabs/nitro/wsbroadcastserver"
 )
+
+type EspressoConfig struct {
+	CaffNode    EspressoCaffNodeConfig                  `koanf:"caff-node"`
+	BatchPoster EspressoBatchPosterConfig               `koanf:"batch-poster"`
+	Streamer    espressostreamer.EspressoStreamerConfig `koanf:"streamer"`
+}
 
 type Config struct {
 	Sequencer                bool                           `koanf:"sequencer"`
@@ -80,7 +87,7 @@ type Config struct {
 	// SnapSyncConfig is only used for testing purposes, these should not be configured in production.
 	SnapSyncTest SnapSyncConfig
 
-	EspressoCaffNode EspressoCaffNodeConfig `koanf:"espresso-caff-node" reload:"hot"`
+	Espresso EspressoConfig `koanf:"espresso" reload:"hot"`
 }
 
 func (c *Config) Validate() error {
@@ -97,7 +104,7 @@ func (c *Config) Validate() error {
 		c.Feed.Output.Enable = false
 		c.Feed.Input.URL = []string{}
 	}
-	if c.EspressoCaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
+	if c.Espresso.CaffNode.Enable && (c.Sequencer || c.DelayedSequencer.Enable || c.SeqCoordinator.Enable) {
 		return errors.New("cannot start a Caff node with any sequencer enabled")
 	}
 	if err := c.BlockValidator.Validate(); err != nil {
@@ -161,7 +168,15 @@ func ConfigAddOptions(prefix string, f *pflag.FlagSet, feedInputEnable bool, fee
 	resourcemanager.ConfigAddOptions(prefix+".resource-mgmt", f)
 	BlockMetadataFetcherConfigAddOptions(prefix+".block-metadata-fetcher", f)
 	ConsensusExecutionSyncerConfigAddOptions(prefix+".consensus-execution-syncer", f)
-	EspressoCaffNodeConfigAddOptions(prefix+".espresso-caff-node", f)
+	EspressoCaffNodeConfigAddOptions(prefix+".espresso.caff-node", f)
+	EspressoBatchPosterConfigAddOptions(prefix+".espresso.batch-poster", f)
+	espressostreamer.EspressoStreamerConfigAddOptions(prefix+".espresso.streamer", f)
+}
+
+var EspressoConfigDefault = EspressoConfig{
+	CaffNode:    DefaultEspressoCaffNodeConfig,
+	BatchPoster: DefaultEspressoBatchPosterConfig,
+	Streamer:    espressostreamer.DefaultEspressoStreamerConfig,
 }
 
 var ConfigDefault = Config{
@@ -187,7 +202,7 @@ var ConfigDefault = Config{
 	ConsensusExecutionSyncer: DefaultConsensusExecutionSyncerConfig,
 	SnapSyncTest:             DefaultSnapSyncConfig,
 
-	EspressoCaffNode: DefaultEspressoCaffNodeConfig,
+	Espresso: EspressoConfigDefault,
 }
 
 func ConfigDefaultL1Test() *Config {
@@ -997,6 +1012,10 @@ func getBatchPoster(
 			DAPReaders:     dapReaders,
 
 			DataSigner: dataSigner,
+
+			EspressoConfigFetcher: func() *EspressoConfig {
+				return &configFetcher.Get().Espresso
+			},
 		})
 		if err != nil {
 			return nil, err
@@ -1030,23 +1049,26 @@ func getEspressoCaffNode(
 	fatalErrChan chan error,
 	caffNodeInitArgs *EspressoCaffNodeInitArgs,
 ) (*Node, error) {
-	if config.EspressoCaffNode.Enable {
+	if config.Espresso.CaffNode.Enable {
 
 		if exec, ok := exec.(*gethexec.ExecutionNode); ok {
 			espressoCaffNode, err := NewEspressoCaffNode(
 				ctx,
-				func() *EspressoCaffNodeConfig { return &config.EspressoCaffNode },
+				func() *EspressoCaffNodeConfig { return &config.Espresso.CaffNode },
 				chainDb,
 				exec.ExecEngine,
 				delayedBridge,
 				l1Reader,
-				config.EspressoCaffNode.RecordPerformance,
-				config.EspressoCaffNode.BlocksToRead,
+				config.Espresso.CaffNode.RecordPerformance,
+				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
 				rawdb.NewTable(arbDb, storage.CaffNodePrefix),
 				caffNodeInitArgs,
+				func() *espressostreamer.EspressoStreamerConfig {
+					return &configFetcher.Get().Espresso.Streamer
+				},
 			)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create espressoCaffNode: %w", err)
