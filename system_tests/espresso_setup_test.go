@@ -37,7 +37,7 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.PollInterval = 10 * time.Second
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.Espresso.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.Espresso.BatchPoster.TeeType = "SGX"
+	builder.nodeConfig.Espresso.BatchPoster.TeeType = "TESTS"
 	builder.DontParalellise()
 
 	// validator config
@@ -92,5 +92,5 @@ func TestCreateEspressoCaffNode(t *testing.T) {
 	defer valNodeCleanup()
 	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
 	defer cleanup()
-	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxSizeLimit, int64(0), "EspressoTxSizeLimit should be greater than 0")
+	require.Greater(t, builder.nodeConfig.Espresso.BatchPoster.TxnsMonitoringInterval, 0*time.Second, "TxnsMonitoringInterval should be greater than 0")
 }

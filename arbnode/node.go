@@ -981,6 +981,7 @@ func getBatchPoster(
 	stakerAddr common.Address,
 	dataSigner signature.DataSignerFunc,
 	l2ChainId uint64,
+	fatalErrChan chan error,
 ) (*BatchPoster, error) {
 	var batchPoster *BatchPoster
 	if config.BatchPoster.Enable {
@@ -1016,6 +1017,7 @@ func getBatchPoster(
 			EspressoConfigFetcher: func() *EspressoConfig {
 				return &configFetcher.Get().Espresso
 			},
+			FatalErrChan: fatalErrChan,
 		})
 		if err != nil {
 			return nil, err
@@ -1060,7 +1062,6 @@ func getEspressoCaffNode(
 				delayedBridge,
 				l1Reader,
 				config.Espresso.CaffNode.RecordPerformance,
-				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
@@ -1301,7 +1302,7 @@ func createNodeImpl(
 		return nil, err
 	}
 
-	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, anytrustWriter, l1Reader, inboxTracker, txStreamer, arbOSVersionGetter, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr, dataSigner, l2Config.ChainID.Uint64())
+	batchPoster, err := getBatchPoster(ctx, config, configFetcher, txOptsBatchPoster, dapWriter, anytrustWriter, l1Reader, inboxTracker, txStreamer, arbOSVersionGetter, arbDb, syncMonitor, deployInfo, parentChainID, dapReaders, stakerAddr, dataSigner, l2Config.ChainID.Uint64(), fatalErrChan)
 	if err != nil {
 		return nil, err
 	}

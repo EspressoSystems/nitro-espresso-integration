@@ -15,7 +15,6 @@ import (
 
 	key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
-	"github.com/offchainlabs/nitro/espressostreamer"
 )
 
 // TransactionStreamerEspressoConfig is a configuration struct for the
@@ -25,9 +24,7 @@ type TransactionStreamerEspressoConfig struct {
 	EspressoClient                        espresso_client.EspressoClient
 	LightClientReader                     espresso_light_client.LightClientReaderInterface
 	KeyManager                            key_manager.EspressoKeyManagerInterface
-	TxnsPollingInterval                   time.Duration
-	TxnsSendingInterval                   time.Duration
-	TxnsResubmissionInterval              time.Duration
+	TxnsMonitoringInterval                time.Duration
 	ResubmitEspressoTxDeadline            time.Duration
 	UseEscapeHatch                        bool
 	EscapeHatchEnabled                    bool
@@ -67,46 +64,6 @@ func WithKeyManager(keyManager key_manager.EspressoKeyManagerInterface) Transact
 	}
 }
 
-// WithTxnsPollingInterval is a functional option to set the transaction polling
-// interval in the TransactionStreamerEspressoConfig.
-func WithTxnsPollingInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsPollingInterval = interval
-	}
-}
-
-// WithTxnSendingInterval is a functional option to set the transaction sending
-// interval in the TransactionStreamerEspressoConfig.
-func WithTxnSendingInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsSendingInterval = interval
-	}
-}
-
-// WithTxnResubmissionInterval is a functional option to set the transaction
-// resubmission interval in the TransactionStreamerEspressoConfig.
-func WithTxnResubmissionInterval(interval time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.TxnsResubmissionInterval = interval
-	}
-}
-
-// WithResubmitEspressoTxDeadline is a functional option to set the deadline for
-// resubmitting Espresso transactions in the TransactionStreamerEspressoConfig.
-func WithResubmitEspressoTxDeadline(deadline time.Duration) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.ResubmitEspressoTxDeadline = deadline
-	}
-}
-
-// WithUseEscapeHatch is a functional option to enable or disable the use of the
-// escape hatch in the TransactionStreamerEspressoConfig.
-func WithUseEscapeHatch(enable bool) TransactionStreamerEspressoOption {
-	return func(config *TransactionStreamerEspressoConfig) {
-		config.UseEscapeHatch = enable
-	}
-}
-
 // WithMaxTransactionSize is a functional option to set the maximum transaction
 // size in the TransactionStreamerEspressoConfig.
 func WithEscapeHatchEnabled(enable bool) TransactionStreamerEspressoOption {
@@ -130,6 +87,14 @@ func WithMaxTransactionSize(size int64) TransactionStreamerEspressoOption {
 func WithMaxBlockLagBeforeEscapeHatch(maxBlockLag uint64) TransactionStreamerEspressoOption {
 	return func(config *TransactionStreamerEspressoConfig) {
 		config.MaxBlockLagBeforeEscapeHatch = maxBlockLag
+	}
+}
+
+// WithResubmitEspressoTxDeadline is a functional option to set the deadline for
+// resubmitting Espresso transactions in the TransactionStreamerEspressoConfig.
+func WithResubmitEspressoTxDeadline(deadline time.Duration) TransactionStreamerEspressoOption {
+	return func(config *TransactionStreamerEspressoConfig) {
+		config.ResubmitEspressoTxDeadline = deadline
 	}
 }
 
@@ -219,12 +184,10 @@ func ConfigureEspressoFields(
 ) (submitter.EspressoSubmitter, error) {
 	config := TransactionStreamerEspressoConfig{
 		InitialFinalizedSequencerMessageCount: big.NewInt(0),
-		TxnsPollingInterval:                   espressostreamer.DefaultEspressoStreamerConfig.TxnsPollingInterval,
-		TxnsSendingInterval:                   DefaultEspressoBatchPosterConfig.TxnsSendingInterval,
-		TxnsResubmissionInterval:              DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval,
-		MaxTransactionSize:                    DefaultEspressoBatchPosterConfig.TxSizeLimit,
-		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
+		MaxTransactionSize:                    EspressoTxSizeLimit,
+		TxnsMonitoringInterval:                DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval,
 		SubmitterCreator:                      submitter.NewPollingEspressoSubmitter,
+		ResubmitEspressoTxDeadline:            DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline,
 	}
 
 	applyEspressoOptions(&config, options...)
@@ -238,12 +201,10 @@ func ConfigureEspressoFields(
 		submitter.WithEspressoClient(config.EspressoClient),
 		submitter.WithLightClientReader(config.LightClientReader),
 		submitter.WithKeyManager(config.KeyManager),
-		submitter.WithTxnsPollingInterval(config.TxnsPollingInterval),
-		submitter.WithTxnsSendingInterval(config.TxnsSendingInterval),
-		submitter.WithTxnsResubmissionInterval(config.TxnsResubmissionInterval),
-		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
+		submitter.WithTxnsMonitoringInterval(config.TxnsMonitoringInterval),
 		submitter.WithMaxTransactionSize(config.MaxTransactionSize),
 		submitter.WithInitialFinalizedSequencerMessageCount(config.InitialFinalizedSequencerMessageCount),
+		submitter.WithResubmitEspressoTxDeadline(config.ResubmitEspressoTxDeadline),
 		submitter.WithMultipleOptions(config.SubmitterConfiguration...),
 	)
 

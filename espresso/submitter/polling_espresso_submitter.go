@@ -61,8 +61,7 @@ type PollingEspressoSubmitter struct {
 	canSubmit func(ctx context.Context) (bool, error)
 
 	chainID                               uint64
-	espressoTxnsPollingInterval           time.Duration
-	espressoTxnsSendingInterval           time.Duration
+	espressoTxnsMonitoringInterval        time.Duration
 	espressoTxnsResubmissionInterval      time.Duration
 	espressoMaxTransactionSize            int64
 	resubmitEspressoTxDeadline            time.Duration
@@ -94,9 +93,8 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		espressoKeyManager: config.KeyManager,
 
 		chainID:                          config.ChainID,
-		espressoTxnsPollingInterval:      config.EspressoTxnsPollingInterval,
-		espressoTxnsSendingInterval:      config.EspressoTxnSendingInterval,
 		espressoTxnsResubmissionInterval: config.EspressoTxnsResubmissionInterval,
+		espressoTxnsMonitoringInterval:   config.EspressoTxnsMoniteringInterval,
 		espressoMaxTransactionSize:       config.EspressoMaxTransactionSize,
 		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
@@ -462,29 +460,29 @@ func getLogLevel(err error) func(string, ...interface{}) {
 // pollSubmittedTransactionForFinality checks if the submitted transaction has
 // been finalized by Espresso  and verifies it.
 func (s *PollingEspressoSubmitter) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 2
+	retryRate := s.espressoTxnsMonitoringInterval * 2
 	err := s.checkSubmittedTransactionForFinality(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return s.espressoTxnsPollingInterval
+			return s.espressoTxnsMonitoringInterval
 		}
 		logLevel := getLogLevel(err)
 		logLevel("error polling finality, will retry", "err", err)
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return s.espressoTxnsPollingInterval
+	return s.espressoTxnsMonitoringInterval
 }
 
 // submitTransactionsToEspresso submits the transactions to espresso if the
 // escape hatch is not enabled
 func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
-	retryRate := s.espressoTxnsSendingInterval * 2
+	retryRate := s.espressoTxnsMonitoringInterval * 2
 
 	ok, err := s.canSubmit(ctx)
 	if err != nil {
-		return s.espressoTxnsSendingInterval
+		return s.espressoTxnsMonitoringInterval
 	}
 
 	if !ok {
@@ -500,7 +498,7 @@ func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Cont
 			return retryRate
 		}
 	}
-	return s.espressoTxnsSendingInterval
+	return s.espressoTxnsMonitoringInterval
 }
 
 func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
