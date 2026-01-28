@@ -62,6 +62,7 @@ type PollingEspressoSubmitter struct {
 
 	chainID                               uint64
 	espressoTxnsMonitoringInterval        time.Duration
+	espressoTxnsResubmissionInterval      time.Duration
 	espressoMaxTransactionSize            int64
 	resubmitEspressoTxDeadline            time.Duration
 	lastSubmitFailureAt                   *time.Time
@@ -91,10 +92,11 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		espressoClient:     config.EspressoClient,
 		espressoKeyManager: config.KeyManager,
 
-		chainID:                        config.ChainID,
-		espressoTxnsMonitoringInterval: config.EspressoTxnsMoniteringInterval,
-		espressoMaxTransactionSize:     config.EspressoMaxTransactionSize,
-		resubmitEspressoTxDeadline:     config.ResubmitEspressoTxDeadline,
+		chainID:                          config.ChainID,
+		espressoTxnsResubmissionInterval: config.EspressoTxnsResubmissionInterval,
+		espressoTxnsMonitoringInterval:   config.EspressoTxnsMoniteringInterval,
+		espressoMaxTransactionSize:       config.EspressoMaxTransactionSize,
+		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
 		InitialFinalizedSequencerMessageCount: config.InitialFinalizedSequencerMessageCount,
 		canSubmit:                             config.CanSubmit,
@@ -500,7 +502,7 @@ func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Cont
 }
 
 func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsMonitoringInterval * 2
+	retryRate := s.espressoTxnsResubmissionInterval * 2
 	submittedTxns, err := s.getEspressoSubmittedTxns()
 	if err != nil {
 		log.Warn("resubmitting espresso transactions failed: unable to get submitted transactions, will retry", "err", err)
@@ -521,7 +523,7 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 		// Reset the last submit failure time because we successfully resubmitted the transactions
 		s.lastSubmitFailureAt = nil
 	}
-	return s.espressoTxnsMonitoringInterval
+	return s.espressoTxnsResubmissionInterval
 }
 
 // shouldSubmitEspressoTransaction is a method that checks the conditions under

@@ -601,6 +601,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		submitterOptions = append(
 			submitterOptions,
 			submitter.WithTxnsMonitoringInterval(cfg.TxnsMonitoringInterval),
+			submitter.WithTxnsResubmissionInterval(cfg.TxnsResubmissionInterval),
 			submitter.WithMaxTransactionSize(EspressoTxSizeLimit),
 			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
 			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {

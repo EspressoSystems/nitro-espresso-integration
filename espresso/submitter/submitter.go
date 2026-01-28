@@ -38,6 +38,7 @@ type EspressoSubmitterConfig struct {
 
 	ChainID                               uint64
 	EspressoTxnsMoniteringInterval        time.Duration
+	EspressoTxnsResubmissionInterval      time.Duration
 	EspressoTxnSendingInterval            time.Duration
 	EspressoMaxTransactionSize            int64
 	ResubmitEspressoTxDeadline            time.Duration
@@ -214,6 +215,14 @@ func WithMaxTransactionSize(size int64) EspressoSubmitterConfigOption {
 func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.EspressoTxnsMoniteringInterval = interval
+	}
+}
+
+// WithTxnsResubmissionInterval is an [EspressoSubmitterConfigOption] that sets
+// the transaction resubmission interval in the [EspressoSubmitterConfig].
+func WithTxnsResubmissionInterval(interval time.Duration) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.EspressoTxnsResubmissionInterval = interval
 	}
 }
 

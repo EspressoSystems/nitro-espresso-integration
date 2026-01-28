@@ -13,6 +13,7 @@ type EspressoBatchPosterConfig struct {
 	TeeType                    string        `koanf:"tee-type"`
 	HotShotUrl                 string        `koanf:"hotshot-url"`
 	TxnsMonitoringInterval     time.Duration `koanf:"txns-monitoring-interval"`
+	TxnsResubmissionInterval   time.Duration `koanf:"txns-resubmission-interval"`
 	ResubmitEspressoTxDeadline time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	AttestationServiceURL      string        `koanf:"attestation-service-url"`
 
@@ -29,6 +30,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".hotshot-url", DefaultEspressoBatchPosterConfig.HotShotUrl, "specifies the hotshot url if we are batching in espresso mode")
 	f.Uint64(prefix+".hotshot-first-posting-block", DefaultEspressoBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
 	f.Uint64(prefix+".event-polling-step", DefaultEspressoBatchPosterConfig.EventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
+	f.Duration(prefix+".txns-resubmission-interval", DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Duration(prefix+".txns-monitoring-interval", DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
@@ -37,6 +39,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 
 var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
 	TxnsMonitoringInterval:     125 * time.Second,
+	TxnsResubmissionInterval:   2 * time.Second,
 	ResubmitEspressoTxDeadline: 10 * time.Minute,
 	HotShotUrl:                 "",
 	TeeType:                    "NITRO",
