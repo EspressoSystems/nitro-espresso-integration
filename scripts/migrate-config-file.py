@@ -12,14 +12,10 @@ ESPRESSO_FIELD_MAP = {
 
     # [espresso][batch-poster]
     "espresso-tee-type": ("batch-poster", "tee-type"),
-    "espresso-register-service-config": ("batch-poster", "register-service-config"),
     "hotshot-url": ("batch-poster", "hotshot-url"),
-    "espresso-txns-sending-interval": ("batch-poster", "txns-sending-interval"),
+    "espresso-txns-sending-interval": ("batch-poster", "txns-monitoring-interval"),
     "espresso-txns-resubmission-interval": ("batch-poster", "txns-resubmission-interval"),
     "resubmit-espresso-tx-deadline": ("batch-poster", "resubmit-espresso-tx-deadline"),
-    "espresso-tx-size-limit": ("batch-poster", "tx-size-limit"),
-    "user-data-attestation-file": ("batch-poster", "user-data-attestation-file"),
-    "quote-file": ("batch-poster", "quote-file"),
     "attestation-service-url": ("batch-poster", "attestation-service-url"),
     "espresso-event-polling-step": ("batch-poster", "event-polling-step"),
     "hotshot-first-posting-block": ("batch-poster", "hotshot-first-posting-block"),
@@ -52,6 +48,13 @@ def migrate_config(cfg: dict) -> dict:
     batch_poster = node.get("batch-poster")
     if not batch_poster:
         return cfg
+    
+    # These are now hardcoded
+    batch_poster.pop("espresso-register-service-config", None)
+    batch_poster.pop("espresso-tx-size-limit", None)
+    batch_poster.pop("user-data-attestation-file", None)
+    batch_poster.pop("quote-file", None)
+    
 
 
     for old_key, (section, new_key) in ESPRESSO_FIELD_MAP.items():
@@ -78,6 +81,9 @@ def migrate_config(cfg: dict) -> dict:
     caff = espresso.get("caff-node")
     if not caff:
         return
+    # No longer needed
+    caff.pop("wait-for-confirmations", None)
+    caff.pop("blocks-to-read", None)
 
     streamer = espresso.setdefault("streamer", {})
 
