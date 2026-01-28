@@ -45,7 +45,6 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
@@ -150,6 +149,7 @@ type BatchPoster struct {
 	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
 	signerAddr                 common.Address
+	fatalErrChan               chan error
 }
 
 type l1BlockBound int
@@ -274,7 +274,6 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".delay-buffer-threshold-margin", DefaultBatchPosterConfig.DelayBufferThresholdMargin, "the number of blocks to post the batch before reaching the delay buffer threshold")
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
-	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -371,6 +370,7 @@ type BatchPosterOpts struct {
 	DataSigner signature.DataSignerFunc
 
 	EspressoConfigFetcher EspressoConfigFetcher
+	FatalErrChan          chan error
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -454,8 +454,8 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
-
-		espressoRestarting: true,
+		espressoRestarting:        true,
+		fatalErrChan:              opts.FatalErrChan,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -595,7 +595,6 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 				return monitor.IsValid(ctx, addr, l1Height)
 			},
 			opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval,
-			opts.EspressoConfigFetcher().Streamer.Dangerous.MinimumHotshotBlockNum,
 		)
 
 		b.espressoBatcherAddrMonitor = monitor
@@ -603,16 +602,14 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 	}
 
 	if b.espressoStreamer != nil {
-		txPollingInterval := opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval
 		cfg := opts.EspressoConfigFetcher().BatchPoster
 
 		submitterOptions = append(
 			submitterOptions,
-			submitter.WithTxnsPollingInterval(txPollingInterval),
-			submitter.WithTxnsSendingInterval(cfg.TxnsSendingInterval),
+			submitter.WithTxnsMonitoringInterval(cfg.TxnsMonitoringInterval),
 			submitter.WithTxnsResubmissionInterval(cfg.TxnsResubmissionInterval),
+			submitter.WithMaxTransactionSize(EspressoTxSizeLimit),
 			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
-			submitter.WithMaxTransactionSize(cfg.TxSizeLimit),
 			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
 				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
 			}),
@@ -624,25 +621,10 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			return nil, err
 		}
 
-		teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-			espresssoTEEVerifierAddress,
-			opts.L1Reader.Client())
-		if err != nil {
-			return nil, err
-		}
 		verifier := espressotee.NewEspressoTEEVerifier(espresssoTEEVerifierAddress.Hex(), opts.L1Reader.Client(), espresssoTEEVerifierAddress)
 		teeType, err := espressotee.FromString(cfg.TeeType)
 		if err != nil {
 			return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.TeeType)
-		}
-
-		var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-		if teeType == espresso_key_manager.NITRO {
-			log.Info("setting up nitro verifier", "tee type", teeType)
-			nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(teeVerifier, opts.L1Reader.Client(), espressotee.BatchPoster)
-			if err != nil {
-				return nil, err
-			}
 		}
 
 		if b.dataPoster.Auth() == nil {
@@ -652,7 +634,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.RegisterServiceConfig, nil, opts.EspressoConfigFetcher().BatchPoster.UserDataAttestationFile, opts.EspressoConfigFetcher().BatchPoster.QuoteFile, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
 			),
 		)
 
@@ -2576,12 +2558,11 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 			}
 			if errors.Is(err, FatalErrUnableToRegisterSigner) {
 				registrationFailCount++
-				if registrationFailCount > int(b.espressoConfig.BatchPoster.RegisterServiceConfig.MaxRegisterRetries) {
-					log.Crit("Espresso signer registration failed 5 times consecutively. Panicking.", "err", err)
-					panic(err)
+				if registrationFailCount > espressotee.EspressoMaxRetries {
+					log.Crit("Espresso signer registration failed 5 times consecutively. Stopping.", "err", err)
+					b.fatalErrChan <- err
 				}
 				log.Warn("Espresso signer registration failed", "attempt", registrationFailCount, "err", err)
-				return b.espressoConfig.BatchPoster.RegisterServiceConfig.RegisterRetryDelay
 			}
 
 			b.building = nil
@@ -2613,6 +2594,9 @@ func (b *BatchPoster) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.dataPoster.StopAndWait()
 	b.redisLock.StopAndWait()
+	if b.espressoStreamer != nil {
+		b.espressoStreamer.StopAndWait()
+	}
 }
 
 type BoolRing struct {

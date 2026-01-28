@@ -22,6 +22,9 @@ var (
 	DelayedMessagePrefix = []byte("espressoDelayed")
 )
 
+// The number of blocks to read from the parent chain for delayed messages
+const MaxBlocksToRead uint64 = 10000
+
 type DelayedMessageFetcher struct {
 	stopwaiter.StopWaiter
 
@@ -29,9 +32,7 @@ type DelayedMessageFetcher struct {
 	delayedBridge            *DelayedBridge
 	sequencerInbox           *SequencerInbox
 	l1Reader                 *headerreader.HeaderReader
-	maxBlocksToRead          uint64
 	waitForFinalization      bool
-	waitForConfirmations     bool
 	requiredBlockDepth       uint64
 	fatalErrChan             chan error
 	delayedCount             uint64
@@ -68,8 +69,8 @@ func (d *DelayedMessageFetcher) backfill(ctx context.Context) error {
 		toBlock := matureL1Block
 		// If the difference is greater than the maxBlocksToRead,
 		// then set the endBlock to fromBlock + maxBlocksToRead
-		if (matureL1Block - fromBlock) > d.maxBlocksToRead {
-			toBlock = fromBlock + d.maxBlocksToRead
+		if (matureL1Block - fromBlock) > MaxBlocksToRead {
+			toBlock = fromBlock + MaxBlocksToRead
 		}
 
 		err := d.getDelayedMessagesInRange(ctx, fromBlock, toBlock)
@@ -203,7 +204,7 @@ func (d *DelayedMessageFetcher) getL1BlockNumber(ctx context.Context) (uint64, e
 	// If in setting we need to wait for finalized block, then get the latest finalized block number
 	if d.waitForFinalization {
 		return d.l1Reader.LatestFinalizedBlockNr(ctx)
-	} else if d.waitForConfirmations {
+	} else if d.requiredBlockDepth > 0 {
 		// If we need to wait for confirmations,
 		// then get the latest block number - requiredBlockDepth
 		latestBlockNumber, err := d.l1Reader.Client().BlockNumber(ctx)
@@ -342,7 +343,7 @@ func (d *DelayedMessageFetcher) getL1BlockWithinSafetyTolerance(ctx context.Cont
 			return 0, nil
 		}
 		return blockNumber, nil
-	} else if d.waitForConfirmations {
+	} else if d.requiredBlockDepth > 0 {
 		// Get the block number which is latest header - requiredBlockDepth
 		if header.Number.Uint64()-d.requiredBlockDepth < fromBlock {
 			return 0, fmt.Errorf("block already processed current block number: %v, fromBlock: %v", header.Number.Uint64()-d.requiredBlockDepth, fromBlock)
@@ -360,9 +361,7 @@ func (d *DelayedMessageFetcher) storeDelayedMessageLatestIndex(count uint64) {
 func NewDelayedMessageFetcher(
 	delayedBridge *DelayedBridge,
 	l1Reader *headerreader.HeaderReader,
-	blocksToRead uint64,
 	waitForFinalization bool,
-	waitForConfirmations bool,
 	requiredBlockDepth uint64,
 	fromBlock uint64,
 	sequencerInbox *SequencerInbox,
@@ -373,9 +372,7 @@ func NewDelayedMessageFetcher(
 		delayedBridge:            delayedBridge,
 		l1Reader:                 l1Reader,
 		waitForFinalization:      waitForFinalization,
-		waitForConfirmations:     waitForConfirmations,
 		requiredBlockDepth:       requiredBlockDepth,
-		maxBlocksToRead:          blocksToRead,
 		sequencerInbox:           sequencerInbox,
 		fatalErrChan:             fatalErrChan,
 		delayedMessages:          make(map[uint64]*DelayedInboxMessage),
