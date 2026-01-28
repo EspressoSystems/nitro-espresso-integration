@@ -35,12 +35,12 @@ MIN_BLOCK_KEY = "minimum-hotshot-block-num"
 
 ADDRESS_MONITOR_KEYS = [
     "address-monitor-step",
-    "address-monitor-start-l1",
 ]
 
 REMOVE_KEYS = [
     "from-block",
     "retry-time",
+    "next-hotshot-block"
 ]
 
 
@@ -81,10 +81,15 @@ def migrate_caff_node(old_node: dict, espresso: dict) -> None:
     streamer = espresso.setdefault("streamer", OrderedDict())
 
     for key, value in old_caff.items():
-        # from-block → streamer.hotshot-block
+        # from-block → streamer.address-monitor-start-l1
         if key == "from-block":
+            streamer["address-monitor-start-l1"] = value
+
+        # hotshot-block → streamer.hotshot-block
+        if key == "next-hotshot-block":
             streamer["hotshot-block"] = value
 
+        # retry-time → streamer.txns-polling-interval
         if key == "retry-time":
             streamer["txns-polling-interval"] = value
 
