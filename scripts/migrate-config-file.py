@@ -36,7 +36,13 @@ ADDRESS_MONITOR_KEYS = [
 REMOVE_KEYS = [
     "from-block",
     "retry-time",
-    "next-hotshot-block"
+    "next-hotshot-block",
+    "espresso-register-service-config",
+    "espresso-tx-size-limit",
+    "user-data-attestation-file",
+    "quote-file",
+    "wait-for-confirmations",
+    "blocks-to-read"
 ]
 
 
@@ -54,7 +60,9 @@ def migrate_batch_poster(old_node: dict, espresso: dict) -> dict:
         return remaining
 
     for key, value in batch_poster.items():
-        if key in ESPRESSO_FIELD_MAP:
+        if key in REMOVE_KEYS:
+            continue
+        elif key in ESPRESSO_FIELD_MAP:
             section, new_key = ESPRESSO_FIELD_MAP[key]
             espresso.setdefault(section, OrderedDict())[new_key] = value
         else:
@@ -118,14 +126,6 @@ def migrate_dangerous_block(
     """
     Split dangerous fields between streamer and caff-node.
     """
-    streamer_dangerous = (
-        espresso
-        .setdefault("streamer", {})
-        .setdefault("dangerous", {})
-    )
-
-    if MIN_BLOCK_KEY in dangerous:
-        streamer_dangerous[MIN_BLOCK_KEY] = dangerous[MIN_BLOCK_KEY]
 
     remaining = {
         k: v for k, v in dangerous.items()
