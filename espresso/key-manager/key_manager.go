@@ -3,7 +3,6 @@ package keymanager
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,6 +16,8 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbutil"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -65,20 +66,32 @@ func NewEspressoKeyManager(
 	serviceType espressotee.ServiceType,
 	servicePersistentPrivateKey *ecdsa.PrivateKey,
 	zkAttestationServiceURL string,
+	keyPairAttestationsPath string,
+	chainID uint64,
 ) *EspressoKeyManager {
 	var err error
 	var privKey *ecdsa.PrivateKey
 
-	// If the node supports persistent private key, we use that one otherwise we generate a
-	// new ephemeral key. Currently only the cafff node supports persistent private key.
-	if servicePersistentPrivateKey == nil {
-		// ephemeral key
-		privKey, err = ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+	// Both the caff node and batch poster support persistent private keys. If an existing private key
+	// is provided, we use that one. Otherwise, we read the enclave private key from the attestation path.
+	// Note: The current implementation only supports reading the key during key manager construction
+	// for the batch poster. Support for reading the caff node key will be added in a later PR.
+	if keyPairAttestationsPath != "" && chainID != 0 {
+		// Read enclave private key
+		privKey, err = espresso_tee_utils.ReadEnclavePrivateKey(keyPairAttestationsPath, chainID)
 		if err != nil {
-			panic(err)
+			log.Crit("error reading enclave private key for Espresso Key Manager", "path", keyPairAttestationsPath, "err", err)
 		}
-	} else {
+
+		pubKey, ok = privKey.Public().(*ecdsa.PublicKey)
+		if !ok {
+			panic("failed to get public key")
+		}
+	} else if servicePersistentPrivateKey != nil {
 		privKey = servicePersistentPrivateKey
+		pubKey = &servicePersistentPrivateKey.PublicKey
+	} else {
+		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
 
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
@@ -88,7 +101,11 @@ func NewEspressoKeyManager(
 	}
 
 	if teeType == NITRO && zkAttestationServiceURL == "" {
-		panic("zk attestation service URL must be provided for nitro TEE type")
+		if serviceType != espressotee.Test {
+			panic("zk attestation service URL must be provided for nitro TEE type")
+		} else {
+			log.Info("Allowing nitro key manager creation without zkAttestationServiceURL for tests")
+		}
 	}
 
 	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
@@ -169,14 +186,14 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
 	case TESTS:
-		addr := signerAddr.Bytes()
+		pubKey := crypto.FromECDSAPub(k.pubKey)
 		log.Info("TESTS signing address", "addr", signerAddr)
 
-		attestationQuote, err := getAttestationFunc(addr)
+		attestationQuote, err := getAttestationFunc(pubKey)
 		if err != nil {
 			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
 		}
-		return attestationQuote, addr, nil
+		return attestationQuote, pubKey, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
