@@ -152,6 +152,7 @@ func testBatchPosterParallel(t *testing.T, useRedis bool) {
 				TransactOpts:  &seqTxOpts,
 				DAPWriters:    []daprovider.Writer{},
 				ParentChainID: parentChainID,
+				FatalErrChan:  make(chan error),
 
 				EspressoConfigFetcher: func() *arbnode.EspressoConfig { return &espressoConfig },
 			},

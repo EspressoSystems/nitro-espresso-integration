@@ -618,7 +618,6 @@ func createNodeImpl(
 				delayedBridge,
 				l1Reader,
 				config.Espresso.CaffNode.RecordPerformance,
-				config.Espresso.CaffNode.BlocksToRead,
 				sequencerInbox,
 				fatalErrChan,
 				stack,
@@ -903,6 +902,7 @@ func createNodeImpl(
 			EspressoConfigFetcher: func() *EspressoConfig {
 				return &configFetcher.Get().Espresso
 			},
+			FatalErrChan: fatalErrChan,
 		})
 		if err != nil {
 			return nil, err
