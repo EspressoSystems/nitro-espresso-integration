@@ -17,7 +17,6 @@ import (
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	"github.com/offchainlabs/nitro/arbutil"
 	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/util/signature"
@@ -83,13 +82,8 @@ func NewEspressoKeyManager(
 			log.Crit("error reading enclave private key for Espresso Key Manager", "path", keyPairAttestationsPath, "err", err)
 		}
 
-		pubKey, ok = privKey.Public().(*ecdsa.PublicKey)
-		if !ok {
-			panic("failed to get public key")
-		}
 	} else if servicePersistentPrivateKey != nil {
 		privKey = servicePersistentPrivateKey
-		pubKey = &servicePersistentPrivateKey.PublicKey
 	} else {
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
@@ -186,7 +180,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
 	case TESTS:
-		pubKey := crypto.FromECDSAPub(k.pubKey)
+		pubKey := crypto.FromECDSAPub(&k.privKey.PublicKey)
 		log.Info("TESTS signing address", "addr", signerAddr)
 
 		attestationQuote, err := getAttestationFunc(pubKey)
