@@ -38,7 +38,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 }
 
 var DefaultEspressoBatchPosterConfig = EspressoBatchPosterConfig{
-	TxnsMonitoringInterval:     125 * time.Second,
+TxnsMonitoringInterval:     125 * time.Millisecond,
 	TxnsResubmissionInterval:   2 * time.Second,
 	ResubmitEspressoTxDeadline: 10 * time.Minute,
 	HotShotUrl:                 "",
