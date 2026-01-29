@@ -24,13 +24,11 @@ type EspressoTEEVerifierInterface interface {
 		data []byte,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterServiceOpts,
 	) error
 	RegisteredServices(
 		signer common.Address,
 		teeType uint8,
 		serviceType ServiceType,
-		registerSignerOpts EspressoRegisterServiceOpts,
 	) (bool, error)
 }
 
@@ -51,13 +49,12 @@ func (e *EspressoTEEVerifier) RegisterService(
 	data []byte,
 	teeType uint8,
 	serviceType ServiceType,
-	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	switch serviceType {
 	case CaffNode:
-		return e.registerService(dataPoster, attestation, data, teeType, serviceType, registerSignerOpts)
+		return e.registerService(dataPoster, attestation, data, teeType, serviceType)
 	case BatchPoster:
-		return e.registerSigner(dataPoster, attestation, data, teeType, registerSignerOpts)
+		return e.registerSigner(dataPoster, attestation, data, teeType)
 	}
 
 	return fmt.Errorf("unsupported service type: %d", serviceType)
@@ -69,7 +66,6 @@ func (e *EspressoTEEVerifier) registerService(
 	data []byte,
 	teeType uint8,
 	serviceType ServiceType,
-	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
@@ -98,7 +94,7 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 	// Add a buffer to the estimate for the gas limit
-	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
+	gasLimit := estimate * (100 + EspressoGasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
 
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
@@ -109,16 +105,16 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), registerSignerOpts.MaxTxnWaitTime)
+	ctx, cancel := context.WithTimeout(context.Background(), EspressoMaxTxnWaitTime)
 	defer cancel()
-	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", registerSignerOpts.MaxTxnWaitTime)
+	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", EspressoMaxTxnWaitTime)
 
 	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf(
 				"register signer timed out after %v minutes waiting for tx %s to be mined",
-				registerSignerOpts.MaxTxnWaitTime,
+				EspressoMaxTxnWaitTime,
 				tx.Hash().Hex(),
 			)
 		}
@@ -138,26 +134,23 @@ func (e *EspressoTEEVerifier) RegisteredServices(
 	signer common.Address,
 	teeType uint8,
 	serviceType ServiceType,
-	registerSignerOpts EspressoRegisterServiceOpts,
 ) (bool, error) {
 	switch serviceType {
 	case CaffNode:
-		return e.registeredServices(signer, teeType, serviceType, registerSignerOpts)
+		return e.registeredServices(signer, teeType, serviceType)
 	case BatchPoster:
-		return e.registeredSigners(signer, teeType, registerSignerOpts)
+		return e.registeredSigners(signer, teeType)
 	}
 
 	return false, fmt.Errorf("unsupported service type: %d", serviceType)
 }
 
-func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType uint8, serviceType ServiceType, registerSignerOpts EspressoRegisterServiceOpts) (bool, error) {
+func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType uint8, serviceType ServiceType) (bool, error) {
 	contract, err := espressogen.NewIEspressoTEEVerifier(e.address, e.l1Client)
 	if err != nil {
 		return false, err
 	}
 	ok, err := ContractVerification(
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryReadContractDelay,
 		func() (bool, error) {
 			return contract.RegisteredServices(&bind.CallOpts{}, address, teeType, uint8(serviceType))
 		},
@@ -174,7 +167,6 @@ func (e *EspressoTEEVerifier) registerSigner(
 	attestation []byte,
 	data []byte,
 	teeType uint8,
-	registerSignerOpts EspressoRegisterServiceOpts,
 ) error {
 	contractABI, err := legacy_espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
@@ -203,7 +195,7 @@ func (e *EspressoTEEVerifier) registerSigner(
 		return err
 	}
 	// Add a buffer to the estimate for the gas limit
-	gasLimit := estimate * (100 + registerSignerOpts.GasLimitBufferIncreasePercent) / 100
+	gasLimit := estimate * (100 + EspressoGasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
 
 	// Since we use batch poster private key to register signer, we need to use dataposter to post transaction
@@ -214,16 +206,16 @@ func (e *EspressoTEEVerifier) registerSigner(
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), registerSignerOpts.MaxTxnWaitTime)
+	ctx, cancel := context.WithTimeout(context.Background(), EspressoMaxTxnWaitTime)
 	defer cancel()
-	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", registerSignerOpts.MaxTxnWaitTime)
+	log.Info("waiting for register signer tx to be mined", "tx", tx.Hash().Hex(), "timeout", EspressoMaxTxnWaitTime)
 
 	receipt, err := bind.WaitMined(ctx, e.l1Client, tx)
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf(
 				"register signer timed out after %v minutes waiting for tx %s to be mined",
-				registerSignerOpts.MaxTxnWaitTime,
+				EspressoMaxTxnWaitTime,
 				tx.Hash().Hex(),
 			)
 		}
@@ -239,14 +231,12 @@ func (e *EspressoTEEVerifier) registerSigner(
 	return nil
 }
 
-func (e *EspressoTEEVerifier) registeredSigners(address common.Address, teeType uint8, registerSignerOpts EspressoRegisterServiceOpts) (bool, error) {
+func (e *EspressoTEEVerifier) registeredSigners(address common.Address, teeType uint8) (bool, error) {
 	contract, err := legacy_espressogen.NewIEspressoTEEVerifier(e.address, e.l1Client)
 	if err != nil {
 		return false, err
 	}
 	ok, err := ContractVerification(
-		registerSignerOpts.MaxRetries,
-		registerSignerOpts.RetryReadContractDelay,
 		func() (bool, error) {
 			return contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
 		},

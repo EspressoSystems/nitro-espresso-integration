@@ -36,7 +36,7 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.BatchPoster.MaxEmptyBatchDelay = 10 * time.Second
 	builder.nodeConfig.Espresso.BatchPoster.HotShotUrl = hotShotUrl
-	builder.nodeConfig.Espresso.BatchPoster.TeeType = "SGX"
+	builder.nodeConfig.Espresso.BatchPoster.TeeType = "TESTS"
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
