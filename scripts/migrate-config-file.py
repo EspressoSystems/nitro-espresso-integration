@@ -15,14 +15,10 @@ ESPRESSO_FIELD_MAP = {
 
     # batch-poster
     "espresso-tee-type": ("batch-poster", "tee-type"),
-    "espresso-register-service-config": ("batch-poster", "register-service-config"),
     "hotshot-url": ("batch-poster", "hotshot-url"),
-    "espresso-txns-sending-interval": ("batch-poster", "txns-sending-interval"),
+    "espresso-txns-sending-interval": ("batch-poster", "txns-monitoring-interval"),
     "espresso-txns-resubmission-interval": ("batch-poster", "txns-resubmission-interval"),
     "resubmit-espresso-tx-deadline": ("batch-poster", "resubmit-espresso-tx-deadline"),
-    "espresso-tx-size-limit": ("batch-poster", "tx-size-limit"),
-    "user-data-attestation-file": ("batch-poster", "user-data-attestation-file"),
-    "quote-file": ("batch-poster", "quote-file"),
     "attestation-service-url": ("batch-poster", "attestation-service-url"),
     "espresso-event-polling-step": ("batch-poster", "event-polling-step"),
     "hotshot-first-posting-block": ("batch-poster", "hotshot-first-posting-block"),
@@ -41,6 +37,13 @@ ADDRESS_MONITOR_KEYS = [
 REMOVE_KEYS = [
     "from-block",
     "retry-time",
+    "next-hotshot-block",
+    "espresso-register-service-config",
+    "espresso-tx-size-limit",
+    "user-data-attestation-file",
+    "quote-file",
+    "wait-for-confirmations",
+    "blocks-to-read"
 ]
 
 
@@ -58,7 +61,9 @@ def migrate_batch_poster(old_node: dict, espresso: dict) -> dict:
         return remaining
 
     for key, value in batch_poster.items():
-        if key in ESPRESSO_FIELD_MAP:
+        if key in REMOVE_KEYS:
+            continue
+        elif key in ESPRESSO_FIELD_MAP:
             section, new_key = ESPRESSO_FIELD_MAP[key]
             espresso.setdefault(section, OrderedDict())[new_key] = value
         else:
@@ -117,14 +122,6 @@ def migrate_dangerous_block(
     """
     Split dangerous fields between streamer and caff-node.
     """
-    streamer_dangerous = (
-        espresso
-        .setdefault("streamer", {})
-        .setdefault("dangerous", {})
-    )
-
-    if MIN_BLOCK_KEY in dangerous:
-        streamer_dangerous[MIN_BLOCK_KEY] = dangerous[MIN_BLOCK_KEY]
 
     remaining = {
         k: v for k, v in dangerous.items()
