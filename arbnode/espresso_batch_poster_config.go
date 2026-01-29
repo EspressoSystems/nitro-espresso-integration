@@ -32,7 +32,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Uint64(prefix+".event-polling-step", DefaultEspressoBatchPosterConfig.EventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
 	f.Duration(prefix+".txns-resubmission-interval", DefaultEspressoBatchPosterConfig.TxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
-	f.Duration(prefix+".txns-monitoring-interval", DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval, "time threshold after which a transaction will be automatically resubmitted if no response is received")
+	f.Duration(prefix+".txns-monitoring-interval", DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval, "interval for sending and polling transactions to and from espresso")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
 }
