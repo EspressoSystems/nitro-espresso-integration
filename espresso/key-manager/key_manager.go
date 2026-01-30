@@ -187,7 +187,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
 		}
-		return attestationQuote, pubKey, nil
+		return attestationQuote, signerAddr.Bytes(), nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
@@ -215,7 +215,6 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	if err != nil {
 		return err
 	}
-
 	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return err
