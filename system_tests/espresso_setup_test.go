@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/stretchr/testify/require"
+
+	"github.com/offchainlabs/nitro/cmd/genericconf"
 )
 
 func createL1AndL2Node(
