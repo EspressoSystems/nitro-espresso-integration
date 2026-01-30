@@ -5,23 +5,23 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
-	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
 type EspressoSGXVerifierInterface interface {
-	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (legacy_espressogen.EnclaveReport, error)
+	Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte, service ServiceType) (espressogen.EnclaveReport, error)
 }
 
 type EspressoSGXVerifier struct {
-	verifier *legacy_espressogen.IEspressoSGXTEEVerifier
+	verifier *espressogen.IEspressoSGXTEEVerifier
 }
 
-func (v *EspressoSGXVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte) (legacy_espressogen.EnclaveReport, error) {
-	return v.verifier.Verify(opts, rawQuote, reportDataHash)
+func (v *EspressoSGXVerifier) Verify(opts *bind.CallOpts, rawQuote []byte, reportDataHash [32]byte, service ServiceType) (espressogen.EnclaveReport, error) {
+	return v.verifier.Verify(opts, rawQuote, reportDataHash, uint8(service))
 }
 
 func NewEspressoSGXVerifier(l1Client *ethclient.Client, addr common.Address) (*EspressoSGXVerifier, error) {
-	verifier, err := legacy_espressogen.NewIEspressoSGXTEEVerifier(addr, l1Client)
+	verifier, err := espressogen.NewIEspressoSGXTEEVerifier(addr, l1Client)
 	if err != nil {
 		return nil, err
 	}

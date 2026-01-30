@@ -24,9 +24,9 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
@@ -680,11 +680,13 @@ type mockSgxTeeVerifier struct {
 	time time.Time
 }
 
-func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
+var _ espressotee.EspressoSGXVerifierInterface = (*mockSgxTeeVerifier)(nil)
+
+func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, serviceType espressotee.ServiceType) (espressogen.EnclaveReport, error) {
 	if time.Since(v.time) < 1*time.Minute {
-		return legacy_espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
+		return espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
 	}
-	return legacy_espressogen.EnclaveReport{}, nil
+	return espressogen.EnclaveReport{}, nil
 }
 
 func NewMockSgxTeeVerifier() *mockSgxTeeVerifier {

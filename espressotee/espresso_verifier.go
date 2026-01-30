@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
@@ -171,14 +170,7 @@ func (e *EspressoTEEVerifier) RegisteredServices(
 	teeType uint8,
 	serviceType ServiceType,
 ) (bool, error) {
-	switch serviceType {
-	case CaffNode:
-		return e.registeredServices(signer, teeType, serviceType)
-	case BatchPoster:
-		return e.registeredSigners(signer, teeType)
-	}
-
-	return false, fmt.Errorf("unsupported service type: %d", serviceType)
+	return e.registeredServices(signer, teeType, serviceType)
 }
 
 func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType uint8, serviceType ServiceType) (bool, error) {
@@ -204,7 +196,7 @@ func (e *EspressoTEEVerifier) registerSigner(
 	data []byte,
 	teeType uint8,
 ) error {
-	contractABI, err := legacy_espressogen.IEspressoTEEVerifierMetaData.GetAbi()
+	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
 	}
@@ -265,21 +257,4 @@ func (e *EspressoTEEVerifier) registerSigner(
 	log.Info("register signer tx succeeded", "tx", tx.Hash().Hex())
 
 	return nil
-}
-
-func (e *EspressoTEEVerifier) registeredSigners(address common.Address, teeType uint8) (bool, error) {
-	contract, err := legacy_espressogen.NewIEspressoTEEVerifier(e.address, e.l1Client)
-	if err != nil {
-		return false, err
-	}
-	ok, err := ContractVerification(
-		func() (bool, error) {
-			return contract.RegisteredSigners(&bind.CallOpts{}, address, teeType)
-		},
-		"register signers - address not yet registered in contract",
-	)
-	if err != nil {
-		return false, err
-	}
-	return ok, nil
 }
