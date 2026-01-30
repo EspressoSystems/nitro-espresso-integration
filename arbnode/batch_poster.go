@@ -2584,7 +2584,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				return 0
 			}
 			if errors.Is(err, FatalErrUnableToRegisterSigner) {
-				log.Crit(
+				log.Warn(
 					"Espresso signer registration failed consecutively. Stopping.",
 					"retries", espressotee.EspressoMaxRetries,
 					"err", err,
