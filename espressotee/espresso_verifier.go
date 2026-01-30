@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -42,7 +43,6 @@ func NewEspressoTEEVerifier(espressoTEEVerifierAddress string, l1Client *ethclie
 
 	return &EspressoTEEVerifier{espressoTEEVerifierAddress: espressoTEEVerifierAddress, l1Client: l1Client, address: address}
 }
-
 func (e *EspressoTEEVerifier) RegisterService(
 	dataPoster *dataposter.DataPoster,
 	attestation []byte,
@@ -50,14 +50,51 @@ func (e *EspressoTEEVerifier) RegisterService(
 	teeType uint8,
 	serviceType ServiceType,
 ) error {
-	switch serviceType {
-	case CaffNode:
-		return e.registerService(dataPoster, attestation, data, teeType, serviceType)
-	case BatchPoster:
-		return e.registerSigner(dataPoster, attestation, data, teeType)
+	var registrationErr error
+
+	for attempt := 0; attempt < EspressoMaxRetries; attempt++ {
+		switch serviceType {
+		case CaffNode:
+			registrationErr = e.registerService(
+				dataPoster,
+				attestation,
+				data,
+				teeType,
+				serviceType,
+			)
+
+		case BatchPoster:
+			registrationErr = e.registerSigner(
+				dataPoster,
+				attestation,
+				data,
+				teeType,
+			)
+
+		default:
+			return fmt.Errorf("unsupported service type: %d", serviceType)
+		}
+
+		if registrationErr == nil {
+			return nil
+		}
+
+		if attempt < EspressoMaxRetries {
+			log.Warn(
+				"service registration failed",
+				"err", registrationErr,
+				"attempt", attempt+1,
+				"retry_delay", EspressoRetryReadContractDelay,
+			)
+			time.Sleep(EspressoRetryReadContractDelay)
+		}
 	}
 
-	return fmt.Errorf("unsupported service type: %d", serviceType)
+	return fmt.Errorf(
+		"service registration failed after %d attempts: %w",
+		EspressoMaxRetries,
+		registrationErr,
+	)
 }
 
 func (e *EspressoTEEVerifier) registerService(
