@@ -79,13 +79,12 @@ func (e *EspressoTEEVerifier) RegisterService(
 			return nil
 		}
 
-		if attempt < EspressoMaxRetries {
-			log.Warn(
-				"service registration failed",
-				"err", registrationErr,
-				"attempt", attempt+1,
-				"retry_delay", EspressoRetryReadContractDelay,
-			)
+		log.Warn(
+			"service registration failed",
+			"err", registrationErr,
+			"attempt", attempt+1,
+		)
+		if attempt < EspressoMaxRetries-1 {
 			time.Sleep(EspressoRetryReadContractDelay)
 		}
 	}
