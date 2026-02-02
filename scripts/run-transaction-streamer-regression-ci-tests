@@ -2,12 +2,9 @@
 # This script runs the Espresso tests in ./system_tests only.
 set -euo pipefail
 
-gotestsum \
-    --format short-verbose \
-    --packages="github.com/offchainlabs/nitro/system_tests" \
-    -- \
-    -v \
-    -timeout 45m \
-    -p 1 \
-    ./system_tests/... \
-    -run 'TestEspressoRegressionTransactionStreamerToEspressoThroughput'
+go test \
+  -v \
+  -timeout 45m \
+  -p 1 \
+  ./system_tests/... \
+  -run 'TestEspressoRegressionTransactionStreamerToEspressoThroughput'

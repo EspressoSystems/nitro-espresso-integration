@@ -2,23 +2,17 @@
 # This script runs the Espresso tests in ./system_tests only.
 set -euo pipefail
 
-gotestsum \
-    --format short-verbose \
-    --packages="github.com/offchainlabs/nitro/espresso/authdb" \
-    -- \
-    -v \
-    -timeout 5m \
-    -p 1 \
-    ./espresso/authdb... \
-    -run 'TestAuthDB'
+go test \
+  -v \
+  -timeout 5m \
+  -p 1 \
+  ./espresso/authdb/... \
+  -run 'TestAuthDB'
 
-gotestsum \
-    --format short-verbose \
-    --packages="github.com/offchainlabs/nitro/system_tests" \
-    -- \
-    -v \
-    -timeout 45m \
-    -p 1 \
-    -parallel 1 \
-    ./system_tests/... \
-    -run 'TestEspressoCaffNode'
+go test \
+  -v \
+  -timeout 45m \
+  -p 1 \
+  -parallel 1 \
+  ./system_tests/... \
+  -run 'TestEspressoCaffNode'
