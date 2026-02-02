@@ -53,11 +53,13 @@ func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, cl
 	if err != nil {
 		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoSGXTEEVerifierMock: %w", err)
 	}
+	log.Info("sgx address", "sgx", sgx)
 
 	nitro, _, _, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
 	if err != nil {
 		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
 	}
+	log.Info("nitro address", "nitro", nitro)
 
 	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, sgx, nitro)
 }

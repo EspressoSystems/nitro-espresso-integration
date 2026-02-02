@@ -2417,6 +2417,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if !b.redisLock.AttemptLock(ctx) {
 		return false, errAttemptLockFailed
 	}
+	log.Info("????????????????????????????what")
 
 	tx, err := b.dataPoster.PostTransaction(ctx,
 		firstUsefulMsgTime,

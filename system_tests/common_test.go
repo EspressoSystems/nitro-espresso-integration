@@ -1791,6 +1791,7 @@ func deployOnParentChain(
 	//  Deploy a espressoTEEVerifierMock contract
 	espressoTEEVerifierAddress, tx, _, err = deployMockTEEContracts(t, &parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
+	log.Info("espressoTEEVerifier", "addr", espressoTEEVerifierAddress)
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
 

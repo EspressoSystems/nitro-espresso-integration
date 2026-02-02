@@ -28,7 +28,7 @@ func (m *mockEspressoTEEVerifier) RegisterService(dataPoster *dataposter.DataPos
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, serviceType espressotee.ServiceType) (bool, error) {
+func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType espressotee.TEE, serviceType espressotee.ServiceType) (bool, error) {
 	args := m.Called(addr)
 	return args.Bool(0), nil
 }
