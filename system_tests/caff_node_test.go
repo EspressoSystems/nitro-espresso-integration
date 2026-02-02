@@ -24,7 +24,6 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
 	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
@@ -571,7 +570,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
 
 	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client, common.Address{}, common.Address{})
+	espressoTEEVerifierAddress, _, _, err := deployMockTEEContracts(t, &parentChainTransactionOpts, builder.L1.Client)
 	Require(t, err)
 	builderCaffNode.nodeConfig.Espresso.CaffNode.TEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 

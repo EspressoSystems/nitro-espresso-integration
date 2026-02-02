@@ -7,9 +7,14 @@ import (
 
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/nitro/espresso/test-utils"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	testutils "github.com/offchainlabs/nitro/espresso/test-utils"
 )
 
 func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic string, idx uint) error {
@@ -41,4 +46,18 @@ func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic s
 
 func createDummyEspressoMetadata(t *testing.T) []byte {
 	return testutils.CreateDummyEspressoMetadata(t)
+}
+
+func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, client *ethclient.Client) (common.Address, *types.Transaction, *espressogen.EspressoTEEVerifierMock, error) {
+	sgx, _, _, err := espressogen.DeployEspressoSGXTEEVerifierMock(transactionOpts, client)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoSGXTEEVerifierMock: %w", err)
+	}
+
+	nitro, _, _, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
+	}
+
+	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, sgx, nitro)
 }

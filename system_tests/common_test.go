@@ -1789,7 +1789,7 @@ func deployOnParentChain(
 	var tx *types.Transaction
 
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err = espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient, common.HexToAddress("0x1"), common.HexToAddress("0x2"))
+	espressoTEEVerifierAddress, tx, _, err = deployMockTEEContracts(t, &parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
@@ -1882,7 +1882,7 @@ func deployOnParentChain(
 		}
 	} else {
 		//  Deploy a espressoTEEVerifierMock contract
-		espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient, common.HexToAddress("0x1"), common.HexToAddress("0x2"))
+		espressoTEEVerifierAddress, tx, _, err := deployMockTEEContracts(t, &parentChainTransactionOpts, parentChainClient)
 		Require(t, err)
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
