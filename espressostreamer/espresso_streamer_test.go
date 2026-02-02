@@ -21,7 +21,6 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressotee"
 )
 
@@ -319,8 +318,8 @@ type mockEspressoTEEVerifier struct {
 
 var _ espressotee.EspressoSGXVerifierInterface = (*mockEspressoTEEVerifier)(nil)
 
-func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, seviceType espressotee.ServiceType) (espressogen.EnclaveReport, error) {
-	return espressogen.EnclaveReport{}, nil
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressotee.EnclaveReport, error) {
+	return espressotee.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {

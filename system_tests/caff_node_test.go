@@ -571,7 +571,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
 
 	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
+	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client, common.Address{}, common.Address{})
 	Require(t, err)
 	builderCaffNode.nodeConfig.Espresso.CaffNode.TEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
@@ -682,11 +682,11 @@ type mockSgxTeeVerifier struct {
 
 var _ espressotee.EspressoSGXVerifierInterface = (*mockSgxTeeVerifier)(nil)
 
-func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte, serviceType espressotee.ServiceType) (espressogen.EnclaveReport, error) {
+func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressotee.EnclaveReport, error) {
 	if time.Since(v.time) < 1*time.Minute {
-		return espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
+		return espressotee.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
 	}
-	return espressogen.EnclaveReport{}, nil
+	return espressotee.EnclaveReport{}, nil
 }
 
 func NewMockSgxTeeVerifier() *mockSgxTeeVerifier {

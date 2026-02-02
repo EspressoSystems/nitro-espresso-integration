@@ -27,7 +27,6 @@ type EspressoTEEVerifierInterface interface {
 	) error
 	RegisteredServices(
 		signer common.Address,
-		teeType uint8,
 		serviceType ServiceType,
 	) (bool, error)
 }
@@ -37,6 +36,8 @@ type EspressoTEEVerifier struct {
 	l1Client                   *ethclient.Client
 	address                    common.Address
 }
+
+var _ EspressoTEEVerifierInterface = (*EspressoTEEVerifier)(nil)
 
 func NewEspressoTEEVerifier(espressoTEEVerifierAddress string, l1Client *ethclient.Client, address common.Address) *EspressoTEEVerifier {
 
@@ -167,20 +168,19 @@ func (e *EspressoTEEVerifier) registerService(
 
 func (e *EspressoTEEVerifier) RegisteredServices(
 	signer common.Address,
-	teeType uint8,
 	serviceType ServiceType,
 ) (bool, error) {
-	return e.registeredServices(signer, teeType, serviceType)
+	return e.registeredServices(signer, serviceType)
 }
 
-func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType uint8, serviceType ServiceType) (bool, error) {
-	contract, err := espressogen.NewIEspressoTEEVerifier(e.address, e.l1Client)
+func (e *EspressoTEEVerifier) registeredServices(address common.Address, serviceType ServiceType) (bool, error) {
+	contract, err := espressogen.NewITEEHelper(e.address, e.l1Client)
 	if err != nil {
 		return false, err
 	}
 	ok, err := ContractVerification(
 		func() (bool, error) {
-			return contract.RegisteredServices(&bind.CallOpts{}, address, teeType, uint8(serviceType))
+			return contract.IsSignerValid(&bind.CallOpts{}, address, uint8(serviceType))
 		},
 		"register services - address not yet registered in contract",
 	)

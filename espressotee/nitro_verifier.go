@@ -38,11 +38,5 @@ func (e *EspressoNitroTEEVerifier) isPCR0HashRegistered(pcr0Hash [32]byte, servi
 	if err != nil {
 		return false, err
 	}
-	switch serviceType {
-	case CaffNode:
-		return contract.RegisteredCaffNodeEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
-	case BatchPoster:
-		return contract.RegisteredBatchPosterEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
-	}
-	return false, fmt.Errorf("Invalid service type for checking PCR0 hash registration")
+	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash, uint8(serviceType))
 }

@@ -206,7 +206,7 @@ func setupSequencerInboxStub(ctx context.Context, t *testing.T, l1Info *Blockcha
 		FutureSeconds: big.NewInt(10000),
 	}
 	//  Deploy EspressoTEEVerifier Mock
-	espressoTEEVerifierAddr, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&txOpts, l1Client)
+	espressoTEEVerifierAddr, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&txOpts, l1Client, common.HexToAddress("0x1"), common.HexToAddress("0x2"))
 	Require(t, err)
 	_, err = EnsureTxSucceeded(ctx, l1Client, tx)
 	Require(t, err)

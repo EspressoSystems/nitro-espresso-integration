@@ -116,7 +116,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.serviceType)
 	if err != nil {
 		return false, err
 	}
