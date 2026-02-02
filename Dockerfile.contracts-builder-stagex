@@ -148,16 +148,22 @@ ENV NODE_OPTIONS="--max-http-header-size=32768"
 ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
+# Remove Hardhat build-info and cache files (contain timestamps that aren't reproducible)
+RUN find contracts/build contracts-legacy/build safe-smart-account/build \
+         -name 'build-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find contracts/build contracts-legacy/build safe-smart-account/build \
+         -name 'solidity-files-cache.json' -type f -delete 2>/dev/null || true
+
 # Normalize file permissions for reproducibility
 # Set all files to 644 and directories to 755
-RUN find contracts/out contracts/build contracts-legacy/build contracts-legacy/out \
+RUN find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
          contracts-local/out safe-smart-account/build \
          espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
-         -type f -exec chmod 644 {} \; && \
-    find contracts/out contracts/build contracts-legacy/build contracts-legacy/out \
+         -type f -exec chmod 644 {} \; 2>/dev/null || true && \
+    find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
          contracts-local/out safe-smart-account/build \
          espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
-         -type d -exec chmod 755 {} \;
+         -type d -exec chmod 755 {} \; 2>/dev/null || true
 
 FROM scratch AS contracts-builder-repro-export
 COPY --from=contracts-builder-repro /workspace/contracts/out/ /contracts/out/
