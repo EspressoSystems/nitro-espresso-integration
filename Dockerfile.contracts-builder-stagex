@@ -72,15 +72,6 @@ ENV LD_LIBRARY_PATH="/workspace/.libs:/usr/lib:/lib"
 ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/ca-certificates.crt"
 ENV SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt"
 
-# Optional — verify what the loader sees (remove later if you want)
-RUN echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" && \
-    ls -la /usr/lib/libunwind* 2>/dev/null && \
-    /usr/bin/node --version 2>&1 || true
-#ENV LD_LIBRARY_PATH="/usr/lib:/lib"
-RUN ldconfig /usr/lib /lib 2>/dev/null || true
-
-# Download and verify Foundry binaries with pinned commit hash
-# Using nightly-9f5cbb32630a7177cdde5e7b912088c90d9ed6df (2026-02-01)
 RUN curl -L -o /tmp/foundry.tar.gz \
     https://github.com/foundry-rs/foundry/releases/download/nightly-9f5cbb32630a7177cdde5e7b912088c90d9ed6df/foundry_nightly_linux_amd64.tar.gz && \
     echo "4e08e22548f65e9e3cf4e9adcd03734984f162ae13eb753cd4d63402411fe7aa  /tmp/foundry.tar.gz" | sha256sum -c && \
@@ -91,8 +82,7 @@ RUN curl -L -o /tmp/foundry.tar.gz \
 
 ENV PATH="/workspace/.foundry:${PATH}"
 
-# Pre-download Solidity compilers for Hardhat with SHA256 verification
-# This prevents timeout issues and network dependencies during compilation
+# Pre-download Solidity compilers for Hardhat with SHA256 verification (TODO Verify this is working properly)
 RUN mkdir -p /home/user/.cache/hardhat-nodejs/compilers/linux-amd64 && \
     curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f \
     https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f && \
@@ -115,8 +105,7 @@ RUN mkdir -p /home/user/.cache/hardhat-nodejs/compilers/linux-amd64 && \
     echo "fb03a29a517452b9f12bcf459ef37d0a543765bb3bbc911e70a87d6a37c30d5f  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9" | sha256sum -c && \
     chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9
 
-# Copy contract files
-# Create directories first to ensure proper permissions
+
 RUN mkdir -p contracts-legacy contracts contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy
 
 COPY contracts-legacy/package.json contracts-legacy/yarn.lock contracts-legacy/
@@ -133,8 +122,6 @@ COPY safe-smart-account /tmp/stage/safe-smart-account/
 COPY espresso-tee-contracts /tmp/stage/espresso-tee-contracts/
 COPY espresso-tee-contracts-legacy /tmp/stage/espresso-tee-contracts-legacy/
 
-# Move from staging to create writable directories, then create output directories
-# Copy directory contents (with trailing /.) to avoid duplicating directory names
 RUN mkdir -p contracts-legacy contracts-local contracts safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy && \
     cp -a /tmp/stage/contracts-legacy/. contracts-legacy/ && \
     cp -a /tmp/stage/contracts-local/. contracts-local/ && \
@@ -149,7 +136,6 @@ RUN mkdir -p contracts-legacy contracts-local contracts safe-smart-account espre
              espresso-tee-contracts/out espresso-tee-contracts/cache \
              espresso-tee-contracts-legacy/out espresso-tee-contracts-legacy/cache
 
-# Use yarn with --ignore-scripts to skip postinstall that needs npm
 RUN cd safe-smart-account && yarn install --ignore-scripts
 
 COPY Makefile .
@@ -158,17 +144,29 @@ COPY Makefile .
 # Set npm config to not modify package.json/package-lock.json
 ENV npm_config_package_lock=false
 ENV npm_config_save=false
-# Increase HTTP timeout for downloading compilers
 ENV NODE_OPTIONS="--max-http-header-size=32768"
 ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 # Normalize file permissions for reproducibility
 # Set all files to 644 and directories to 755
-RUN find contracts/out contracts/build contracts-legacy/build -type f -exec chmod 644 {} \; && \
-    find contracts/out contracts/build contracts-legacy/build -type d -exec chmod 755 {} \;
+RUN find contracts/out contracts/build contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
+         -type f -exec chmod 644 {} \; && \
+    find contracts/out contracts/build contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
+         -type d -exec chmod 755 {} \;
 
 FROM scratch AS contracts-builder-repro-export
 COPY --from=contracts-builder-repro /workspace/contracts/out/ /contracts/out/
 COPY --from=contracts-builder-repro /workspace/contracts/build/ /contracts/build/
+COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json /contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
 COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/ /contracts-legacy/build/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ /contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/contracts-local/out/ /contracts-local/out/
+COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ /safe-smart-account/build/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ /espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts-legacy/out/ /espresso-tee-contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/.make/ /.make/
