@@ -2560,7 +2560,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		nonceTooHighEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
 	}
-	registrationFailCount := 0
+
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
@@ -2601,12 +2601,13 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				return 0
 			}
 			if errors.Is(err, FatalErrUnableToRegisterSigner) {
-				registrationFailCount++
-				if registrationFailCount > espressotee.EspressoMaxRetries {
-					log.Crit("Espresso signer registration failed 5 times consecutively. Stopping.", "err", err)
-					b.fatalErrChan <- err
-				}
-				log.Warn("Espresso signer registration failed", "attempt", registrationFailCount, "err", err)
+				log.Warn(
+					"Espresso signer registration failed consecutively. Stopping.",
+					"retries", espressotee.EspressoMaxRetries,
+					"err", err,
+				)
+
+				b.fatalErrChan <- err
 			}
 
 			b.building = nil
