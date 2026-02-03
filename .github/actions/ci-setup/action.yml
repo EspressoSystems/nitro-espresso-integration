@@ -67,7 +67,7 @@ runs:
       uses: foundry-rs/foundry-toolchain@v1
       with:
         cache: false
-        version: v1.0.0
+        version: stable
 
     - name: Install cbindgen
       run: cargo install --force cbindgen
