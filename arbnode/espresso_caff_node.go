@@ -338,7 +338,7 @@ func NewEspressoCaffNode(
 			return nil, fmt.Errorf("failed to create data poster: %w", err)
 		}
 
-		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, dataPoster, nil, teeType, espressotee.CaffNode, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().AttestationServiceURL)
+		keyManager = espresso_key_manager.NewEspressoKeyManager(verifier, dataPoster, nil, teeType, espressotee.CaffNode, caffNodeInitArgs.CaffNodePrivateKey, configFetcher().AttestationServiceURL, "", 0)
 
 	}
 	initializeCaffNodeTags := false
