@@ -176,14 +176,12 @@ func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType
 			return false, err
 		}
 		verifier = sgxAddr
-		break
 	case NITRO:
 		nitroAddr, err := contract.EspressoNitroTEEVerifier(&bind.CallOpts{})
 		if err != nil {
 			return false, err
 		}
 		verifier = nitroAddr
-		break
 	default:
 		return false, fmt.Errorf("unsupported tee type: %d", teeType)
 	}
@@ -192,7 +190,6 @@ func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType
 	if err != nil {
 		return false, err
 	}
-	log.Info("hhhhhhh")
 	ok, err := ContractVerification(
 		func() (bool, error) {
 			return helper.IsSignerValid(&bind.CallOpts{}, address, uint8(serviceType))
@@ -202,6 +199,5 @@ func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType
 	if err != nil {
 		return false, err
 	}
-	log.Info("llllllllllll")
 	return ok, nil
 }
