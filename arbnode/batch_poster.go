@@ -6,7 +6,6 @@ package arbnode
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -27,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -633,19 +631,11 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 			panic("TransactOpts is nil")
 		}
 		// to support tests, we can give the batch poster a "persistent key" via the config, This variable WILL be nil if the configured tee type is not TESTS
-		var testsPersistentKey *ecdsa.PrivateKey
-		if teeType == espressotee.TESTS {
-			testsPersistentKey, err = crypto.HexToECDSA(opts.Config().ParentChainWallet.PrivateKey)
-			if err != nil {
-				log.Error("Unable to convert config private key string to type for mocking during tests")
-				return nil, err
-			}
-		}
 		submitterOptions = append(
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, testsPersistentKey, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
 			),
 		)
 

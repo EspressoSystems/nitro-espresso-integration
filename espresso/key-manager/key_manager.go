@@ -29,6 +29,9 @@ const (
 	EMPTY = espressotee.EMPTY
 )
 
+// This is a private key derived from the test test test ... test junk BIP-39 mnemonic. It is a well known private key, so it should be fine to hardcode for tests.
+// I found it here: https://ethereum.stackexchange.com/questions/147078/hardhat-which-file-is-initial-state-in-such-as-the-mnemonic-and-20-accounts
+const TEST_PERSISTENT_KEY = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 const quoteFile = "/dev/attestation/quote"
 const userDataAttestationFile = "/dev/attestation/user_report_data"
 
@@ -84,6 +87,11 @@ func NewEspressoKeyManager(
 
 	} else if servicePersistentPrivateKey != nil {
 		privKey = servicePersistentPrivateKey
+	} else if teeType == espressotee.TESTS {
+		privKey, err = crypto.HexToECDSA(TEST_PERSISTENT_KEY)
+		if err != nil {
+			log.Crit("Failed to create persistent private key for tests", "err", err)
+		}
 	} else {
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}

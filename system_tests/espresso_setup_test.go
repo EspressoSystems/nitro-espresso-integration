@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/offchainlabs/nitro/cmd/genericconf"
 )
 
 func createL1AndL2Node(
@@ -41,11 +39,6 @@ func createL1AndL2Node(
 	builder.nodeConfig.BatchPoster.MaxDelay = -1000 * time.Hour
 	builder.nodeConfig.Espresso.BatchPoster.HotShotUrl = hotShotUrl
 	builder.nodeConfig.Espresso.BatchPoster.TeeType = "TESTS"
-	// This is a private key derived from the test test test ... test junk BIP-39 mnemonic. It is a well known private key, so it should be fine to hardcode for tests.
-	// I found it here: https://ethereum.stackexchange.com/questions/147078/hardhat-which-file-is-initial-state-in-such-as-the-mnemonic-and-20-accounts
-	builder.nodeConfig.BatchPoster.ParentChainWallet = genericconf.WalletConfig{
-		PrivateKey: "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-	}
 
 	// validator config
 	builder.nodeConfig.BlockValidator.Enable = true
