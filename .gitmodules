@@ -37,7 +37,7 @@
 [submodule "contracts-legacy"]
 	path = contracts-legacy
 	url = git@github.com:EspressoSystems/nitro-contracts.git
-	branch = 2.1.3-legacy
+	branch = jh/update-tee-2.1.3
 [submodule "contracts-local/lib/openzeppelin-contracts"]
 	path = contracts-local/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
