@@ -11,7 +11,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = git@github.com:EspressoSystems/nitro-contracts.git
-	branch = jh/update-tee
+	branch = v3.1.1
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
@@ -37,7 +37,7 @@
 [submodule "contracts-legacy"]
 	path = contracts-legacy
 	url = git@github.com:EspressoSystems/nitro-contracts.git
-	branch = jh/update-tee-2.1.3
+	branch = 2.1.3-legacy
 [submodule "contracts-local/lib/openzeppelin-contracts"]
 	path = contracts-local/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
