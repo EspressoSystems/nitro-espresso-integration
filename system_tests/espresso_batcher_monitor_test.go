@@ -54,18 +54,15 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	Require(t, err)
 	log.Info("tx receipt", "receipt", receipt.BlockNumber)
 
-	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 35)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 	time.Sleep(time.Second * 25)
 
-	events := monitor.GetEvents()
-	if len(events) != 1 {
-		t.Fatal("expected 1 valid address, got", events)
-	}
-	if events[0].Addr != batchPosterAddr {
-		t.Fatal("expected valid address to be", batchPosterAddr, "got", events[0].Addr)
-	}
-	if events[0].IsBatcher != true {
-		t.Fatal("expected valid address to be batcher, got", events[0].IsBatcher)
+	l1Height, err := builder.L1.Client.BlockNumber(ctx)
+	Require(t, err)
+	valid, err := monitor.IsValid(ctx, batchPosterAddr, l1Height)
+	Require(t, err)
+	if !valid {
+		t.Fatal("expect valid")
 	}
 
 	newAddr := common.Address{}
@@ -76,18 +73,14 @@ func TestEspressoBatcherMonitor(t *testing.T) {
 	Require(t, err)
 	_, err = EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx2, time.Second*10)
 	Require(t, err)
-	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 30)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 	time.Sleep(time.Second * 5)
 
-	events2 := monitor.GetEvents()
-	if len(events2) != 2 {
-		t.Fatal("expected 2 valid addresses, got", events2)
+	l1Height, err = builder.L1.Client.BlockNumber(ctx)
+	Require(t, err)
+	valid, err = monitor.IsValid(ctx, newAddr, l1Height)
+	Require(t, err)
+	if valid {
+		t.Fatal("expect invalid")
 	}
-	if events2[1].Addr != newAddr {
-		t.Fatal("expected valid address to be", newAddr, "got", events2[1].Addr)
-	}
-	if events2[1].IsBatcher != false {
-		t.Fatal("expected valid address to not be batcher, got", events2[1].IsBatcher)
-	}
-
 }

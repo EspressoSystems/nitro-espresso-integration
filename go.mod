@@ -7,7 +7,7 @@ replace github.com/ethereum/go-ethereum => ./go-ethereum
 require (
 	cloud.google.com/go/storage v1.43.0
 	github.com/DATA-DOG/go-sqlmock v1.5.2
-	github.com/EspressoSystems/espresso-network/sdks/go v0.3.2
+	github.com/EspressoSystems/espresso-network/sdks/go v0.3.4
 	github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible
 	github.com/Shopify/toxiproxy v2.1.4+incompatible
 	github.com/alicebob/miniredis/v2 v2.32.1
@@ -172,7 +172,7 @@ require (
 	github.com/google/go-github/v62 v62.0.0
 	github.com/google/pprof v0.0.0-20231023181126-ff6d637d2a7b // indirect
 	github.com/gorilla/mux v1.8.0
-	github.com/gorilla/websocket v1.5.0
+	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/graph-gophers/graphql-go v1.3.0 // indirect
 	github.com/h2non/filetype v1.0.6 // indirect
 	github.com/hashicorp/go-bexpr v0.1.10 // indirect
