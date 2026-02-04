@@ -1,0 +1,83 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - integration-v3.9.2
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.compound-version.outputs.tag_name }}
+      version: ${{ steps.compound-version.outputs.full_version }}
+      espresso_version: ${{ steps.release.outputs.version }}
+      upstream_version: ${{ steps.compound-version.outputs.upstream_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get upstream version
+        id: upstream
+        run: |
+          UPSTREAM=$(jq -r '.upstream' version.json)
+          echo "version=$UPSTREAM" >> $GITHUB_OUTPUT
+
+      - name: Run Release Please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Compute compound version
+        id: compound-version
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          UPSTREAM="${{ steps.upstream.outputs.version }}"
+          ESPRESSO="${{ steps.release.outputs.version }}"
+          FULL_VERSION="${UPSTREAM}-espresso-${ESPRESSO}"
+          TAG_NAME="v${FULL_VERSION}"
+
+          echo "upstream_version=$UPSTREAM" >> $GITHUB_OUTPUT
+          echo "espresso_version=$ESPRESSO" >> $GITHUB_OUTPUT
+          echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+
+          echo "Compound version: $TAG_NAME"
+
+      - name: Create compound version tag
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email github-actions[bot]@users.noreply.github.com
+
+          TAG_NAME="${{ steps.compound-version.outputs.tag_name }}"
+
+          # Delete the simple tag created by release-please
+          git push --delete origin "v${{ steps.release.outputs.version }}" || true
+          git tag -d "v${{ steps.release.outputs.version }}" || true
+
+          # Create the compound version tag
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME"
+
+          echo "Created tag: $TAG_NAME"
+
+      - name: Update GitHub Release with compound version
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ steps.compound-version.outputs.tag_name }}"
+          ESPRESSO="${{ steps.release.outputs.version }}"
+
+          # Update the release created by release-please to use compound tag
+          gh release edit "v${ESPRESSO}" --tag "$TAG_NAME" --title "Release $TAG_NAME" || true
