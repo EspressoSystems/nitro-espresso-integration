@@ -12,7 +12,7 @@ This project uses compound versioning: `v{upstream}-espresso-v{espresso}`
 - **Upstream version**: Tracks the base Nitro version from upstream
 - **Espresso version**: Tracks Espresso-specific changes (auto-incremented)
 
-Example: `v3.9.4-espresso-v0.1.0`
+Example: `v3.9.2-espresso-v0.1.0`
 
 ---
 
