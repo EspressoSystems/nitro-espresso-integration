@@ -1,6 +1,7 @@
 package submitter
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"time"
@@ -36,9 +37,9 @@ type EspressoSubmitterConfig struct {
 	// values set for them, but can be overridden by the user.
 
 	ChainID                               uint64
-	EspressoTxnsPollingInterval           time.Duration
-	EspressoTxnSendingInterval            time.Duration
+	EspressoTxnsMoniteringInterval        time.Duration
 	EspressoTxnsResubmissionInterval      time.Duration
+	EspressoTxnSendingInterval            time.Duration
 	EspressoMaxTransactionSize            int64
 	ResubmitEspressoTxDeadline            time.Duration
 	InitialFinalizedSequencerMessageCount *big.Int
@@ -57,6 +58,8 @@ type EspressoSubmitterConfig struct {
 	KeyManager        espresso_key_manager.EspressoKeyManagerInterface
 	MessageGetter     MessageGetter
 	Db                ethdb.Database
+
+	CanSubmit func(ctx context.Context) (bool, error)
 
 	// These are specific to the Multi Worker Queue Espresso Submitter
 	// and governs how many workers / buffering is used for the
@@ -89,7 +92,7 @@ type EspressoSubmitterConfig struct {
 // - LightClientReader
 // - MessageGetter
 var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
-	EspressoTxnsPollingInterval:           time.Second,
+	EspressoTxnsMoniteringInterval:        time.Second,
 	EspressoTxnSendingInterval:            time.Second,
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
@@ -131,6 +134,12 @@ func applyEspressoSubmitterConfigOptions(
 func WithMultipleOptions(options ...EspressoSubmitterConfigOption) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		applyEspressoSubmitterConfigOptions(config, options...)
+	}
+}
+
+func WithCanSubmit(canSubmit func(ctx context.Context) (bool, error)) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.CanSubmit = canSubmit
 	}
 }
 
@@ -201,19 +210,11 @@ func WithMaxTransactionSize(size int64) EspressoSubmitterConfigOption {
 	}
 }
 
-// WithTxnsSendingInterval is an [EspressoSubmitterConfigOption] that sets the
-// transaction sending interval in the [EspressoSubmitterConfig].
-func WithTxnsSendingInterval(interval time.Duration) EspressoSubmitterConfigOption {
+// WithTxnsMonitoringInterval is an [EspressoSubmitterConfigOption] that sets the
+// transaction polling, resubmission, and submission interval
+func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnSendingInterval = interval
-	}
-}
-
-// WithTxnsPollingInterval is an [EspressoSubmitterConfigOption] that sets the
-// transaction polling interval in the [EspressoSubmitterConfig].
-func WithTxnsPollingInterval(interval time.Duration) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnsPollingInterval = interval
+		config.EspressoTxnsMoniteringInterval = interval
 	}
 }
 
@@ -225,20 +226,20 @@ func WithTxnsResubmissionInterval(interval time.Duration) EspressoSubmitterConfi
 	}
 }
 
-// WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
-// to use the escape hatch in the [EspressoSubmitterConfig].
-func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitterConfigOption {
-	return func(config *EspressoSubmitterConfig) {
-		config.InitialFinalizedSequencerMessageCount = count
-	}
-}
-
 // WithResubmitEspressoTxDeadline is an [EspressoSubmitterConfigOption] that
 // sets the deadline for resubmitting Espresso transactions in the
 // [EspressoSubmitterConfig].
 func WithResubmitEspressoTxDeadline(deadline time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
 		config.ResubmitEspressoTxDeadline = deadline
+	}
+}
+
+// WithUseEscapeHatch is an [EspressoSubmitterConfigOption] that sets whether
+// to use the escape hatch in the [EspressoSubmitterConfig].
+func WithInitialFinalizedSequencerMessageCount(count *big.Int) EspressoSubmitterConfigOption {
+	return func(config *EspressoSubmitterConfig) {
+		config.InitialFinalizedSequencerMessageCount = count
 	}
 }
 
@@ -359,7 +360,6 @@ func WithInitialNitroMessageToSubmit(pos arbutil.MessageIndex) EspressoSubmitter
 // It returns an error if any of the following required fields are set to their
 // zero value:
 // - EspressoClient
-// - LightClientReader
 // - MessageGetter
 // - Db
 // - KeyManager
@@ -370,10 +370,6 @@ func WithInitialNitroMessageToSubmit(pos arbutil.MessageIndex) EspressoSubmitter
 func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 	if config.EspressoClient == nil {
 		return fmt.Errorf("espresso client is not set")
-	}
-
-	if config.LightClientReader == nil {
-		return fmt.Errorf("light client reader is not set")
 	}
 
 	if config.MessageGetter == nil {
@@ -396,12 +392,16 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 		return fmt.Errorf("espresso max transaction size must be greater than 0")
 	}
 
-	if config.EspressoTxnsPollingInterval <= 0 {
+	if config.EspressoTxnsMoniteringInterval <= 0 {
 		return fmt.Errorf("espresso transactions polling interval must be greater than 0")
 	}
 
 	if config.EspressoTxnSendingInterval <= 0 {
 		return fmt.Errorf("espresso transactions submission interval must be greater than 0")
+	}
+
+	if config.CanSubmit == nil {
+		return fmt.Errorf("espresso can submit is not set")
 	}
 
 	return nil

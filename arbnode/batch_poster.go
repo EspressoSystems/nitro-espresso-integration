@@ -17,7 +17,6 @@ import (
 	"time"
 
 	hotshotClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	lightclient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/andybalholm/brotli"
 	"github.com/spf13/pflag"
 
@@ -46,7 +45,6 @@ import (
 	"github.com/offchainlabs/nitro/cmd/chaininfo"
 	"github.com/offchainlabs/nitro/cmd/genericconf"
 	"github.com/offchainlabs/nitro/daprovider"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/espresso/submitter"
@@ -83,8 +81,9 @@ var (
 
 	batchPosterFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/failure", nil)
 
-	usableBytesInBlob    = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
-	blobTxBlobGasPerBlob = big.NewInt(params.BlobTxBlobGasPerBlob)
+	usableBytesInBlob              = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
+	blobTxBlobGasPerBlob           = big.NewInt(params.BlobTxBlobGasPerBlob)
+	FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
 )
 
 const (
@@ -142,12 +141,15 @@ type BatchPoster struct {
 	checkEip7623 bool
 	useEip7623   bool
 
+	espressoConfig             *EspressoConfig
 	bytesType                  abi.Type
 	bytes32ArrayType           abi.Type
 	blobsAttestationArguments  abi.Arguments
 	espressoStreamer           *espressostreamer.EspressoStreamer
-	espressoBatcherAddrMonitor *BatcherAddrMonitor
+	espressoBatcherAddrMonitor BatcherAddrMonitorInterface
 	espressoRestarting         bool
+	signerAddr                 common.Address
+	fatalErrChan               chan error
 }
 
 type l1BlockBound int
@@ -206,27 +208,6 @@ type BatchPosterConfig struct {
 
 	gasRefunder  common.Address
 	l1BlockBound l1BlockBound
-	// Espresso specific flags
-	EspressoTeeType                  string                                    `koanf:"espresso-tee-type"`
-	EspressoRegisterServiceConfig    espressotee.EspressoRegisterServiceConfig `koanf:"espresso-register-service-config"`
-	LightClientAddress               string                                    `koanf:"light-client-address"`
-	HotShotUrls                      []string                                  `koanf:"hotshot-urls"`
-	EspressoTxnsPollingInterval      time.Duration                             `koanf:"espresso-txns-polling-interval"`
-	EspressoTxnsSendingInterval      time.Duration                             `koanf:"espresso-txns-sending-interval"`
-	EspressoTxnsResubmissionInterval time.Duration                             `koanf:"espresso-txns-resubmission-interval"`
-	ResubmitEspressoTxDeadline       time.Duration                             `koanf:"resubmit-espresso-tx-deadline"`
-	EspressoTxSizeLimit              int64                                     `koanf:"espresso-tx-size-limit"`
-	UserDataAttestationFile          string                                    `koanf:"user-data-attestation-file"`
-	QuoteFile                        string                                    `koanf:"quote-file"`
-
-	// Fetch messages from HotShot block
-	HotShotBlock             uint64 `koanf:"hotshot-block"`
-	EspressoEventPollingStep uint64 `koanf:"espresso-event-polling-step"`
-	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
-	// Please make sure that these addresses are already valid at the `AddressMonitorStartL1`
-	AddressMonitorStartL1 uint64   `koanf:"address-monitor-start-l1"`
-	InitBatcherAddresses  []string `koanf:"init-batcher-addresses"`
-	AddressMonitorStep    uint64   `koanf:"address-monitor-step"`
 }
 
 func (c *BatchPosterConfig) Validate() error {
@@ -253,7 +234,10 @@ func (c *BatchPosterConfig) Validate() error {
 	return nil
 }
 
+type EspressoConfigFetcher func() *EspressoConfig
 type BatchPosterConfigFetcher func() *BatchPosterConfig
+type EspressoBatchConfigFetcher func() *EspressoBatchPosterConfig
+type EspressoStreamerConfigFetcher func() *espressostreamer.EspressoStreamerConfig
 
 func DangerousBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Bool(prefix+".allow-posting-first-batch-when-sequencer-message-count-mismatch", DefaultBatchPosterConfig.Dangerous.AllowPostingFirstBatchWhenSequencerMessageCountMismatch, "allow posting the first batch even if sequence number doesn't match chain (useful after force-inclusion)")
@@ -279,30 +263,13 @@ func BatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.String(prefix+".l1-block-bound", DefaultBatchPosterConfig.L1BlockBound, "only post messages to batches when they're within the max future block/timestamp as of this L1 block tag (\"safe\", \"finalized\", \"latest\", or \"ignore\" to ignore this check)")
 	f.Duration(prefix+".l1-block-bound-bypass", DefaultBatchPosterConfig.L1BlockBoundBypass, "post batches even if not within the layer 1 future bounds if we're within this margin of the max delay")
 	f.Bool(prefix+".use-access-lists", DefaultBatchPosterConfig.UseAccessLists, "post batches with access lists to reduce gas usage (disabled for L3s)")
-	f.String(prefix+".espresso-tee-type", DefaultBatchPosterConfig.EspressoTeeType, "the Trusted Execution Environment (TEE) that Batch poster is running in")
-	f.StringSlice(prefix+".hotshot-urls", DefaultBatchPosterConfig.HotShotUrls, "specifies the hotshot urls if we are batching in espresso mode")
-	f.Uint64(prefix+".hotshot-block", DefaultBatchPosterConfig.HotShotBlock, "specifies the hotshot block number to start the espresso streamer on")
-	f.Uint64(prefix+".hotshot-first-posting-block", DefaultBatchPosterConfig.HotShotFirstPostingBlock, "specifies the l1 block number when this rollup started posting to hotshot")
-	f.Uint64(prefix+".espresso-event-polling-step", DefaultBatchPosterConfig.EspressoEventPollingStep, "specifies the number of blocks at a time to query when searching for logs emitted by batch posting.")
-	f.String(prefix+".light-client-address", DefaultBatchPosterConfig.LightClientAddress, "specifies the hotshot light client address if we are batching in espresso mode")
 	f.Uint64(prefix+".gas-estimate-base-fee-multiple-bips", uint64(DefaultBatchPosterConfig.GasEstimateBaseFeeMultipleBips), "for gas estimation, use this multiple of the basefee (measured in basis points) as the max fee per gas")
 	f.Duration(prefix+".reorg-resistance-margin", DefaultBatchPosterConfig.ReorgResistanceMargin, "do not post batch if its within this duration from layer 1 minimum bounds. Requires l1-block-bound option not be set to \"ignore\"")
 	f.Bool(prefix+".check-batch-correctness", DefaultBatchPosterConfig.CheckBatchCorrectness, "setting this to true will run the batch against an inbox multiplexer and verifies that it produces the correct set of messages")
 	f.Duration(prefix+".max-empty-batch-delay", DefaultBatchPosterConfig.MaxEmptyBatchDelay, "maximum empty batch posting delay, batch poster will only be able to post an empty batch if this time period building a batch has passed")
 	f.Uint64(prefix+".delay-buffer-threshold-margin", DefaultBatchPosterConfig.DelayBufferThresholdMargin, "the number of blocks to post the batch before reaching the delay buffer threshold")
-	f.Duration(prefix+".espresso-txns-polling-interval", DefaultBatchPosterConfig.EspressoTxnsPollingInterval, "interval between polling for transactions to be included in the block")
-	f.Duration(prefix+".espresso-txns-sending-interval", DefaultBatchPosterConfig.EspressoTxnsSendingInterval, "interval between sending transactions to Espresso Network")
-	f.Duration(prefix+".espresso-txns-resubmission-interval", DefaultBatchPosterConfig.EspressoTxnsResubmissionInterval, "interval between checking if the node should resubmitting transactions to Espresso Network")
-	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
-	f.String(prefix+".user-data-attestation-file", DefaultBatchPosterConfig.UserDataAttestationFile, "path to SGX user data attestation file")
-	f.String(prefix+".quote-file", DefaultBatchPosterConfig.QuoteFile, "path to SGX quote file")
 	f.String(prefix+".parent-chain-eip7623", DefaultBatchPosterConfig.ParentChainEip7623, "if parent chain uses EIP7623 (\"yes\", \"no\", \"auto\")")
 	f.Bool(prefix+".delay-buffer-always-updatable", DefaultBatchPosterConfig.DelayBufferAlwaysUpdatable, "always treat delay buffer as updatable")
-	f.Int64(prefix+".espresso-tx-size-limit", DefaultBatchPosterConfig.EspressoTxSizeLimit, "specifies the maximum size of a transaction to be sent to the Espresso Network")
-	f.StringSlice(prefix+".init-batcher-addresses", DefaultBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
-	f.Uint64(prefix+".address-monitor-step", DefaultBatchPosterConfig.AddressMonitorStep, "specifies the number of blocks at a time to query when searching for logs emitted for updating valid batcher addresses.")
-	f.Uint64(prefix+".address-monitor-start-l1", DefaultBatchPosterConfig.AddressMonitorStartL1, "specifies the l1 block number when this rollup started posting to monitor addresses")
-	espressotee.AddEspressoRegisterServiceConfigOptions(prefix+".espresso-register-service-config", f)
 	redislock.AddConfigOptions(prefix+".redis-lock", f)
 	dataposter.DataPosterConfigAddOptions(prefix+".data-poster", f, dataposter.DefaultDataPosterConfig, dataposter.DataPosterUsageBatchPoster)
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
@@ -341,31 +308,6 @@ var DefaultBatchPosterConfig = BatchPosterConfig{
 	DelayBufferThresholdMargin:     25, // 5 minutes considering 12-second blocks
 	DelayBufferAlwaysUpdatable:     true,
 	ParentChainEip7623:             "auto",
-
-	// Espresso Specific config //
-
-	// Hotshot currently produces blocks at average of 2 seconds
-	// We set it to 1 second to get updates more often than blocks are produced
-	EspressoTxnsPollingInterval: time.Second,
-	// We should send to espresso at a speed faster than the speed nitro is producing messages
-	EspressoTxnsSendingInterval:      125 * time.Millisecond,
-	EspressoTxnsResubmissionInterval: 2 * time.Second,
-	ResubmitEspressoTxDeadline:       10 * time.Minute,
-	LightClientAddress:               "",
-	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "NITRO",
-	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
-	// EspressoTxSizeLimit is 1 MB, to have some buffer we set it to 900 KB
-	EspressoTxSizeLimit:     900 * 1024,
-	UserDataAttestationFile: "",
-	QuoteFile:               "",
-
-	HotShotBlock:             1,
-	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []string{},
-	EspressoEventPollingStep: 100,
-	AddressMonitorStep:       100,
-	AddressMonitorStartL1:    1,
 }
 
 var DefaultBatchPosterL1WalletConfig = genericconf.WalletConfig{
@@ -402,23 +344,6 @@ var TestBatchPosterConfig = BatchPosterConfig{
 	DelayBufferThresholdMargin:         0,
 	DelayBufferAlwaysUpdatable:         true,
 	ParentChainEip7623:                 "auto",
-
-	EspressoTxnsPollingInterval:      time.Second,
-	EspressoTxnsSendingInterval:      time.Second,
-	EspressoTxnsResubmissionInterval: 2 * time.Second,
-	LightClientAddress:               "",
-	ResubmitEspressoTxDeadline:       10 * time.Second,
-	HotShotUrls:                      []string{},
-	EspressoTeeType:                  "TESTS",
-	EspressoRegisterServiceConfig:    espressotee.DefaultEspressoRegisterServiceConfig,
-	EspressoTxSizeLimit:              200 * 1024,
-
-	HotShotBlock:             1,
-	HotShotFirstPostingBlock: 1,
-	InitBatcherAddresses:     []string{},
-	EspressoEventPollingStep: 100,
-	AddressMonitorStartL1:    1,
-	AddressMonitorStep:       100,
 }
 
 type BatchPosterOpts struct {
@@ -437,6 +362,9 @@ type BatchPosterOpts struct {
 	DAPReaders    *daprovider.ReaderRegistry
 
 	DataSigner signature.DataSignerFunc
+
+	EspressoConfigFetcher EspressoConfigFetcher
+	FatalErrChan          chan error
 }
 
 func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, error) {
@@ -516,10 +444,12 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		checkEip7623:       checkEip7623,
 		useEip7623:         useEip7623,
 
+		espressoConfig:            opts.EspressoConfigFetcher(),
 		bytesType:                 bytesType,
 		bytes32ArrayType:          bytes32ArrayType,
 		blobsAttestationArguments: blobsAttestationArguments,
 		espressoRestarting:        true,
+		fatalErrChan:              opts.FatalErrChan,
 	}
 	b.messagesPerBatch, err = arbmath.NewMovingAverage[uint64](20)
 	if err != nil {
@@ -563,175 +493,154 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		})
 	}
 
-	// Espresso Config Round 2
-	{
-		hotShotUrls := opts.Config().HotShotUrls
+	submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
 
-		lightClientAddr := opts.Config().LightClientAddress
-		hotShotUrlsLen := len(hotShotUrls)
+	hotshotUrl := opts.EspressoConfigFetcher().BatchPoster.HotShotUrl
+	// If the hotshot URL is non-empty, create the Espresso client.
+	if hotshotUrl != "" {
+		hotShotClient := hotshotClient.NewClient(hotshotUrl)
+		submitterOptions = append(submitterOptions, submitter.WithEspressoClient(hotShotClient))
 
-		submitterOptions = append(submitterOptions, WithTransactionStreamer(opts.Streamer))
+		// If hotshot url is set, also set the sequencer inbox
+		if seqInbox == nil {
+			log.Error("espresso mode enabled without a sequencer inbox address")
+			return nil, fmt.Errorf("espresso mode enabled without a sequencer inbox address")
+		}
+		bridgeAddress, err := seqInbox.Bridge(&bind.CallOpts{Context: context.Background()})
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled bridge")
+		}
+		bridge, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
+		if err != nil {
+			return nil, fmt.Errorf("espresso mode enabled without bridge")
+		}
 
-		// If the length of the hotshot urls is greater than zero, and it's not length 1 with an empty string, create the espresso multiple nodes client.
-		if hotShotUrlsLen != 0 && !(hotShotUrls[0] == "" && hotShotUrlsLen == 1) {
-			hotShotClient, err := hotshotClient.NewMultipleNodesClient(hotShotUrls)
+		// check if the pos is already finalized on L1
+		// and get the current finalized block number from L1
+		blockNumber, err := opts.L1Reader.LatestFinalizedBlockNr(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to get finalized block number: %w", err)
+		}
+
+		// Edge case: its possible that batch poster is started even before the `DeployedAt` block is finalized
+		// in that case we should use the `DeployedAt` block number because no message would have been posted before that
+		if blockNumber < opts.DeployInfo.DeployedAt {
+			blockNumber = opts.DeployInfo.DeployedAt
+		}
+
+		sequencerMessageCount, err := bridge.SequencerReportedSubMessageCount(&bind.CallOpts{
+			BlockNumber: new(big.Int).SetUint64(blockNumber),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
+		}
+
+		submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
+
+		initStringAddresses := opts.EspressoConfigFetcher().BatchPoster.InitBatcherAddresses
+		// Convert the init addresses to common.Address
+		initAddresses := []common.Address{}
+		for _, addr := range initStringAddresses {
+			initAddresses = append(initAddresses, common.HexToAddress(addr))
+		}
+		if len(initAddresses) == 0 {
+			addr, err := recoverAddressFromSigner(opts.DataSigner)
 			if err != nil {
-				log.Crit("Failed to create hotshot client", "err", err)
-			}
-			submitterOptions = append(submitterOptions, submitter.WithEspressoClient(hotShotClient))
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to create espresso original submitter: %w", err)
+				return nil, fmt.Errorf("failed to recover address from signer: %w", err)
 			}
 
-			// If hotshot url is set, also set the sequencer inbox
-			if seqInbox == nil {
-				log.Error("espresso mode enabled without a sequencer inbox address")
-				return nil, fmt.Errorf("espresso mode enabled without a sequencer inbox address")
-			}
-			bridgeAddress, err := seqInbox.Bridge(&bind.CallOpts{Context: context.Background()})
-			if err != nil {
-				return nil, fmt.Errorf("espresso mode enabled bridge")
-			}
-			bridge, err := bridgegen.NewBridge(bridgeAddress, opts.L1Reader.Client())
-			if err != nil {
-				return nil, fmt.Errorf("espresso mode enabled without bridge")
-			}
+			initAddresses = []common.Address{addr}
+		}
+		addr, err := recoverAddressFromSigner(opts.DataSigner)
+		if err != nil {
+			return nil, err
+		}
+		b.signerAddr = addr
 
-			// check if the pos is already finalized on L1
-			// and get the current finalized block number from L1
-			blockNumber, err := opts.L1Reader.LatestFinalizedBlockNr(context.Background())
-			if err != nil {
-				return nil, fmt.Errorf("failed to get finalized block number: %w", err)
-			}
-
-			// Edge case: its possible that batch poster is started even before the `DeployedAt` block is finalized
-			// in that case we should use the `DeployedAt` block number because no message would have been posted before that
-			if blockNumber < opts.DeployInfo.DeployedAt {
-				blockNumber = opts.DeployInfo.DeployedAt
-			}
-
-			sequencerMessageCount, err := bridge.SequencerReportedSubMessageCount(&bind.CallOpts{
-				BlockNumber: new(big.Int).SetUint64(blockNumber),
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to get sequencerMessageCount: %w", err)
-			}
-
-			submitterOptions = append(submitterOptions, submitter.WithInitialFinalizedSequencerMessageCount(sequencerMessageCount))
-
-			initStringAddresses := opts.Config().InitBatcherAddresses
-			// Convert the init addresses to common.Address
-			initAddresses := []common.Address{}
-			for _, addr := range initStringAddresses {
-				initAddresses = append(initAddresses, common.HexToAddress(addr))
-			}
-			if len(initAddresses) == 0 {
-				addr, err := recoverAddressFromSigner(opts.DataSigner)
-				if err != nil {
-					return nil, fmt.Errorf("failed to recover address from signer: %w", err)
-				}
-
-				initAddresses = []common.Address{addr}
-			}
-
-			// We dont need auth reads here because batch poster is not reliant on the
-			// database for determining which messages to post, it gets the messages
-			// from Espresso directly
-			db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, true)
-			if err != nil {
-				return nil, err
-			}
-			monitor := NewBatcherAddrMonitor(
+		// We dont need auth reads here because batch poster is not reliant on the
+		// database for determining which messages to post, it gets the messages
+		// from Espresso directly
+		db, err := authdb.NewAuthDB(opts.DataPosterDB, nil, true)
+		if err != nil {
+			return nil, err
+		}
+		var monitor BatcherAddrMonitorInterface
+		if len(opts.EspressoConfigFetcher().BatchPoster.AddressValidRanges) == 0 {
+			monitor = NewBatcherAddrMonitor(
 				initAddresses,
 				&db,
 				opts.L1Reader,
 				opts.DeployInfo.SequencerInbox,
 				opts.DeployInfo.DeployedAt,
-				opts.Config().AddressMonitorStartL1,
-				opts.Config().AddressMonitorStep,
+				opts.EspressoConfigFetcher().Streamer.AddressMonitorStartL1,
+				opts.EspressoConfigFetcher().Streamer.AddressMonitorStep,
 			)
-
-			espressoStreamer := espressostreamer.NewEspressoStreamer(
-				opts.ChainID,
-				opts.Config().HotShotBlock,
-				nil,
-				hotShotClient,
-				false,
-				monitor.GetValidAddresses,
-				opts.Config().EspressoTxnsPollingInterval,
-			)
-
-			b.espressoBatcherAddrMonitor = monitor
-			b.espressoStreamer = espressoStreamer
+		} else {
+			monitor = NewBatcherAddrSimpleMonitor(opts.EspressoConfigFetcher().BatchPoster.AddressValidRanges)
 		}
 
-		if lightClientAddr != "" {
-			lightClientReader, err := lightclient.NewLightClientReader(common.HexToAddress(lightClientAddr), opts.L1Reader.Client())
-			if err != nil {
-				return nil, err
-			}
+		espressoStreamer := espressostreamer.NewEspressoStreamer(
+			opts.ChainID,
+			opts.EspressoConfigFetcher().Streamer.HotShotBlock,
+			nil,
+			hotShotClient,
+			false,
+			func(l1Height uint64, addr common.Address) (bool, error) {
+				return monitor.IsValid(ctx, addr, l1Height)
+			},
+			opts.EspressoConfigFetcher().Streamer.TxnsPollingInterval,
+		)
 
-			cfg := opts.Config()
+		b.espressoBatcherAddrMonitor = monitor
+		b.espressoStreamer = espressoStreamer
+	}
 
-			submitterOptions = append(
-				submitterOptions,
-				submitter.WithLightClientReader(lightClientReader),
-				submitter.WithTxnsPollingInterval(cfg.EspressoTxnsPollingInterval),
-				submitter.WithTxnsSendingInterval(cfg.EspressoTxnsSendingInterval),
-				submitter.WithTxnsResubmissionInterval(cfg.EspressoTxnsResubmissionInterval),
-				submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
-				submitter.WithMaxTransactionSize(cfg.EspressoTxSizeLimit),
-			)
+	if b.espressoStreamer != nil {
+		cfg := opts.EspressoConfigFetcher().BatchPoster
 
-			// Get the espressoTEEVerifier address for the sequencer inbox contract
-			espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
-			if err != nil {
-				return nil, err
-			}
+		submitterOptions = append(
+			submitterOptions,
+			submitter.WithTxnsMonitoringInterval(cfg.TxnsMonitoringInterval),
+			submitter.WithTxnsResubmissionInterval(cfg.TxnsResubmissionInterval),
+			submitter.WithMaxTransactionSize(EspressoTxSizeLimit),
+			submitter.WithResubmitEspressoTxDeadline(cfg.ResubmitEspressoTxDeadline),
+			submitter.WithCanSubmit(func(ctx context.Context) (bool, error) {
+				return b.espressoStreamer.CanBatcherAddressSend(ctx, b.signerAddr)
+			}),
+		)
 
-			teeVerifier, err := espressogen.NewIEspressoTEEVerifier(
-				espresssoTEEVerifierAddress,
-				opts.L1Reader.Client())
-			if err != nil {
-				return nil, err
-			}
-			verifier := espressotee.NewEspressoTEEVerifier(espresssoTEEVerifierAddress.Hex(), opts.L1Reader.Client(), espresssoTEEVerifierAddress)
-			teeType, err := espressotee.FromString(cfg.EspressoTeeType)
-			if err != nil {
-				return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.EspressoTeeType)
-			}
-
-			var nitroVerifier espressotee.EspressoNitroTEEVerifierInterface
-			if teeType == espresso_key_manager.NITRO {
-				log.Info("setting up nitro verifier", "tee type", teeType)
-				nitroVerifier, err = espresso_key_manager.SetupNitroVerifier(teeVerifier, opts.L1Reader.Client(), espressotee.BatchPoster)
-				if err != nil {
-					return nil, err
-				}
-			}
-
-			if b.dataPoster.Auth() == nil {
-				panic("TransactOpts is nil")
-			}
-			submitterOptions = append(
-				submitterOptions,
-				// TODO: pass the persistent private key to the key manager in future
-				submitter.WithKeyManager(
-					espresso_key_manager.NewEspressoKeyManager(verifier, nitroVerifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, cfg.EspressoRegisterServiceConfig, nil, opts.Config().UserDataAttestationFile, opts.Config().QuoteFile),
-				),
-			)
-
-			submitter, err := submitter.NewPollingEspressoSubmitter(
-				submitterOptions...,
-			)
-
-			if err != nil {
-				return nil, fmt.Errorf("failed to create espresso original submitter: %w", err)
-			}
-
-			opts.Streamer.espressoSubmitter = submitter
+		// Get the espressoTEEVerifier address for the sequencer inbox contract
+		espresssoTEEVerifierAddress, err := seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+		if err != nil {
+			return nil, err
 		}
+
+		verifier := espressotee.NewEspressoTEEVerifier(espresssoTEEVerifierAddress.Hex(), opts.L1Reader.Client(), espresssoTEEVerifierAddress)
+		teeType, err := espressotee.FromString(cfg.TeeType)
+		if err != nil {
+			return nil, fmt.Errorf("unsupported tee type in config: %s", cfg.TeeType)
+		}
+
+		if b.dataPoster.Auth() == nil {
+			panic("TransactOpts is nil")
+		}
+		submitterOptions = append(
+			submitterOptions,
+			// TODO: pass the persistent private key to the key manager in future
+			submitter.WithKeyManager(
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
+			),
+		)
+
+		submitter, err := submitter.NewPollingEspressoSubmitter(
+			submitterOptions...,
+		)
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to create espresso original submitter: %w", err)
+		}
+
+		opts.Streamer.espressoSubmitter = submitter
 	}
 
 	return b, nil
@@ -1908,7 +1817,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
 			err := espressoSubmitter.RegisterService()
 			if err != nil {
-				return false, fmt.Errorf("unable to register signer: %w", err)
+				return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
 			}
 		}
 	}
@@ -2634,6 +2543,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 		nonceTooHighEphemeralErrorHandler.Reset()
 		espressoEphemeralErrorHandler.Reset()
 	}
+
 	b.CallIteratively(func(ctx context.Context) time.Duration {
 		var err error
 		if common.HexToAddress(b.config().GasRefunderAddress) != (common.Address{}) {
@@ -2673,6 +2583,16 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				// Shutting down. No need to print the context canceled error.
 				return 0
 			}
+			if errors.Is(err, FatalErrUnableToRegisterSigner) {
+				log.Warn(
+					"Espresso signer registration failed consecutively. Stopping.",
+					"retries", espressotee.EspressoMaxRetries,
+					"err", err,
+				)
+
+				b.fatalErrChan <- err
+			}
+
 			b.building = nil
 			logLevel := log.Error
 			// Likely the inbox tracker just isn't caught up.
@@ -2705,6 +2625,9 @@ func (b *BatchPoster) StopAndWait() {
 	b.StopWaiter.StopAndWait()
 	b.dataPoster.StopAndWait()
 	b.redisLock.StopAndWait()
+	if b.espressoStreamer != nil {
+		b.espressoStreamer.StopAndWait()
+	}
 }
 
 type BoolRing struct {

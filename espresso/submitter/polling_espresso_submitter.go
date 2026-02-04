@@ -9,7 +9,6 @@ import (
 	"time"
 
 	espresso_client "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	espresso_light_client "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ccoveille/go-safecast"
@@ -57,12 +56,12 @@ type PollingEspressoSubmitter struct {
 	db                 ethdb.Database
 	messageGetter      MessageGetter
 	espressoClient     espresso_client.EspressoClient
-	lightClientReader  espresso_light_client.LightClientReaderInterface
 	espressoKeyManager espresso_key_manager.EspressoKeyManagerInterface
 
+	canSubmit func(ctx context.Context) (bool, error)
+
 	chainID                               uint64
-	espressoTxnsPollingInterval           time.Duration
-	espressoTxnsSendingInterval           time.Duration
+	espressoTxnsMonitoringInterval        time.Duration
 	espressoTxnsResubmissionInterval      time.Duration
 	espressoMaxTransactionSize            int64
 	resubmitEspressoTxDeadline            time.Duration
@@ -91,17 +90,16 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 		db:                 config.Db,
 		messageGetter:      config.MessageGetter,
 		espressoClient:     config.EspressoClient,
-		lightClientReader:  config.LightClientReader,
 		espressoKeyManager: config.KeyManager,
 
 		chainID:                          config.ChainID,
-		espressoTxnsPollingInterval:      config.EspressoTxnsPollingInterval,
-		espressoTxnsSendingInterval:      config.EspressoTxnSendingInterval,
 		espressoTxnsResubmissionInterval: config.EspressoTxnsResubmissionInterval,
+		espressoTxnsMonitoringInterval:   config.EspressoTxnsMoniteringInterval,
 		espressoMaxTransactionSize:       config.EspressoMaxTransactionSize,
 		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
 		InitialFinalizedSequencerMessageCount: config.InitialFinalizedSequencerMessageCount,
+		canSubmit:                             config.CanSubmit,
 	}, nil
 }
 
@@ -462,25 +460,34 @@ func getLogLevel(err error) func(string, ...interface{}) {
 // pollSubmittedTransactionForFinality checks if the submitted transaction has
 // been finalized by Espresso  and verifies it.
 func (s *PollingEspressoSubmitter) pollSubmittedTransactionForFinality(ctx context.Context, ignored struct{}) time.Duration {
-	retryRate := s.espressoTxnsPollingInterval * 2
+	retryRate := s.espressoTxnsMonitoringInterval * 2
 	err := s.checkSubmittedTransactionForFinality(ctx)
 	if err != nil {
 		if ctx.Err() != nil {
-			return s.espressoTxnsPollingInterval
+			return s.espressoTxnsMonitoringInterval
 		}
 		logLevel := getLogLevel(err)
 		logLevel("error polling finality, will retry", "err", err)
 		return retryRate
 	}
 	espressoMerkleProofEphemeralErrorHandler.Reset()
-	return s.espressoTxnsPollingInterval
+	return s.espressoTxnsMonitoringInterval
 }
 
 // submitTransactionsToEspresso submits the transactions to espresso if the
 // escape hatch is not enabled
 func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Context, ignored struct{}) time.Duration {
 	// When encountering an error during the initial attempt at submitting a transaction, double the amount of our polling interval and try again.
-	retryRate := s.espressoTxnsSendingInterval * 2
+	retryRate := s.espressoTxnsMonitoringInterval * 2
+
+	ok, err := s.canSubmit(ctx)
+	if err != nil {
+		return s.espressoTxnsMonitoringInterval
+	}
+
+	if !ok {
+		return retryRate
+	}
 	shouldSubmit := s.shouldSubmitEspressoTransaction(nil)
 	// Only submit the transaction if escape hatch is not enabled
 	if shouldSubmit {
@@ -491,7 +498,7 @@ func (s *PollingEspressoSubmitter) submitTransactionsToEspresso(ctx context.Cont
 			return retryRate
 		}
 	}
-	return s.espressoTxnsSendingInterval
+	return s.espressoTxnsMonitoringInterval
 }
 
 func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx context.Context, ignored struct{}) time.Duration {
@@ -524,14 +531,14 @@ func (s *PollingEspressoSubmitter) pollToResubmitEspressoTransactions(ctx contex
 // are not met, we will not submit the transaction to Espresso.
 //
 // The necessary conditions are:
-//   - The Espresso Client and Light Client Reader must be set
+//   - The Espresso Client must be set
 //   - The given `pos` parameter must be after our recorded finalized sequencer
 //     message count
 //
 // NOTE: This method does not acquire any locks, so its state may change
 // when running concurrently with other methods.
 func (s *PollingEspressoSubmitter) shouldSubmitEspressoTransaction(pos *uint64) bool {
-	if s.espressoClient == nil && s.lightClientReader == nil {
+	if s.espressoClient == nil {
 		return false
 	}
 	if pos != nil {
@@ -584,7 +591,7 @@ func (s *PollingEspressoSubmitter) RegisterService() error {
 }
 
 func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
-	if s.lightClientReader != nil && s.espressoClient != nil {
+	if s.espressoClient != nil {
 		err := stopwaiter.CallIterativelyWith[struct{}](sw, s.pollSubmittedTransactionForFinality, nil)
 		if err != nil {
 			return err
@@ -598,7 +605,7 @@ func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
 			return err
 		}
 	} else {
-		log.Warn("light client reader or espresso client not set, skipping espresso verification")
+		log.Warn("espresso client not set, skipping espresso verification")
 	}
 
 	return nil
