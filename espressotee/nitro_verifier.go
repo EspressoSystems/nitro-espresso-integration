@@ -26,6 +26,7 @@ func NewEspressoNitroTEEVerifier(l1Client *ethclient.Client, nitroAddr common.Ad
 func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error) {
 	switch serviceType {
 	case BatchPoster:
+		fallthrough
 	case CaffNode:
 		return e.isPCR0HashRegistered(pcr0Hash, serviceType)
 	}
