@@ -396,8 +396,8 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 		return fmt.Errorf("espresso transactions polling interval must be greater than 0")
 	}
 
-	if config.EspressoTxnsMonitoringInterval >= 10*time.Second {
-		return fmt.Errorf("espresso transactions polling interval must be 10 seconds or less")
+	if config.EspressoTxnsMonitoringInterval >= 2*time.Second {
+		return fmt.Errorf("espresso transactions polling interval must be 2 seconds or less")
 	}
 
 	if config.EspressoTxnSendingInterval <= 0 {
