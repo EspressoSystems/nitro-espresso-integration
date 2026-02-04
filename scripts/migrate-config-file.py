@@ -26,6 +26,9 @@ ESPRESSO_FIELD_MAP = {
     "address-valid-ranges": ("batch-poster", "address-valid-ranges"),
 }
 
+HOTSHOT_URLS_KEY = "hotshot-urls"
+HOTSHOT_URL_KEY = "hotshot-url"
+
 OLD_CAFF_NODE_KEY = "espresso-caff-node"
 MIN_BLOCK_KEY = "minimum-hotshot-block-num"
 
@@ -42,7 +45,8 @@ REMOVE_KEYS = [
     "user-data-attestation-file",
     "quote-file",
     "wait-for-confirmations",
-    "blocks-to-read"
+    "blocks-to-read",
+    "hotshot-urls"
 ]
 
 
@@ -58,6 +62,14 @@ def migrate_batch_poster(old_node: dict, espresso: dict) -> dict:
 
     if not isinstance(batch_poster, dict):
         return remaining
+    
+    if HOTSHOT_URLS_KEY in batch_poster:
+        urls = batch_poster.get(HOTSHOT_URLS_KEY)
+
+        if isinstance(urls, list) and len(urls) > 0:
+            hotshot_url = urls[0]
+            # add hotshot-url to the espresso section
+            espresso.setdefault("batch-poster", OrderedDict())["hotshot-url"] = hotshot_url
 
     for key, value in batch_poster.items():
         if key in REMOVE_KEYS:
@@ -83,6 +95,7 @@ def migrate_caff_node(old_node: dict, espresso: dict) -> None:
 
     caff_node = espresso.setdefault("caff-node", OrderedDict())
     streamer = espresso.setdefault("streamer", OrderedDict())
+    hotshot_url=espresso.get("batch-poster", {}).get("hotshot-url")
 
     for key, value in old_caff.items():
         # from-block → streamer.address-monitor-start-l1
@@ -113,6 +126,9 @@ def migrate_caff_node(old_node: dict, espresso: dict) -> None:
         # default: strip espresso- prefix
         new_key = key.replace("espresso-", "") if key.startswith("espresso-") else key
         caff_node[new_key] = value
+    
+    if hotshot_url:
+        caff_node["hotshot-url"] = hotshot_url
 
     if not caff_node:
         espresso.pop("caff-node", None)
