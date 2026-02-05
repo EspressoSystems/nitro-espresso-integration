@@ -1,0 +1,597 @@
+# Dockerfile.reproducible - Full reproducible build for nitro-node
+# This combines reproducible contract building with reproducible nitro-node building
+
+# ============================================================================
+# Stage 1: Brotli builders (needed for WASM)
+# ============================================================================
+FROM debian:bookworm-slim AS brotli-wasm-builder
+WORKDIR /workspace
+RUN apt-get update && \
+    apt-get install -y cmake make git lbzip2 python3 xz-utils && \
+    git clone https://github.com/emscripten-core/emsdk.git && \
+    cd emsdk && \
+    ./emsdk install 3.1.7 && \
+    ./emsdk activate 3.1.7
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN cd emsdk && . ./emsdk_env.sh && cd .. && ./scripts/build-brotli.sh -w -t /workspace/install/
+
+FROM scratch AS brotli-wasm-export
+COPY --from=brotli-wasm-builder /workspace/install/ /
+
+FROM debian:bookworm-slim AS brotli-library-builder
+WORKDIR /workspace
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN apt-get update && \
+    apt-get install -y cmake make gcc git && \
+    ./scripts/build-brotli.sh -l -t /workspace/install/
+
+FROM scratch AS brotli-library-export
+COPY --from=brotli-library-builder /workspace/install/ /
+
+# ============================================================================
+# Stage 2: Reproducible Contracts Builder (using StageX)
+# ============================================================================
+FROM stagex/core-nodejs@sha256:18cc8e3b961e987e7fb3c44e1b9b0faef4edd66c43afc032dad906b4e7607e01 AS stagex-nodejs
+FROM stagex/yarn:latest@sha256:45be69eb569060abc48078facca7ec8c6602950644d1b2b8300dfae148a74a8a AS stagex-yarn
+FROM stagex/npm:latest@sha256:4f4b4cc0a2a2f8126126bf2a7a7f45e32224956396a4a0915fc2d6c7b25f5e3b AS stagex-npm
+FROM stagex/busybox:latest@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS stagex-busybox
+FROM stagex/ca-certificates:latest@sha256:a84695f983a448a82acfe78af11f33c6a66b27124266e1fdc3ecfb8dc5852573 AS stagex-ca-certs
+FROM stagex/make:latest@sha256:ad81793d21d9778421925085c52734fdcca443957ade4f9bb80e4032b88252db AS stagex-make
+FROM stagex/bash:latest@sha256:fa9dab36a8a18bd3dc31528648063bea5491508bd6d090961b02a510c2a3dc0e AS stagex-bash
+FROM stagex/musl:latest@sha256:d7f6c365f5724c65cadb2b96d9f594e46132ceb366174c89dbf7554897f2bc53 AS stagex-musl
+FROM stagex/glibc:latest@sha256:5e4f3c0b0b811dac9bfa96c43215856de4a7ec4a7866bc019608b0889f78633a AS stagex-glibc
+FROM stagex/core-git:latest@sha256:5f3a01de8477643894420d1f977cefe24ad6acecbdd54862eb9104ae65a20168 AS stagex-git
+FROM stagex/core-python:latest@sha256:a6628068597da0c73f75dd1c8a34d74e9748bcb9184543b916055d753768191f AS stagex-python
+FROM stagex/curl:latest@sha256:6566b4cc3148d450bc67980ef287751246ccb7c4cb3731f8e338014abda1449a AS stagex-curl
+FROM stagex/gcc:latest@sha256:49ea63c81c65f8be25c242b7e64f2758b23effdaafb458b5862d0f23ec803075 AS stagex-gcc
+FROM stagex/core-openssl:latest@sha256:642fc594683011e647622483fe289a6e2e0b335d1322bfbae94773cdd64fd4ef AS stagex-openssl
+FROM stagex/zlib:latest@sha256:09d63654e27decb6147f1b23005d539e30db8e53eb2d284e824bcf4d4e7c3c11 AS stagex-zlib
+FROM stagex/brotli:latest@sha256:4d2574c497c2c114e25c6339d23e94211d6c9111baf77e6c38847ecd04eae698 AS stagex-brotli
+FROM stagex/c-ares:latest@sha256:e3fbd1339c5d21819daa83a41cf308230beb0a4370a78a7479d50907b3cf2c77 AS stagex-cares
+FROM stagex/libnghttp2:latest@sha256:b77c5cfd906a1c240927c51eb751aa5ff748c3d096e0a146e3fa3c949d9c379d AS stagex-nghttp2
+FROM stagex/icu:latest@sha256:45cfc5911e1e5ce541d4845078c25dd72e2a35b0b3f4475140dd2a2c98349c28 AS stagex-icu
+FROM stagex/core-libcxx:latest@sha256:c37566fc25788e232d71f03728da960455d5ec1218ccf08a8a67dd2d5497cd43 AS stagex-libcxx
+FROM stagex/core-libcxxabi:latest@sha256:63cfbd7e7ddf505dc8f59babfc2ae25d397c2e02ebe2db5a27c3267d2f485362 AS stagex-libcxxabi
+FROM stagex/libunwind:latest@sha256:290b8d183a467edc55e338471632f2e40859aef92a4eecf12415ca29b9c16e9f AS stagex-libunwind
+FROM stagex/llvm:latest AS stagex-llvm
+
+FROM stagex-busybox AS stagex-nodejs-base
+COPY --from=stagex-musl . /
+COPY --from=stagex-glibc . /
+COPY --from=stagex-openssl . /
+COPY --from=stagex-zlib . /
+COPY --from=stagex-brotli . /
+COPY --from=stagex-cares . /
+COPY --from=stagex-nghttp2 . /
+COPY --from=stagex-icu . /
+COPY --from=stagex-libcxx . /
+COPY --from=stagex-libcxxabi . /
+COPY --from=stagex-libunwind . /
+COPY --from=stagex-llvm . /
+COPY --from=stagex-gcc . /
+COPY --from=stagex-nodejs . /
+COPY --from=stagex-yarn . /
+COPY --from=stagex-npm . /
+COPY --from=stagex-ca-certs . /
+COPY --from=stagex-make . /
+COPY --from=stagex-bash . /
+COPY --from=stagex-git . /
+COPY --from=stagex-python . /
+COPY --from=stagex-curl . /
+
+FROM stagex-nodejs-base AS contracts-builder-repro
+WORKDIR /workspace
+
+# Set reproducible build environment
+ENV SOURCE_DATE_EPOCH=1
+ENV NITRO_BUILD_IGNORE_TIMESTAMPS=1
+
+# Create writable lib directory and symlink libunwind.so.1
+RUN mkdir -p /workspace/.libs && \
+    ln -sf /usr/lib/libunwind.so.8.0.1 /workspace/.libs/libunwind.so.1 && \
+    ls -la /workspace/.libs/
+
+# Set LD_LIBRARY_PATH to include our custom libs directory first, then system paths
+ENV LD_LIBRARY_PATH="/workspace/.libs:/usr/lib:/lib"
+
+# Point Node.js to the CA certificate bundle
+ENV NODE_EXTRA_CA_CERTS="/etc/ssl/certs/ca-certificates.crt"
+ENV SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt"
+
+# Download and install Foundry with checksum verification
+RUN curl -L -o /tmp/foundry.tar.gz \
+    https://github.com/foundry-rs/foundry/releases/download/nightly-9f5cbb32630a7177cdde5e7b912088c90d9ed6df/foundry_nightly_linux_amd64.tar.gz && \
+    echo "4e08e22548f65e9e3cf4e9adcd03734984f162ae13eb753cd4d63402411fe7aa  /tmp/foundry.tar.gz" | sha256sum -c && \
+    mkdir -p /workspace/.foundry && \
+    tar -xzf /tmp/foundry.tar.gz -C /workspace/.foundry && \
+    chmod +x /workspace/.foundry/forge /workspace/.foundry/cast /workspace/.foundry/anvil /workspace/.foundry/chisel && \
+    rm /tmp/foundry.tar.gz
+
+ENV PATH="/workspace/.foundry:${PATH}"
+
+# Pre-download Solidity compilers with SHA256 verification
+RUN mkdir -p /home/user/.cache/hardhat-nodejs/compilers/linux-amd64 && \
+    curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f && \
+    echo "bd69ea85427bf2f4da74cb426ad951dd78db9dfdd01d791208eccc2d4958a6bb  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f" | sha256sum -c && \
+    chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f && \
+    curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.17+commit.8df45f5f \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.17+commit.8df45f5f && \
+    echo "99f2070b776e9714f1f76c43c229cf99b8978a92938ee8d2364c6de11c1a03d4  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.17+commit.8df45f5f" | sha256sum -c && \
+    chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.17+commit.8df45f5f && \
+    curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.19+commit.7dd6d404 \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.19+commit.7dd6d404 && \
+    echo "7a5c1d3dc9a8eba62bb2ec37192c9178ae5fe8a54a56e5573fd3c9c17cd9eb48  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.19+commit.7dd6d404" | sha256sum -c && \
+    chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.19+commit.7dd6d404 && \
+    curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6 \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6 && \
+    echo "0479d44fdf9c501c25337fdc540419f1593b884a87b47f023da4f1c700fda782  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6" | sha256sum -c && \
+    chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.20+commit.a1b79de6 && \
+    curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9 \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9 && \
+    echo "fb03a29a517452b9f12bcf459ef37d0a543765bb3bbc911e70a87d6a37c30d5f  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9" | sha256sum -c && \
+    chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9
+
+# Create contract directories
+RUN mkdir -p contracts-legacy contracts contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy
+
+# Install dependencies
+COPY contracts-legacy/package.json contracts-legacy/yarn.lock contracts-legacy/
+RUN cd contracts-legacy && yarn install
+
+COPY contracts/package.json contracts/yarn.lock contracts/
+RUN cd contracts && yarn install
+
+# Copy contract source files to staging area
+COPY contracts-legacy /tmp/stage/contracts-legacy/
+COPY contracts-local /tmp/stage/contracts-local/
+COPY contracts /tmp/stage/contracts/
+COPY safe-smart-account /tmp/stage/safe-smart-account/
+COPY espresso-tee-contracts /tmp/stage/espresso-tee-contracts/
+COPY espresso-tee-contracts-legacy /tmp/stage/espresso-tee-contracts-legacy/
+
+# Copy to workspace and create output directories
+RUN mkdir -p contracts-legacy contracts-local contracts safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy && \
+    cp -a /tmp/stage/contracts-legacy/. contracts-legacy/ && \
+    cp -a /tmp/stage/contracts-local/. contracts-local/ && \
+    cp -a /tmp/stage/contracts/. contracts/ && \
+    cp -a /tmp/stage/safe-smart-account/. safe-smart-account/ && \
+    cp -a /tmp/stage/espresso-tee-contracts/. espresso-tee-contracts/ && \
+    cp -a /tmp/stage/espresso-tee-contracts-legacy/. espresso-tee-contracts-legacy/ && \
+    mkdir -p contracts/out contracts/build contracts/cache \
+             contracts-legacy/out contracts-legacy/build contracts-legacy/cache \
+             contracts-local/out contracts-local/cache \
+             safe-smart-account/artifacts safe-smart-account/cache \
+             espresso-tee-contracts/out espresso-tee-contracts/cache \
+             espresso-tee-contracts-legacy/out espresso-tee-contracts-legacy/cache
+
+RUN cd safe-smart-account && yarn install --ignore-scripts
+
+COPY Makefile .
+
+# Build contracts with reproducible settings
+ENV npm_config_package_lock=false
+ENV npm_config_save=false
+ENV NODE_OPTIONS="--max-http-header-size=32768"
+ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
+
+# Remove non-reproducible build artifacts
+RUN find contracts/build contracts-legacy/build safe-smart-account/build \
+         -name 'build-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
+    find contracts/build contracts-legacy/build safe-smart-account/build \
+         -name 'solidity-files-cache.json' -type f -delete 2>/dev/null || true
+
+# Normalize file permissions for reproducibility
+RUN find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
+         -type f -exec chmod 644 {} \; 2>/dev/null || true && \
+    find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out espresso-tee-contracts-legacy/out .make \
+         -type d -exec chmod 755 {} \; 2>/dev/null || true
+
+FROM scratch AS contracts-builder-repro-export
+COPY --from=contracts-builder-repro /workspace/contracts/out/ /contracts/out/
+COPY --from=contracts-builder-repro /workspace/contracts/build/ /contracts/build/
+COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json /contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/ /contracts-legacy/build/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ /contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/contracts-local/out/ /contracts-local/out/
+COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ /safe-smart-account/build/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ /espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts-legacy/out/ /espresso-tee-contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/.make/ /.make/
+
+# ============================================================================
+# Stage 3: WASM Builders
+# ============================================================================
+FROM debian:bookworm-20231218 AS wasm-base
+WORKDIR /workspace
+RUN apt-get update && apt-get install -y curl build-essential=12.9
+
+FROM wasm-base AS wasm-libs-builder
+RUN apt-get update && \
+    apt-get install -y clang=1:14.0-55.7~deb12u1 lld=1:14.0-55.7~deb12u1 wabt
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --target x86_64-unknown-linux-gnu,wasm32-unknown-unknown,wasm32-wasip1
+COPY ./Makefile ./
+COPY arbitrator/Cargo.* arbitrator/
+COPY arbitrator/arbutil arbitrator/arbutil
+COPY arbitrator/brotli arbitrator/brotli
+COPY arbitrator/caller-env arbitrator/caller-env
+COPY arbitrator/prover arbitrator/prover
+COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
+COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
+COPY brotli brotli
+COPY scripts/build-brotli.sh scripts/
+COPY scripts/remove_reference_types.sh scripts/
+COPY --from=brotli-wasm-export / target/
+RUN apt-get update && apt-get install -y cmake
+RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
+
+FROM scratch AS wasm-libs-export
+COPY --from=wasm-libs-builder /workspace/ /
+
+FROM wasm-base AS wasm-bin-builder
+RUN apt update && apt install -y wabt
+RUN curl -L https://golang.org/dl/go1.25.1.linux-`dpkg --print-architecture`.tar.gz | tar -C /usr/local -xzf -
+COPY ./Makefile ./go.mod ./go.sum ./
+COPY ./arbcompress ./arbcompress
+COPY ./arbos ./arbos
+COPY ./arbstate ./arbstate
+COPY ./arbutil ./arbutil
+COPY ./gethhook ./gethhook
+COPY ./blsSignatures ./blsSignatures
+COPY ./cmd/chaininfo ./cmd/chaininfo
+COPY ./cmd/replay ./cmd/replay
+COPY ./daprovider ./daprovider
+COPY ./daprovider/das/dasutil ./daprovider/das/dasutil
+COPY ./daprovider/das/dastree ./daprovider/das/dastree
+COPY ./precompiles ./precompiles
+COPY ./statetransfer ./statetransfer
+COPY ./util ./util
+COPY ./wavmio ./wavmio
+COPY ./zeroheavy ./zeroheavy
+COPY ./contracts-legacy/package.json ./contracts-legacy/yarn.lock ./contracts-legacy/
+COPY ./contracts-legacy/src/precompiles/ ./contracts-legacy/src/precompiles/
+COPY ./contracts-local/src/precompiles/ ./contracts-local/src/precompiles/
+COPY ./contracts-local/gas-dimensions/ ./contracts-local/gas-dimensions/
+COPY ./contracts-local/lib/ ./contracts-local/lib/
+COPY ./contracts/src/precompiles/ ./contracts/src/precompiles/
+COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
+COPY ./safe-smart-account ./safe-smart-account
+COPY ./espresso-tee-contracts ./espresso-tee-contracts
+COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
+COPY ./solgen/gen.go ./solgen/
+COPY ./go-ethereum ./go-ethereum
+COPY scripts/remove_reference_types.sh scripts/
+COPY --from=brotli-wasm-export / target/
+COPY --from=contracts-builder-repro /workspace/contracts-local/out/precompiles/ contracts-local/out/precompiles/
+COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/contracts/src/precompiles/ contracts-legacy/build/contracts/src/precompiles/
+COPY --from=contracts-builder-repro /workspace/.make/ .make/
+RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
+
+# ============================================================================
+# Stage 4: Prover Builders
+# ============================================================================
+FROM rust:1.88.0-slim-bookworm AS prover-header-builder
+WORKDIR /workspace
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y make clang wabt && \
+    cargo install --force cbindgen --version 0.24.3
+COPY arbitrator/Cargo.* arbitrator/
+COPY ./Makefile ./
+COPY arbitrator/arbutil arbitrator/arbutil
+COPY arbitrator/bench arbitrator/bench
+COPY arbitrator/brotli arbitrator/brotli
+COPY arbitrator/caller-env arbitrator/caller-env
+COPY arbitrator/prover arbitrator/prover
+COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
+COPY arbitrator/jit arbitrator/jit
+COPY arbitrator/stylus arbitrator/stylus
+COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
+COPY --from=brotli-wasm-export / target/
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN apt-get update && apt-get install -y cmake
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
+
+FROM scratch AS prover-header-export
+COPY --from=prover-header-builder /workspace/target/ /
+
+# Glibc-based prover builder (dynamic linking)
+FROM rust:1.88.0-slim-bookworm AS prover-builder
+WORKDIR /workspace
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y make wget gpg software-properties-common zlib1g-dev libstdc++-12-dev wabt
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
+    add-apt-repository 'deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-15 main' && \
+    apt-get update && \
+    apt-get install -y llvm-15-dev libclang-common-15-dev
+COPY --from=brotli-library-export / target/
+COPY arbitrator/Cargo.* arbitrator/
+COPY arbitrator/arbutil arbitrator/arbutil
+COPY arbitrator/bench arbitrator/bench
+COPY arbitrator/brotli arbitrator/brotli
+COPY arbitrator/caller-env arbitrator/caller-env
+COPY arbitrator/prover/Cargo.toml arbitrator/prover/
+COPY arbitrator/prover/benches arbitrator/prover/benches
+COPY arbitrator/bench/Cargo.toml arbitrator/bench/
+COPY arbitrator/jit/Cargo.toml arbitrator/jit/
+COPY arbitrator/stylus/Cargo.toml arbitrator/stylus/
+COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
+COPY arbitrator/wasm-libraries/user-host-trait/Cargo.toml arbitrator/wasm-libraries/user-host-trait/Cargo.toml
+RUN bash -c 'mkdir arbitrator/{prover,jit,stylus}/src arbitrator/wasm-libraries/user-host-trait/src'
+RUN echo "fn test() {}" > arbitrator/jit/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/prover/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/bench/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/prover/benches/merkle_bench.rs && \
+    echo "fn test() {}" > arbitrator/stylus/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
+    cargo build --manifest-path arbitrator/Cargo.toml --release --lib && \
+    rm arbitrator/prover/src/lib.rs arbitrator/jit/src/lib.rs arbitrator/stylus/src/lib.rs && \
+    rm arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
+    rm arbitrator/prover/benches/merkle_bench.rs && \
+    rm arbitrator/bench/src/lib.rs
+COPY ./Makefile ./
+COPY arbitrator/prover arbitrator/prover
+COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
+COPY arbitrator/jit arbitrator/jit
+COPY arbitrator/stylus arbitrator/stylus
+COPY --from=brotli-wasm-export / target/
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN touch -a -m arbitrator/prover/src/lib.rs
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-lib
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-bin
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-jit
+
+FROM scratch AS prover-export
+COPY --from=prover-builder /workspace/target/ /
+
+# Musl-based prover builder for static linking
+FROM rust:1.88.0-slim-bookworm AS prover-builder-musl
+WORKDIR /workspace
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y make wget gpg software-properties-common zlib1g-dev libstdc++-12-dev wabt musl-tools musl-dev
+RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
+    add-apt-repository 'deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-15 main' && \
+    apt-get update && \
+    apt-get install -y llvm-15-dev libclang-common-15-dev
+RUN rustup target add x86_64-unknown-linux-musl
+COPY --from=brotli-library-export / target/
+COPY arbitrator/Cargo.* arbitrator/
+COPY arbitrator/arbutil arbitrator/arbutil
+COPY arbitrator/bench arbitrator/bench
+COPY arbitrator/brotli arbitrator/brotli
+COPY arbitrator/caller-env arbitrator/caller-env
+COPY arbitrator/prover/Cargo.toml arbitrator/prover/
+COPY arbitrator/prover/benches arbitrator/prover/benches
+COPY arbitrator/bench/Cargo.toml arbitrator/bench/
+COPY arbitrator/jit/Cargo.toml arbitrator/jit/
+COPY arbitrator/stylus/Cargo.toml arbitrator/stylus/
+COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
+COPY arbitrator/wasm-libraries/user-host-trait/Cargo.toml arbitrator/wasm-libraries/user-host-trait/Cargo.toml
+RUN bash -c 'mkdir arbitrator/{prover,jit,stylus}/src arbitrator/wasm-libraries/user-host-trait/src'
+RUN echo "fn test() {}" > arbitrator/jit/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/prover/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/bench/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/prover/benches/merkle_bench.rs && \
+    echo "fn test() {}" > arbitrator/stylus/src/lib.rs && \
+    echo "fn test() {}" > arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
+    cargo build --manifest-path arbitrator/Cargo.toml --release --lib --target x86_64-unknown-linux-musl && \
+    rm arbitrator/prover/src/lib.rs arbitrator/jit/src/lib.rs arbitrator/stylus/src/lib.rs && \
+    rm arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
+    rm arbitrator/prover/benches/merkle_bench.rs && \
+    rm arbitrator/bench/src/lib.rs
+COPY ./Makefile ./
+COPY arbitrator/prover arbitrator/prover
+COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
+COPY arbitrator/jit arbitrator/jit
+COPY arbitrator/stylus arbitrator/stylus
+COPY --from=brotli-wasm-export / target/
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN touch -a -m arbitrator/prover/src/lib.rs
+# Create machines directory and generate forward_stub.wasm
+RUN mkdir -p target/machines/latest && \
+    cargo run --manifest-path arbitrator/wasm-libraries/forward/Cargo.toml -- --path arbitrator/wasm-libraries/forward/forward_stub.wat --stub && \
+    wat2wasm arbitrator/wasm-libraries/forward/forward_stub.wat -o target/machines/latest/forward_stub.wasm
+# Build with musl target
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --lib -p stylus --target x86_64-unknown-linux-musl && \
+    mkdir -p arbitrator/target/release && \
+    cp arbitrator/target/x86_64-unknown-linux-musl/release/libstylus.a arbitrator/target/release/
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --bin prover --target x86_64-unknown-linux-musl && \
+    cp arbitrator/target/x86_64-unknown-linux-musl/release/prover arbitrator/target/release/
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --bin jit --target x86_64-unknown-linux-musl && \
+    cp arbitrator/target/x86_64-unknown-linux-musl/release/jit arbitrator/target/release/
+# Create stub library for glibc symbols
+COPY glibc_stubs.c /tmp/
+RUN mkdir -p target/lib && \
+    musl-gcc -c -O2 /tmp/glibc_stubs.c -o target/lib/glibc_stubs.o && \
+    ar rcs target/lib/libglibc_stubs.a target/lib/glibc_stubs.o
+# Run make targets to install to target/ directory
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-lib
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-bin
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-jit
+
+FROM scratch AS prover-export-musl
+COPY --from=prover-builder-musl /workspace/target/ /
+
+# ============================================================================
+# Stage 5: Module Root Calculator
+# ============================================================================
+FROM debian:bookworm-slim AS module-root-calc
+WORKDIR /workspace
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    apt-get update && \
+    apt-get install -y wabt make
+COPY --from=prover-export-musl / target/
+COPY --from=wasm-bin-builder /workspace/target/ target/
+COPY --from=wasm-bin-builder /workspace/.make/ .make/
+COPY --from=wasm-libs-builder /workspace/target/ target/
+COPY --from=wasm-libs-builder /workspace/arbitrator/prover/ arbitrator/prover/
+COPY --from=wasm-libs-builder /workspace/arbitrator/tools/wasmer/ arbitrator/tools/wasmer/
+COPY --from=wasm-libs-builder /workspace/arbitrator/wasm-libraries/ arbitrator/wasm-libraries/
+COPY --from=wasm-libs-builder /workspace/arbitrator/arbutil arbitrator/arbutil
+COPY --from=wasm-libs-builder /workspace/arbitrator/brotli arbitrator/brotli
+COPY --from=wasm-libs-builder /workspace/arbitrator/caller-env arbitrator/caller-env
+COPY --from=wasm-libs-builder /workspace/.make/ .make/
+COPY ./Makefile ./
+COPY ./arbitrator ./arbitrator
+COPY ./solgen ./solgen
+COPY ./contracts ./contracts
+COPY ./contracts-legacy ./contracts-legacy
+COPY ./contracts-local ./contracts-local
+COPY ./safe-smart-account ./safe-smart-account
+COPY ./espresso-tee-contracts ./espresso-tee-contracts
+COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-replay-env
+
+# ============================================================================
+# Stage 6: Machine Versions
+# ============================================================================
+FROM debian:bookworm-slim AS machine-versions
+RUN apt-get update && apt-get install -y unzip wget curl
+WORKDIR /workspace/machines
+COPY ./scripts/download-machine.sh .
+RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2
+
+# ============================================================================
+# Stage 7: Reproducible Node Builder (using StageX + musl)
+# ============================================================================
+FROM stagex/core-go@sha256:c00d5f25a6fd34e8e94975b42b0bc222f6fe707749ac6283c0940dc116a49883 AS stagex-go
+FROM stagex/ca-certificates:latest@sha256:a84695f983a448a82acfe78af11f33c6a66b27124266e1fdc3ecfb8dc5852573 AS stagex-ca-certs-go
+FROM stagex/make:latest@sha256:ad81793d21d9778421925085c52734fdcca443957ade4f9bb80e4032b88252db AS stagex-make-go
+FROM stagex/bash:latest@sha256:fa9dab36a8a18bd3dc31528648063bea5491508bd6d090961b02a510c2a3dc0e AS stagex-bash-go
+FROM stagex/cmake:latest@sha256:b6ab70f24d5b4118f3c120e17c78dee57939e94cccbdca849e0994cf644da8f8 AS stagex-cmake
+FROM stagex/gcc:latest@sha256:49ea63c81c65f8be25c242b7e64f2758b23effdaafb458b5862d0f23ec803075 AS stagex-gcc-go
+FROM stagex/openssl:latest@sha256:8e3eb24b4d21639f7ea204b89211d8bc03a2e1b729fb1123f8d0b3752b4beaa1 AS stagex-openssl-go
+FROM stagex/binutils:latest@sha256:eff721a796fdfba8c34e21a487b0e376fb55ca2633524926998f1660fbb810de AS stagex-binutils
+FROM stagex/busybox:latest@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS stagex-busybox-go
+FROM stagex/musl:latest@sha256:d7f6c365f5724c65cadb2b96d9f594e46132ceb366174c89dbf7554897f2bc53 AS stagex-musl-go
+FROM stagex/glibc:latest@sha256:5e4f3c0b0b811dac9bfa96c43215856de4a7ec4a7866bc019608b0889f78633a AS stagex-glibc-go
+
+FROM stagex-busybox-go AS stagex-go-base
+COPY --from=stagex-musl-go . /
+COPY --from=stagex-glibc-go . /
+COPY --from=stagex-binutils . /
+COPY --from=stagex-gcc-go . /
+COPY --from=stagex-openssl-go . /
+COPY --from=stagex-go . /
+COPY --from=stagex-ca-certs-go . /
+COPY --from=stagex-make-go . /
+COPY --from=stagex-bash-go . /
+COPY --from=stagex-cmake . /
+USER root
+
+FROM stagex-go-base AS node-builder-repro
+WORKDIR /workspace
+
+# Set reproducible build environment
+ENV SOURCE_DATE_EPOCH=1
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOARCH=amd64
+ENV GOFLAGS="-buildvcs=false -trimpath"
+
+# Set fixed version info for reproducibility
+ARG version="reproducible-build"
+ARG datetime="1970-01-01T00:00:00Z"
+ARG modified="false"
+ENV NITRO_VERSION=$version
+ENV NITRO_DATETIME=$datetime
+ENV NITRO_MODIFIED=$modified
+
+# Copy go.mod files and download dependencies
+COPY go.mod go.sum ./
+COPY go-ethereum/go.mod go-ethereum/go.sum go-ethereum/
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN go mod download
+
+# Copy all source files
+COPY . ./
+COPY --from=contracts-builder-repro /workspace/contracts/build/ contracts/build/
+COPY --from=contracts-builder-repro /workspace/contracts/out/ contracts/out/
+COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/ contracts-legacy/build/
+COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/contracts-local/out/ contracts-local/out/
+COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ safe-smart-account/build/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts-legacy/out/ espresso-tee-contracts-legacy/out/
+COPY --from=contracts-builder-repro /workspace/.make/ .make/
+COPY --from=prover-header-export / target/
+COPY --from=brotli-library-export / target/
+COPY --from=prover-export-musl / target/
+RUN mkdir -p target/bin
+COPY .nitro-tag.txt /nitro-tag.txt
+
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make contracts
+
+# Move generated files from /workspace/go to /workspace/solgen/go (if they ended up in the wrong place)
+RUN if [ -d "/workspace/go" ] && [ "$(ls -A /workspace/go 2>/dev/null)" ]; then \
+        echo "Moving generated files from /workspace/go to /workspace/solgen/go"; \
+        cp -r /workspace/go/* /workspace/solgen/go/ 2>/dev/null || true; \
+        rm -rf /workspace/go; \
+    fi
+
+# # Debug shell - stop here to inspect before build
+# FROM node-builder-repro AS debug-shell-repro
+# WORKDIR /workspace
+# CMD ["/bin/sh"]
+
+# # Build with reproducible flags and musl dynamic linking
+# FROM node-builder-repro AS node-builder-repro-built
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 \
+    CGO_LDFLAGS="-L/workspace/target/lib -lglibc_stubs -static-libgcc" \
+    GOLANG_LDFLAGS="-s -w -buildid= -X github.com/offchainlabs/nitro/cmd/util/confighelpers.version=${NITRO_VERSION} -X github.com/offchainlabs/nitro/cmd/util/confighelpers.datetime=${NITRO_DATETIME} -X github.com/offchainlabs/nitro/cmd/util/confighelpers.modified=${NITRO_MODIFIED}" \
+    make build
+
+FROM scratch AS node-builder-repro-export
+COPY --from=node-builder-repro /workspace/target/bin/ /bin/
+
+# ============================================================================
+# Stage 8: Final Nitro Node Image
+# ============================================================================
+FROM scratch AS nitro-node-repro
+
+# Copy musl dynamic linker and libraries needed for the binaries
+COPY --from=stagex-musl-go /lib/ld-musl-x86_64.so.1 /lib/
+COPY --from=stagex-musl-go /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
+
+# Copy CA certificates for TLS/HTTPS
+COPY --from=stagex-ca-certs-go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy binaries
+COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/relay /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/nitro-val /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/seq-coordinator-manager /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/prover /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/dbconv /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/daserver /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/daprovider /usr/local/bin/
+COPY --from=node-builder-repro /workspace/target/bin/datool /usr/local/bin/
+COPY --from=prover-export /bin/jit /usr/local/bin/
+
+# Copy machine files
+COPY --from=machine-versions /workspace/machines /home/user/target/machines
+COPY --from=module-root-calc /workspace/target/machines/latest/machine.wavm.br /home/user/target/machines/latest/
+COPY --from=module-root-calc /workspace/target/machines/latest/until-host-io-state.bin /home/user/target/machines/latest/
+COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /home/user/target/machines/latest/
+COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
+
+# Create necessary directories
+COPY --from=stagex-busybox-go /bin/mkdir /bin/mkdir
+RUN ["/bin/mkdir", "-p", "/home/user/l1keystore", "/home/user/.arbitrum/local/nitro", "/tmp"]
+
+WORKDIR /home/user/
+ENTRYPOINT [ "/usr/local/bin/nitro" ]
