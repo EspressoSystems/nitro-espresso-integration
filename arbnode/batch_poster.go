@@ -1412,7 +1412,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		teeType = keyManager.TeeType()
 	} else {
 		// Not running espresso mode. This should happen in testing only.
-		log.Warn("BatchPoster is not running in espresso mode, no signature will be attached to the batch")
+		log.Error("BatchPoster is not running in espresso mode, no signature will be attached to the batch")
 		// For compatibility we sign the data with a given private key.
 		signature, err = arbutil.SignMessage(calldata, TestEspressoPrivateKey)
 		if err != nil {
