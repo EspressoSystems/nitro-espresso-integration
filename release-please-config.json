@@ -10,7 +10,7 @@
   "packages": {
     ".": {
       "component": "v3.9.2",
-      "bootstrap-sha": "e6dbe7b5231dc3464d57e76fcf468373a9a191f7",
+      "last-release-sha": "e6dbe7b5231dc3464d57e76fcf468373a9a191f7",
       "changelog-path": "CHANGELOG.md",
       "release-type": "simple",
       "extra-files": [
