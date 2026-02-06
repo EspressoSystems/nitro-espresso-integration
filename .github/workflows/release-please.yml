@@ -28,6 +28,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          target-branch: integration-v3.9.2
 
       - name: Output release info
         if: ${{ steps.release.outputs.release_created }}
