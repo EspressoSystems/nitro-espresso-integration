@@ -203,7 +203,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	// In tests we use TESTS tee type but the contract only accepts SGX tee type
-	if k.teeType == TESTS {
+	if k.teeType == TESTS && k.serviceType != espressotee.Test {
 		k.teeType = SGX
 	}
 
