@@ -183,6 +183,11 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return nil
 	}
 
+	// In tests we use TESTS tee type but the contract only accepts SGX tee type
+	if k.teeType == TESTS {
+		k.teeType = SGX
+	}
+
 	// Check on-chain if we have already registered
 	hasRegistered, err := k.VerifyRegistered()
 	if err != nil {
@@ -200,12 +205,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 
-	teeTypeForContract := k.teeType
-	if teeTypeForContract == TESTS {
-		teeTypeForContract = SGX
-	}
-
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(teeTypeForContract), k.serviceType)
+	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return err
 	}
@@ -223,9 +223,6 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
