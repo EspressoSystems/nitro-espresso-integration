@@ -72,7 +72,6 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das/dastree"
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
-	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
@@ -1790,7 +1789,7 @@ func deployOnParentChain(
 	var tx *types.Transaction
 
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err = legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
+	espressoTEEVerifierAddress, tx, _, err = deployMockTEEContracts(t, &parentChainTransactionOpts, parentChainClient)
 	Require(t, err)
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
@@ -1882,9 +1881,6 @@ func deployOnParentChain(
 			DeployedAt:             boldAddresses.DeployedAt,
 		}
 	} else {
-		//  Deploy a espressoTEEVerifierMock contract
-		espressoTEEVerifierAddress, tx, _, err := legacy_gen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, parentChainClient)
-		Require(t, err)
 		_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 		Require(t, err)
 		addresses, err = deploy.DeployLegacyOnParentChain(

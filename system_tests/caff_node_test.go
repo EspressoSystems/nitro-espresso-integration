@@ -24,9 +24,8 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espressostreamer"
+	"github.com/offchainlabs/nitro/espressotee"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/util/testhelpers"
 )
@@ -571,7 +570,7 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
 
 	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	espressoTEEVerifierAddress, _, _, err := espressogen.DeployEspressoTEEVerifierMock(&parentChainTransactionOpts, builder.L1.Client)
+	espressoTEEVerifierAddress, _, _, err := deployMockTEEContracts(t, &parentChainTransactionOpts, builder.L1.Client)
 	Require(t, err)
 	builderCaffNode.nodeConfig.Espresso.CaffNode.TEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
@@ -680,11 +679,13 @@ type mockSgxTeeVerifier struct {
 	time time.Time
 }
 
-func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
+var _ espressotee.EspressoSGXVerifierInterface = (*mockSgxTeeVerifier)(nil)
+
+func (v *mockSgxTeeVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressotee.EnclaveReport, error) {
 	if time.Since(v.time) < 1*time.Minute {
-		return legacy_espressogen.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
+		return espressotee.EnclaveReport{}, rpc.HTTPError{StatusCode: 500, Status: "Internal Server Error", Body: []byte("Internal Server Error")}
 	}
-	return legacy_espressogen.EnclaveReport{}, nil
+	return espressotee.EnclaveReport{}, nil
 }
 
 func NewMockSgxTeeVerifier() *mockSgxTeeVerifier {

@@ -300,7 +300,6 @@ clean:
 	rm -rf contracts/build contracts/cache solgen/go/
 	rm -rf contracts-legacy/build contracts-legacy/cache contracts-legacy/out
 	rm -rf contracts-local/out contracts-local/forge-cache
-	rm -rf  espresso-tee-contracts/espressogen/ espresso-tee-contracts-legacy/espressogen/ contracts/out
 	rm -f .make/*
 	rm -rf brotli/buildfiles
 	# Ensure lib64 is a symlink to lib
@@ -613,7 +612,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen .make/espresso-legacy-gen  $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
 	go run solgen/gen.go
 	@touch $@
@@ -623,11 +622,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
 	@touch $@
 
-.make/espresso-legacy-gen: $(DEP_PREDICATE) espresso-tee-contracts-legacy/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
-	mkdir -p espresso-tee-contracts-legacy/espressogen/
-	go run -modfile ./espresso-tee-contracts-legacy/bindings/go.mod ./espresso-tee-contracts-legacy/bindings/gen.go
-	@touch $@
-
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
 	npm --prefix safe-smart-account run build
 	yarn --cwd contracts build
@@ -635,7 +629,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	yarn --cwd contracts-legacy build
 	yarn --cwd contracts-legacy build:forge:yul
 	cd espresso-tee-contracts && forge build && cd ../
-	cd espresso-tee-contracts-legacy && forge build && cd ../
 	+make -C contracts-local build
 	@touch $@
 
