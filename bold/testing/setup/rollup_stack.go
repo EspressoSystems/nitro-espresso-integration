@@ -30,7 +30,7 @@ import (
 	retry "github.com/offchainlabs/nitro/bold/runtime"
 	challenge_testing "github.com/offchainlabs/nitro/bold/testing"
 	stateprovider "github.com/offchainlabs/nitro/bold/testing/mocks/state-provider"
-	legacy_gen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
 	"github.com/offchainlabs/nitro/solgen/go/challengeV2gen"
 	"github.com/offchainlabs/nitro/solgen/go/contractsgen"
@@ -302,7 +302,7 @@ func ChainsWithEdgeChallengeManager(opts ...Opt) (*ChainSetup, error) {
 		accs[0].TxOpts.Value = big.NewInt(0)
 	}
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := legacy_gen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend)
+	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend, common.HexToAddress("0x1"), common.HexToAddress("0x2"))
 	if err != nil {
 		return nil, err
 	}

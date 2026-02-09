@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*-espresso-v*"
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: espressosystems/nitro-espresso-integration/nitro-node
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: network=host
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse version from tag
+        id: version
+        run: |
+          # Tag format: v3.9.2-espresso-v0.1.0
+          TAG=${GITHUB_REF#refs/tags/}
+
+          # Extract upstream version (3.9.2)
+          UPSTREAM=$(echo "$TAG" | sed 's/^v\(.*\)-espresso-v.*/\1/')
+
+          # Extract espresso version (0.1.0)
+          ESPRESSO=$(echo "$TAG" | sed 's/.*-espresso-v//')
+
+          # Full version without leading 'v' (3.9.2-espresso-0.1.0)
+          FULL_VERSION="${UPSTREAM}-espresso-${ESPRESSO}"
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
+          echo "espresso=$ESPRESSO" >> $GITHUB_OUTPUT
+          echo "full_version=$FULL_VERSION" >> $GITHUB_OUTPUT
+
+          echo "Tag: $TAG"
+          echo "Upstream: $UPSTREAM"
+          echo "Espresso: $ESPRESSO"
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.full_version }}
+            type=raw,value=${{ steps.version.outputs.upstream }}-espresso-latest
+            type=raw,value=latest,enable=${{ !contains(github.ref, 'rc') && !contains(github.ref, 'alpha') && !contains(github.ref, 'beta') }}
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-release-${{ hashFiles('Dockerfile') }}
+          restore-keys: ${{ runner.os }}-buildx-release-
+
+      - name: Build and push nitro-node
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: nitro-node
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          build-args: |
+            NITRO_VERSION=${{ steps.version.outputs.full_version }}
+            NITRO_DATETIME=${{ github.event.head_commit.timestamp }}
+
+      - name: Generate release notes from changelog
+        id: release-notes
+        run: |
+          ESPRESSO="${{ steps.version.outputs.espresso }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Extract content between this version header and the next version header
+          awk -v ver="$ESPRESSO" '
+            /^## \[/ { if (found) exit; if (index($0, ver)) found=1; next }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+
+          # If no changelog entry found, create a basic one
+          if [ ! -s release-notes.md ]; then
+            echo "Release $TAG" > release-notes.md
+          fi
+
+          # Append Docker image details
+          echo "" >> release-notes.md
+          echo "---" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Docker Images" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "\`\`\`bash" >> release-notes.md
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.full_version }}" >> release-notes.md
+          echo "\`\`\`" >> release-notes.md
+
+      - name: Update GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Release ${{ steps.version.outputs.tag }}
+          body_path: release-notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref, 'rc') || contains(github.ref, 'alpha') || contains(github.ref, 'beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
