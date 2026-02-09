@@ -16,6 +16,13 @@ Example: `v3.9.2-espresso-v0.1.0`
 
 ---
 
+## [1.0.1](https://github.com/EspressoSystems/nitro-espresso-integration/compare/v3.9.2-espresso-v1.0.0...v3.9.2-espresso-v1.0.1) (2026-02-09)
+
+
+### Bug Fixes
+
+* run ci on v3.9.2 branches and add githook for checking commit messages ([#987](https://github.com/EspressoSystems/nitro-espresso-integration/issues/987)) ([ec638bd](https://github.com/EspressoSystems/nitro-espresso-integration/commit/ec638bdd2158fe91dfecfda3e1995f01d6349814))
+
 ## 1.0.0 (2026-02-06)
 
 
