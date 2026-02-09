@@ -166,33 +166,9 @@ func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType
 	if err != nil {
 		return false, err
 	}
-	var verifier common.Address
-	switch teeType {
-	case TESTS:
-		fallthrough
-	case SGX:
-		sgxAddr, err := contract.EspressoSGXTEEVerifier(&bind.CallOpts{})
-		if err != nil {
-			return false, err
-		}
-		verifier = sgxAddr
-	case NITRO:
-		nitroAddr, err := contract.EspressoNitroTEEVerifier(&bind.CallOpts{})
-		if err != nil {
-			return false, err
-		}
-		verifier = nitroAddr
-	default:
-		return false, fmt.Errorf("unsupported tee type: %d", teeType)
-	}
-
-	helper, err := espressogen.NewITEEHelper(verifier, e.l1Client)
-	if err != nil {
-		return false, err
-	}
 	ok, err := ContractVerification(
 		func() (bool, error) {
-			return helper.IsSignerValid(&bind.CallOpts{}, address, uint8(serviceType))
+			return contract.IsSignerValid(&bind.CallOpts{}, address, uint8(teeType), uint8(serviceType))
 		},
 		"register services - address not yet registered in contract",
 	)
