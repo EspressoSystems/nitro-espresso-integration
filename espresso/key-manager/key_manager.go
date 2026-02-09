@@ -116,7 +116,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.serviceType)
 	if err != nil {
 		return false, err
 	}
@@ -183,6 +183,11 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return nil
 	}
 
+	// In tests we use TESTS tee type but the contract only accepts SGX tee type
+	if k.teeType == TESTS {
+		k.teeType = SGX
+	}
+
 	// Check on-chain if we have already registered
 	hasRegistered, err := k.VerifyRegistered()
 	if err != nil {
@@ -218,9 +223,6 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
@@ -322,6 +324,6 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 
 // No-Op Signauture
 // This is a function designed to replace a signing function for functionality that depends on operating in a TEE
-func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
-	return []byte{}, nil
+func (k *EspressoKeyManager) noOpSignerFunc(addr []byte) ([]byte, error) {
+	return addr, nil
 }

@@ -1,15 +1,23 @@
 package arbtest
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"testing"
 
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/offchainlabs/nitro/espresso/test-utils"
+	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
+	testutils "github.com/offchainlabs/nitro/espresso/test-utils"
 )
 
 func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic string, idx uint) error {
@@ -41,4 +49,42 @@ func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic s
 
 func createDummyEspressoMetadata(t *testing.T) []byte {
 	return testutils.CreateDummyEspressoMetadata(t)
+}
+
+func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, client *ethclient.Client) (common.Address, *types.Transaction, *espressogen.EspressoTEEVerifierMock, error) {
+	ctx := transactionOpts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	sgx, sgxTx, contract, err := espressogen.DeployEspressoSGXTEEVerifierMock(transactionOpts, client)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoSGXTEEVerifierMock: %w", err)
+	}
+	_, err = bind.WaitDeployed(ctx, client, sgxTx)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to confirm EspressoSGXTEEVerifierMock deployment: %w", err)
+	}
+
+	// Register the test key
+	privKey := arbnode.TestEspressoPrivateKey
+	signerAddr := crypto.PubkeyToAddress(privKey.PublicKey)
+	_, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes(), 0)
+
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to register SGX test key: %w", err)
+	}
+
+	_, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes(), 1)
+
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to register Nitro test key: %w", err)
+	}
+
+	nitro, _, _, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
+	}
+
+	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, sgx, nitro)
 }
