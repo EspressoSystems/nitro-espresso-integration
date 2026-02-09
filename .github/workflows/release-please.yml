@@ -35,3 +35,12 @@ jobs:
         run: |
           echo "Release created: ${{ steps.release.outputs.tag_name }}"
           echo "Version: ${{ steps.release.outputs.version }}"
+
+      - name: Normalize release title to full tag
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ steps.release.outputs.tag_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ steps.release.outputs.tag_name }}"
