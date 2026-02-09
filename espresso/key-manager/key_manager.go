@@ -3,7 +3,6 @@ package keymanager
 import (
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
