@@ -275,7 +275,6 @@ COPY ./contracts/src/precompiles/ ./contracts/src/precompiles/
 COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
-COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 COPY ./solgen/gen.go ./solgen/
 COPY ./go-ethereum ./go-ethereum
 COPY scripts/remove_reference_types.sh scripts/
@@ -413,7 +412,6 @@ COPY ./contracts-legacy ./contracts-legacy
 COPY ./contracts-local ./contracts-local
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
-COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-replay-env
 
 # ============================================================================
