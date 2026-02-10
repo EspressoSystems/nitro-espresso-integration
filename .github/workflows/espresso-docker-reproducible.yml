@@ -1,0 +1,110 @@
+# Build the nitro-node images on  AMD64 hosts.
+# After building, the images are merged together to make a multiplatform image.
+name: Espresso Docker Reproducible build CI
+run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - integration
+      - celestia-integration
+      - integration-v3.9.2
+      - celestia-v3.9.2
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker_build:
+    strategy:
+      matrix:
+        platform: [linux/amd64]
+
+    runs-on: ubuntu-24.04-8core
+
+    steps:
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner  }}
+          password: ${{ secrets.GITHUB_TOKEN  }}
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+
+      - name: Compute SOURCE_DATE_EPOCH
+        id: sde
+        run: echo "value=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
+          tags: |
+            type=ref,event=pr
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+
+      - name: Build & export to OCI directory (reproducible)
+        run: |
+          DOCKER_BUILDKIT=1 \
+          SOURCE_DATE_EPOCH=1 \
+          docker build \
+            --platform linux/amd64 \
+            --file Dockerfile.reproducible \
+            --target nitro-node \
+            --provenance=false \
+            --sbom=false \
+            --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
+            --tag nitro-node:ci .   # tag is optional but helps for reference
+
+      - name: Convert OCI dir to Docker archive tar using skopeo
+        run: |
+          # Use one of the tags from metadata (or hardcode a temp one)
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}  # or :ci or :${{ github.sha }}
+          skopeo copy \
+            --insecure-policy \
+            oci:oci-export \
+            docker-archive:reproducible.tar:${IMAGE_REF}
+
+      - name: Load tar into Docker (for docker push / verification)
+        if: github.event_name != 'pull_request'  # skip on PRs if you don't need local run
+        run: |
+          docker load < reproducible.tar
+
+      - name: Push to GHCR
+        if: github.event_name != 'pull_request'
+        run: |
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
+          docker tag nitro-node:ci $IMAGE_REF
+          docker push $IMAGE_REF
+
+      # Optional: Verify space or clean up
+      - name: Check available space after CI run
+        if: "!cancelled()"
+        run: sudo df -h

@@ -4,11 +4,34 @@
 # ============================================================================
 # Stage 1: Brotli builders (needed for WASM)
 # ============================================================================
-FROM debian:bookworm-slim AS brotli-wasm-builder
+FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS brotli-wasm-builder
+
+COPY --from=stagex/make       . /
+COPY --from=stagex/cmake      . /
+COPY --from=stagex/gcc        . /
+COPY --from=stagex/binutils   . /
+COPY --from=stagex/xz         . /
+COPY --from=stagex/bzip2      . /
+COPY --from=stagex/zlib       . /
+COPY --from=stagex/curl       . /
+COPY --from=stagex/ca-certificates . /
+COPY --from=stagex/openssl     . /
+COPY --from=stagex/git        . /
+COPY --from=stagex/libffi     . /
+COPY --from=stagex/python     . /
+COPY --from=stagex/core-filesystem . /
+COPY --from=stagex/bash       . /
+COPY --from=stagex/musl       . /
+COPY --from=stagex/clang       . /
+COPY --from=stagex/glibc       . /
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+ENV PATH="/usr/bin:/bin:/sbin:$PATH"
+USER root
 WORKDIR /workspace
-RUN apt-get update && \
-    apt-get install -y cmake make git lbzip2 python3 xz-utils && \
-    git clone https://github.com/emscripten-core/emsdk.git && \
+RUN git clone https://github.com/emscripten-core/emsdk.git && \
     cd emsdk && \
     ./emsdk install 3.1.7 && \
     ./emsdk activate 3.1.7
@@ -19,13 +42,23 @@ RUN cd emsdk && . ./emsdk_env.sh && cd .. && ./scripts/build-brotli.sh -w -t /wo
 FROM scratch AS brotli-wasm-export
 COPY --from=brotli-wasm-builder /workspace/install/ /
 
-FROM debian:bookworm-slim AS brotli-library-builder
+FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS brotli-library-builder
+COPY --from=stagex/make       . /
+COPY --from=stagex/cmake      . /
+COPY --from=stagex/gcc        . /
+COPY --from=stagex/binutils   . /
+COPY --from=stagex/git        . /
+COPY --from=stagex/core-filesystem . /
+COPY --from=stagex/bash . /
+COPY --from=stagex/musl . /
+COPY --from=stagex/openssl . /
+
+ENV PATH="/usr/bin:/bin:/sbin:$PATH"
+USER root
 WORKDIR /workspace
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
-RUN apt-get update && \
-    apt-get install -y cmake make gcc git && \
-    ./scripts/build-brotli.sh -l -t /workspace/install/
+RUN ./scripts/build-brotli.sh -l -t /workspace/install/
 
 FROM scratch AS brotli-library-export
 COPY --from=brotli-library-builder /workspace/install/ /
@@ -55,7 +88,7 @@ FROM stagex/icu:latest@sha256:45cfc5911e1e5ce541d4845078c25dd72e2a35b0b3f4475140
 FROM stagex/core-libcxx:latest@sha256:c37566fc25788e232d71f03728da960455d5ec1218ccf08a8a67dd2d5497cd43 AS stagex-libcxx
 FROM stagex/core-libcxxabi:latest@sha256:63cfbd7e7ddf505dc8f59babfc2ae25d397c2e02ebe2db5a27c3267d2f485362 AS stagex-libcxxabi
 FROM stagex/libunwind:latest@sha256:290b8d183a467edc55e338471632f2e40859aef92a4eecf12415ca29b9c16e9f AS stagex-libunwind
-FROM stagex/llvm:latest AS stagex-llvm
+FROM stagex/llvm:latest@sha256:27da8a38ec621317dbafbf1dbdefb07a5b007d1d28ae86393480209652ed3770 AS stagex-llvm
 
 FROM stagex-busybox AS stagex-nodejs-base
 COPY --from=stagex-musl . /
@@ -133,39 +166,18 @@ RUN mkdir -p /home/user/.cache/hardhat-nodejs/compilers/linux-amd64 && \
     https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9 && \
     echo "fb03a29a517452b9f12bcf459ef37d0a543765bb3bbc911e70a87d6a37c30d5f  /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9" | sha256sum -c && \
     chmod +x /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.8.24+commit.e11b9ed9
-
-# Create contract directories
-RUN mkdir -p contracts-legacy contracts contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy
-
-# Install dependencies
+USER root
+WORKDIR /workspace
+RUN chmod -R 777 /workspace
 COPY contracts-legacy/package.json contracts-legacy/yarn.lock contracts-legacy/
 RUN cd contracts-legacy && yarn install
-
 COPY contracts/package.json contracts/yarn.lock contracts/
 RUN cd contracts && yarn install
-
-# Copy contract source files to staging area
-COPY contracts-legacy /tmp/stage/contracts-legacy/
-COPY contracts-local /tmp/stage/contracts-local/
-COPY contracts /tmp/stage/contracts/
-COPY safe-smart-account /tmp/stage/safe-smart-account/
-COPY espresso-tee-contracts /tmp/stage/espresso-tee-contracts/
-COPY espresso-tee-contracts-legacy /tmp/stage/espresso-tee-contracts-legacy/
-
-# Copy to workspace and create output directories
-RUN mkdir -p contracts-legacy contracts-local contracts safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy && \
-    cp -a /tmp/stage/contracts-legacy/. contracts-legacy/ && \
-    cp -a /tmp/stage/contracts-local/. contracts-local/ && \
-    cp -a /tmp/stage/contracts/. contracts/ && \
-    cp -a /tmp/stage/safe-smart-account/. safe-smart-account/ && \
-    cp -a /tmp/stage/espresso-tee-contracts/. espresso-tee-contracts/ && \
-    cp -a /tmp/stage/espresso-tee-contracts-legacy/. espresso-tee-contracts-legacy/ && \
-    mkdir -p contracts/out contracts/build contracts/cache \
-             contracts-legacy/out contracts-legacy/build contracts-legacy/cache \
-             contracts-local/out contracts-local/cache \
-             safe-smart-account/artifacts safe-smart-account/cache \
-             espresso-tee-contracts/out espresso-tee-contracts/cache \
-             espresso-tee-contracts-legacy/out espresso-tee-contracts-legacy/cache
+COPY contracts-legacy contracts-legacy/
+COPY contracts-local contracts-local/
+COPY contracts contracts/
+COPY safe-smart-account safe-smart-account/
+COPY espresso-tee-contracts espresso-tee-contracts/
 
 RUN cd safe-smart-account && yarn install --ignore-scripts
 
@@ -203,7 +215,6 @@ COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ /contracts-
 COPY --from=contracts-builder-repro /workspace/contracts-local/out/ /contracts-local/out/
 COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ /safe-smart-account/build/
 COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ /espresso-tee-contracts/out/
-COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts-legacy/out/ /espresso-tee-contracts-legacy/out/
 COPY --from=contracts-builder-repro /workspace/.make/ /.make/
 
 # ============================================================================
@@ -304,57 +315,6 @@ RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
 
-# Glibc-based prover builder (dynamic linking)
-FROM rust:1.88.0-slim-bookworm AS prover-builder
-WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y make wget gpg software-properties-common zlib1g-dev libstdc++-12-dev wabt
-RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-    add-apt-repository 'deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-15 main' && \
-    apt-get update && \
-    apt-get install -y llvm-15-dev libclang-common-15-dev
-COPY --from=brotli-library-export / target/
-COPY arbitrator/Cargo.* arbitrator/
-COPY arbitrator/arbutil arbitrator/arbutil
-COPY arbitrator/bench arbitrator/bench
-COPY arbitrator/brotli arbitrator/brotli
-COPY arbitrator/caller-env arbitrator/caller-env
-COPY arbitrator/prover/Cargo.toml arbitrator/prover/
-COPY arbitrator/prover/benches arbitrator/prover/benches
-COPY arbitrator/bench/Cargo.toml arbitrator/bench/
-COPY arbitrator/jit/Cargo.toml arbitrator/jit/
-COPY arbitrator/stylus/Cargo.toml arbitrator/stylus/
-COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
-COPY arbitrator/wasm-libraries/user-host-trait/Cargo.toml arbitrator/wasm-libraries/user-host-trait/Cargo.toml
-RUN bash -c 'mkdir arbitrator/{prover,jit,stylus}/src arbitrator/wasm-libraries/user-host-trait/src'
-RUN echo "fn test() {}" > arbitrator/jit/src/lib.rs && \
-    echo "fn test() {}" > arbitrator/prover/src/lib.rs && \
-    echo "fn test() {}" > arbitrator/bench/src/lib.rs && \
-    echo "fn test() {}" > arbitrator/prover/benches/merkle_bench.rs && \
-    echo "fn test() {}" > arbitrator/stylus/src/lib.rs && \
-    echo "fn test() {}" > arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
-    cargo build --manifest-path arbitrator/Cargo.toml --release --lib && \
-    rm arbitrator/prover/src/lib.rs arbitrator/jit/src/lib.rs arbitrator/stylus/src/lib.rs && \
-    rm arbitrator/wasm-libraries/user-host-trait/src/lib.rs && \
-    rm arbitrator/prover/benches/merkle_bench.rs && \
-    rm arbitrator/bench/src/lib.rs
-COPY ./Makefile ./
-COPY arbitrator/prover arbitrator/prover
-COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
-COPY arbitrator/jit arbitrator/jit
-COPY arbitrator/stylus arbitrator/stylus
-COPY --from=brotli-wasm-export / target/
-COPY scripts/build-brotli.sh scripts/
-COPY brotli brotli
-RUN touch -a -m arbitrator/prover/src/lib.rs
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-lib
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-bin
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-jit
-
-FROM scratch AS prover-export
-COPY --from=prover-builder /workspace/target/ /
-
 # Musl-based prover builder for static linking
 FROM rust:1.88.0-slim-bookworm AS prover-builder-musl
 WORKDIR /workspace
@@ -413,14 +373,15 @@ RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --bin jit --target x86_64-unknown-linux-musl && \
     cp arbitrator/target/x86_64-unknown-linux-musl/release/jit arbitrator/target/release/
 # Create stub library for glibc symbols
-COPY glibc_stubs.c /tmp/
 RUN mkdir -p target/lib && \
+    printf 'const char* gnu_get_libc_version(void) {\n    return "stub";\n}\n\nint __res_init(void) {\n    return 0;\n}' > /tmp/glibc_stubs.c && \
     musl-gcc -c -O2 /tmp/glibc_stubs.c -o target/lib/glibc_stubs.o && \
     ar rcs target/lib/libglibc_stubs.a target/lib/glibc_stubs.o
-# Run make targets to install to target/ directory
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-lib
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-bin
-RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-jit
+
+RUN mkdir -p target/bin target/lib && \
+    cp arbitrator/target/release/libstylus.a target/lib/ && \
+    cp arbitrator/target/release/prover target/bin/ && \
+    cp arbitrator/target/release/jit target/bin/
 
 FROM scratch AS prover-export-musl
 COPY --from=prover-builder-musl /workspace/target/ /
@@ -503,12 +464,9 @@ ENV GOARCH=amd64
 ENV GOFLAGS="-buildvcs=false -trimpath"
 
 # Set fixed version info for reproducibility
-ARG version="reproducible-build"
-ARG datetime="1970-01-01T00:00:00Z"
-ARG modified="false"
-ENV NITRO_VERSION=$version
-ENV NITRO_DATETIME=$datetime
-ENV NITRO_MODIFIED=$modified
+ENV NITRO_VERSION="reproducible-build"
+ENV NITRO_DATETIME="1970-01-01T00:00:00Z"
+ENV NITRO_MODIFIED="false"
 
 # Copy go.mod files and download dependencies
 COPY go.mod go.sum ./
@@ -526,7 +484,6 @@ COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ contracts-l
 COPY --from=contracts-builder-repro /workspace/contracts-local/out/ contracts-local/out/
 COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ safe-smart-account/build/
 COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
-COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts-legacy/out/ espresso-tee-contracts-legacy/out/
 COPY --from=contracts-builder-repro /workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/
@@ -542,11 +499,6 @@ RUN if [ -d "/workspace/go" ] && [ "$(ls -A /workspace/go 2>/dev/null)" ]; then 
         cp -r /workspace/go/* /workspace/solgen/go/ 2>/dev/null || true; \
         rm -rf /workspace/go; \
     fi
-
-# # Debug shell - stop here to inspect before build
-# FROM node-builder-repro AS debug-shell-repro
-# WORKDIR /workspace
-# CMD ["/bin/sh"]
 
 # # Build with reproducible flags and musl dynamic linking
 # FROM node-builder-repro AS node-builder-repro-built
@@ -580,7 +532,7 @@ COPY --from=node-builder-repro /workspace/target/bin/dbconv /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/daserver /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/daprovider /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/datool /usr/local/bin/
-COPY --from=prover-export /bin/jit /usr/local/bin/
+COPY --from=prover-export-musl /bin/jit /usr/local/bin/
 
 # Copy machine files
 COPY --from=machine-versions /workspace/machines /home/user/target/machines
