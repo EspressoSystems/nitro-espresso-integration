@@ -498,6 +498,9 @@ func TestEspressoCaffNodeUnfinalizedDelayedMessages(t *testing.T) {
 	tx3 := builder.L1.SendWaitTestTransactions(t, []*types.Transaction{
 		WrapL2ForDelayed(t, delayedTx3, builder.L1Info, "Faucet", 100000),
 	})
+	// Advance L1 to make sure the tx is included.
+	// Since the caff node is not waiting for finalization, it should appear after 1 block.
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 1)
 	// Wait for the tx to appear on the caff node
 	err = waitForWith(ctx, 240*time.Second, 10*time.Second, func() bool {
 		balance := builderCaffNode.GetBalance(t, addr)
