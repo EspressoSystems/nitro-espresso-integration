@@ -44,6 +44,8 @@ jobs:
 
       - name: Fetch submodules (full depth for reproducibility)
         run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule sync --recursive
           git submodule update --init --recursive
 
       - name: Set up Docker Buildx
