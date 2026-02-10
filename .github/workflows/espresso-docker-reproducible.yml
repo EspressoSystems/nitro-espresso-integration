@@ -99,7 +99,6 @@ jobs:
         # if: github.event_name != 'pull_request'
         run: |
           IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
-          docker tag nitro-node:ci $IMAGE_REF
           docker push $IMAGE_REF
 
       - name: Check available space after CI run
