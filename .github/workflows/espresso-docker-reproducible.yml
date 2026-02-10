@@ -72,16 +72,15 @@ jobs:
 
       - name: Build & export to OCI directory (reproducible)
         run: |
-          DOCKER_BUILDKIT=1 \
           SOURCE_DATE_EPOCH=1 \
-          docker build \
+          docker buildx build \
             --platform linux/amd64 \
             --file Dockerfile.reproducible \
             --target nitro-node \
             --provenance=false \
             --sbom=false \
             --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
-            --tag nitro-node:ci .   # tag is optional but helps for reference
+            --tag nitro-node:ci .
 
       - name: Convert OCI dir to Docker archive tar using skopeo
         run: |
@@ -98,13 +97,12 @@ jobs:
           docker load < reproducible.tar
 
       - name: Push to GHCR
-        if: github.event_name != 'pull_request'
+        # if: github.event_name != 'pull_request'
         run: |
           IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
           docker tag nitro-node:ci $IMAGE_REF
           docker push $IMAGE_REF
 
-      # Optional: Verify space or clean up
       - name: Check available space after CI run
         if: "!cancelled()"
         run: sudo df -h
