@@ -91,7 +91,7 @@ jobs:
             docker-archive:reproducible.tar:${IMAGE_REF}
 
       - name: Load tar into Docker (for docker push / verification)
-        if: github.event_name != 'pull_request'  # skip on PRs if you don't need local run
+        # if: github.event_name != 'pull_request'
         run: |
           docker load < reproducible.tar
 
