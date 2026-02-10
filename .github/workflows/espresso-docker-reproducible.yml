@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          submodules: false  # We'll do this manually below
+          submodules: false
           fetch-depth: 0
 
       - name: Fetch submodules (full depth for reproducibility)
@@ -63,10 +63,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y skopeo
 
-      - name: Compute SOURCE_DATE_EPOCH
-        id: sde
-        run: echo "value=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
-
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -77,6 +73,10 @@ jobs:
             type=ref,event=branch
             type=ref,event=tag
             type=sha
+      - name: Docker prune
+        run: |
+          docker buildx prune -a -f
+          docker system prune -a -f
 
       - name: Build & export to OCI directory (reproducible)
         run: |
@@ -93,7 +93,7 @@ jobs:
       - name: Convert OCI dir to Docker archive tar using skopeo
         run: |
           # Use one of the tags from metadata (or hardcode a temp one)
-          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}  # or :ci or :${{ github.sha }}
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
           skopeo copy \
             --insecure-policy \
             oci:oci-export \
