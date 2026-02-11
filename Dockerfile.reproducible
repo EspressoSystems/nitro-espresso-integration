@@ -225,7 +225,7 @@ COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/ /contract
 COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ /contracts-legacy/out/
 COPY --from=contracts-builder-repro /workspace/contracts-local/out/ /contracts-local/out/
 COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ /safe-smart-account/build/
-# COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ /espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ /espresso-tee-contracts/out/
 COPY --from=contracts-builder-repro /workspace/.make/ /.make/
 
 # ============================================================================
@@ -493,7 +493,7 @@ COPY --from=contracts-builder-repro-export /contracts-legacy/build/ contracts-le
 COPY --from=contracts-builder-repro-export /contracts-legacy/out/ contracts-legacy/out/
 COPY --from=contracts-builder-repro-export /contracts-local/out/ contracts-local/out/
 COPY --from=contracts-builder-repro-export /safe-smart-account/build/ safe-smart-account/build/
-# COPY --from=contracts-builder-repro-export /espresso-tee-contracts/out/ espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro-export /espresso-tee-contracts/out/ espresso-tee-contracts/out/
 COPY --from=contracts-builder-repro-export /.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/

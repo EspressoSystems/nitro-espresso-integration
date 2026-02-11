@@ -649,6 +649,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
   		"@nomicfoundation/ignition-core@^0.15.14"
 	yarn --cwd contracts install
 	yarn --cwd contracts-legacy install
+	cd espresso-tee-contracts && forge build --no-metadata && cd ../
 	+make -C contracts-local install
 	@touch $@
 
