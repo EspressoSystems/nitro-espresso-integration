@@ -65,6 +65,13 @@ jobs:
           docker builder prune -a -f
           docker system prune -a -f
 
+      - name: Enable containerd image store
+        run: |
+          sudo mkdir -p /etc/docker
+          echo '{"features":{"containerd-snapshotter":true}}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+
       - name: Build & export to OCI directory (reproducible)
         run: |
           SOURCE_DATE_EPOCH=1 \
