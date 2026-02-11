@@ -333,7 +333,7 @@ clean:
 	rm -f arbitrator/wasm-libraries/forward/*.wat
 	rm -rf arbitrator/stylus/tests/*/target/ arbitrator/stylus/tests/*/*.wasm
 	rm -rf brotli/buildfiles
-	rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/ espresso-tee-contracts-legacy/espressogen/ contracts/out
+	rm -rf contracts/build contracts/cache solgen/go/ espresso-tee-contracts/espressogen/ contracts/out
 	rm -f .make/*
 	rm -rf brotli/buildfiles
 	@rm -f $(output_root)/lib/$(espresso_crypto_filename)
@@ -653,7 +653,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	cargo test --manifest-path arbitrator/Cargo.toml --release
 	@touch $@
 
-.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen .make/espresso-legacy-gen  $(ORDER_ONLY_PREDICATE) .make
+.make/solgen: $(DEP_PREDICATE) solgen/gen.go .make/solidity .make/espresso-gen $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p solgen/go/
 	go run ./solgen/gen.go
 	@touch $@
@@ -672,7 +672,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	yarn --cwd safe-smart-account build
 	yarn --cwd contracts build:all
 	cd espresso-tee-contracts && forge build && cd ../
-	cd espresso-tee-contracts-legacy && forge build && cd ../
 	@touch $@
 
 .make/yarndeps: $(DEP_PREDICATE) */package.json */yarn.lock $(ORDER_ONLY_PREDICATE) .make
