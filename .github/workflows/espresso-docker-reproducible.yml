@@ -105,7 +105,7 @@ jobs:
           DOCKER_BUILDKIT=1 \
           docker build \
             --platform linux/amd64 \
-            --target contracts-builder-repro \
+            --target contracts-builder-repro-export \
             --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
             --tag nitro-node:ci \
             -f Dockerfile.reproducible .
@@ -113,7 +113,7 @@ jobs:
       - name: Convert OCI dir to Docker archive tar using skopeo
         run: |
           # Use one of the tags from metadata (or hardcode a temp one)
-          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ github.sha }}
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:luke-testing
           skopeo copy \
             --insecure-policy \
             oci:oci-export \
@@ -127,7 +127,7 @@ jobs:
       - name: Push to GHCR
         # if: github.event_name != 'pull_request'
         run: |
-          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ github.sha }}
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:luke-testing
           docker push $IMAGE_REF
 
       - name: Check available space after CI run

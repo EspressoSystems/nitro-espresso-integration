@@ -191,9 +191,9 @@ ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 # Remove non-reproducible build artifacts
-RUN find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy \
+RUN find contracts/build contracts-legacy/build safe-smart-account/build \
          -name 'build-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
-    find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy \
+    find contracts/build contracts-legacy/build safe-smart-account/build \
          -name 'solidity-files-cache.json' -type f -delete 2>/dev/null || true
 
 # # Strip Solidity CBOR metadata from bytecode for reproducibility
@@ -204,9 +204,17 @@ RUN find contracts contracts-legacy contracts-local safe-smart-account espresso-
 # done && echo "Stripped metadata from contract bytecode"
 
 # Normalize file permissions for reproducibility
-RUN find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy .make \
+# RUN find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts .make \
+#          -type f -exec chmod 644 {} \; 2>/dev/null || true && \
+#     find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts .make \
+#          -type d -exec chmod 755 {} \; 2>/dev/null || true
+RUN find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out .make \
          -type f -exec chmod 644 {} \; 2>/dev/null || true && \
-    find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy .make \
+    find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
+         contracts-local/out safe-smart-account/build \
+         espresso-tee-contracts/out .make \
          -type d -exec chmod 755 {} \; 2>/dev/null || true
 
 FROM scratch AS contracts-builder-repro-export
@@ -282,10 +290,10 @@ COPY ./solgen/gen.go ./solgen/
 COPY ./go-ethereum ./go-ethereum
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/
-COPY --from=contracts-builder-repro /workspace/contracts-local/out/precompiles/ contracts-local/out/precompiles/
-COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
-COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/contracts/src/precompiles/ contracts-legacy/build/contracts/src/precompiles/
-COPY --from=contracts-builder-repro /workspace/.make/ .make/
+COPY --from=contracts-builder-repro-export /workspace/contracts-local/out/precompiles/ contracts-local/out/precompiles/
+COPY --from=contracts-builder-repro-export /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
+COPY --from=contracts-builder-repro-export /workspace/contracts-legacy/build/contracts/src/precompiles/ contracts-legacy/build/contracts/src/precompiles/
+COPY --from=contracts-builder-repro-export /workspace/.make/ .make/
 RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
 # ============================================================================
@@ -478,15 +486,15 @@ RUN go mod download
 
 # Copy all source files
 COPY . ./
-COPY --from=contracts-builder-repro /workspace/contracts/build/ contracts/build/
-COPY --from=contracts-builder-repro /workspace/contracts/out/ contracts/out/
-COPY --from=contracts-builder-repro /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
-COPY --from=contracts-builder-repro /workspace/contracts-legacy/build/ contracts-legacy/build/
-COPY --from=contracts-builder-repro /workspace/contracts-legacy/out/ contracts-legacy/out/
-COPY --from=contracts-builder-repro /workspace/contracts-local/out/ contracts-local/out/
-COPY --from=contracts-builder-repro /workspace/safe-smart-account/build/ safe-smart-account/build/
-COPY --from=contracts-builder-repro /workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
-COPY --from=contracts-builder-repro /workspace/.make/ .make/
+COPY --from=contracts-builder-repro-export /workspace/contracts/build/ contracts/build/
+COPY --from=contracts-builder-repro-export /workspace/contracts/out/ contracts/out/
+COPY --from=contracts-builder-repro-export /workspace/contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
+COPY --from=contracts-builder-repro-export /workspace/contracts-legacy/build/ contracts-legacy/build/
+COPY --from=contracts-builder-repro-export /workspace/contracts-legacy/out/ contracts-legacy/out/
+COPY --from=contracts-builder-repro-export /workspace/contracts-local/out/ contracts-local/out/
+COPY --from=contracts-builder-repro-export /workspace/safe-smart-account/build/ safe-smart-account/build/
+COPY --from=contracts-builder-repro-export /workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
+COPY --from=contracts-builder-repro-export /workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/
 COPY --from=prover-export-musl / target/
@@ -525,7 +533,6 @@ COPY --from=stagex-musl-go /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 COPY --from=stagex-ca-certs-go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy binaries
-COPY --from=contracts-builder-repro /workspace/contracts/build/contracts/src/ /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/relay /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/nitro-val /usr/local/bin/
@@ -536,7 +543,6 @@ COPY --from=node-builder-repro /workspace/target/bin/daserver /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/daprovider /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/datool /usr/local/bin/
 COPY --from=prover-export-musl /bin/jit /usr/local/bin/
-COPY --from=contracts-builder-repro /workspace/contracts/build/contracts/src/ /usr/local/bin/
 
 # Copy machine files
 COPY --from=machine-versions /workspace/machines /home/user/target/machines
