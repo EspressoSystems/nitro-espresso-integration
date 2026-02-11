@@ -105,7 +105,7 @@ jobs:
           DOCKER_BUILDKIT=1 \
           docker build \
             --platform linux/amd64 \
-            --target contracts-builder-repro-export \
+            --target nitro-node-repro \
             --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
             --tag nitro-node:ci \
             -f Dockerfile.reproducible .
