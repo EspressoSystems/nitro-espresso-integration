@@ -191,9 +191,9 @@ ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 # Remove non-reproducible build artifacts
-RUN find contracts/build contracts-legacy/build safe-smart-account/build \
+RUN find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy \
          -name 'build-info' -type d -exec rm -rf {} + 2>/dev/null || true && \
-    find contracts/build contracts-legacy/build safe-smart-account/build \
+    find contracts contracts-legacy contracts-local safe-smart-account espresso-tee-contracts espresso-tee-contracts-legacy \
          -name 'solidity-files-cache.json' -type f -delete 2>/dev/null || true
 
 # # Strip Solidity CBOR metadata from bytecode for reproducibility
