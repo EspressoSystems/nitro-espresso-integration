@@ -48,9 +48,6 @@ jobs:
           git submodule sync --recursive
           git submodule update --init --recursive
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Login to Github Container Repo
         uses: docker/login-action@v3
         with:
@@ -62,38 +59,27 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y skopeo
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
-          tags: |
-            type=ref,event=pr
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha
       - name: Docker prune
         run: |
-          docker buildx prune -a -f
+          docker version
+          docker builder prune -a -f
           docker system prune -a -f
 
       - name: Build & export to OCI directory (reproducible)
         run: |
           SOURCE_DATE_EPOCH=1 \
-          docker buildx build \
+          DOCKER_BUILDKIT=1 \
+          docker build \
             --platform linux/amd64 \
-            --file Dockerfile.reproducible \
-            --provenance=false \
-            --sbom=false \
             --target nitro-node-repro \
             --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
-            --tag nitro-node:ci .
+            --tag nitro-node:ci \
+            -f Dockerfile.reproducible .
 
       - name: Convert OCI dir to Docker archive tar using skopeo
         run: |
           # Use one of the tags from metadata (or hardcode a temp one)
-          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ github.sha }}
           skopeo copy \
             --insecure-policy \
             oci:oci-export \
@@ -107,7 +93,7 @@ jobs:
       - name: Push to GHCR
         # if: github.event_name != 'pull_request'
         run: |
-          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ steps.meta.outputs.version }}
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:${{ github.sha }}
           docker push $IMAGE_REF
 
       - name: Check available space after CI run
