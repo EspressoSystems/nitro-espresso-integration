@@ -421,7 +421,8 @@ FROM debian:bookworm-slim AS machine-versions
 RUN apt-get update && apt-get install -y unzip wget curl
 WORKDIR /workspace/machines
 COPY ./scripts/download-machine.sh .
-RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2
+RUN chmod 755 ./download-machine.sh && \
+    ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2
 
 # ============================================================================
 # Stage 7: Reproducible Node Builder (using StageX + musl)

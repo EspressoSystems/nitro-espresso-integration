@@ -7,6 +7,13 @@
 **/.gitmodules
 go-ethereum/tests
 **/*.yml
+
+# Build output directories
+out/
+tmp/
+*.tar
+*.diff
+
 contracts/build
 contracts/cache/
 contracts/out/
