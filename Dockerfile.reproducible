@@ -196,6 +196,13 @@ RUN find contracts/build contracts-legacy/build safe-smart-account/build \
     find contracts/build contracts-legacy/build safe-smart-account/build \
          -name 'solidity-files-cache.json' -type f -delete 2>/dev/null || true
 
+# # Strip Solidity CBOR metadata from bytecode for reproducibility
+# RUN find contracts/build contracts/out contracts-legacy/build contracts-legacy/out \
+#          safe-smart-account/build espresso-tee-contracts/out \
+#          -name "*.json" ! -name "*.dbg.json" -type f 2>/dev/null | while read f; do \
+#     jq 'walk(if type == "string" and startswith("0x") then gsub("a2646970667358221220[0-9a-f]{64}64736f6c6343[0-9a-f]{6}0033"; "") else . end)' "$f" > "$f.tmp" && mv "$f.tmp" "$f" || rm -f "$f.tmp"; \
+# done && echo "Stripped metadata from contract bytecode"
+
 # Normalize file permissions for reproducibility
 RUN find contracts/out contracts/build contracts/node_modules contracts-legacy/build contracts-legacy/out \
          contracts-local/out safe-smart-account/build \
@@ -522,6 +529,7 @@ COPY --from=stagex-musl-go /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 COPY --from=stagex-ca-certs-go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy binaries
+COPY --from=contracts-builder-repro /workspace/contracts/build/contracts/src/ /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/relay /usr/local/bin/
 COPY --from=node-builder-repro /workspace/target/bin/nitro-val /usr/local/bin/
