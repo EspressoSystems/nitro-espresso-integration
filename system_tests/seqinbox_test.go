@@ -355,9 +355,11 @@ func testSequencerInboxReaderImpl(t *testing.T, validator bool) {
 				t.Errorf("Access list mismatch:\n%s\n", diff)
 			}
 			if i%5 == 0 {
-				tx, err = seqInbox.AddSequencerL2Batch99020501(&seqOpts, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, big.NewInt(0), big.NewInt(0), createDummyEspressoMetadata(t))
+				espressoMetadata := createDummyEspressoMetadata(t, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, big.NewInt(0), big.NewInt(0))
+				tx, err = seqInbox.AddSequencerL2Batch99020501(&seqOpts, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, big.NewInt(0), big.NewInt(0), espressoMetadata)
 			} else {
-				tx, err = seqInbox.AddSequencerL2BatchFromOrigin37501551(&seqOpts, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, common.Big0, common.Big0, createDummyEspressoMetadata(t))
+				espressoMetadata := createDummyEspressoMetadata(t, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, common.Big0, common.Big0)
+				tx, err = seqInbox.AddSequencerL2BatchFromOrigin37501551(&seqOpts, big.NewInt(int64(len(blockStates))), batchData, big.NewInt(1), gasRefunderAddr, common.Big0, common.Big0, espressoMetadata)
 			}
 			Require(t, err)
 			txRes, err := builder.L1.EnsureTxSucceeded(tx)
