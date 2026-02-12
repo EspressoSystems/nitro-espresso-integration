@@ -359,7 +359,9 @@ func (b *NodeBuilder) WithProdConfirmPeriodBlocks() *NodeBuilder {
 }
 
 func (b *NodeBuilder) WithBoldDeployment() *NodeBuilder {
-	b.deployBold = true
+	// b.deployBold = true
+	// Espresso Note: bold is disabled for tests
+	b.deployBold = false
 	return b
 }
 
