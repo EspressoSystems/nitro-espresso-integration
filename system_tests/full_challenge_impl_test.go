@@ -158,8 +158,8 @@ func makeBatch(t *testing.T, l2Node *arbnode.Node, l2Info *BlockchainTestInfo, b
 
 	seqNum := new(big.Int).Lsh(common.Big1, 256)
 	seqNum.Sub(seqNum, common.Big1)
-	espressoMetadata := createDummyEspressoMetadata(t, big.NewInt(1), nil, big.NewInt(1), common.Address{}, common.Big0, common.Big0)
-	tx, err := seqInbox.AddSequencerL2Batch99020501(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), espressoMetadata)
+	espressoMetadata := createDummyEspressoMetadata(t, seqNum, message, big.NewInt(1), common.Address{}, common.Big0, common.Big0)
+	tx, err := seqInbox.AddSequencerL2Batch99020501(sequencer, seqNum, message, big.NewInt(1), common.Address{}, common.Big0, common.Big0, espressoMetadata)
 	Require(t, err)
 	receipt, err := EnsureTxSucceeded(ctx, backend, tx)
 	Require(t, err)
