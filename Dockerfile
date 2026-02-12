@@ -107,7 +107,7 @@ WORKDIR /workspace
 RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get update && \
     apt-get install -y make clang wabt && \
-    cargo install cbindgen --version 0.24.5 --force
+    cargo install cbindgen --version 0.24.3 --locked --force
 COPY arbitrator/Cargo.* arbitrator/
 COPY ./Makefile ./
 COPY arbitrator/arbutil arbitrator/arbutil
