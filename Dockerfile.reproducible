@@ -219,106 +219,15 @@ COPY --from=contracts-builder-repro /workspace/.make/ /.make/
 # ============================================================================
 # Stage 3: WASM Builders
 # ============================================================================
-# FROM debian:bookworm-20231218 AS wasm-base
-# WORKDIR /workspace
-# RUN apt-get update && apt-get install -y curl build-essential=12.9
-
-# FROM wasm-base AS wasm-libs-builder
-# RUN apt-get update && \
-#     apt-get install -y clang=1:14.0-55.7~deb12u1 lld=1:14.0-55.7~deb12u1 wabt
-# RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --target x86_64-unknown-linux-gnu,wasm32-unknown-unknown,wasm32-wasip1
-# COPY ./Makefile ./
-# COPY arbitrator/Cargo.* arbitrator/
-# COPY arbitrator/arbutil arbitrator/arbutil
-# COPY arbitrator/brotli arbitrator/brotli
-# COPY arbitrator/caller-env arbitrator/caller-env
-# COPY arbitrator/prover arbitrator/prover
-# COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
-# COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
-# COPY brotli brotli
-# COPY scripts/build-brotli.sh scripts/
-# COPY scripts/remove_reference_types.sh scripts/
-# COPY --from=brotli-wasm-export / target/
-# RUN apt-get update && apt-get install -y cmake
-# RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
-
-  # ============================================================================                                                                                                                                                                         
-  # Stage 3: WASM Builders (StageX)                                                                     
-  # ============================================================================                                                                                                                                                                         
-#   FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS wasm-libs-builder                                                                                                                                       
-
-#   COPY --from=stagex/make       . /
-#   COPY --from=stagex/cmake      . /
-#   COPY --from=stagex/gcc        . /
-#   COPY --from=stagex/binutils   . /
-#   COPY --from=stagex/git        . /
-#   COPY --from=stagex/curl       . /
-#   COPY --from=stagex/ca-certificates . /
-#   COPY --from=stagex/openssl     . /
-#   COPY --from=stagex/core-filesystem . /
-#   COPY --from=stagex/bash       . /
-#   COPY --from=stagex/musl       . /
-#   COPY --from=stagex/clang      . /
-
-#   ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-#   ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-#   ENV PATH="/usr/bin:/bin:/sbin:$PATH"
-#   USER root
-#   WORKDIR /workspace
-
-#   # Install Rust via rustup
-#   RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --target x86_64-unknown-linux-gnu,wasm32-unknown-unknown,wasm32-wasip1
-
-#   # Install wabt (WebAssembly Binary Toolkit) - you may need to build from source or find a prebuilt binary
-#   RUN curl -L https://github.com/WebAssembly/wabt/releases/download/1.0.36/wabt-1.0.36-ubuntu-20.04.tar.gz | tar xz && \
-#       cp wabt-1.0.36/bin/* /usr/bin/
-
-#   COPY ./Makefile ./
-#   COPY arbitrator/Cargo.* arbitrator/
-#   COPY arbitrator/arbutil arbitrator/arbutil
-#   COPY arbitrator/brotli arbitrator/brotli
-#   COPY arbitrator/caller-env arbitrator/caller-env
-#   COPY arbitrator/prover arbitrator/prover
-#   COPY arbitrator/wasm-libraries arbitrator/wasm-libraries
-#   COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
-#   COPY brotli brotli
-#   COPY scripts/build-brotli.sh scripts/
-#   COPY scripts/remove_reference_types.sh scripts/
-#   COPY --from=brotli-wasm-export / target/
-
-#   RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
-FROM stagex/core-busybox:latest AS wasm-base
-
-# Add static curl, clang/lld (for wasm linking), wabt (wasm tools)
-COPY --from=stagex/core-curl:latest     /usr/bin/curl     /usr/bin/curl
-COPY --from=stagex/core-clang:latest    /usr/bin/clang    /usr/bin/clang
-COPY --from=stagex/core-clang:latest    /usr/bin/clang++  /usr/bin/clang++
-COPY --from=stagex/core-clang:latest    /usr/bin/lld      /usr/bin/lld
-COPY --from=stagex/core-wabt:latest     /usr/bin/*        /usr/bin/ 
-
-# Add static Rust toolchain from StageX (no rustup download!)
-COPY --from=stagex/pallet-rust:latest   /usr/lib/rustlib  /usr/lib/rustlib
-COPY --from=stagex/pallet-rust:latest   /usr/bin/rustc    /usr/bin/rustc
-COPY --from=stagex/pallet-rust:latest   /usr/bin/cargo    /usr/bin/cargo
-# Add cargo config if needed for reproducibility
-COPY --from=stagex/pallet-rust:latest   /root/.cargo      /root/.cargo
-
-# Set environment for deterministic builds
-ENV SOURCE_DATE_EPOCH=1
-ENV RUSTFLAGS="-C link-arg=-s -C symbol-mangling-version=v0"
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true   
-ENV CARGO_INCREMENTAL=0                
-ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
-ENV CARGO_PROFILE_RELEASE_LTO=thin     
-
+FROM debian:bookworm-20231218 AS wasm-base
 WORKDIR /workspace
+RUN apt-get update && apt-get install -y curl build-essential=12.9
 
-# ────────────────────────────────────────────────
-# Stage 2: Build WASM libs
-# ────────────────────────────────────────────────
 FROM wasm-base AS wasm-libs-builder
-
-COPY ./Makefile .
+RUN apt-get update && \
+    apt-get install -y clang=1:14.0-55.7~deb12u1 lld=1:14.0-55.7~deb12u1 wabt
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --target x86_64-unknown-linux-gnu,wasm32-unknown-unknown,wasm32-wasip1
+COPY ./Makefile ./
 COPY arbitrator/Cargo.* arbitrator/
 COPY arbitrator/arbutil arbitrator/arbutil
 COPY arbitrator/brotli arbitrator/brotli
@@ -330,11 +239,8 @@ COPY brotli brotli
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
 COPY --from=brotli-wasm-export / target/  
-
-# Build with pinned Rust from StageX
-RUN --network=none \
-    cargo build --release --target wasm32-unknown-unknown && \
-    cargo build --release --target wasm32-wasip1
+RUN apt-get update && apt-get install -y cmake
+RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
 
 FROM scratch AS wasm-libs-export
 COPY --from=wasm-libs-builder /workspace/ /
