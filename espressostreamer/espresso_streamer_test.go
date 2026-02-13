@@ -23,7 +23,7 @@ import (
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
 	"github.com/offchainlabs/nitro/arbutil"
-	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
+	"github.com/offchainlabs/nitro/espressotee"
 )
 
 func TestEspressoStreamer(t *testing.T) {
@@ -334,8 +334,10 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (legacy_espressogen.EnclaveReport, error) {
-	return legacy_espressogen.EnclaveReport{}, nil
+var _ espressotee.EspressoSGXVerifierInterface = (*mockEspressoTEEVerifier)(nil)
+
+func (v *mockEspressoTEEVerifier) Verify(opts *bind.CallOpts, attestation []byte, signature [32]byte) (espressotee.EnclaveReport, error) {
+	return espressotee.EnclaveReport{}, nil
 }
 
 type mockEspressoClient struct {

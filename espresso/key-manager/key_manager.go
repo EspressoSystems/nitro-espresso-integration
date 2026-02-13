@@ -121,7 +121,7 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, uint8(k.teeType), k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.serviceType)
 	if err != nil {
 		return false, err
 	}
@@ -192,21 +192,15 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return nil
 	}
 
-	// Check on-chain if we have already registered
-	hasRegistered, err := k.VerifyRegistered()
-	if err != nil {
-		return err
-	}
-	if hasRegistered {
-		k.hasRegistered = true
-		log.Info("Signer already registered on-chain")
-		return nil
-	}
-
 	// Get the attestation and data needed to register the signer
 	attestation, data, err := k.PrepareRegisterService(getAttestationFunc)
 	if err != nil {
 		return err
+	}
+
+	// In tests we use TESTS tee type but the contract only accepts SGX tee type
+	if k.teeType == TESTS {
+		k.teeType = SGX
 	}
 
 	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
@@ -218,7 +212,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
-	hasRegistered, err = k.VerifyRegistered()
+	hasRegistered, err := k.VerifyRegistered()
 	if err != nil {
 		return err
 	}
@@ -227,9 +221,6 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	}
 
 	k.hasRegistered = true
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }
@@ -331,6 +322,6 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 
 // No-Op Signauture
 // This is a function designed to replace a signing function for functionality that depends on operating in a TEE
-func (k *EspressoKeyManager) noOpSignerFunc(payload []byte) ([]byte, error) {
-	return []byte{}, nil
+func (k *EspressoKeyManager) noOpSignerFunc(addr []byte) ([]byte, error) {
+	return addr, nil
 }
