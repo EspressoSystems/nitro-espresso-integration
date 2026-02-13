@@ -44,7 +44,7 @@ gotestsum \
 # Code style guidelines
 - Avoid unnecessary comments when the code is self-explanatory through clear function and variable names.
 - Avoid making extensive changes to the batch_poster.go file.
-- All tests should start with the TestEspresso prefix.
+- All tests should start with the `TestEspresso` or `TestAuthDB` prefix.
 
 # Testing
 This is blockchain infrastructure. Bugs can cause irreversible financial losses.
