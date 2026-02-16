@@ -43,8 +43,10 @@ gotestsum \
 
 # Code style guidelines
 - Avoid unnecessary comments when the code is self-explanatory through clear function and variable names.
-- Avoid making extensive changes to the batch_poster.go file.
 - All tests should start with the TestEspresso prefix.
+- No changes should be made to the submodules.
+- Avoid making changes to the Rollup code outside of the espresso folder.
+- Lint fixes should be in separate, individual commits. To run lint, use make lint.
 
 # Testing
 This is blockchain infrastructure. Bugs can cause irreversible financial losses.
