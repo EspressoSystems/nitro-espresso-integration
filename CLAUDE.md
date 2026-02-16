@@ -44,9 +44,9 @@ gotestsum \
 # Code style guidelines
 - Avoid unnecessary comments when the code is self-explanatory through clear function and variable names.
 - All tests should start with the TestEspresso prefix.
-- No changes should be done to the submodules
-- Avoid changes to the rollup code outside of the espresso folder.
-- Have lint fixes in separated individual commits, to run lint use `make lint`
+- No changes should be made to the submodules.
+- Avoid making changes to the Rollup code outside of the espresso folder.
+- Lint fixes should be in separate, individual commits. To run lint, use make lint.
 
 # Testing
 This is blockchain infrastructure. Bugs can cause irreversible financial losses.
