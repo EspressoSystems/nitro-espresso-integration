@@ -8,6 +8,8 @@ on:
     branches:
       - integration
       - celestia-integration
+      - integration-v3.9.2
+      - celestia-v3.9.2
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

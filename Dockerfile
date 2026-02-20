@@ -39,7 +39,6 @@ COPY contracts contracts/
 COPY safe-smart-account safe-smart-account/
 COPY espresso-tee-contracts espresso-tee-contracts/
 RUN cd safe-smart-account && npm install
-COPY espresso-tee-contracts-legacy espresso-tee-contracts-legacy/
 COPY Makefile .
 RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
@@ -101,7 +100,6 @@ COPY ./contracts/src/precompiles/ ./contracts/src/precompiles/
 COPY ./contracts/package.json ./contracts/yarn.lock ./contracts/
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
-COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 COPY ./solgen/gen.go ./solgen/
 COPY ./go-ethereum ./go-ethereum
 COPY scripts/remove_reference_types.sh scripts/
@@ -212,7 +210,6 @@ COPY ./contracts-legacy ./contracts-legacy
 COPY ./contracts-local ./contracts-local
 COPY ./safe-smart-account ./safe-smart-account
 COPY ./espresso-tee-contracts ./espresso-tee-contracts
-COPY ./espresso-tee-contracts-legacy ./espresso-tee-contracts-legacy
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-replay-env
 
 FROM debian:bookworm-slim AS machine-versions
@@ -277,7 +274,6 @@ COPY --from=contracts-builder workspace/contracts-legacy/out/ contracts-legacy/o
 COPY --from=contracts-builder workspace/contracts-local/out/ contracts-local/out/
 COPY --from=contracts-builder workspace/safe-smart-account/build/ safe-smart-account/build/
 COPY --from=contracts-builder workspace/espresso-tee-contracts/out/ espresso-tee-contracts/out/
-COPY --from=contracts-builder workspace/espresso-tee-contracts-legacy/out/ espresso-tee-contracts-legacy/out/
 COPY --from=contracts-builder workspace/.make/ .make/
 COPY --from=prover-header-export / target/
 COPY --from=brotli-library-export / target/

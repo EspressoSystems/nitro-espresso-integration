@@ -1,0 +1,25 @@
+name: PR Title Lint
+run-name: Validate PR title (@${{ github.actor }})
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate PR title
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TITLE=$(gh pr view ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --json title --jq .title)
+          echo "PR title: $TITLE"
+
+          if ! echo "$TITLE" | grep -Eq '^(feat|fix|chore|docs|refactor|test|ci)(\(.+\))?: .+'; then
+            echo "❌ PR title must follow Conventional Commits"
+            exit 1
+          fi

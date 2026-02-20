@@ -624,11 +624,12 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if b.dataPoster.Auth() == nil {
 			panic("TransactOpts is nil")
 		}
+		// to support tests, we can give the batch poster a "persistent key" via the config, This variable WILL be nil if the configured tee type is not TESTS
 		submitterOptions = append(
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
 			),
 		)
 
@@ -1409,21 +1410,29 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata: %w", err)
 		}
-
-		sigLength := len(signature)
-		if sigLength > 0 {
-			// Get the last byte (v)
-			vIndex := sigLength - 1
-			v := signature[vIndex]
-
-			// Adjusting ECDSA signature 'v' value for Ethereum compatibility
-			// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
-			// https://github.com/ethereum/go-ethereum/issues/19751
-			if v == 0 || v == 1 {
-				signature[vIndex] = v + 27
-			}
-		}
 		teeType = keyManager.TeeType()
+	} else {
+		// Not running espresso mode. This should happen in testing only.
+		log.Error("BatchPoster is not running in espresso mode, no signature will be attached to the batch")
+		// For compatibility we sign the data with a given private key.
+		signature, err = arbutil.SignMessage(calldata, TestEspressoPrivateKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to sign the calldata with test private key: %w", err)
+		}
+	}
+
+	sigLength := len(signature)
+	if sigLength > 0 {
+		// Get the last byte (v)
+		vIndex := sigLength - 1
+		v := signature[vIndex]
+
+		// Adjusting ECDSA signature 'v' value for Ethereum compatibility
+		// Get `v` from the signature and verify the byte is in expected format for openzeppelin `ECDSA.recover`
+		// https://github.com/ethereum/go-ethereum/issues/19751
+		if v == 0 || v == 1 {
+			signature[vIndex] = v + 27
+		}
 	}
 
 	bytesType, err := abi.NewType("bytes", "", nil)

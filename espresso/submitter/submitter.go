@@ -38,7 +38,7 @@ type EspressoSubmitterConfig struct {
 	// values set for them, but can be overridden by the user.
 
 	ChainID                               uint64
-	EspressoTxnsMoniteringInterval        time.Duration
+	EspressoTxnsMonitoringInterval        time.Duration
 	EspressoTxnsResubmissionInterval      time.Duration
 	EspressoTxnSendingInterval            time.Duration
 	EspressoMaxTransactionSize            int64
@@ -93,7 +93,7 @@ type EspressoSubmitterConfig struct {
 // - LightClientReader
 // - MessageGetter
 var DefaultEspressoSubmitterConfig = EspressoSubmitterConfig{
-	EspressoTxnsMoniteringInterval:        time.Second,
+	EspressoTxnsMonitoringInterval:        time.Second,
 	EspressoTxnSendingInterval:            time.Second,
 	EspressoMaxTransactionSize:            200_000,
 	ResubmitEspressoTxDeadline:            16 * time.Second,
@@ -215,7 +215,7 @@ func WithMaxTransactionSize(size int64) EspressoSubmitterConfigOption {
 // transaction polling, resubmission, and submission interval
 func WithTxnsMonitoringInterval(interval time.Duration) EspressoSubmitterConfigOption {
 	return func(config *EspressoSubmitterConfig) {
-		config.EspressoTxnsMoniteringInterval = interval
+		config.EspressoTxnsMonitoringInterval = interval
 	}
 }
 
@@ -393,8 +393,12 @@ func ValidateEspressoSubmitterConfig(config EspressoSubmitterConfig) error {
 		return fmt.Errorf("espresso max transaction size must be greater than 0")
 	}
 
-	if config.EspressoTxnsMoniteringInterval <= 0 {
+	if config.EspressoTxnsMonitoringInterval <= 0 {
 		return fmt.Errorf("espresso transactions polling interval must be greater than 0")
+	}
+
+	if config.EspressoTxnsMonitoringInterval >= 2*time.Second {
+		return fmt.Errorf("espresso transactions polling interval must be 2 seconds or less")
 	}
 
 	if config.EspressoTxnSendingInterval <= 0 {
