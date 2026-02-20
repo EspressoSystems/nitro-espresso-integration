@@ -273,11 +273,11 @@ func (n *NitroMessageToEspressoTransactionAdapter) Init() error {
 	teeType := n.keyManager.TeeType()
 	switch teeType {
 	case espresso_key_manager.SGX:
-		return n.keyManager.GetAttestation(n.getAttestationQuote)
+		return n.keyManager.InitRegistration(n.getAttestationQuote)
 	case espresso_key_manager.NITRO:
-		return n.keyManager.GetAttestation(n.getNitroAttestation)
+		return n.keyManager.InitRegistration(n.getNitroAttestation)
 	case espresso_key_manager.TESTS:
-		return n.keyManager.GetAttestation(n.getAttestationQuote)
+		return n.keyManager.InitRegistration(n.getAttestationQuote)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}

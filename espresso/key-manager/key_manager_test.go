@@ -92,7 +92,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.GetAttestation(getAttestationFunc)
+		err := km.InitRegistration(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		state = km.GetKeyManagerState()
@@ -172,7 +172,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.GetAttestation(getAttestationFunc)
+		err := km.InitRegistration(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		state = km.GetKeyManagerState()

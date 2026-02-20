@@ -56,7 +56,7 @@ type EspressoKeyManagerInterface interface {
 	SignMessage(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
 	GetKeyManagerState() KeyManagerState
-	GetAttestation(getAttestationFunc func([]byte) ([]byte, error)) error
+	InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error
 }
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
@@ -220,7 +220,7 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 	}
 }
 
-func (k *EspressoKeyManager) GetAttestation(getAttestationFunc func([]byte) ([]byte, error)) error {
+func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error {
 	if k.hasRegistered() {
 		log.Info("EspressoKeyManager already registered")
 		return nil
@@ -257,7 +257,7 @@ func (k *EspressoKeyManager) GetAttestation(getAttestationFunc func([]byte) ([]b
 
 func (k *EspressoKeyManager) RegisterSigner() error {
 	currentState := k.GetKeyManagerState()
-if currentState != PendingRegister {
+	if currentState != PendingRegister {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegister", currentState)
 	}
 	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
@@ -308,11 +308,11 @@ func (k *EspressoKeyManager) Init() error {
 	teeType := k.TeeType()
 	switch teeType {
 	case SGX:
-		return k.GetAttestation(k.getAttestationQuote)
+		return k.InitRegistration(k.getAttestationQuote)
 	case NITRO:
-		return k.GetAttestation(k.getNitroAttestation)
+		return k.InitRegistration(k.getNitroAttestation)
 	case TESTS:
-		return k.GetAttestation(k.noOpSignerFunc)
+		return k.InitRegistration(k.noOpSignerFunc)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
