@@ -257,8 +257,8 @@ func (k *EspressoKeyManager) GetAttestation(getAttestationFunc func([]byte) ([]b
 
 func (k *EspressoKeyManager) RegisterSigner() error {
 	currentState := k.GetKeyManagerState()
-	if currentState != PendingRegister {
-		log.Warn("Trying to register but our state is incorrect", "state", currentState)
+if currentState != PendingRegister {
+		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegister", currentState)
 	}
 	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
 	if err != nil {
