@@ -28,17 +28,32 @@ const (
 	EMPTY = espressotee.EMPTY
 )
 
+type KeyManagerState int
+
+const (
+	Init KeyManagerState = iota
+	PendingRegister
+	Registered
+)
+
+type state struct {
+	currentState KeyManagerState
+	attestation  []byte
+	data         []byte
+}
+
 const quoteFile = "/dev/attestation/quote"
 const userDataAttestationFile = "/dev/attestation/user_report_data"
 
 type EspressoKeyManagerInterface interface {
-	HasRegistered() bool
-	Register(getAttestationFunc func([]byte) ([]byte, error)) error
-	RegisterService() error
+	RegisterSigner() error
+	Init() error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignPayload(message []byte) ([]byte, error)
 	SignMessage(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
+	GetKeyManagerState() KeyManagerState
+	GetAttestation(getAttestationFunc func([]byte) ([]byte, error)) error
 }
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
@@ -52,8 +67,8 @@ type EspressoKeyManager struct {
 	teeType     espressotee.TEE
 	serviceType espressotee.ServiceType
 
-	hasRegistered                          bool
 	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
+	state                                  state
 }
 
 func NewEspressoKeyManager(
@@ -100,15 +115,24 @@ func NewEspressoKeyManager(
 		teeType:                                teeType,
 		serviceType:                            serviceType,
 		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
+		state: state{
+			currentState: Init,
+			attestation:  []byte{},
+			data:         []byte{},
+		},
 	}
 }
 
-func (k *EspressoKeyManager) HasRegistered() bool {
-	return k.hasRegistered
+func (k *EspressoKeyManager) hasRegistered() bool {
+	return k.state.currentState == Registered
+}
+
+func (k *EspressoKeyManager) GetKeyManagerState() KeyManagerState {
+	return k.state.currentState
 }
 
 func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
-	if k.hasRegistered {
+	if k.hasRegistered() {
 		return true, nil
 	}
 	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
@@ -177,8 +201,8 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 	}
 }
 
-func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) error {
-	if k.hasRegistered {
+func (k *EspressoKeyManager) GetAttestation(getAttestationFunc func([]byte) ([]byte, error)) error {
+	if k.hasRegistered() {
 		log.Info("EspressoKeyManager already registered")
 		return nil
 	}
@@ -189,7 +213,9 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return err
 	}
 	if hasRegistered {
-		k.hasRegistered = true
+		k.state.currentState = Registered
+		k.state.attestation = []byte{}
+		k.state.data = []byte{}
 		log.Info("Signer already registered on-chain")
 		return nil
 	}
@@ -199,8 +225,18 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	if err != nil {
 		return err
 	}
+	k.state.currentState = PendingRegister
+	k.state.attestation = attestation
+	k.state.data = data
+	return nil
+}
 
-	err = k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, attestation, data, uint8(k.teeType), k.serviceType)
+func (k *EspressoKeyManager) RegisterSigner() error {
+	currentState := k.GetKeyManagerState()
+	if currentState != PendingRegister {
+		log.Warn("Trying to register but our state is incorrect", "state", currentState)
+	}
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
 	if err != nil {
 		return err
 	}
@@ -209,7 +245,7 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
 
 	// Verify our address is actually registered in contract
-	hasRegistered, err = k.VerifyRegistered()
+	hasRegistered, err := k.VerifyRegistered()
 	if err != nil {
 		return err
 	}
@@ -217,7 +253,9 @@ func (k *EspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, e
 		return errors.New("address is not registered in contract even after successful transaction and retries")
 	}
 
-	k.hasRegistered = true
+	k.state.currentState = Registered
+	k.state.attestation = []byte{}
+	k.state.data = []byte{}
 	if k.teeType == TESTS {
 		k.teeType = SGX
 	}
@@ -242,15 +280,15 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 	return arbutil.SignMessage(message, k.privKey)
 }
 
-func (k *EspressoKeyManager) RegisterService() error {
+func (k *EspressoKeyManager) Init() error {
 	teeType := k.TeeType()
 	switch teeType {
 	case SGX:
-		return k.Register(k.getAttestationQuote)
+		return k.GetAttestation(k.getAttestationQuote)
 	case NITRO:
-		return k.Register(k.getNitroAttestation)
+		return k.GetAttestation(k.getNitroAttestation)
 	case TESTS:
-		return k.Register(k.noOpSignerFunc)
+		return k.GetAttestation(k.noOpSignerFunc)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}

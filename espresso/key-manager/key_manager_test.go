@@ -61,8 +61,8 @@ func TestEspressoKeyManager(t *testing.T) {
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.GetCurrentKey(), "Public key should be set")
 		// assert.NotNil(t, km.privKey, "Private key should be set")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should not be registered initially")
+		state := km.GetKeyManagerState()
+		assert.Equal(t, espresso_key_manager.Init, state, "Should not be registered initially")
 	})
 
 	// Test HasRegistered and Registry
@@ -73,8 +73,8 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should start unregistered")
+		state := km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
 
 		// Mock sign function
 		called := false
@@ -87,17 +87,17 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.Register(getAttestationFunc)
+		err := km.GetAttestation(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Should be registered after call")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegister, "Should be registered after call")
 
 		// Second call (already registered)
-		called = false
-		err = km.Register(getAttestationFunc)
-		require.NoError(t, err, "Registry should succeed when already registered")
-		assert.False(t, called, "Sign function should not be called again")
+		err = km.RegisterSigner()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")
 	})
 
 	// Test GetCurrentKey
@@ -155,8 +155,8 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, nil, "http:/127.0.0.1")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should start unregistered")
+		state := km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
 
 		// Mock sign function
 		called := false
@@ -168,19 +168,17 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.Register(getAttestationFunc)
+		err := km.GetAttestation(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Should be registered after call")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegister, "Should be registered after call")
 
 		// Second call (already registered)
-		called = false
-		err = km.Register(getAttestationFunc)
-		require.NoError(t, err, "Registry should succeed when already registered")
-		assert.False(t, called, "Sign function should not be called again")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Register function should still return true")
+		err = km.RegisterSigner()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")
 	})
 
 	// Test Sign

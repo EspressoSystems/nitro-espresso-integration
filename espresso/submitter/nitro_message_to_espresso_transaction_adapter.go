@@ -269,18 +269,22 @@ func (t *NitroMessageToEspressoTransactionAdapter) getNitroAttestation(pubKey []
 	return attestationBytes, nil
 }
 
-func (n *NitroMessageToEspressoTransactionAdapter) RegisterService() error {
+func (n *NitroMessageToEspressoTransactionAdapter) Init() error {
 	teeType := n.keyManager.TeeType()
 	switch teeType {
 	case espresso_key_manager.SGX:
-		return n.keyManager.Register(n.getAttestationQuote)
+		return n.keyManager.GetAttestation(n.getAttestationQuote)
 	case espresso_key_manager.NITRO:
-		return n.keyManager.Register(n.getNitroAttestation)
+		return n.keyManager.GetAttestation(n.getNitroAttestation)
 	case espresso_key_manager.TESTS:
-		return n.keyManager.Register(n.getAttestationQuote)
+		return n.keyManager.GetAttestation(n.getAttestationQuote)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
+}
+
+func (n *NitroMessageToEspressoTransactionAdapter) RegisterSigner() error {
+	return n.keyManager.RegisterSigner()
 }
 
 func (n *NitroMessageToEspressoTransactionAdapter) EnqueuePendingTransaction(pos []arbutil.MessageIndex) error {

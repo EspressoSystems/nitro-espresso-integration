@@ -1812,13 +1812,26 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		registered := espressoSubmitter.GetKeyManager().HasRegistered()
-		if !registered {
-			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
-			err := espressoSubmitter.RegisterService()
+		state := espressoSubmitter.GetKeyManager().GetKeyManagerState()
+		switch state {
+		case espresso_key_manager.Init:
+			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, keymanager in init phase")
+			err := espressoSubmitter.Init()
+			if err != nil {
+				return false, fmt.Errorf("unable to init keymanager: %w", err)
+			}
+			return false, nil
+		case espresso_key_manager.PendingRegister:
+			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, keymanager in register phase")
+			err := espressoSubmitter.RegisterSigner()
 			if err != nil {
 				return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
 			}
+			return false, nil
+		case espresso_key_manager.Registered:
+			// registered phase we are good
+		default:
+			return false, fmt.Errorf("key manager in an unknown state: %v", state)
 		}
 	}
 
