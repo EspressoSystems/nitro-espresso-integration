@@ -32,7 +32,7 @@ type KeyManagerState int
 
 const (
 	Init KeyManagerState = iota
-	PendingRegister
+	PendingRegistration
 	Registered
 )
 
@@ -240,7 +240,8 @@ func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([
 		k.state.currentState = Registered
 		k.state.attestation = []byte{}
 		k.state.data = []byte{}
-		log.Info("Signer already registered on-chain")
+		signerAddr := crypto.PubkeyToAddress(k.privKey.PublicKey)
+		log.Info("Signer already registered on-chain", "signer address", signerAddr.Hex())
 		return nil
 	}
 
@@ -249,7 +250,7 @@ func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([
 	if err != nil {
 		return err
 	}
-	k.state.currentState = PendingRegister
+	k.state.currentState = PendingRegistration
 	k.state.attestation = attestation
 	k.state.data = data
 	return nil
@@ -257,8 +258,8 @@ func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([
 
 func (k *EspressoKeyManager) RegisterSigner() error {
 	currentState := k.GetKeyManagerState()
-	if currentState != PendingRegister {
-		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegister", currentState)
+	if currentState != PendingRegistration {
+		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
 	}
 	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
 	if err != nil {
