@@ -84,6 +84,10 @@ func (m *MockEspressoKeyManager) HasRegistered() bool {
 	return false
 }
 
+func (m *MockEspressoKeyManager) GetKeyManagerState() key_manager.KeyManagerState {
+	return key_manager.Registered
+}
+
 // Register implements key_manager.EspressoKeyManagerInterface.
 func (m *MockEspressoKeyManager) Register(getAttestationFunc func([]byte) ([]byte, error)) error {
 	return nil
@@ -106,6 +110,10 @@ func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
 	return espressotee.SGX
 }
 
+func (m *MockEspressoKeyManager) CheckRegistration() (bool, error) {
+	return true, nil
+}
+
 func (m *MockEspressoKeyManager) RegisterService() error {
 	teeType := m.TeeType()
 	switch teeType {
@@ -115,6 +123,24 @@ func (m *MockEspressoKeyManager) RegisterService() error {
 		return m.Register(m.getData)
 	case espressotee.TESTS:
 		return m.Register(m.getData)
+	default:
+		return fmt.Errorf("unsupported tee Type: %d", teeType)
+	}
+}
+
+func (m *MockEspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error {
+	return nil
+}
+
+func (m *MockEspressoKeyManager) Init() error {
+	teeType := m.TeeType()
+	switch teeType {
+	case espressotee.SGX:
+		return m.InitRegistration(m.getData)
+	case espressotee.NITRO:
+		return m.InitRegistration(m.getData)
+	case espressotee.TESTS:
+		return m.InitRegistration(m.getData)
 	default:
 		return fmt.Errorf("unsupported tee Type: %d", teeType)
 	}

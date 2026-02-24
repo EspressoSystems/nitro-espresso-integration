@@ -586,6 +586,10 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	return true
 }
 
+func (s *PollingEspressoSubmitter) Init() error {
+	return s.espressoKeyManager.Init()
+}
+
 func (s *PollingEspressoSubmitter) RegisterService() error {
 	return s.espressoKeyManager.RegisterService()
 }
