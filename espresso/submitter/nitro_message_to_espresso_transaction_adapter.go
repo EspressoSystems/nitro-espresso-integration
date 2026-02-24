@@ -283,8 +283,8 @@ func (n *NitroMessageToEspressoTransactionAdapter) Init() error {
 	}
 }
 
-func (n *NitroMessageToEspressoTransactionAdapter) RegisterSigner() error {
-	return n.keyManager.RegisterSigner()
+func (n *NitroMessageToEspressoTransactionAdapter) RegisterService() error {
+	return n.keyManager.RegisterService()
 }
 
 func (n *NitroMessageToEspressoTransactionAdapter) EnqueuePendingTransaction(pos []arbutil.MessageIndex) error {

@@ -114,7 +114,7 @@ func (m *MockEspressoKeyManager) CheckRegistration() (bool, error) {
 	return true, nil
 }
 
-func (m *MockEspressoKeyManager) RegisterSigner() error {
+func (m *MockEspressoKeyManager) RegisterService() error {
 	teeType := m.TeeType()
 	switch teeType {
 	case espressotee.SGX:

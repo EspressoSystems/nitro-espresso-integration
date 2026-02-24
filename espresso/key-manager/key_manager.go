@@ -51,7 +51,7 @@ const quoteFile = "/dev/attestation/quote"
 const userDataAttestationFile = "/dev/attestation/user_report_data"
 
 type EspressoKeyManagerInterface interface {
-	RegisterSigner() error
+	RegisterService() error
 	Init() error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignPayload(message []byte) ([]byte, error)
@@ -181,7 +181,7 @@ func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
 		return false, nil
 	case PendingRegistration:
 		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
-		err := k.RegisterSigner()
+		err := k.RegisterService()
 		if err != nil {
 			return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
 		}
@@ -283,7 +283,7 @@ func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([
 	return nil
 }
 
-func (k *EspressoKeyManager) RegisterSigner() error {
+func (k *EspressoKeyManager) RegisterService() error {
 	currentState := k.GetKeyManagerState()
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)

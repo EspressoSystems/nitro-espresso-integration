@@ -99,7 +99,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
 
 		// Second call (already registered)
-		err = km.RegisterSigner()
+		err = km.RegisterService()
 		require.NoError(t, err, "Registry should succeed")
 		state = km.GetKeyManagerState()
 		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")
@@ -179,7 +179,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
 
 		// Second call (already registered)
-		err = km.RegisterSigner()
+		err = km.RegisterService()
 		require.NoError(t, err, "Registry should succeed")
 		state = km.GetKeyManagerState()
 		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")

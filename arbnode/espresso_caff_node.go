@@ -515,7 +515,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			log.Info("Caff node address is already registered on chain!")
 		} else {
 			log.Info("caff node completed init, trying to register signer")
-			if err := n.keyManager.RegisterSigner(); err != nil {
+			if err := n.keyManager.RegisterService(); err != nil {
 				return err
 			}
 		}

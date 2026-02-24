@@ -27,7 +27,7 @@ type EspressoSubmitter interface {
 	NotifyNewPendingMessages(pos arbutil.MessageIndex, messages []arbostypes.MessageWithMetadataAndBlockInfo) error
 	GetKeyManager() espresso_key_manager.EspressoKeyManagerInterface
 	Init() error
-	RegisterSigner() error
+	RegisterService() error
 	EnqueuePendingTransaction(pos []arbutil.MessageIndex) error
 }
 
