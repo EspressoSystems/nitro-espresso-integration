@@ -28,6 +28,8 @@ const (
 	EMPTY = espressotee.EMPTY
 )
 
+var FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
+
 type KeyManagerState int
 
 const (
@@ -56,6 +58,7 @@ type EspressoKeyManagerInterface interface {
 	SignMessage(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
 	GetKeyManagerState() KeyManagerState
+	CheckRegistration() (bool, error)
 	InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error
 }
 
@@ -164,6 +167,30 @@ func (k *EspressoKeyManager) VerifyRegistered() (bool, error) {
 		return false, err
 	}
 	return ok, nil
+}
+
+func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
+	state := k.state.currentState
+	switch state {
+	case Init:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Init phase. Waiting for Zk proof to be generated")
+		err := k.Init()
+		if err != nil {
+			return false, fmt.Errorf("unable to init keymanager: %w", err)
+		}
+		return false, nil
+	case PendingRegistration:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
+		err := k.RegisterSigner()
+		if err != nil {
+			return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
+		}
+		return false, nil
+	case Registered:
+		return true, nil
+	default:
+		return false, fmt.Errorf("key manager in an unknown state: %v", state)
+	}
 }
 
 /*
@@ -278,12 +305,10 @@ func (k *EspressoKeyManager) RegisterSigner() error {
 		return errors.New("address is not registered in contract even after successful transaction and retries")
 	}
 
+	// We are registered free up the memory
 	k.state.currentState = Registered
 	k.state.attestation = []byte{}
 	k.state.data = []byte{}
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
 	log.Info("Signer registration confirmed on-chain")
 	return nil
 }

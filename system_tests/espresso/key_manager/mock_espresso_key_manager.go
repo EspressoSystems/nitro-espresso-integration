@@ -110,6 +110,10 @@ func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
 	return espressotee.SGX
 }
 
+func (m *MockEspressoKeyManager) CheckRegistration() (bool, error) {
+	return true, nil
+}
+
 func (m *MockEspressoKeyManager) RegisterSigner() error {
 	teeType := m.TeeType()
 	switch teeType {

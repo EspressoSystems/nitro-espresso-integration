@@ -81,9 +81,8 @@ var (
 
 	batchPosterFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/failure", nil)
 
-	usableBytesInBlob              = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
-	blobTxBlobGasPerBlob           = big.NewInt(params.BlobTxBlobGasPerBlob)
-	FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
+	usableBytesInBlob    = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
+	blobTxBlobGasPerBlob = big.NewInt(params.BlobTxBlobGasPerBlob)
 )
 
 const (
@@ -1821,26 +1820,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		state := espressoSubmitter.GetKeyManager().GetKeyManagerState()
-		switch state {
-		case espresso_key_manager.Init:
-			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Init phase")
-			err := espressoSubmitter.Init()
-			if err != nil {
-				return false, fmt.Errorf("unable to init keymanager: %w", err)
-			}
-			return false, nil
-		case espresso_key_manager.PendingRegistration:
-			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
-			err := espressoSubmitter.RegisterSigner()
-			if err != nil {
-				return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
-			}
-			return false, nil
-		case espresso_key_manager.Registered:
-			// registered phase we are good
-		default:
-			return false, fmt.Errorf("key manager in an unknown state: %v", state)
+		isRegistered, err := espressoSubmitter.GetKeyManager().CheckRegistration()
+		if !isRegistered {
+			return false, err
 		}
 	}
 
@@ -2605,7 +2587,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				// Shutting down. No need to print the context canceled error.
 				return 0
 			}
-			if errors.Is(err, FatalErrUnableToRegisterSigner) {
+			if errors.Is(err, espresso_key_manager.FatalErrUnableToRegisterSigner) {
 				log.Warn(
 					"Espresso signer registration failed consecutively. Stopping.",
 					"retries", espressotee.EspressoMaxRetries,
