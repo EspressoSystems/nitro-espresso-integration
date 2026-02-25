@@ -171,16 +171,13 @@ func (s *EspressoStreamer) CanBatcherAddressSend(ctx context.Context, address co
 func (s *EspressoStreamer) GetMessageCount() uint64 {
 	s.messageLock.RLock()
 	defer s.messageLock.RUnlock()
-	connsecutive := uint64(0)
-	end := s.currentMessagePos + uint64(len(s.messageWithMetadataAndPos))
-	// Go though connsecutive positions
-	for start := s.currentMessagePos; start <= end; start++ {
-		if _, ok := s.messageWithMetadataAndPos[start]; !ok {
-			break
+	count := s.currentMessagePos
+	for {
+		if _, ok := s.messageWithMetadataAndPos[count]; !ok {
+			return count
 		}
-		connsecutive += 1
+		count++
 	}
-	return s.currentMessagePos + connsecutive
 }
 
 func (s *EspressoStreamer) Reset(currentMessagePos uint64, currentHotshotBlock uint64) {
