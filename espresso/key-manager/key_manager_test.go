@@ -3,9 +3,11 @@ package keymanager_test
 import (
 	"crypto/ecdsa"
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
 
+	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -28,8 +30,8 @@ func (m *mockEspressoTEEVerifier) RegisterService(dataPoster *dataposter.DataPos
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType uint8, serviceType espressotee.ServiceType) (bool, error) {
-	args := m.Called(addr, teeType)
+func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType espressotee.TEE, serviceType espressotee.ServiceType) (bool, error) {
+	args := m.Called(addr)
 	return args.Bool(0), nil
 }
 
@@ -52,29 +54,32 @@ func TestEspressoKeyManager(t *testing.T) {
 	mockEspressoNitroTEEVerifier := new(mockNitroEspressoTEEVerifier)
 	mockEspressoNitroTEEVerifier.On("IsPCR0HashRegistered", mock.Anything).Return(true, nil)
 
+	// Generate persistent private key from test mnemonic for tests that need it
+	testMnemonic := "test test test test test test test test test test test junk"
+	persistentPrivKey := GeneratePrivateKeyFromMnemonic(t, testMnemonic, 0)
+
 	// Test initialization
 	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
 		require.NotNil(t, km, "Key manager should not be nil")
 		assert.NotEmpty(t, km.GetCurrentKey(), "Public key should be set")
 		// assert.NotNil(t, km.privKey, "Private key should be set")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should not be registered initially")
+		state := km.GetKeyManagerState()
+		assert.Equal(t, espresso_key_manager.Init, state, "Should not be registered initially")
 	})
 
 	// Test HasRegistered and Registry
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		// First call: not registered, Second call: registered
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should start unregistered")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
+		state := km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
 
 		// Mock sign function
 		called := false
@@ -87,17 +92,17 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.Register(getAttestationFunc)
+		err := km.InitRegistration(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Should be registered after call")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
 
 		// Second call (already registered)
-		called = false
-		err = km.Register(getAttestationFunc)
-		require.NoError(t, err, "Registry should succeed when already registered")
-		assert.False(t, called, "Sign function should not be called again")
+		err = km.RegisterService()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")
 	})
 
 	// Test GetCurrentKey
@@ -105,7 +110,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
 		pubKey := km.GetCurrentKey()
 		assert.NotEmpty(t, pubKey, "Public key should not be empty")
 	})
@@ -115,7 +120,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
 		message := []byte("test-message")
 		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
@@ -131,7 +136,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, nil, "")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
 		message := []byte("test-message")
 		signature, err := km.SignPayload(message)
 		require.NoError(t, err, "Sign should succeed")
@@ -151,12 +156,11 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		// First call: not registered, Second call: registered
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, nil, "http:/127.0.0.1")
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should start unregistered")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, nil, "", "", 0)
+		state := km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
 
 		// Mock sign function
 		called := false
@@ -168,19 +172,17 @@ func TestEspressoKeyManager(t *testing.T) {
 		}
 
 		// Register: should call sign function
-		err := km.Register(getAttestationFunc)
+		err := km.InitRegistration(getAttestationFunc)
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Should be registered after call")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
 
 		// Second call (already registered)
-		called = false
-		err = km.Register(getAttestationFunc)
-		require.NoError(t, err, "Registry should succeed when already registered")
-		assert.False(t, called, "Sign function should not be called again")
-		registered = km.HasRegistered()
-		assert.True(t, registered, "Register function should still return true")
+		err = km.RegisterService()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.Registered, "Should be registered after call")
 	})
 
 	// Test Sign
@@ -188,7 +190,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, nil, "http:/127.0.0.1")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, persistentPrivKey, "", "", 0)
 		message := []byte("test-message")
 		signature, err := km.SignMessage(message)
 		require.NoError(t, err, "Sign should succeed")
@@ -204,7 +206,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, nil, "http:/127.0.0.1")
+		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, persistentPrivKey, "", "", 0)
 		message := []byte("test-message")
 		signature, err := km.SignPayload(message)
 		require.NoError(t, err, "Sign should succeed")
@@ -254,3 +256,18 @@ func GetTransactOptsAndSigner(priKey string, chainId *big.Int) (*bind.TransactOp
 }
 
 type DataSignerFunc func([]byte) ([]byte, error)
+
+// GeneratePrivateKeyFromMnemonic generates a private key from a mnemonic phrase
+func GeneratePrivateKeyFromMnemonic(t *testing.T, mnemonic string, index uint) *ecdsa.PrivateKey {
+	wallet, err := hdwallet.NewFromMnemonic(mnemonic)
+	require.NoError(t, err, "Should create wallet from mnemonic")
+
+	path := hdwallet.MustParseDerivationPath(fmt.Sprintf("m/44'/60'/0'/0/%d", index))
+	account, err := wallet.Derive(path, false)
+	require.NoError(t, err, "Should derive account from path")
+
+	privateKey, err := wallet.PrivateKey(account)
+	require.NoError(t, err, "Should get private key from wallet")
+
+	return privateKey
+}

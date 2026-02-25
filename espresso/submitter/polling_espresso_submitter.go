@@ -94,7 +94,7 @@ func NewPollingEspressoSubmitter(options ...EspressoSubmitterConfigOption) (Espr
 
 		chainID:                          config.ChainID,
 		espressoTxnsResubmissionInterval: config.EspressoTxnsResubmissionInterval,
-		espressoTxnsMonitoringInterval:   config.EspressoTxnsMoniteringInterval,
+		espressoTxnsMonitoringInterval:   config.EspressoTxnsMonitoringInterval,
 		espressoMaxTransactionSize:       config.EspressoMaxTransactionSize,
 		resubmitEspressoTxDeadline:       config.ResubmitEspressoTxDeadline,
 
@@ -584,6 +584,10 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	}
 
 	return true
+}
+
+func (s *PollingEspressoSubmitter) Init() error {
+	return s.espressoKeyManager.Init()
 }
 
 func (s *PollingEspressoSubmitter) RegisterService() error {
