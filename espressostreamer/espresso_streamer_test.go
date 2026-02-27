@@ -125,8 +125,8 @@ func TestEspressoStreamer(t *testing.T) {
 
 		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second)
 
-		testParseFn := func(tx types.Bytes, l1 uint64) ([]*MessageWithMetadataAndPos, error) {
-			return nil, nil
+		testParseFn := func(tx types.Bytes, l1 uint64) error {
+			return nil
 		}
 
 		err := streamer.QueueMessagesFromHotshot(ctx, testParseFn)
@@ -179,18 +179,18 @@ func TestEspressoStreamer(t *testing.T) {
 
 		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second)
 
-		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
+		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) error {
 
-			return func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-				return []*MessageWithMetadataAndPos{
-					{
-						MessageWithMeta: arbostypes.MessageWithMetadata{
-							Message: &arbostypes.L1IncomingMessage{},
-						},
-						Pos:           pos,
-						HotshotHeight: hotshotheight,
+			return func(tx types.Bytes, l1Height uint64) error {
+				msg := &MessageWithMetadataAndPos{
+					MessageWithMeta: arbostypes.MessageWithMetadata{
+						Message: &arbostypes.L1IncomingMessage{},
 					},
-				}, nil
+					Pos:           pos,
+					HotshotHeight: hotshotheight,
+				}
+				streamer.messageWithMetadataAndPos[msg.Pos] = msg
+				return nil
 			}
 		}
 
@@ -254,19 +254,21 @@ func TestEspressoStreamer(t *testing.T) {
 		}, nil).Once()
 
 		parseAttemptCount := 0
-		parseFn := func(tx types.Bytes, _ uint64) ([]*MessageWithMetadataAndPos, error) {
+		messages := []*MessageWithMetadataAndPos{}
+		parseFn := func(tx types.Bytes, _ uint64) error {
 			if assert.ObjectsAreEqual(tx, tx2) {
 				parseAttemptCount++
-				return nil, rpc.ErrNoResult
+				return rpc.ErrNoResult
 			}
-			return []*MessageWithMetadataAndPos{{
+			messages = append(messages, &MessageWithMetadataAndPos{
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             uint64(tx[0]),
 				HotshotHeight:   blockNum,
-			}}, nil
+			})
+			return nil
 		}
 
-		messages, _, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
+		_, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(messages), "Expected to process two messages")
@@ -306,7 +308,7 @@ func TestEspressoEmptyTransaction(t *testing.T) {
 		return []byte{1}, nil
 	}
 	signedPayload, _ := arbutil.SignHotShotPayload(payload, signerFunc)
-	_, err := streamer.parseEspressoTransaction(signedPayload, 1)
+	err := streamer.parseEspressoTransaction(signedPayload, 1)
 	ExpectErr(t, err, ErrPayloadHadNoMessages)
 }
 

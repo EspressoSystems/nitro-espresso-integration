@@ -1846,15 +1846,11 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
 			b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
-			// TODO: Remove reset, this shouldnt be needed
-			if batchPosition.HotShotBlockNumber > 0 {
-				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
-			} else {
+			if b.espressoRestarting {
+				// Reset only once
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
-			}
-			if b.espressoRestarting {
 				cnt, err := b.streamer.GetMessageCount()
 				if err != nil {
 					return false, err
@@ -2049,7 +2045,7 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.GetMsg(b.building.msgCount)
+			espressoMsg := b.espressoStreamer.GetMsg(uint64(b.building.msgCount))
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
