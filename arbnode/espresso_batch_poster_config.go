@@ -16,6 +16,7 @@ type EspressoBatchPosterConfig struct {
 	TxnsResubmissionInterval   time.Duration `koanf:"txns-resubmission-interval"`
 	ResubmitEspressoTxDeadline time.Duration `koanf:"resubmit-espresso-tx-deadline"`
 	AttestationServiceURL      string        `koanf:"attestation-service-url"`
+	KeyPairAttestationsPath    string        `koanf:"key-pair-attestations-path"`
 
 	EventPollingStep         uint64 `koanf:"event-polling-step"`
 	HotShotFirstPostingBlock uint64 `koanf:"hotshot-first-posting-block"`
@@ -34,6 +35,7 @@ func EspressoBatchPosterConfigAddOptions(prefix string, f *pflag.FlagSet) {
 	f.Duration(prefix+".resubmit-espresso-tx-deadline", DefaultEspressoBatchPosterConfig.ResubmitEspressoTxDeadline, "time threshold after which a transaction will be automatically resubmitted if no response is received")
 	f.Duration(prefix+".txns-monitoring-interval", DefaultEspressoBatchPosterConfig.TxnsMonitoringInterval, "interval for sending and polling transactions to and from espresso")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
+	f.String(prefix+".key-pair-attestations-path", DefaultEspressoBatchPosterConfig.KeyPairAttestationsPath, "path to attestation documents with KMSKeyID, EncryptedPrivateKey attestations")
 	f.StringSlice(prefix+".init-batcher-addresses", DefaultEspressoBatchPosterConfig.InitBatcherAddresses, "specifies the init batcher addresses")
 }
 
