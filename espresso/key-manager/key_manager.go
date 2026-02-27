@@ -3,6 +3,7 @@ package keymanager
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"os"
@@ -95,7 +96,12 @@ func NewEspressoKeyManager(
 	// is provided, we use that one. Otherwise, we read the enclave private key from the attestation path.
 	// Note: The current implementation only supports reading the key during key manager construction
 	// for the batch poster. Support for reading the caff node key will be added in a later PR.
-	if keyPairAttestationsPath != "" && chainID != 0 {
+	if teeType == espressotee.SGX {
+		privKey, err = ecdsa.GenerateKey(crypto.S256(), rand.Reader)
+		if err != nil {
+			panic(err)
+		}
+	} else if keyPairAttestationsPath != "" && chainID != 0 {
 		// Read enclave private key
 		privKey, err = espresso_tee_utils.ReadEnclavePrivateKey(keyPairAttestationsPath, chainID)
 		if err != nil {
