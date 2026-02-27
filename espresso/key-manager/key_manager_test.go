@@ -159,8 +159,8 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, persistentPrivKey, "", "", 0)
-		registered := km.HasRegistered()
-		assert.False(t, registered, "Should start unregistered")
+		state := km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should start init")
 
 		// Mock sign function
 		called := false
