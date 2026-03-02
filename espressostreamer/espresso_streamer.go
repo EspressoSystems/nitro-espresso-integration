@@ -214,7 +214,7 @@ func (s *EspressoStreamer) GetMsg(pos uint64) *MessageWithMetadataAndPos {
 	s.messageLock.RLock()
 	defer s.messageLock.RUnlock()
 
-	return s.messageWithMetadataAndPos[uint64(pos)]
+	return s.messageWithMetadataAndPos[pos]
 }
 
 // Call this function to advance the streamer to the next message
