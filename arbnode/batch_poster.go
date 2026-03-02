@@ -81,9 +81,8 @@ var (
 
 	batchPosterFailureCounter = metrics.NewRegisteredCounter("arb/batchPoster/action/failure", nil)
 
-	usableBytesInBlob              = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
-	blobTxBlobGasPerBlob           = big.NewInt(params.BlobTxBlobGasPerBlob)
-	FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
+	usableBytesInBlob    = big.NewInt(int64(len(kzg4844.Blob{}) * 31 / 32))
+	blobTxBlobGasPerBlob = big.NewInt(params.BlobTxBlobGasPerBlob)
 )
 
 const (
@@ -631,11 +630,12 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if b.dataPoster.Auth() == nil {
 			panic("TransactOpts is nil")
 		}
+		// to support tests, we can give the batch poster a "persistent key" via the config, This variable WILL be nil if the configured tee type is not TESTS
 		submitterOptions = append(
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL),
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
 			),
 		)
 
@@ -1819,13 +1819,9 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 		return false, fmt.Errorf("batch was reverted, not posting any more batches")
 	}
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
-		registered := espressoSubmitter.GetKeyManager().HasRegistered()
-		if !registered {
-			log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract")
-			err := espressoSubmitter.RegisterService()
-			if err != nil {
-				return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
-			}
+		isRegistered, err := espressoSubmitter.GetKeyManager().CheckRegistration()
+		if !isRegistered {
+			return false, err
 		}
 	}
 
@@ -2600,7 +2596,7 @@ func (b *BatchPoster) Start(ctxIn context.Context) {
 				// Shutting down. No need to print the context canceled error.
 				return 0
 			}
-			if errors.Is(err, FatalErrUnableToRegisterSigner) {
+			if errors.Is(err, espresso_key_manager.FatalErrUnableToRegisterSigner) {
 				log.Warn(
 					"Espresso signer registration failed consecutively. Stopping.",
 					"retries", espressotee.EspressoMaxRetries,

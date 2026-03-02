@@ -435,7 +435,6 @@ func TestEspressoWithBlobs(t *testing.T) {
 	// Check if the tx is executed correctly
 	err = checkTransferTxOnL2(t, ctx, l2Node, "User10", l2Info)
 	Require(t, err)
-	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
 
 	// Remember the number of messages
 	var msgCnt arbutil.MessageIndex
@@ -456,6 +455,7 @@ func TestEspressoWithBlobs(t *testing.T) {
 		Require(t, err)
 
 		batchCount, err := sequencerInbox.BatchCount(&bind.CallOpts{Context: ctx})
+		AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 1)
 		Require(t, err)
 		return batchCount.Uint64() > 1
 	})
