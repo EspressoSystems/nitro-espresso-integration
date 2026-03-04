@@ -287,7 +287,7 @@ func NewEspressoCaffNode(
 	// Get the EspressoTEEVerifier address from SequencerInbox contract
 	var espressoTEEVerifierAddress common.Address
 	espressoTEEVerifierAddress, err = sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
 	}
