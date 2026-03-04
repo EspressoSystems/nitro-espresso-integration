@@ -97,7 +97,6 @@ func createCaffNode(
 	nodeConfig.Espresso.CaffNode.TeeType = existing.nodeConfig.Espresso.CaffNode.TeeType
 	nodeConfig.Espresso.CaffNode.SnapshotChecksum = existing.nodeConfig.Espresso.CaffNode.SnapshotChecksum
 	nodeConfig.Espresso.CaffNode.GenerateSnapshot = existing.nodeConfig.Espresso.CaffNode.GenerateSnapshot
-	nodeConfig.Espresso.CaffNode.TEEVerifierAddr = existing.nodeConfig.Espresso.CaffNode.TEEVerifierAddr
 
 	cleanup, err := builder.BuildEspressoCaffNode(t, existing)
 	builder.L1 = existing.L1
@@ -571,11 +570,6 @@ func TestEspressoCaffNodeSnapshot(t *testing.T) {
 	builderCaffNode.nodeConfig.Espresso.CaffNode.SnapshotChecksum = base64SnapshotFileContent
 	builderCaffNode.nodeConfig.Espresso.CaffNode.TeeType = "TESTS"
 	builderCaffNode.nodeConfig.Espresso.CaffNode.GenerateSnapshot = false
-
-	parentChainTransactionOpts := builderCaffNode.L1Info.GetDefaultTransactOpts("RollupOwner", ctx)
-	espressoTEEVerifierAddress, _, _, err := deployMockTEEContracts(t, &parentChainTransactionOpts, builder.L1.Client)
-	Require(t, err)
-	builderCaffNode.nodeConfig.Espresso.CaffNode.TEEVerifierAddr = espressoTEEVerifierAddress.Hex()
 
 	logHandler := testhelpers.InitTestLog(t, log.LevelInfo)
 	_ = logHandler
