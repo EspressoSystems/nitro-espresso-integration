@@ -56,9 +56,6 @@ type EspressoCaffNodeConfig struct {
 	Dangerous              DangerousCaffNodeConfig `koanf:"dangerous"`
 	TeeType                string                  `koanf:"tee-type"`
 
-	// SGX specific config, leave empty if not using SGX
-	TEEVerifierAddr string `koanf:"tee-verifier-addr"`
-
 	// AWS Nitro Attestation Service URL
 	AttestationServiceURL string `koanf:"attestation-service-url"`
 
@@ -110,7 +107,6 @@ var DefaultEspressoCaffNodeConfig = EspressoCaffNodeConfig{
 	KeyPairAttestationsPath: "caff_node_key_pair_attestations",
 	TeeType:                 "",
 	AttestationServiceURL:   "",
-	TEEVerifierAddr:         "",
 	DataPoster:              dataposter.DefaultDataPosterConfig,
 	SnapshotChecksum:        "",
 	ParentChainWallet:       DefaultBatchPosterL1WalletConfig,
@@ -136,7 +132,6 @@ func EspressoCaffNodeConfigAddOptions(prefix string, f *flag.FlagSet) {
 	f.String(prefix+".tee-type", DefaultEspressoCaffNodeConfig.TeeType, "The Trusted Execution Environment (TEE) that Caff node is running in")
 	f.String(prefix+".attestation-service-url", DefaultEspressoBatchPosterConfig.AttestationServiceURL, "URL of the attestation service to use for obtaining zk proof over  attestation")
 	genericconf.WalletConfigAddOptions(prefix+".parent-chain-wallet", f, DefaultBatchPosterConfig.ParentChainWallet.Pathname)
-	f.String(prefix+".tee-verifier-addr", DefaultEspressoCaffNodeConfig.TEEVerifierAddr, "Address of the EspressoTEEVerifier contract utilize for handling cross chain NFT verification")
 	DangerousCaffNodeConfigAddOptions(prefix+".dangerous", f)
 	f.Bool(prefix+".generate-snapshot", DefaultEspressoCaffNodeConfig.GenerateSnapshot, "Configures whether to generate a snapshot")
 	f.Int(prefix+".auth-db-batch-size", DefaultEspressoCaffNodeConfig.AuthDBBatchSize, "Batch size to use when initializing auth tags in the AuthDB")
@@ -227,7 +222,7 @@ func NewEspressoCaffNode(
 		common.HexToAddress(configFetcher().SGXVerifierAddr),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create espressoTEEVerifier: %w", err)
+		return nil, fmt.Errorf("failed to create sgxVerifier: %w", err)
 	}
 	client := espressoClient.NewClient(configFetcher().HotShotUrl)
 
@@ -290,16 +285,9 @@ func NewEspressoCaffNode(
 
 	// Create a new EspressoKeyManager
 	// Get the EspressoTEEVerifier address from SequencerInbox contract
-	configAddress := configFetcher().TEEVerifierAddr
 	var espressoTEEVerifierAddress common.Address
-	// parse the espresso tee verifier address from config if it exists, otherwise read from the sequencerInbox
-	// Eventually we should only read from the SequencerInbox
-	if configAddress != "" && common.IsHexAddress(configAddress) {
-		espressoTEEVerifierAddress = common.HexToAddress(configAddress)
-	} else {
-		espressoTEEVerifierAddress, err = sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
-	}
-
+	espressoTEEVerifierAddress, err = sequencerInbox.con.EspressoTEEVerifier(&bind.CallOpts{})
+	
 	if err != nil {
 		return nil, fmt.Errorf("failed to get EspressoTEEVerifier address: %w", err)
 	}
