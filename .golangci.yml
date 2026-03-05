@@ -56,7 +56,6 @@ linters:
       - third_party$
       - builtin$
       - examples$
-      - espressotee/legacy
 formatters:
   enable:
     - gci
@@ -76,4 +75,3 @@ formatters:
       - third_party$
       - builtin$
       - examples$
-      - espressotee/legacy

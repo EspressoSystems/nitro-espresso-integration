@@ -2,25 +2,12 @@ package arbnode
 
 import (
 	"context"
-	"crypto/ecdsa"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/offchainlabs/nitro/util/signature"
 )
-
-// TestEspressoPrivateKey is a hardcoded private key for testing purposes only
-var TestEspressoPrivateKey *ecdsa.PrivateKey
-
-func init() {
-	// Hardcoded test private key (DO NOT use in production)
-	key, err := crypto.HexToECDSA("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-	if err != nil {
-		panic(err)
-	}
-	TestEspressoPrivateKey = key
-}
 
 var BlockSignaturePrefix = []byte("blockSignature")
 

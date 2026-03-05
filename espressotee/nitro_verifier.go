@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
+	legacy_espressogen "github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
@@ -26,18 +27,26 @@ func NewEspressoNitroTEEVerifier(l1Client *ethclient.Client, nitroAddr common.Ad
 func (e *EspressoNitroTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error) {
 	switch serviceType {
 	case BatchPoster:
-		fallthrough
+		return e.isPCR0HashRegisteredLegacy(pcr0Hash)
 	case CaffNode:
-		return e.isPCR0HashRegistered(pcr0Hash, serviceType)
+		return e.isPCR0HashRegistered(pcr0Hash)
+	default:
+		return false, fmt.Errorf("Invalid service type for checking PCR0 hash registration")
 	}
-	return false, fmt.Errorf("Invalid service type for checking PCR0 hash registration")
-
 }
 
-func (e *EspressoNitroTEEVerifier) isPCR0HashRegistered(pcr0Hash [32]byte, serviceType ServiceType) (bool, error) {
+func (e *EspressoNitroTEEVerifier) isPCR0HashRegisteredLegacy(pcr0Hash [32]byte) (bool, error) {
+	contract, err := legacy_espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
+	if err != nil {
+		return false, err
+	}
+	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash)
+}
+
+func (e *EspressoNitroTEEVerifier) isPCR0HashRegistered(pcr0Hash [32]byte) (bool, error) {
 	contract, err := espressogen.NewEspressoNitroTEEVerifier(e.address, e.l1Client)
 	if err != nil {
 		return false, err
 	}
-	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash, uint8(serviceType))
+	return contract.RegisteredCaffNodeEnclaveHashes(&bind.CallOpts{}, pcr0Hash)
 }
