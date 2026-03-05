@@ -5,16 +5,18 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
 
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
-	"github.com/offchainlabs/nitro/arbutil"
 	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
 	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
 	"github.com/offchainlabs/nitro/espressotee"
@@ -57,6 +59,7 @@ type EspressoKeyManager struct {
 
 	hasRegistered                          bool
 	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
+	parentChainId                          uint64
 }
 
 func NewEspressoKeyManager(
@@ -110,6 +113,10 @@ func NewEspressoKeyManager(
 	}
 
 	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
+	parentChainId, err := espressoTEEVerifierCaller.ParentChainId()
+	if err != nil {
+		log.Crit("failed to get parent chain ID", "err", err)
+	}
 
 	return &EspressoKeyManager{
 		privKey:                                privKey,
@@ -119,6 +126,7 @@ func NewEspressoKeyManager(
 		teeType:                                teeType,
 		serviceType:                            serviceType,
 		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
+		parentChainId:                          parentChainId,
 	}
 }
 
@@ -257,9 +265,49 @@ func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 	return k.signer(crypto.Keccak256Hash(message).Bytes())
 }
 
-// SignMessage uses the ephemeral/persistent private key which is generated inside the TEE to sign the given message
+// SignMessage uses the ephemeral/persistent private key which is generated inside the TEE to sign the EIP-712 message
 func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
-	return arbutil.SignMessage(message, k.privKey)
+	messageHash := crypto.Keccak256(message)
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"EspressoTEEVerifier": []apitypes.Type{
+				{Name: "commitment", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "EspressoTEEVerifier",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "EspressoTEEVerifier",
+			Version:           "1",
+			ChainId:           (*math.HexOrDecimal256)(new(big.Int).SetUint64(k.parentChainId)),
+			VerifyingContract: k.espressoTEEVerifierCaller.EspressoTEEAddress().Hex(),
+		},
+		Message: map[string]interface{}{
+			"commitment": messageHash[:32],
+		},
+	}
+	// Calculate the hash using go-ethereum's EIP-712 implementation
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate EIP-712 hash: %w", err)
+	}
+
+	signature, err := crypto.Sign(hash, k.privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign EIP-712 hash: %w", err)
+	}
+
+	// Normalize the recovery ID (v) from 0/1 to 27/28 for Solidity's ECDSA.recover
+	// See: https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
+	if signature[64] < 27 {
+		signature[64] += 27
+	}
+	return signature, nil
 }
 
 func (k *EspressoKeyManager) RegisterService() error {
