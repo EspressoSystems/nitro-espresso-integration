@@ -14,7 +14,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 	espresso_key_manager "github.com/offchainlabs/nitro/espresso/key-manager"
@@ -35,6 +37,18 @@ func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeTyp
 	return args.Bool(0), nil
 }
 
+func (m *mockEspressoTEEVerifier) EspressoTEEAddress() common.Address {
+	args := m.Called()
+	addr, _ := args.Get(0).(common.Address)
+	return addr
+}
+
+func (m *mockEspressoTEEVerifier) ParentChainId() (uint64, error) {
+	args := m.Called()
+	val, _ := args.Get(0).(uint64)
+	return val, args.Error(1)
+}
+
 type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
@@ -46,6 +60,8 @@ func (m *mockNitroEspressoTEEVerifier) IsPCR0HashRegistered(pcr0Hash [32]byte, s
 
 func TestEspressoKeyManager(t *testing.T) {
 	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
+	const parentChainID uint64 = 1
+	verifierAddress := common.HexToAddress("0x0000000000000000000000000000000000000001")
 
 	_, signer, err := GetTransactOptsAndSigner(privKey, big.NewInt(1))
 	require.NoError(t, err, "Should open wallet")
@@ -61,6 +77,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test initialization
 	t.Run("SGX NewEspressoKeyManager", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -74,6 +92,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test HasRegistered and Registry
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
@@ -108,6 +128,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test GetCurrentKey
 	t.Run("GetCurrentKey", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -118,6 +140,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test Sign
 	t.Run("SGX SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -127,13 +151,15 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
 		ecdsaPubkey := km.GetCurrentKey()
-		valid, err := VerifySignatureWithPublicKey(ecdsaPubkey, message, signature)
+		valid, err := VerifyEIP712SignatureWithPublicKey(ecdsaPubkey, message, signature, parentChainID, verifierAddress)
 		require.NoError(t, err, "Should verify signature")
 		assert.True(t, valid, "Signature should verify with public key")
 	})
 
 	t.Run("SGX Sign Hotshot payload with batcher private key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -155,6 +181,8 @@ func TestEspressoKeyManager(t *testing.T) {
 
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
@@ -188,6 +216,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	// Test Sign
 	t.Run("Nitro SignMessage with the ephemeral key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -197,13 +227,15 @@ func TestEspressoKeyManager(t *testing.T) {
 		assert.NotEmpty(t, signature, "Signature should not be empty")
 
 		ecdsaPubkey := km.GetCurrentKey()
-		valid, err := VerifySignatureWithPublicKey(ecdsaPubkey, message, signature)
+		valid, err := VerifyEIP712SignatureWithPublicKey(ecdsaPubkey, message, signature, parentChainID, verifierAddress)
 		require.NoError(t, err, "Should verify signature")
 		assert.True(t, valid, "Signature should verify with public key")
 	})
 
 	t.Run("Nitro Sign Hotshot payload with batcher private key", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+		mockEspressoTEEVerifierClient.On("ParentChainId").Return(parentChainID, nil)
+		mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(verifierAddress)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.NITRO, espressotee.Test, persistentPrivKey, "", "", 0)
@@ -234,6 +266,50 @@ func VerifySignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signa
 
 	matches := recoveredPubKey.Equal(publicKey)
 	return matches, nil
+}
+
+func VerifyEIP712SignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signature []byte, chainID uint64, verifierAddress common.Address) (bool, error) {
+	messageHash := crypto.Keccak256(data)
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"EspressoTEEVerifier": []apitypes.Type{
+				{Name: "commitment", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "EspressoTEEVerifier",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "EspressoTEEVerifier",
+			Version:           "1",
+			ChainId:           (*math.HexOrDecimal256)(new(big.Int).SetUint64(chainID)),
+			VerifyingContract: verifierAddress.Hex(),
+		},
+		Message: map[string]interface{}{
+			"commitment": messageHash[:32],
+		},
+	}
+
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return false, err
+	}
+
+	recoverableSig := append([]byte(nil), signature...)
+	if len(recoverableSig) == 65 && recoverableSig[64] >= 27 {
+		recoverableSig[64] -= 27
+	}
+
+	recoveredPubKey, err := crypto.SigToPub(hash, recoverableSig)
+	if err != nil {
+		return false, err
+	}
+
+	return recoveredPubKey.Equal(publicKey), nil
 }
 
 func GetTransactOptsAndSigner(priKey string, chainId *big.Int) (*bind.TransactOpts, DataSignerFunc, error) {

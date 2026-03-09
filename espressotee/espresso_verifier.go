@@ -30,6 +30,8 @@ type EspressoTEEVerifierInterface interface {
 		teeType TEE,
 		serviceType ServiceType,
 	) (bool, error)
+	EspressoTEEAddress() common.Address
+	ParentChainId() (uint64, error)
 }
 
 type EspressoTEEVerifier struct {
@@ -159,6 +161,18 @@ func (e *EspressoTEEVerifier) RegisteredServices(
 	serviceType ServiceType,
 ) (bool, error) {
 	return e.registeredServices(signer, teeType, serviceType)
+}
+
+func (e *EspressoTEEVerifier) EspressoTEEAddress() common.Address {
+	return e.address
+}
+
+func (e *EspressoTEEVerifier) ParentChainId() (uint64, error) {
+	chainID, err := e.l1Client.ChainID(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return chainID.Uint64(), nil
 }
 
 func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType TEE, serviceType ServiceType) (bool, error) {
