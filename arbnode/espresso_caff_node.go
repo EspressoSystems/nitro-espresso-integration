@@ -378,7 +378,7 @@ func NewEspressoCaffNode(
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
-	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
+	messageWithMetadataAndPos := n.espressoStreamer.Peek()
 
 	if messageWithMetadataAndPos == nil {
 		return nil, 0, nil
@@ -450,7 +450,8 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	// Check for next position hotshot block number since we processed this one
+	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(messageWithMetadataAndPos.Pos + 1)
 	batch := n.db.NewBatch()
 
 	// Store hotshot block num with auth tag
