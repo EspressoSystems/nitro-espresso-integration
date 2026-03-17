@@ -1200,7 +1200,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
 	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
-		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(uint64(newMsgNum))
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
 	}
 
@@ -1326,7 +1326,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	hotshotBlockNumber := new(big.Int).SetUint64(0)
 	// Remove this condition once we have get an espresso streamer
 	if b.espressoStreamer != nil {
-		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+		earliestHotShot := b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(uint64(newMsgNum))
 		hotshotBlockNumber = hotshotBlockNumber.SetUint64(earliestHotShot)
 	}
 
@@ -1657,14 +1657,12 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			if batchPosition.HotShotBlockNumber > 0 {
-				b.espressoStreamer.Reset(uint64(batchPosition.MessageCount), uint64(batchPosition.HotShotBlockNumber))
-			} else {
+			b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+			if b.espressoRestarting {
+				// Reset only once
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
-			}
-			if b.espressoRestarting {
 				cnt, err := b.streamer.GetMessageCount()
 				if err != nil {
 					return false, err
@@ -1830,7 +1828,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 		}
 	} else {
 		getNextMessage = func() (*arbostypes.MessageWithMetadata, error) {
-			espressoMsg := b.espressoStreamer.Peek(ctx)
+			espressoMsg := b.espressoStreamer.GetMsg(uint64(b.building.msgCount))
 			if espressoMsg == nil {
 				return nil, errors.New("the Espresso streamer has no more messages currently")
 			}
@@ -1923,9 +1921,6 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 			b.building.firstNonDelayedMsg = msg
 		}
 		b.building.msgCount++
-		if b.espressoStreamer != nil {
-			b.espressoStreamer.Advance()
-		}
 	}
 
 	firstUsefulMsgTime := time.Now()
@@ -2100,7 +2095,7 @@ func (b *BatchPoster) maybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	var HotShotBlockNumber uint64
 	if b.espressoStreamer != nil {
-		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+		HotShotBlockNumber = b.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(uint64(b.building.msgCount))
 	}
 	newMeta, err := rlp.EncodeToBytes(batchPosterPosition{
 		MessageCount:        b.building.msgCount,

@@ -46,7 +46,7 @@ func (m *MockEspressoStreamer) CanBatcherAddressSend(ctx context.Context, addres
 	panic("unimplemented")
 }
 
-func (m *MockEspressoStreamer) GetCurrentEarliestHotShotBlockNumber() uint64 {
+func (m *MockEspressoStreamer) GetCurrentEarliestHotShotBlockNumber(pos uint64) uint64 {
 	return m.currHotShot
 }
 
@@ -54,7 +54,7 @@ func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 	return nil
 }
 
-func (m *MockEspressoStreamer) Peek(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
+func (m *MockEspressoStreamer) Peek() *espressostreamer.MessageWithMetadataAndPos {
 	var delayedCnt uint64 = 1
 	if m.delayedPos == m.currPos {
 		delayedCnt = 2
@@ -75,8 +75,8 @@ func (m *MockEspressoStreamer) Advance() {
 	m.currHotShot++
 }
 
-func (m *MockEspressoStreamer) Next(ctx context.Context) *espressostreamer.MessageWithMetadataAndPos {
-	result := m.Peek(ctx)
+func (m *MockEspressoStreamer) Next() *espressostreamer.MessageWithMetadataAndPos {
+	result := m.Peek()
 	m.Advance()
 	return result
 }
