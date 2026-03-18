@@ -349,6 +349,7 @@ func (b *BatcherAddrMonitor) Process(ctx context.Context) error {
 func (b *BatcherAddrMonitor) addEventUpdates(updates []uint64) {
 	b.eventUpdatesAt = append(b.eventUpdatesAt, updates...)
 	for i := 0; i < len(updates); i++ {
+		log.Info("adding event: batcher address change detected on-chain", "height", updates[i])
 		b.validityCaches = append(b.validityCaches, make(map[common.Address]bool))
 	}
 }
