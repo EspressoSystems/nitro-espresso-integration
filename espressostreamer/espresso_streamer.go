@@ -361,6 +361,11 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 		}
 	}
 
+	// do not proceed with message parsing if the all signature verification paths failed
+	if !success {
+		return fmt.Errorf("all signature verification paths failed for HotShot payload")
+	}
+
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 	for i, message := range messages {
