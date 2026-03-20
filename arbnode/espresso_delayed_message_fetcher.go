@@ -211,6 +211,10 @@ func (d *DelayedMessageFetcher) getL1BlockNumber(ctx context.Context) (uint64, e
 		if err != nil {
 			return 0, err
 		}
+		if latestBlockNumber < d.requiredBlockDepth {
+			// chain is too young, start from genesis
+			return 0, nil
+		}
 		// Get the latest block - requiredBlockDepth
 		return latestBlockNumber - d.requiredBlockDepth, nil
 	}
