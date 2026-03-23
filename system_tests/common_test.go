@@ -1793,9 +1793,6 @@ func deployOnParentChain(
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
 
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-	Require(t, err)
-
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := localgen.DeployTestWETH9(
