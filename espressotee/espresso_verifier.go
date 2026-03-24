@@ -55,7 +55,7 @@ func (e *EspressoTEEVerifier) RegisterService(
 ) error {
 	var registrationErr error
 
-	for attempt := 0; attempt < EspressoMaxRetries; attempt++ {
+	for attempt := 0; attempt < EspressoMaxRetries; {
 		registrationErr = e.registerService(
 			dataPoster,
 			attestation,
@@ -68,12 +68,22 @@ func (e *EspressoTEEVerifier) RegisterService(
 			return nil
 		}
 
+		if errors.Is(registrationErr, ErrNonceValidation) {
+			log.Warn(
+				"nonce validation error during service registration, retrying without counting as failure",
+				"err", registrationErr,
+			)
+			time.Sleep(EspressoRetryReadContractDelay)
+			continue
+		}
+
+		attempt++
 		log.Warn(
 			"service registration failed",
 			"err", registrationErr,
-			"attempt", attempt+1,
+			"attempt", attempt,
 		)
-		if attempt < EspressoMaxRetries-1 {
+		if attempt < EspressoMaxRetries {
 			time.Sleep(EspressoRetryReadContractDelay)
 		}
 	}

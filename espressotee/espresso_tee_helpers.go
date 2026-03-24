@@ -2,6 +2,7 @@ package espressotee
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,10 @@ import (
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
 )
+
+// ErrNonceValidation should not increment the signer registration attempt
+// as the database may need time to sync state from l1 and update itself
+var ErrNonceValidation = errors.New("nonce validation error")
 
 type TEE uint8
 
@@ -81,16 +86,16 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 	nonce, err := l1Client.NonceAt(context, dataPoster.Sender(), nil)
 	if err != nil {
 		log.Warn("could not retrieve on-chain nonce", "err", err)
-		return err
+		return fmt.Errorf("%w: %w", ErrNonceValidation, err)
 	}
 	dataPosterNonce, _, err := dataPoster.GetNextNonceAndMeta(context)
 	if err != nil {
 		log.Warn("error getting dataposter nonce", "err", err)
-		return err
+		return fmt.Errorf("%w: %w", ErrNonceValidation, err)
 	}
 	log.Info("successfully got datapaster next nonce and on-chain nonce", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
 	if dataPosterNonce != nonce {
-		return fmt.Errorf("dataposter nonce %d does not match on-chain nonce %d", dataPosterNonce, nonce)
+		return fmt.Errorf("%w: dataposter nonce %d does not match on-chain nonce %d", ErrNonceValidation, dataPosterNonce, nonce)
 	}
 	return nil
 }

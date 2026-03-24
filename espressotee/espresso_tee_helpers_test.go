@@ -92,6 +92,9 @@ func TestEspressoNonceValidationMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonce mismatch, got nil")
 	}
+	if !errors.Is(err, ErrNonceValidation) {
+		t.Fatalf("expected ErrNonceValidation, got: %v", err)
+	}
 }
 
 // Both sides agree on nonce 5 — should pass.
