@@ -32,6 +32,7 @@ type EspressoTEEVerifierInterface interface {
 	) (bool, error)
 	EspressoTEEAddress() common.Address
 	ParentChainId() (uint64, error)
+	CheckNonceValidation(dataPoster *dataposter.DataPoster) error
 }
 
 type EspressoTEEVerifier struct {
@@ -83,6 +84,14 @@ func (e *EspressoTEEVerifier) RegisterService(
 		EspressoMaxRetries,
 		registrationErr,
 	)
+}
+
+func (e *EspressoTEEVerifier) CheckNonceValidation(dataPoster *dataposter.DataPoster) error {
+	err := NonceValidation(context.Background(), e.l1Client, dataPoster)
+	if err != nil {
+		return fmt.Errorf("nonce validation failed: %w", err)
+	}
+	return nil
 }
 
 func (e *EspressoTEEVerifier) registerService(

@@ -49,6 +49,11 @@ func (m *mockEspressoTEEVerifier) ParentChainId() (uint64, error) {
 	return val, args.Error(1)
 }
 
+func (m *mockEspressoTEEVerifier) CheckNonceValidation(dataPoster *dataposter.DataPoster) error {
+	args := m.Called(dataPoster)
+	return args.Error(0)
+}
+
 type mockNitroEspressoTEEVerifier struct {
 	mock.Mock
 }
@@ -97,6 +102,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
+		mockEspressoTEEVerifierClient.On("CheckNonceValidation", mock.Anything).Return(nil)
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.SGX, espressotee.Test, persistentPrivKey, "", "", 0)
 		state := km.GetKeyManagerState()
 		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
@@ -116,9 +122,14 @@ func TestEspressoKeyManager(t *testing.T) {
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		state = km.GetKeyManagerState()
-		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
+		assert.Equal(t, state, espresso_key_manager.PendingDataPosterSync, "Should be pending data poster sync after call")
 
 		// Second call (already registered)
+		err = km.PendingDataPosterSync()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
+
 		err = km.RegisterService()
 		require.NoError(t, err, "Registry should succeed")
 		state = km.GetKeyManagerState()
@@ -186,6 +197,7 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
+		mockEspressoTEEVerifierClient.On("CheckNonceValidation", mock.Anything).Return(nil)
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, nil, "", "", 0)
 		state := km.GetKeyManagerState()
 		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
@@ -204,9 +216,14 @@ func TestEspressoKeyManager(t *testing.T) {
 		require.NoError(t, err, "Registry should succeed")
 		assert.True(t, called, "Sign function should be called")
 		state = km.GetKeyManagerState()
-		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
+		assert.Equal(t, state, espresso_key_manager.PendingDataPosterSync, "Should be pending data poster sync after call")
 
 		// Second call (already registered)
+		err = km.PendingDataPosterSync()
+		require.NoError(t, err, "Registry should succeed")
+		state = km.GetKeyManagerState()
+		assert.Equal(t, state, espresso_key_manager.PendingRegistration, "Should be pending registration after call")
+
 		err = km.RegisterService()
 		require.NoError(t, err, "Registry should succeed")
 		state = km.GetKeyManagerState()

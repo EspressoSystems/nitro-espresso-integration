@@ -37,6 +37,7 @@ type KeyManagerState int
 
 const (
 	Init KeyManagerState = iota
+	PendingDataPosterSync
 	PendingRegistration
 	Registered
 )
@@ -193,6 +194,13 @@ func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
 			return false, fmt.Errorf("unable to init keymanager: %w", err)
 		}
 		return false, nil
+	case PendingDataPosterSync:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Data Poster sync phase")
+		err := k.PendingDataPosterSync()
+		if err != nil {
+			return false, fmt.Errorf("data poster nonce and l1 nonce still mismatch: %w", err)
+		}
+		return false, nil
 	case PendingRegistration:
 		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
 		err := k.RegisterService()
@@ -291,9 +299,22 @@ func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([
 	if err != nil {
 		return err
 	}
-	k.state.currentState = PendingRegistration
+	k.state.currentState = PendingDataPosterSync
 	k.state.attestation = attestation
 	k.state.data = data
+	return nil
+}
+
+func (k *EspressoKeyManager) PendingDataPosterSync() error {
+	currentState := k.GetKeyManagerState()
+	if currentState != PendingDataPosterSync {
+		return fmt.Errorf("invalid state to check data poster sync: got %v, want PendingDataPosterSync", currentState)
+	}
+	err := k.espressoTEEVerifierCaller.CheckNonceValidation(k.dataPoster)
+	if err != nil {
+		return err
+	}
+	k.state.currentState = PendingRegistration
 	return nil
 }
 
