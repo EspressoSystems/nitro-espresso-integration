@@ -72,7 +72,6 @@ import (
 	"github.com/offchainlabs/nitro/daprovider/das/dastree"
 	"github.com/offchainlabs/nitro/daprovider/das/dasutil"
 	"github.com/offchainlabs/nitro/deploy"
-	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	"github.com/offchainlabs/nitro/espresso/authdb"
 	"github.com/offchainlabs/nitro/execution/gethexec"
 	_ "github.com/offchainlabs/nitro/execution/nodeInterface"
@@ -1794,14 +1793,6 @@ func deployOnParentChain(
 	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
 	Require(t, err)
 
-	rollupSequencerManagerAddress, tx, _, err := espressogen.DeployEspressoRollupSequencerManager(&parentChainTransactionOpts, parentChainClient, []common.Address{
-		parentChainInfo.GetAddress("Sequencer"),
-	})
-	Require(t, err)
-
-	_, err = parentChainReader.WaitForTxApproval(ctx, tx)
-	Require(t, err)
-
 	var addresses *chaininfo.RollupAddresses
 	if deployBold {
 		stakeToken, tx, _, err := localgen.DeployTestWETH9(
@@ -1902,7 +1893,6 @@ func deployOnParentChain(
 	parentChainInfo.SetContract("Inbox", addresses.Inbox)
 	parentChainInfo.SetContract("UpgradeExecutor", addresses.UpgradeExecutor)
 	parentChainInfo.SetContract("EspressoTEEVerifierMock", espressoTEEVerifierAddress)
-	parentChainInfo.SetContract("RollupSequencerManager", rollupSequencerManagerAddress)
 	initMessage := getInitMessage(ctx, t, parentChainClient, addresses)
 	return addresses, initMessage
 }
