@@ -326,6 +326,12 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 			log.Warn("failed to verify attestation quote", "err", err)
 			return nil, err
 		}
+		success = true
+	}
+
+	// do not proceed with message parsing if the all signature verification paths failed
+	if !success {
+		return fmt.Errorf("all signature verification paths failed for HotShot payload")
 	}
 
 	result := []*MessageWithMetadataAndPos{}
