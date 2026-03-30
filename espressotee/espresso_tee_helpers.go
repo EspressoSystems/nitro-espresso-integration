@@ -90,8 +90,7 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 	}
 	log.Info("successfully got datapaster next nonce and on-chain nonce", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
 	if dataPosterNonce != nonce {
-		log.Warn("dataposter and on-chain nonce have mismatch, not sending txn", "dataposter nonce", dataPosterNonce, "on-chain nonce", nonce)
-		return err
+		return fmt.Errorf("dataposter nonce %d does not match on-chain nonce %d", dataPosterNonce, nonce)
 	}
 	return nil
 }
