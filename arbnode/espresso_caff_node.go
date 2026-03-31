@@ -513,7 +513,20 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 		if state := n.keyManager.GetKeyManagerState(); state == espresso_key_manager.Registered {
 			log.Info("Caff node address is already registered on chain!")
 		} else {
-			log.Info("caff node completed init, trying to register signer")
+			log.Info("caff node completed init, waiting for data poster nonce to sync")
+			for {
+				err := n.keyManager.PendingDataPosterSync()
+				if err == nil {
+					break
+				}
+				log.Warn("data poster nonce not yet synced, retrying...", "err", err)
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+				}
+			}
+			log.Info("caff node completed data poster nonce validation, trying to register signer")
 			if err := n.keyManager.RegisterService(); err != nil {
 				return err
 			}
