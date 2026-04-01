@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+#
+# commit-msg hook: Validates that commit messages follow Conventional Commits
+# format required by release-please.
+#
+# Format: <type>[(scope)][!]: <description>
+#
+# Valid types: feat, fix, perf, revert, docs, chore, style, refactor, test, build, ci
+#
+# Examples:
+#   feat: add new authentication flow
+#   fix(release): correct tag separator
+#   feat!: breaking change to API
+#   chore(deps): bump dependencies
+#
+# To skip this check (e.g. merge commits), use:
+#   git commit --no-verify
+
+commit_msg_file="$1"
+commit_msg=$(head -1 "$commit_msg_file")
+
+# Allow merge commits
+if echo "$commit_msg" | grep -qE '^Merge '; then
+  exit 0
+fi
+
+# Allow revert commits
+if echo "$commit_msg" | grep -qE '^Revert "'; then
+  exit 0
+fi
+
+# Allow release-please commits
+if echo "$commit_msg" | grep -qE '^chore\(release\):'; then
+  exit 0
+fi
+
+# Conventional Commits pattern:
+# <type>[(scope)][!]: <description>
+pattern='^(feat|fix|perf|revert|docs|chore|style|refactor|test|build|ci)(\([a-zA-Z0-9._-]+\))?(!)?: .+'
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+  echo ""
+  echo "ERROR: Commit message does not follow Conventional Commits format."
+  echo ""
+  echo "  Your message:  $commit_msg"
+  echo ""
+  echo "  Expected format: <type>[(scope)]: <description>"
+  echo ""
+  echo "  Valid types: feat, fix, perf, revert, docs, chore, style, refactor, test, build, ci"
+  echo ""
+  echo "  Examples:"
+  echo "    feat: add new authentication flow"
+  echo "    fix(release): correct tag separator"
+  echo "    feat!: breaking change to API"
+  echo ""
+  echo "  This is required for release-please to generate changelogs correctly."
+  echo "  To skip this check: git commit --no-verify"
+  echo ""
+  exit 1
+fi

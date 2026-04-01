@@ -147,6 +147,8 @@ func testBatchPosterParallel(t *testing.T, useRedis bool, useRedisLock bool) {
 	for i := 0; i < parallelBatchPosters; i++ {
 		// Make a copy of the batch poster config so NewBatchPoster calling Validate() on it doesn't race
 		batchPosterConfig := builder.nodeConfig.BatchPoster
+		espressoConfig := builder.nodeConfig.Espresso
+
 		batchPoster, err := arbnode.NewBatchPoster(ctx,
 			&arbnode.BatchPosterOpts{
 				DataPosterDB:  nil,
@@ -160,6 +162,9 @@ func testBatchPosterParallel(t *testing.T, useRedis bool, useRedisLock bool) {
 				TransactOpts:  &seqTxOpts,
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
+				FatalErrChan:  make(chan error),
+
+				EspressoConfigFetcher: func() *arbnode.EspressoConfig { return &espressoConfig },
 			},
 		)
 		Require(t, err)
@@ -287,6 +292,8 @@ func TestRedisBatchPosterHandoff(t *testing.T) {
 	newBatchPoster := func() *arbnode.BatchPoster {
 		// Make a copy of the batch poster config so NewBatchPoster calling Validate() on it doesn't race
 		batchPosterConfig := builder.nodeConfig.BatchPoster
+		espressoConfig := builder.nodeConfig.Espresso
+
 		batchPoster, err := arbnode.NewBatchPoster(ctx,
 			&arbnode.BatchPosterOpts{
 				DataPosterDB:  nil,
@@ -300,6 +307,9 @@ func TestRedisBatchPosterHandoff(t *testing.T) {
 				TransactOpts:  &seqTxOpts,
 				DAPWriter:     nil,
 				ParentChainID: parentChainID,
+				FatalErrChan:  make(chan error),
+
+				EspressoConfigFetcher: func() *arbnode.EspressoConfig { return &espressoConfig },
 			},
 		)
 		Require(t, err)
@@ -452,7 +462,7 @@ func testAllowPostingFirstBatchWhenSequencerMessageCountMismatch(t *testing.T, e
 	seqInbox, err := bridgegen.NewSequencerInbox(builder.L1Info.GetAddress("SequencerInbox"), builder.L1.Client)
 	Require(t, err)
 	seqOpts := builder.L1Info.GetDefaultTransactOpts("Sequencer", ctx)
-	tx, err := seqInbox.AddSequencerL2Batch(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10))
+	tx, err := seqInbox.AddSequencerL2Batch99020501(&seqOpts, big.NewInt(1), nil, big.NewInt(1), common.Address{}, big.NewInt(1), big.NewInt(10), createDummyEspressoMetadata(t))
 	Require(t, err)
 	_, err = builder.L1.EnsureTxSucceeded(tx)
 	Require(t, err)

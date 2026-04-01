@@ -43,6 +43,7 @@ func main() {
 	deployAccount := flag.String("l1DeployAccount", "", "l1 seq account to use (default is first account in keystore)")
 	ownerAddressString := flag.String("ownerAddress", "", "the rollup owner's address")
 	sequencerAddressString := flag.String("sequencerAddress", "", "the sequencer's address")
+	espressoTEEVerifierAddressString := flag.String("espressoTEEVerifierAddress", "", "the address of the espressoTEEVerifier contract")
 	batchPostersString := flag.String("batchPosters", "", "the comma separated array of addresses of batch posters. Defaults to sequencer address")
 	batchPosterManagerAddressString := flag.String("batchPosterManger", "", "the batch poster manger's address. Defaults to owner address")
 	nativeTokenAddressString := flag.String("nativeTokenAddress", "0x0000000000000000000000000000000000000000", "address of the ERC20 token which is used as native L2 currency")
@@ -96,6 +97,11 @@ func main() {
 	if !common.IsHexAddress(*sequencerAddressString) && len(*sequencerAddressString) > 0 {
 		panic("specified sequencer address is invalid")
 	}
+
+	if !common.IsHexAddress(*espressoTEEVerifierAddressString) {
+		panic("specified espressoTEEVerifier address is invalid")
+	}
+	espressoTEEVerifierAddress := common.HexToAddress(*espressoTEEVerifierAddressString) // This might be unused as a result of using mergiraf the one time, it meant that the creation of the rollup config here no longer takes the tee verifier address. TODO
 	sequencerAddress := common.HexToAddress(*sequencerAddressString)
 
 	if !common.IsHexAddress(*ownerAddressString) {
@@ -105,6 +111,10 @@ func main() {
 
 	if *prod && !common.IsHexAddress(*loserEscrowAddressString) {
 		panic("please specify a valid loser escrow address")
+	}
+
+	if !common.IsHexAddress(*espressoTEEVerifierAddressString) {
+		panic("please specify a valid espresso tee verifier address")
 	}
 
 	var batchPosters []common.Address
@@ -185,7 +195,7 @@ func main() {
 		batchPosters,
 		batchPosterManagerAddress,
 		*authorizevalidators,
-		deploy.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress),
+		deploy.GenerateLegacyRollupConfig(*prod, moduleRoot, ownerAddress, &chainConfig, chainConfigJson, loserEscrowAddress, espressoTEEVerifierAddress),
 		nativeToken,
 		maxDataSize,
 		true,
