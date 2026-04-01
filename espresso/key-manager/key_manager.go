@@ -47,11 +47,21 @@ type state struct {
 	data         []byte
 }
 
-// This is a private key derived from the test test test ... test junk BIP-39 mnemonic. It is a well known private key, so it should be fine to hardcode for tests.
-// I found it here: https://ethereum.stackexchange.com/questions/147078/hardhat-which-file-is-initial-state-in-such-as-the-mnemonic-and-20-accounts
-const TEST_PERSISTENT_KEY = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 const quoteFile = "/dev/attestation/quote"
 const userDataAttestationFile = "/dev/attestation/user_report_data"
+
+var TestEspressoPrivateKey *ecdsa.PrivateKey
+
+func init() {
+	// Hardcoded test private key (DO NOT use in production)
+	// This is a private key derived from the test test test ... test junk BIP-39 mnemonic. It is a well known private key, so it should be fine to hardcode for tests.
+	// I found it here: https://ethereum.stackexchange.com/questions/147078/hardhat-which-file-is-initial-state-in-such-as-the-mnemonic-and-20-accounts
+	key, err := crypto.HexToECDSA("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+	if err != nil {
+		panic(err)
+	}
+	TestEspressoPrivateKey = key
+}
 
 type EspressoKeyManagerInterface interface {
 	RegisterService() error
@@ -114,10 +124,7 @@ func NewEspressoKeyManager(
 	} else if servicePersistentPrivateKey != nil {
 		privKey = servicePersistentPrivateKey
 	} else if teeType == espressotee.TESTS {
-		privKey, err = crypto.HexToECDSA(TEST_PERSISTENT_KEY)
-		if err != nil {
-			log.Crit("Failed to create persistent private key for tests", "err", err)
-		}
+		privKey = TestEspressoPrivateKey
 	} else {
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
@@ -341,47 +348,7 @@ func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 
 // SignMessage uses the ephemeral/persistent private key which is generated inside the TEE to sign the EIP-712 message
 func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
-	messageHash := crypto.Keccak256(message)
-	typedData := apitypes.TypedData{
-		Types: apitypes.Types{
-			"EIP712Domain": []apitypes.Type{
-				{Name: "name", Type: "string"},
-				{Name: "version", Type: "string"},
-				{Name: "chainId", Type: "uint256"},
-				{Name: "verifyingContract", Type: "address"},
-			},
-			"EspressoTEEVerifier": []apitypes.Type{
-				{Name: "commitment", Type: "bytes32"},
-			},
-		},
-		PrimaryType: "EspressoTEEVerifier",
-		Domain: apitypes.TypedDataDomain{
-			Name:              "EspressoTEEVerifier",
-			Version:           "1",
-			ChainId:           (*math.HexOrDecimal256)(new(big.Int).SetUint64(k.parentChainId)),
-			VerifyingContract: k.espressoTEEVerifierCaller.EspressoTEEAddress().Hex(),
-		},
-		Message: map[string]interface{}{
-			"commitment": messageHash[:32],
-		},
-	}
-	// Calculate the hash using go-ethereum's EIP-712 implementation
-	hash, _, err := apitypes.TypedDataAndHash(typedData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to calculate EIP-712 hash: %w", err)
-	}
-
-	signature, err := crypto.Sign(hash, k.privKey)
-	if err != nil {
-		return nil, fmt.Errorf("failed to sign EIP-712 hash: %w", err)
-	}
-
-	// Normalize the recovery ID (v) from 0/1 to 27/28 for Solidity's ECDSA.recover
-	// See: https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
-	if signature[64] < 27 {
-		signature[64] += 27
-	}
-	return signature, nil
+	return SignTypedMessage(message, k.privKey, k.parentChainId, k.espressoTEEVerifierCaller.EspressoTEEAddress().Hex())
 }
 
 func (k *EspressoKeyManager) Init() error {
@@ -466,4 +433,48 @@ func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) 
 // This is a function designed to replace a signing function for functionality that depends on operating in a TEE
 func (k *EspressoKeyManager) noOpSignerFunc(addr []byte) ([]byte, error) {
 	return addr, nil
+}
+
+func SignTypedMessage(message []byte, privKey *ecdsa.PrivateKey, parentChainId uint64, contract string) ([]byte, error) {
+	messageHash := crypto.Keccak256(message)
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"EspressoTEEVerifier": []apitypes.Type{
+				{Name: "commitment", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "EspressoTEEVerifier",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "EspressoTEEVerifier",
+			Version:           "1",
+			ChainId:           (*math.HexOrDecimal256)(new(big.Int).SetUint64(parentChainId)),
+			VerifyingContract: contract,
+		},
+		Message: map[string]interface{}{
+			"commitment": messageHash[:32],
+		},
+	}
+	// Calculate the hash using go-ethereum's EIP-712 implementation
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate EIP-712 hash: %w", err)
+	}
+
+	signature, err := crypto.Sign(hash, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign EIP-712 hash: %w", err)
+	}
+
+	// Normalize the recovery ID (v) from 0/1 to 27/28 for Solidity's ECDSA.recover
+	// See: https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
+	if signature[64] < 27 {
+		signature[64] += 27
+	}
+	return signature, nil
 }
