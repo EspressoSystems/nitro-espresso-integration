@@ -7,20 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/offchainlabs/nitro/espresso/key-manager"
 	"github.com/offchainlabs/nitro/util/signature"
 )
 
-// TestEspressoPrivateKey is a hardcoded private key for testing purposes only
-var TestEspressoPrivateKey *ecdsa.PrivateKey
-
-func init() {
-	// Hardcoded test private key (DO NOT use in production)
-	key, err := crypto.HexToECDSA("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
-	if err != nil {
-		panic(err)
-	}
-	TestEspressoPrivateKey = key
-}
+var TestEspressoPrivateKey *ecdsa.PrivateKey = keymanager.TestEspressoPrivateKey
 
 var BlockSignaturePrefix = []byte("blockSignature")
 
