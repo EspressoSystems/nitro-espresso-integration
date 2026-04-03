@@ -65,7 +65,7 @@ func getSequencerBatchData(
 	txIndex uint,
 	receiptFetcher ReceiptFetcher,
 ) ([]byte, error) {
-	addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin0"]
+	addSequencerL2BatchFromOriginCallABI := seqInboxABI.Methods["addSequencerL2BatchFromOrigin1"]
 	switch batch.DataLocation {
 	case mel.BatchDataTxInput:
 		data := tx.Data()
