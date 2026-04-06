@@ -64,8 +64,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("SGX Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything).Return(false, nil).Once()
-		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything).Return(true, nil).Once()
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		mockEspressoTEEVerifierClient.On("CheckNonceValidation", mock.Anything).Return(nil)
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, persistentPrivKey, "", "", 0)
 		assert.Equal(t, espresso_key_manager.Init, km.GetKeyManagerState(), "Should start unregistered")
@@ -137,8 +137,8 @@ func TestEspressoKeyManager(t *testing.T) {
 	t.Run("Nitro Registry", func(t *testing.T) {
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 		mockEspressoTEEVerifierClient.On("RegisterService", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything).Return(false, nil).Once()
-		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything).Return(true, nil).Once()
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		mockEspressoTEEVerifierClient.On("CheckNonceValidation", mock.Anything).Return(nil)
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, nil, "", "", 0)
 		assert.Equal(t, espresso_key_manager.Init, km.GetKeyManagerState(), "Should start unregistered")
