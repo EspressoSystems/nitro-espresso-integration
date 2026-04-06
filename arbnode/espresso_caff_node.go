@@ -518,7 +518,6 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 					log.Warn(
 						"Espresso signer registration failed consecutively. Stopping.",
 						"retries", espressotee.EspressoMaxRetries,
-						"err", err,
 					)
 
 					log.Crit("caff node failed to failed to register signer")
