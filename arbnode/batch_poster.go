@@ -1413,8 +1413,15 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	} else {
 		// Not running espresso mode. This should happen in testing only.
 		log.Error("BatchPoster is not running in espresso mode, no signature will be attached to the batch")
-		// For compatibility we sign the data with a given private key.
-		signature, err = arbutil.SignMessage(calldata, TestEspressoPrivateKey)
+
+		// Get the verifier address. It calls the contract every time and not that efficient but it's only for testing
+		// and we don't want to hardcode the address in case the contract changes.
+		espressoTEEVerifierAddress, err := b.seqInbox.EspressoTEEVerifier(&bind.CallOpts{})
+		if err != nil {
+			return nil, err
+		}
+		log.Info("signing messages with test private key")
+		signature, err = espresso_key_manager.SignTypedMessage(calldata, TestEspressoPrivateKey, b.parentChain.ChainID.Uint64(), espressoTEEVerifierAddress.Hex())
 		if err != nil {
 			return nil, fmt.Errorf("failed to sign the calldata with test private key: %w", err)
 		}
