@@ -31,6 +31,9 @@ type EspressoTEEVerifierInterface interface {
 		teeType uint8,
 		serviceType ServiceType,
 	) (bool, error)
+	EspressoTEEAddress() common.Address
+	ParentChainId() (uint64, error)
+	CheckNonceValidation(dataPoster *dataposter.DataPoster) error
 }
 
 type EspressoTEEVerifier struct {
@@ -96,6 +99,14 @@ func (e *EspressoTEEVerifier) RegisterService(
 	)
 }
 
+func (e *EspressoTEEVerifier) CheckNonceValidation(dataPoster *dataposter.DataPoster) error {
+	err := NonceValidation(context.Background(), e.l1Client, dataPoster)
+	if err != nil {
+		return fmt.Errorf("nonce validation failed: %w", err)
+	}
+	return nil
+}
+
 func (e *EspressoTEEVerifier) registerService(
 	dataPoster *dataposter.DataPoster,
 	attestation []byte,
@@ -125,10 +136,6 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 
-	err = NonceValidation(context.Background(), e.l1Client, dataPoster)
-	if err != nil {
-		return err
-	}
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + EspressoGasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
