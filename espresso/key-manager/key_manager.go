@@ -65,15 +65,12 @@ func init() {
 }
 
 type EspressoKeyManagerInterface interface {
-	RegisterService() error
-	Init() error
 	GetCurrentKey() *ecdsa.PublicKey
 	SignPayload(message []byte) ([]byte, error)
 	SignMessage(message []byte) ([]byte, error)
 	TeeType() espressotee.TEE
 	GetKeyManagerState() KeyManagerState
 	CheckRegistration() (bool, error)
-	InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error
 }
 
 var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
@@ -196,30 +193,21 @@ func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
 	switch state {
 	case Init:
 		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Init phase. Waiting for Zk proof to be generated")
-		// In tests we use TESTS tee type but the contract only accepts SGX tee type
-		if k.teeType == TESTS && k.serviceType != espressotee.Test {
-			k.teeType = SGX
-		}
-		hasRegistered, err := k.VerifyRegistered()
+		newState, err := k.init()
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf("unable to init keymanager: %w", err)
 		}
-		if hasRegistered {
-			k.state.currentState = Registered
-			k.state.attestation = []byte{}
-			k.state.data = []byte{}
+		if newState.currentState == Registered {
+			k.state = *newState
 			signerAddr := crypto.PubkeyToAddress(k.privKey.PublicKey)
 			log.Info("Signer already registered on-chain", "signer address", signerAddr.Hex())
 			return true, nil
 		}
-		if err := k.Init(); err != nil {
-			return false, fmt.Errorf("unable to init keymanager: %w", err)
-		}
-		k.state.currentState = PendingDataPosterSync
+		k.state = *newState
 		return false, nil
 	case PendingDataPosterSync:
 		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Data Poster sync phase")
-		err := k.PendingDataPosterSync()
+		err := k.pendingDataPosterSync()
 		if err != nil {
 			return false, fmt.Errorf("data poster nonce and l1 nonce still mismatch: %w", err)
 		}
@@ -227,7 +215,7 @@ func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
 		return false, nil
 	case PendingRegistration:
 		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
-		err := k.RegisterService()
+		err := k.registerService()
 		if err != nil {
 			return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
 		}
@@ -246,7 +234,7 @@ func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
 /*
  * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
  */
-func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
+func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
 	pubKey := k.privKey.PublicKey
 	signerAddr := crypto.PubkeyToAddress(pubKey)
 	switch k.teeType {
@@ -297,24 +285,39 @@ func (k *EspressoKeyManager) PrepareRegisterService(getAttestationFunc func([]by
 	}
 }
 
-func (k *EspressoKeyManager) InitRegistration(getAttestationFunc func([]byte) ([]byte, error)) error {
-	if k.hasRegistered() {
-		log.Info("EspressoKeyManager already registered")
-		return nil
+func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
+
+	// In tests we use TESTS tee type but the contract only accepts SGX tee type
+	if k.teeType == TESTS && k.serviceType != espressotee.Test {
+		k.teeType = SGX
+	}
+
+	hasRegistered, err := k.VerifyRegistered()
+	if err != nil {
+		return nil, err
+	}
+	if hasRegistered {
+		return &state{
+			currentState: Registered,
+			attestation:  []byte{},
+			data:         []byte{},
+		}, nil
 	}
 
 	// Get the attestation and data needed to register the signer
-	attestation, data, err := k.PrepareRegisterService(getAttestationFunc)
+	attestation, data, err := k.prepareRegisterService(getAttestationFunc)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	k.state.attestation = attestation
-	k.state.data = data
-	return nil
+	return &state{
+		data:         data,
+		attestation:  attestation,
+		currentState: PendingDataPosterSync,
+	}, nil
 }
 
-func (k *EspressoKeyManager) PendingDataPosterSync() error {
+func (k *EspressoKeyManager) pendingDataPosterSync() error {
 	currentState := k.GetKeyManagerState()
 	if currentState != PendingDataPosterSync {
 		return fmt.Errorf("invalid state to check data poster sync: got %v, want PendingDataPosterSync", currentState)
@@ -326,7 +329,7 @@ func (k *EspressoKeyManager) PendingDataPosterSync() error {
 	return nil
 }
 
-func (k *EspressoKeyManager) RegisterService() error {
+func (k *EspressoKeyManager) registerService() error {
 	currentState := k.GetKeyManagerState()
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
@@ -369,17 +372,17 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 	return SignTypedMessage(message, k.privKey, k.parentChainId, k.espressoTEEVerifierCaller.EspressoTEEAddress().Hex())
 }
 
-func (k *EspressoKeyManager) Init() error {
+func (k *EspressoKeyManager) init() (*state, error) {
 	teeType := k.TeeType()
 	switch teeType {
 	case SGX:
-		return k.InitRegistration(k.getAttestationQuote)
+		return k.initRegistration(k.getAttestationQuote)
 	case NITRO:
-		return k.InitRegistration(k.getNitroAttestation)
+		return k.initRegistration(k.getNitroAttestation)
 	case TESTS:
-		return k.InitRegistration(k.noOpSignerFunc)
+		return k.initRegistration(k.noOpSignerFunc)
 	default:
-		return fmt.Errorf("unsupported tee Type: %d", teeType)
+		return nil, fmt.Errorf("unsupported tee Type: %d", teeType)
 	}
 }
 
