@@ -517,7 +517,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 						"retries", espressotee.EspressoMaxRetries,
 					)
 
-					log.Crit("caff node failed to failed to register signer")
+					log.Crit("caff node failed to register signer")
 				}
 			}
 			if registered {
