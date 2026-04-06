@@ -123,10 +123,6 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 
-	err = NonceValidation(context.Background(), e.l1Client, dataPoster)
-	if err != nil {
-		return err
-	}
 	// Add a buffer to the estimate for the gas limit
 	gasLimit := estimate * (100 + EspressoGasLimitBufferIncreasePercent) / 100
 	log.Info("register signer gas limit", "gas limit", gasLimit)
