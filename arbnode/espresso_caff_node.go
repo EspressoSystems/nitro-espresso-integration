@@ -513,7 +513,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 			registered, err := n.keyManager.CheckRegistration()
 			state := n.keyManager.GetKeyManagerState()
 			if err != nil {
-				log.Warn("caff node not registered on chain yet...", "current key manager state", state, "err", err)
+				log.Warn("caff node address not registered on chain yet...", "current key manager state", state, "err", err)
 				if errors.Is(err, espresso_key_manager.FatalErrUnableToRegisterSigner) {
 					log.Warn(
 						"Espresso signer registration failed consecutively. Stopping.",
@@ -529,7 +529,7 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 				break
 			}
 			if err == nil {
-				log.Info("caff node not registered", "current key manager state", state)
+				log.Info("caff node address not registered", "current key manager state", state)
 			}
 			select {
 			case <-ctx.Done():
