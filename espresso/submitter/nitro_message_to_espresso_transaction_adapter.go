@@ -2,17 +2,11 @@ package submitter
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	espresso_types "github.com/EspressoSystems/espresso-network/sdks/go/types"
-	"github.com/hf/nitrite"
-	"github.com/hf/nsm"
-	"github.com/hf/nsm/request"
 
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -193,98 +187,6 @@ func (n *NitroMessageToEspressoTransactionAdapter) NotifyNewPendingMessages(pos 
 // GetKeyManager returns the key manager used by this Espresso submitter.
 func (n *NitroMessageToEspressoTransactionAdapter) GetKeyManager() espresso_key_manager.EspressoKeyManagerInterface {
 	return n.keyManager
-}
-
-// getAttestationQuote is a method that retrieves the attestation quote for the user data.
-// This function generates the attestation quote for the user data.
-// The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
-// The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
-// The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
-func (t *NitroMessageToEspressoTransactionAdapter) getAttestationQuote(userData []byte) ([]byte, error) {
-	if (t.userDataAttestationFile == "") || (t.quoteFile == "") {
-		return []byte{}, nil
-	}
-	// keccak256 hash of userData
-	userDataHash := crypto.Keccak256(userData)
-
-	// Add 32 bytes of padding to the user data hash
-	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
-	for i := 0; i < 32; i += 1 {
-		userDataHash = append(userDataHash, 0)
-	}
-
-	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(t.userDataAttestationFile, userDataHash, 0600)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
-	}
-
-	// Read the quote from "/dev/attestation/quote" in SGX
-	attestationQuote, err := os.ReadFile(t.quoteFile)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
-	}
-
-	return attestationQuote, nil
-}
-
-// getNitroAttestation is a method that retrieves the attestation document for
-// AWS Nitro Enclaves.
-// This function gets the attestation document for AWS Nitro Enclaves
-// We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
-// After we retrieve, we verify the attestation, where we retrieve the result
-// Which will contain the complete attestation which we serialize for further processing
-func (t *NitroMessageToEspressoTransactionAdapter) getNitroAttestation(pubKey []byte) ([]byte, error) {
-	sess, err := nsm.OpenDefaultSession()
-	if err != nil {
-		return nil, fmt.Errorf("failed to open nsm session: %w", err)
-	}
-	defer sess.Close()
-
-	res, err := sess.Send(&request.Attestation{
-		PublicKey: pubKey,
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to send attestation request: %w", err)
-	}
-
-	if res.Error != "" {
-		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
-	}
-
-	if res.Attestation == nil || res.Attestation.Document == nil {
-		return nil, fmt.Errorf("no attestation document returned")
-	}
-
-	attestation, err := nitrite.Verify(res.Attestation.Document, nitrite.VerifyOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify attestation: %w", err)
-	}
-
-	attestationBytes, err := json.Marshal(attestation)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal attestation")
-	}
-	return attestationBytes, nil
-}
-
-func (n *NitroMessageToEspressoTransactionAdapter) Init() error {
-	teeType := n.keyManager.TeeType()
-	switch teeType {
-	case espresso_key_manager.SGX:
-		return n.keyManager.InitRegistration(n.getAttestationQuote)
-	case espresso_key_manager.NITRO:
-		return n.keyManager.InitRegistration(n.getNitroAttestation)
-	case espresso_key_manager.TESTS:
-		return n.keyManager.InitRegistration(n.getAttestationQuote)
-	default:
-		return fmt.Errorf("unsupported tee Type: %d", teeType)
-	}
-}
-
-func (n *NitroMessageToEspressoTransactionAdapter) RegisterService() error {
-	return n.keyManager.RegisterService()
 }
 
 func (n *NitroMessageToEspressoTransactionAdapter) EnqueuePendingTransaction(pos []arbutil.MessageIndex) error {
