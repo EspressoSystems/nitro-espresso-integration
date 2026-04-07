@@ -103,5 +103,3 @@ TestClassicRedirectURLNotLeaked
 
 TestDimLogSstoreMultipleWarmZeroToNonZeroToNonZero
 TestDimTxOpCallColdPayingContractFundedMemUnchanged
-
-TestBatchPosterDelayBufferEnabled

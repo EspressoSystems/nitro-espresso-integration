@@ -10,7 +10,7 @@
 [submodule "contracts"]
 	path = contracts
 	url = https://github.com/EspressoSystems/nitro-contracts.git
-	branch = celestia-integration
+	branch = release-v2.1.3-celestia-409085b
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
@@ -43,3 +43,7 @@
 [submodule "espresso-tee-contracts"]
 	path = espresso-tee-contracts
 	url = https://github.com/EspressoSystems/espresso-tee-contracts
+	branch = release-tee-caff-node
+[submodule "espresso-tee-contracts-legacy"]
+	path = espresso-tee-contracts-legacy
+	url = https://github.com/EspressoSystems/espresso-tee-contracts.git

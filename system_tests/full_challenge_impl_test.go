@@ -25,6 +25,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/arbos"
 	"github.com/offchainlabs/nitro/arbstate"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts-legacy/espressogen"
 	"github.com/offchainlabs/nitro/solgen/go/challengegen"
 	"github.com/offchainlabs/nitro/solgen/go/mocksgen"
 	"github.com/offchainlabs/nitro/solgen/go/ospgen"
@@ -158,8 +159,7 @@ func makeBatch(t *testing.T, l2Node *arbnode.Node, l2Info *BlockchainTestInfo, b
 
 	seqNum := new(big.Int).Lsh(common.Big1, 256)
 	seqNum.Sub(seqNum, common.Big1)
-	espressoMetadata := createDummyEspressoMetadata(t, seqNum, message, big.NewInt(1), common.Address{}, common.Big0, common.Big0)
-	tx, err := seqInbox.AddSequencerL2Batch99020501(sequencer, seqNum, message, big.NewInt(1), common.Address{}, common.Big0, common.Big0, espressoMetadata)
+	tx, err := seqInbox.AddSequencerL2Batch99020501(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), createDummyEspressoMetadata(t))
 	Require(t, err)
 	receipt, err := EnsureTxSucceeded(ctx, backend, tx)
 	Require(t, err)
@@ -207,7 +207,7 @@ func setupSequencerInboxStub(ctx context.Context, t *testing.T, l1Info *Blockcha
 	}
 
 	//  Deploy EspressoTEEVerifier Mock
-	espressoTEEVerifierAddr, tx, _, err := deployMockTEEContracts(t, &txOpts, l1Client)
+	espressoTEEVerifierAddr, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(&txOpts, l1Client)
 	Require(t, err)
 	_, err = EnsureTxSucceeded(ctx, l1Client, tx)
 	Require(t, err)
