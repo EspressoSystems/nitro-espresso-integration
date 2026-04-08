@@ -7,9 +7,28 @@
 **/.gitmodules
 go-ethereum/tests
 **/*.yml
+
+# Build output directories
+out/
+tmp/
+*.tar
+*.diff
+
 contracts/build
 contracts/cache/
+contracts/out/
+contracts-legacy/build/
+contracts-legacy/cache/
+contracts-legacy/out/
+contracts-local/out/
+contracts-local/cache/
 safe-smart-account/build/
+safe-smart-account/artifacts/
+safe-smart-account/cache/
+espresso-tee-contracts/out/
+espresso-tee-contracts/cache/
+espresso-tee-contracts-legacy/out/
+espresso-tee-contracts-legacy/cache/
 solgen/go
 **/node_modules
 

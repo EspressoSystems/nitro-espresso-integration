@@ -1,0 +1,135 @@
+# Build the nitro-node images on  AMD64 hosts.
+# After building, the images are merged together to make a multiplatform image.
+name: Espresso Docker Reproducible build CI
+run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - integration
+      - celestia-integration
+      - integration-v3.9.2
+      - celestia-v3.9.2
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker_build:
+    strategy:
+      matrix:
+        platform: [linux/amd64]
+
+    runs-on: ubuntu-24.04-8core
+
+    steps:
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          submodules: false
+          fetch-depth: 0
+
+      - name: Fetch submodules (full depth for reproducibility)
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule sync --recursive
+          git submodule update --init --recursive
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner  }}
+          password: ${{ secrets.GITHUB_TOKEN  }}
+
+      - name: Install skopeo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo
+      - name: Docker prune
+        run: |
+          docker version
+          docker builder prune -a -f
+          docker system prune -a -f
+
+      # - name: Enable containerd image store
+      #   run: |
+      #     sudo mkdir -p /etc/docker
+      #     echo '{"features":{"containerd-snapshotter":true}}' | sudo tee /etc/docker/daemon.json
+      #     sudo systemctl restart docker
+
+      - name: Setup and configure docker
+        shell: 'script -q -e -c "bash {0}"'
+        run: |
+          [[ $EUID -ne 0 ]] && exec sudo /bin/sh "$0" "$@"
+          for pkg in docker.io docker-doc docker-compose docker-compose-v2 podman-docker containerd runc; \
+            do apt-get remove $pkg; \
+          done
+          apt-get update
+          apt-get install ca-certificates curl
+          install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          chmod a+r /etc/apt/keyrings/docker.asc
+          echo \
+            "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+            $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+            tee /etc/apt/sources.list.d/docker.list > /dev/null
+          apt-get update
+          cat << EOF >/etc/docker/daemon.json
+          {
+            "features": {
+            "containerd-snapshotter": true
+            }
+          }
+          EOF
+          apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+          systemctl restart docker
+
+
+      - name: Build & export to OCI directory (reproducible)
+        run: |
+          SOURCE_DATE_EPOCH=1 \
+          DOCKER_BUILDKIT=1 \
+          docker build \
+            --platform linux/amd64 \
+            --target nitro-node-repro \
+            --output "type=oci,tar=false,rewrite-timestamp=true,force-compression=true,name=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node,dest=oci-export" \
+            --tag nitro-node:ci \
+            -f Dockerfile.reproducible .
+
+      - name: Convert OCI dir to Docker archive tar using skopeo
+        run: |
+          # Use one of the tags from metadata (or hardcode a temp one)
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:luke-testing
+          skopeo copy \
+            --insecure-policy \
+            oci:oci-export \
+            docker-archive:reproducible.tar:${IMAGE_REF}
+
+      - name: Load tar into Docker (for docker push / verification)
+        # if: github.event_name != 'pull_request'
+        run: |
+          docker load < reproducible.tar
+
+      - name: Push to GHCR
+        # if: github.event_name != 'pull_request'
+        run: |
+          IMAGE_REF=ghcr.io/espressosystems/nitro-espresso-integration/nitro-node:luke-testing
+          docker push $IMAGE_REF
+
+      - name: Check available space after CI run
+        if: "!cancelled()"
+        run: sudo df -h
