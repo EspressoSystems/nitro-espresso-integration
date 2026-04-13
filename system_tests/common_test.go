@@ -932,8 +932,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	privKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(privKey)))
-	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.l2StackConfig, b.execConfig)
+	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(t, b.L2Info, b.dataDir, b.chainConfig, existing.initMessage, b.l2StackConfig, b.execConfig)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -2453,9 +2452,9 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...ra
 }
 
 func createL2BlockChain(
-	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, nodeConf *node.Config, execConfig *gethexec.Config,
+	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, initMessage *arbostypes.ParsedInitMessage, nodeConf *node.Config, execConfig *gethexec.Config,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
-	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, nodeConf, execConfig, nil)
+	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, initMessage, nodeConf, execConfig, nil)
 }
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {
