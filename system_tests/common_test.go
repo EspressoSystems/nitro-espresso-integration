@@ -945,6 +945,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	Require(t, err)
 
 	b.L1Info = existing.L1Info
+	b.initMessage = existing.initMessage
 
 	teeHMAC, err := espresso_tee_utils.HmacForTest()
 	Require(t, err)
