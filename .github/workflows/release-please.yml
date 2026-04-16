@@ -3,7 +3,7 @@ name: Release Please
 on:
   push:
     branches:
-      - integration-v3.9.2
+      - integration-v3.9.8
   workflow_dispatch:
 
 permissions:
@@ -28,7 +28,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          target-branch: integration-v3.9.2
+          target-branch: integration-v3.9.8
 
       - name: Output release info
         if: ${{ steps.release.outputs.release_created }}
