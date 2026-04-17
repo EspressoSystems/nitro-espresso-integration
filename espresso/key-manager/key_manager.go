@@ -133,6 +133,11 @@ func NewEspressoKeyManager(
 		panic("DataSigner is nil")
 	}
 
+	// TESTS tee type is only valid when paired with the Test service type.
+	if teeType == TESTS && serviceType != espressotee.Test {
+		panic(fmt.Sprintf("invalid configuration: TeeType=TESTS is only valid for Test service type, got serviceType=%v", serviceType))
+	}
+
 	if teeType == NITRO && zkAttestationServiceURL == "" {
 		if serviceType != espressotee.Test {
 			panic("zk attestation service URL must be provided for nitro TEE type")
@@ -285,11 +290,6 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 }
 
 func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
-	// In tests we use TESTS tee type but the contract only accepts SGX tee type
-	if k.teeType == TESTS && k.serviceType != espressotee.Test {
-		k.teeType = SGX
-	}
-
 	hasRegistered, err := k.verifyRegistrationOnChain()
 	if err != nil {
 		return nil, err
