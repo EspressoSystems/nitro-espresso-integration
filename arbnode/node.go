@@ -1648,6 +1648,9 @@ func (n *Node) StopAndWait() {
 	if n.configFetcher != nil && n.configFetcher.Started() {
 		n.configFetcher.StopAndWait()
 	}
+	if n.blockMetadataFetcher != nil {
+		n.blockMetadataFetcher.StopAndWait()
+	}
 	if n.SeqCoordinator != nil && n.SeqCoordinator.Started() {
 		// Releases the chosen sequencer lockout,
 		// and stops the background thread but not the redis client.

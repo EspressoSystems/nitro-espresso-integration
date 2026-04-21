@@ -627,6 +627,7 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if teeType == espressotee.TESTS {
 			batchPosterServiceType = espressotee.Test
 		}
+		// to support tests, we can give the batch poster a "persistent key" via the config, This variable WILL be nil if the configured tee type is not TESTS
 		submitterOptions = append(
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future

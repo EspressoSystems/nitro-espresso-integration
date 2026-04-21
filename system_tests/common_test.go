@@ -196,6 +196,22 @@ func (tc *TestClient) EnsureTxSucceededWithTimeout(transaction *types.Transactio
 	return EnsureTxSucceededWithTimeout(tc.ctx, tc.Client, transaction, timeout)
 }
 
+func (tc *TestClient) BalanceDifferenceAtBlock(address common.Address, blockNum *big.Int) (*big.Int, error) {
+	if blockNum.Cmp(common.Big1) < 0 {
+		return nil, fmt.Errorf("blocknum must be > 1")
+	}
+	prevBlock := arbmath.BigSub(blockNum, common.Big1)
+	prevBalance, err := tc.Client.BalanceAt(tc.ctx, address, prevBlock)
+	if err != nil {
+		return nil, err
+	}
+	newBalance, err := tc.Client.BalanceAt(tc.ctx, address, blockNum)
+	if err != nil {
+		return nil, err
+	}
+	return arbmath.BigSub(newBalance, prevBalance), nil
+}
+
 var DefaultTestForwarderConfig = gethexec.ForwarderConfig{
 	ConnectionTimeout:     2 * time.Second,
 	IdleConnectionTimeout: 2 * time.Second,
@@ -351,11 +367,11 @@ func (b *NodeBuilder) DefaultConfig(t *testing.T, withL1 bool) *NodeBuilder {
 	b.withL1 = withL1
 	b.parallelise = true
 	b.deployBold = true
+	b.takeOwnership = true
 	if withL1 {
 		b.isSequencer = true
 		b.nodeConfig = arbnode.ConfigDefaultL1Test()
 	} else {
-		b.takeOwnership = true
 		b.nodeConfig = arbnode.ConfigDefaultL2Test()
 	}
 	b.chainConfig = chaininfo.ArbitrumDevTestChainConfig()
@@ -450,6 +466,11 @@ func (b *NodeBuilder) WithL1ClientWrapper(t *testing.T) *NodeBuilder {
 
 func (b *NodeBuilder) TakeOwnership() *NodeBuilder {
 	b.takeOwnership = true
+	return b
+}
+
+func (b *NodeBuilder) WithTakeOwnership(takeOwnership bool) *NodeBuilder {
+	b.takeOwnership = takeOwnership
 	return b
 }
 
@@ -789,7 +810,8 @@ func (b *NodeBuilder) BuildL2OnL1(t *testing.T) func() {
 		b.addresses,
 	)
 
-	if b.takeOwnership {
+	_, hasOwnerAccount := b.L2Info.Accounts["Owner"]
+	if b.takeOwnership && hasOwnerAccount {
 		debugAuth := b.L2Info.GetDefaultTransactOpts("Owner", b.ctx)
 
 		// make auth a chain owner
@@ -801,6 +823,15 @@ func (b *NodeBuilder) BuildL2OnL1(t *testing.T) func() {
 
 		_, err = EnsureTxSucceeded(b.ctx, b.L2.Client, tx)
 		Require(t, err)
+
+		if b.chainConfig.ArbitrumChainParams.InitialArbOSVersion >= params.ArbosVersion_MultiConstraintFix {
+			arbowner, err := precompilesgen.NewArbOwner(common.HexToAddress("70"), b.L2.Client)
+			Require(t, err)
+			tx, err = arbowner.SetGasPricingConstraints(&debugAuth, [][3]uint64{{30_000_000, 102, 800_000}, {15_000_000, 600, 1_600_000}})
+			Require(t, err)
+			_, err = EnsureTxSucceeded(b.ctx, b.L2.Client, tx)
+			Require(t, err)
+		}
 	}
 
 	return func() {
@@ -901,8 +932,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	privKey := existing.L1Info.GetInfoWithPrivKey("User").PrivateKey
 
 	t.Setenv("CAFF_NODE_PRIV_KEY", common.Bytes2Hex(crypto.FromECDSA(privKey)))
-	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(
-		t, b.L2Info, b.dataDir, b.chainConfig, b.l2StackConfig, b.execConfig)
+	b.L2Info, b.L2.Stack, chainDb, arbDb, blockchain = createL2BlockChain(t, b.L2Info, b.dataDir, b.chainConfig, existing.initMessage, b.l2StackConfig, b.execConfig)
 
 	Require(t, b.execConfig.Validate())
 	execConfig := b.execConfig
@@ -915,6 +945,7 @@ func (b *NodeBuilder) BuildEspressoCaffNode(t *testing.T, existing *NodeBuilder)
 	Require(t, err)
 
 	b.L1Info = existing.L1Info
+	b.initMessage = existing.initMessage
 
 	teeHMAC, err := espresso_tee_utils.HmacForTest()
 	Require(t, err)
@@ -2422,9 +2453,9 @@ func recordBlock(t *testing.T, block uint64, builder *NodeBuilder, targets ...ra
 }
 
 func createL2BlockChain(
-	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, nodeConf *node.Config, execConfig *gethexec.Config,
+	t *testing.T, l2info *BlockchainTestInfo, dataDir string, chainConfig *params.ChainConfig, initMessage *arbostypes.ParsedInitMessage, nodeConf *node.Config, execConfig *gethexec.Config,
 ) (*BlockchainTestInfo, *node.Node, ethdb.Database, ethdb.Database, *core.BlockChain) {
-	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, nil, nodeConf, execConfig, nil)
+	return createNonL1BlockChainWithStackConfig(t, l2info, dataDir, chainConfig, nil, initMessage, nodeConf, execConfig, nil)
 }
 
 func populateMachineDir(t *testing.T, cr *github.ConsensusRelease) string {

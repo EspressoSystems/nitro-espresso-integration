@@ -35,7 +35,7 @@ jobs:
           echo "GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }}" >> "$GITHUB_ENV"
 
       - name: Build
-        run: make -j8 build test-go-deps
+        run: make -j4 build test-go-deps
 
       - name: Build all lint dependencies
         run: make -j8 build-node-deps

@@ -9,8 +9,8 @@
   "prerelease": false,
   "packages": {
     ".": {
-      "component": "v3.9.2",
-      "last-release-sha": "a4e865b5ff12959a43cc7a2e9d956915ad7159b8",
+      "component": "v3.9.8",
+      "bootstrap-sha": "249a3572d349d144e70e1226523f6c76622f76de",
       "changelog-path": "CHANGELOG.md",
       "release-type": "simple",
       "extra-files": [
