@@ -127,6 +127,14 @@ func NewEspressoKeyManager(
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
 
+	// TeeType=TESTS uses a well-known test private key and dummy attestations.
+	// In production this is harmless — the real SGX/NITRO verifier contract will
+	// reject the dummy attestation — but it indicates a misconfiguration.
+	if teeType == TESTS {
+		log.Warn("TeeType=TESTS detected. This must only be used in test environments. In production, use SGX or NITRO.",
+			"serviceType", serviceType)
+	}
+
 	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
 	// and if it is we can safely ignore a nil data signer.
 	if signerFunc == nil && serviceType != espressotee.CaffNode {
@@ -270,23 +278,15 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
-	case TESTS:
-		pubKey := crypto.FromECDSAPub(&k.privKey.PublicKey)
-		log.Info("TESTS signing address", "addr", signerAddr)
-
-		attestationQuote, err := getAttestationFunc(pubKey)
-		if err != nil {
-			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
-		}
-		return attestationQuote, signerAddr.Bytes(), nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
 }
 
 func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
-	// In tests we use TESTS tee type but the contract only accepts SGX tee type
-	if k.teeType == TESTS && k.serviceType != espressotee.Test {
+	// The on-chain contract only accepts SGX (0) and NITRO (1) as tee types.
+	// Map TESTS to SGX for the contract call.
+	if k.teeType == TESTS {
 		k.teeType = SGX
 	}
 

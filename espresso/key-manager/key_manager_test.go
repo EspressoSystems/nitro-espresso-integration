@@ -252,6 +252,29 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 }
 
+// TestEspressoKeyManagerTestsTeeTypeWarnsButDoesNotPanic verifies that
+// TeeType=TESTS with a production service type logs a warning but does not
+// crash. The on-chain contract rejects dummy attestations in production,
+// providing the real security defense.
+func TestEspressoKeyManagerTestsTeeTypeWarnsButDoesNotPanic(t *testing.T) {
+	mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+	mockEspressoTEEVerifierClient.On("ParentChainId").Return(uint64(1), nil)
+	mockEspressoTEEVerifierClient.On("EspressoTEEAddress").Return(common.Address{})
+
+	privKey := "1234567890abcdef1234567890abcdef12345678000000000000000000000000"
+	_, signer, err := GetTransactOptsAndSigner(privKey, big.NewInt(1))
+	require.NoError(t, err)
+	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
+
+	require.NotPanics(t, func() {
+		espresso_key_manager.NewEspressoKeyManager(
+			mockEspressoTEEVerifierClient, &dataposter.DataPoster{}, dataSigner,
+			espresso_key_manager.TESTS, espressotee.BatchPoster,
+			nil, "", "", 0,
+		)
+	})
+}
+
 func VerifySignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signature []byte) (bool, error) {
 	hash := crypto.Keccak256Hash(data)
 
