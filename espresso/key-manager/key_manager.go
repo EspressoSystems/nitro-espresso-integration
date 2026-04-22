@@ -83,6 +83,8 @@ type EspressoKeyManager struct {
 	dataPoster  *dataposter.DataPoster
 	teeType     espressotee.TEE
 	serviceType espressotee.ServiceType
+	// contractServiceType is what we send on-chain; the contract rejects Test (255).
+	contractServiceType espressotee.ServiceType
 
 	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
 	parentChainId                          uint64
@@ -127,9 +129,24 @@ func NewEspressoKeyManager(
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
 
-	// Currently the caff node will not need to sign any payloads, so we check if the service type is a caff node
-	// and if it is we can safely ignore a nil data signer.
-	if signerFunc == nil && serviceType != espressotee.CaffNode {
+	// Guard against a production node with TeeType=TESTS: it would register the
+	// well-known test key on-chain as SGX-attested with no real attestation.
+	if teeType == TESTS && serviceType != espressotee.Test {
+		panic(fmt.Sprintf("fatal misconfiguration: TeeType=TESTS requires serviceType=Test, got serviceType=%v", serviceType))
+	}
+
+	// The contract rejects Test (255). Infer the production service type from
+	// the signer: batch posters have one, caff nodes don't.
+	contractServiceType := serviceType
+	if teeType == TESTS {
+		if signerFunc != nil {
+			contractServiceType = espressotee.BatchPoster
+		} else {
+			contractServiceType = espressotee.CaffNode
+		}
+	}
+
+	if signerFunc == nil && serviceType != espressotee.CaffNode && serviceType != espressotee.Test {
 		panic("DataSigner is nil")
 	}
 
@@ -154,6 +171,7 @@ func NewEspressoKeyManager(
 		dataPoster:                             dataPoster,
 		teeType:                                teeType,
 		serviceType:                            serviceType,
+		contractServiceType:                    contractServiceType,
 		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
 		parentChainId:                          parentChainId,
 		state: state{
@@ -181,7 +199,7 @@ func (k *EspressoKeyManager) verifyRegistrationOnChain() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.contractServiceType)
 	if err != nil {
 		return false, err
 	}
@@ -270,23 +288,14 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
-	case TESTS:
-		pubKey := crypto.FromECDSAPub(&k.privKey.PublicKey)
-		log.Info("TESTS signing address", "addr", signerAddr)
-
-		attestationQuote, err := getAttestationFunc(pubKey)
-		if err != nil {
-			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
-		}
-		return attestationQuote, signerAddr.Bytes(), nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
 }
 
 func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
-	// In tests we use TESTS tee type but the contract only accepts SGX tee type
-	if k.teeType == TESTS && k.serviceType != espressotee.Test {
+	// The on-chain contract only accepts SGX or NITRO.
+	if k.teeType == TESTS {
 		k.teeType = SGX
 	}
 
@@ -332,7 +341,7 @@ func (k *EspressoKeyManager) registerService() error {
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
 	}
-	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.contractServiceType)
 	if err != nil {
 		return err
 	}

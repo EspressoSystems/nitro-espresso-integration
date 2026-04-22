@@ -252,6 +252,58 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 }
 
+func TestEspressoKeyManagerTestsTeeTypeWithProductionServiceTypePanics(t *testing.T) {
+	mockClient := new(mockEspressoTEEVerifier)
+	mockClient.On("ParentChainId").Return(uint64(1), nil)
+	mockClient.On("EspressoTEEAddress").Return(common.Address{})
+
+	_, signer, err := GetTransactOptsAndSigner("1234567890abcdef1234567890abcdef12345678000000000000000000000000", big.NewInt(1))
+	require.NoError(t, err)
+	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
+
+	require.Panics(t, func() {
+		espresso_key_manager.NewEspressoKeyManager(
+			mockClient, &dataposter.DataPoster{}, dataSigner,
+			espresso_key_manager.TESTS, espressotee.BatchPoster,
+			nil, "", "", 0,
+		)
+	})
+
+	require.Panics(t, func() {
+		espresso_key_manager.NewEspressoKeyManager(
+			mockClient, &dataposter.DataPoster{}, nil,
+			espresso_key_manager.TESTS, espressotee.CaffNode,
+			nil, "", "", 0,
+		)
+	})
+}
+
+func TestEspressoKeyManagerTestsTeeTypeWithTestServiceTypeSucceeds(t *testing.T) {
+	mockClient := new(mockEspressoTEEVerifier)
+	mockClient.On("ParentChainId").Return(uint64(1), nil)
+	mockClient.On("EspressoTEEAddress").Return(common.Address{})
+
+	_, signer, err := GetTransactOptsAndSigner("1234567890abcdef1234567890abcdef12345678000000000000000000000000", big.NewInt(1))
+	require.NoError(t, err)
+	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
+
+	require.NotPanics(t, func() {
+		espresso_key_manager.NewEspressoKeyManager(
+			mockClient, &dataposter.DataPoster{}, dataSigner,
+			espresso_key_manager.TESTS, espressotee.Test,
+			nil, "", "", 0,
+		)
+	})
+
+	require.NotPanics(t, func() {
+		espresso_key_manager.NewEspressoKeyManager(
+			mockClient, &dataposter.DataPoster{}, nil,
+			espresso_key_manager.TESTS, espressotee.Test,
+			nil, "", "", 0,
+		)
+	})
+}
+
 func VerifySignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signature []byte) (bool, error) {
 	hash := crypto.Keccak256Hash(data)
 
