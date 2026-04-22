@@ -83,8 +83,6 @@ type EspressoKeyManager struct {
 	dataPoster  *dataposter.DataPoster
 	teeType     espressotee.TEE
 	serviceType espressotee.ServiceType
-	// contractServiceType is what we send on-chain; the contract rejects Test (255).
-	contractServiceType espressotee.ServiceType
 
 	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
 	parentChainId                          uint64
@@ -135,17 +133,6 @@ func NewEspressoKeyManager(
 		panic(fmt.Sprintf("fatal misconfiguration: TeeType=TESTS requires serviceType=Test, got serviceType=%v", serviceType))
 	}
 
-	// The contract rejects Test (255). Infer the production service type from
-	// the signer: batch posters have one, caff nodes don't.
-	contractServiceType := serviceType
-	if teeType == TESTS {
-		if signerFunc != nil {
-			contractServiceType = espressotee.BatchPoster
-		} else {
-			contractServiceType = espressotee.CaffNode
-		}
-	}
-
 	if signerFunc == nil && serviceType != espressotee.CaffNode && serviceType != espressotee.Test {
 		panic("DataSigner is nil")
 	}
@@ -171,7 +158,6 @@ func NewEspressoKeyManager(
 		dataPoster:                             dataPoster,
 		teeType:                                teeType,
 		serviceType:                            serviceType,
-		contractServiceType:                    contractServiceType,
 		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
 		parentChainId:                          parentChainId,
 		state: state{
@@ -180,6 +166,28 @@ func NewEspressoKeyManager(
 			data:         []byte{},
 		},
 	}
+}
+
+// onChainTeeType is the tee type we send to the on-chain contract, which
+// only accepts SGX or NITRO. TESTS is mapped to SGX.
+func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
+	if k.teeType == TESTS {
+		return SGX
+	}
+	return k.teeType
+}
+
+// onChainServiceType is the service type we send to the on-chain contract,
+// which only accepts BatchPoster or CaffNode. When in TESTS mode we infer
+// the production type from whether a data signer was provided.
+func (k *EspressoKeyManager) onChainServiceType() espressotee.ServiceType {
+	if k.teeType == TESTS {
+		if k.signer != nil {
+			return espressotee.BatchPoster
+		}
+		return espressotee.CaffNode
+	}
+	return k.serviceType
 }
 
 func (k *EspressoKeyManager) hasRegistered() bool {
@@ -199,7 +207,7 @@ func (k *EspressoKeyManager) verifyRegistrationOnChain() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.contractServiceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.onChainTeeType(), k.onChainServiceType())
 	if err != nil {
 		return false, err
 	}
@@ -288,17 +296,21 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 
 		log.Info("successfully generated zk proof from nitro attestation")
 		return journalBytes, onchainProofBytes, nil
+	case TESTS:
+		pubKey := crypto.FromECDSAPub(&k.privKey.PublicKey)
+		log.Info("TESTS signing address", "addr", signerAddr)
+
+		attestationQuote, err := getAttestationFunc(pubKey)
+		if err != nil {
+			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
+		}
+		return attestationQuote, signerAddr.Bytes(), nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
 }
 
 func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
-	// The on-chain contract only accepts SGX or NITRO.
-	if k.teeType == TESTS {
-		k.teeType = SGX
-	}
-
 	hasRegistered, err := k.verifyRegistrationOnChain()
 	if err != nil {
 		return nil, err
@@ -341,7 +353,7 @@ func (k *EspressoKeyManager) registerService() error {
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
 	}
-	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.contractServiceType)
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.onChainTeeType()), k.onChainServiceType())
 	if err != nil {
 		return err
 	}
@@ -366,8 +378,10 @@ func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
 	return &k.privKey.PublicKey
 }
 
+// TeeType returns the tee type registered on-chain. Callers (e.g. the batch
+// poster building its on-chain payload) need to match what the contract saw.
 func (k *EspressoKeyManager) TeeType() espressotee.TEE {
-	return k.teeType
+	return k.onChainTeeType()
 }
 
 func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
@@ -380,8 +394,9 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 }
 
 func (k *EspressoKeyManager) init() (*state, error) {
-	teeType := k.TeeType()
-	switch teeType {
+	// Dispatch on the configured tee type, not the on-chain one: TESTS must
+	// use noOpSignerFunc even though it registers on-chain as SGX.
+	switch k.teeType {
 	case SGX:
 		return k.initRegistration(k.getAttestationQuote)
 	case NITRO:
@@ -389,7 +404,7 @@ func (k *EspressoKeyManager) init() (*state, error) {
 	case TESTS:
 		return k.initRegistration(k.noOpSignerFunc)
 	default:
-		return nil, fmt.Errorf("unsupported tee Type: %d", teeType)
+		return nil, fmt.Errorf("unsupported tee Type: %d", k.teeType)
 	}
 }
 
