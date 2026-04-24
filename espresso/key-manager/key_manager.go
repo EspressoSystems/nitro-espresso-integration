@@ -127,8 +127,7 @@ func NewEspressoKeyManager(
 		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
 	}
 
-	// Guard against a production node with TeeType=TESTS: it would register the
-	// well-known test key on-chain as SGX-attested with no real attestation.
+	// Production guard: TESTS with a non-Test serviceType would register the test key unattested.
 	if teeType == TESTS && serviceType != espressotee.Test {
 		panic(fmt.Sprintf("fatal misconfiguration: TeeType=TESTS requires serviceType=Test, got serviceType=%v", serviceType))
 	}
@@ -168,8 +167,7 @@ func NewEspressoKeyManager(
 	}
 }
 
-// onChainTeeType is the tee type we send to the on-chain contract, which
-// only accepts SGX or NITRO. TESTS is mapped to NITRO.
+// Contract only accepts SGX/NITRO; TESTS → NITRO.
 func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
 	if k.teeType == TESTS {
 		return NITRO
@@ -177,9 +175,7 @@ func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
 	return k.teeType
 }
 
-// onChainServiceType is the service type we send to the on-chain contract,
-// which only accepts BatchPoster or CaffNode. When in TESTS mode we infer
-// the production type from whether a data signer was provided.
+// Contract only accepts BatchPoster/CaffNode; infer from signer presence when in TESTS.
 func (k *EspressoKeyManager) onChainServiceType() espressotee.ServiceType {
 	if k.teeType == TESTS {
 		if k.signer != nil {
@@ -378,8 +374,7 @@ func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
 	return &k.privKey.PublicKey
 }
 
-// TeeType returns the tee type registered on-chain. Callers (e.g. the batch
-// poster building its on-chain payload) need to match what the contract saw.
+// Returns the on-chain tee type (callers building payloads need to match the contract).
 func (k *EspressoKeyManager) TeeType() espressotee.TEE {
 	return k.onChainTeeType()
 }
@@ -394,8 +389,7 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 }
 
 func (k *EspressoKeyManager) init() (*state, error) {
-	// Dispatch on the configured tee type, not the on-chain one: TESTS must
-	// use noOpSignerFunc even though it registers on-chain as SGX.
+	// Dispatch on configured tee type, not on-chain: TESTS needs noOpSignerFunc.
 	switch k.teeType {
 	case SGX:
 		return k.initRegistration(k.getAttestationQuote)
