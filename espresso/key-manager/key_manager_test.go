@@ -252,7 +252,7 @@ func TestEspressoKeyManager(t *testing.T) {
 	})
 }
 
-func TestEspressoKeyManagerTestsTeeTypeWithProductionServiceTypePanics(t *testing.T) {
+func TestEspressoKeyManagerTestsTeeTypeServiceTypeValidation(t *testing.T) {
 	mockClient := new(mockEspressoTEEVerifier)
 	mockClient.On("ParentChainId").Return(uint64(1), nil)
 	mockClient.On("EspressoTEEAddress").Return(common.Address{})
@@ -261,47 +261,21 @@ func TestEspressoKeyManagerTestsTeeTypeWithProductionServiceTypePanics(t *testin
 	require.NoError(t, err)
 	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
 
-	require.Panics(t, func() {
+	newKM := func(sig func([]byte) ([]byte, error), svc espressotee.ServiceType) {
 		espresso_key_manager.NewEspressoKeyManager(
-			mockClient, &dataposter.DataPoster{}, dataSigner,
-			espresso_key_manager.TESTS, espressotee.BatchPoster,
+			mockClient, &dataposter.DataPoster{}, sig,
+			espresso_key_manager.TESTS, svc,
 			nil, "", "", 0,
 		)
-	})
+	}
 
-	require.Panics(t, func() {
-		espresso_key_manager.NewEspressoKeyManager(
-			mockClient, &dataposter.DataPoster{}, nil,
-			espresso_key_manager.TESTS, espressotee.CaffNode,
-			nil, "", "", 0,
-		)
-	})
-}
+	// TESTS paired with a production service type is a fatal misconfiguration.
+	require.Panics(t, func() { newKM(dataSigner, espressotee.BatchPoster) })
+	require.Panics(t, func() { newKM(nil, espressotee.CaffNode) })
 
-func TestEspressoKeyManagerTestsTeeTypeWithTestServiceTypeSucceeds(t *testing.T) {
-	mockClient := new(mockEspressoTEEVerifier)
-	mockClient.On("ParentChainId").Return(uint64(1), nil)
-	mockClient.On("EspressoTEEAddress").Return(common.Address{})
-
-	_, signer, err := GetTransactOptsAndSigner("1234567890abcdef1234567890abcdef12345678000000000000000000000000", big.NewInt(1))
-	require.NoError(t, err)
-	dataSigner := func(data []byte) ([]byte, error) { return signer(data) }
-
-	require.NotPanics(t, func() {
-		espresso_key_manager.NewEspressoKeyManager(
-			mockClient, &dataposter.DataPoster{}, dataSigner,
-			espresso_key_manager.TESTS, espressotee.Test,
-			nil, "", "", 0,
-		)
-	})
-
-	require.NotPanics(t, func() {
-		espresso_key_manager.NewEspressoKeyManager(
-			mockClient, &dataposter.DataPoster{}, nil,
-			espresso_key_manager.TESTS, espressotee.Test,
-			nil, "", "", 0,
-		)
-	})
+	// TESTS + Test is the only valid test configuration (either signer flavor).
+	require.NotPanics(t, func() { newKM(dataSigner, espressotee.Test) })
+	require.NotPanics(t, func() { newKM(nil, espressotee.Test) })
 }
 
 func VerifySignatureWithPublicKey(publicKey *ecdsa.PublicKey, data []byte, signature []byte) (bool, error) {

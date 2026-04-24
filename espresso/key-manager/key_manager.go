@@ -169,10 +169,10 @@ func NewEspressoKeyManager(
 }
 
 // onChainTeeType is the tee type we send to the on-chain contract, which
-// only accepts SGX or NITRO. TESTS is mapped to SGX.
+// only accepts SGX or NITRO. TESTS is mapped to NITRO.
 func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
 	if k.teeType == TESTS {
-		return SGX
+		return NITRO
 	}
 	return k.teeType
 }
