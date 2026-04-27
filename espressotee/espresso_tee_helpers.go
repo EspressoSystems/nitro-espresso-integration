@@ -6,10 +6,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 )
 
 type TEE uint8
@@ -93,4 +95,37 @@ func NonceValidation(context context.Context, l1Client *ethclient.Client, dataPo
 		return fmt.Errorf("dataposter nonce %d does not match on-chain nonce %d", dataPosterNonce, nonce)
 	}
 	return nil
+}
+
+// EncodeNitroMockVerifierJournalPublicKey returns ABI-encoded VerifierJournal bytes
+// with only PublicKey set; Nitro mock ignores the rest of the fields.
+func EncodeNitroMockVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	journalType, err := abi.NewType("tuple", "VerifierJournal", []abi.ArgumentMarshaling{
+		{Name: "result", Type: "uint8"},
+		{Name: "trustedCertsPrefixLen", Type: "uint8"},
+		{Name: "timestamp", Type: "uint64"},
+		{Name: "certs", Type: "bytes32[]"},
+		{Name: "userData", Type: "bytes"},
+		{Name: "nonce", Type: "bytes"},
+		{Name: "publicKey", Type: "bytes"},
+		{Name: "pcrs", Type: "tuple[]", Components: []abi.ArgumentMarshaling{
+			{Name: "index", Type: "uint64"},
+			{Name: "value", Type: "tuple", Components: []abi.ArgumentMarshaling{
+				{Name: "first", Type: "bytes32"},
+				{Name: "second", Type: "bytes16"},
+			}},
+		}},
+		{Name: "moduleId", Type: "string"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	args := abi.Arguments{{Type: journalType}}
+	return args.Pack(espressogen.VerifierJournal{
+		Certs:     [][32]byte{},
+		UserData:  []byte{},
+		Nonce:     []byte{},
+		PublicKey: publicKey,
+		Pcrs:      []espressogen.Pcr{},
+	})
 }

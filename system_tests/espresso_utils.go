@@ -2,6 +2,7 @@ package arbtest
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,7 @@ import (
 	"github.com/offchainlabs/nitro/arbnode"
 	"github.com/offchainlabs/nitro/espresso-tee-contracts/espressogen"
 	testutils "github.com/offchainlabs/nitro/espresso/test-utils"
+	"github.com/offchainlabs/nitro/espressotee"
 )
 
 func (b *BlockchainTestInfo) GenerateAccountWithMnemonic(name string, mnemonic string, idx uint) error {
@@ -81,10 +83,63 @@ func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, cl
 		return common.Address{}, nil, nil, fmt.Errorf("failed to register Nitro test key: %w", err)
 	}
 
-	nitro, _, _, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
+	nitro, nitroTx, nitroMock, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
 	if err != nil {
 		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
 	}
+	_, err = bind.WaitDeployed(ctx, client, nitroTx)
+	if err != nil {
+		return common.Address{}, nil, nil, fmt.Errorf("failed to confirm EspressoNitroTEEVerifierMock deployment: %w", err)
+	}
+
+	err = registerNitroMockBatchPosterTestKey(transactionOpts, nitroMock, privKey)
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
+	err = registerNitroMockCaffNodeTestKey(transactionOpts, nitroMock, privKey)
+	if err != nil {
+		return common.Address{}, nil, nil, err
+	}
 
 	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, sgx, nitro)
+}
+
+func registerNitroMockBatchPosterTestKey(
+	transactionOpts *bind.TransactOpts,
+	nitroMock *espressogen.EspressoNitroTEEVerifierMock,
+	privKey *ecdsa.PrivateKey,
+) error {
+	journalBytes, err := encodeNitroMockBatchPosterVerifierJournalPublicKey(crypto.FromECDSAPub(&privKey.PublicKey))
+	if err != nil {
+		return fmt.Errorf("failed to encode Nitro mock VerifierJournal for batch poster: %w", err)
+	}
+	_, err = nitroMock.RegisterService(transactionOpts, journalBytes, []byte{}, uint8(espressotee.BatchPoster))
+	if err != nil {
+		return fmt.Errorf("failed to register Nitro mock batch poster test key: %w", err)
+	}
+	return nil
+}
+
+func registerNitroMockCaffNodeTestKey(
+	transactionOpts *bind.TransactOpts,
+	nitroMock *espressogen.EspressoNitroTEEVerifierMock,
+	privKey *ecdsa.PrivateKey,
+) error {
+	journalBytes, err := encodeNitroMockCaffNodeVerifierJournalPublicKey(crypto.FromECDSAPub(&privKey.PublicKey))
+	if err != nil {
+		return fmt.Errorf("failed to encode Nitro mock VerifierJournal for caff node: %w", err)
+	}
+	_, err = nitroMock.RegisterService(transactionOpts, journalBytes, []byte{}, uint8(espressotee.CaffNode))
+	if err != nil {
+		return fmt.Errorf("failed to register Nitro mock caff node test key: %w", err)
+	}
+	return nil
+}
+
+func encodeNitroMockBatchPosterVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
+}
+
+func encodeNitroMockCaffNodeVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
 }
