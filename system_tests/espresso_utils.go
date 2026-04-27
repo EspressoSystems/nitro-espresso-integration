@@ -57,34 +57,29 @@ func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, cl
 		ctx = context.Background()
 	}
 
-	sgx, sgxTx, contract, err := espressogen.DeployEspressoSGXTEEVerifierMock(transactionOpts, client)
+	nitro, nitroTx, contract, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
 	if err != nil {
-		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoSGXTEEVerifierMock: %w", err)
+		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
 	}
-	_, err = bind.WaitDeployed(ctx, client, sgxTx)
+	_, err = bind.WaitDeployed(ctx, client, nitroTx)
 	if err != nil {
-		return common.Address{}, nil, nil, fmt.Errorf("failed to confirm EspressoSGXTEEVerifierMock deployment: %w", err)
+		return common.Address{}, nil, nil, fmt.Errorf("failed to confirm EspressoNitroTEEVerifierMock deployment: %w", err)
 	}
 
 	// Register the test key
 	privKey := arbnode.TestEspressoPrivateKey
 	signerAddr := crypto.PubkeyToAddress(privKey.PublicKey)
-	_, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes(), 0)
+	_, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes())
 
 	if err != nil {
-		return common.Address{}, nil, nil, fmt.Errorf("failed to register SGX test key: %w", err)
+		return common.Address{}, nil, nil, fmt.Errorf("failed to register NTIRO test key: %w", err)
 	}
 
-	_, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes(), 1)
+	// _, err = contract.RegisterService(transactionOpts, []byte{}, signerAddr.Bytes(), 1)
 
-	if err != nil {
-		return common.Address{}, nil, nil, fmt.Errorf("failed to register Nitro test key: %w", err)
-	}
+	// if err != nil {
+	// 	return common.Address{}, nil, nil, fmt.Errorf("failed to register Nitro test key: %w", err)
+	// }
 
-	nitro, _, _, err := espressogen.DeployEspressoNitroTEEVerifierMock(transactionOpts, client)
-	if err != nil {
-		return common.Address{}, nil, nil, fmt.Errorf("failed to deploy EspressoNitroTEEVerifierMock: %w", err)
-	}
-
-	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, sgx, nitro)
+	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, nitro)
 }

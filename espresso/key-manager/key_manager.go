@@ -181,7 +181,7 @@ func (k *EspressoKeyManager) verifyRegistrationOnChain() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType, k.serviceType)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.teeType)
 	if err != nil {
 		return false, err
 	}
@@ -332,7 +332,7 @@ func (k *EspressoKeyManager) registerService() error {
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
 	}
-	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType), k.serviceType)
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.teeType))
 	if err != nil {
 		return err
 	}

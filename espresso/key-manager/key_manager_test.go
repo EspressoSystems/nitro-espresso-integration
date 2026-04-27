@@ -27,12 +27,12 @@ type mockEspressoTEEVerifier struct {
 	mock.Mock
 }
 
-func (m *mockEspressoTEEVerifier) RegisterService(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8, serviceType espressotee.ServiceType) error {
+func (m *mockEspressoTEEVerifier) RegisterService(dataPoster *dataposter.DataPoster, attestation []byte, data []byte, teeType uint8) error {
 	args := m.Called(dataPoster, attestation, data, teeType)
 	return args.Error(0)
 }
 
-func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType espressotee.TEE, serviceType espressotee.ServiceType) (bool, error) {
+func (m *mockEspressoTEEVerifier) RegisteredServices(addr common.Address, teeType espressotee.TEE) (bool, error) {
 	args := m.Called(addr)
 	return args.Bool(0), nil
 }

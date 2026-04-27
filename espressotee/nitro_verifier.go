@@ -39,5 +39,5 @@ func (e *EspressoNitroTEEVerifier) isPCR0HashRegistered(pcr0Hash [32]byte, servi
 	if err != nil {
 		return false, err
 	}
-	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash, uint8(serviceType))
+	return contract.RegisteredEnclaveHash(&bind.CallOpts{}, pcr0Hash)
 }
