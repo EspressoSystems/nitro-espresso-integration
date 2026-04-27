@@ -300,10 +300,32 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 		if err != nil {
 			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
 		}
-		return attestationQuote, signerAddr.Bytes(), nil
+		// TESTS maps to NITRO on-chain; Nitro mock expects `output` to be an
+		// ABI-encoded VerifierJournal containing the signer public key.
+		journalBytes, err := k.encodeNitroMockJournalByService(attestationQuote)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to encode Nitro mock VerifierJournal for TESTS registration: %w", err)
+		}
+		// Proof bytes are ignored by the Nitro mock.
+		return journalBytes, []byte{}, nil
 	default:
 		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
 	}
+}
+
+func (k *EspressoKeyManager) encodeNitroMockJournalByService(publicKey []byte) ([]byte, error) {
+	if k.onChainServiceType() == espressotee.BatchPoster {
+		return encodeNitroMockBatchPosterVerifierJournalPublicKey(publicKey)
+	}
+	return encodeNitroMockCaffNodeVerifierJournalPublicKey(publicKey)
+}
+
+func encodeNitroMockBatchPosterVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
+}
+
+func encodeNitroMockCaffNodeVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
 }
 
 func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
