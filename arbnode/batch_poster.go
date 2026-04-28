@@ -623,12 +623,15 @@ func NewBatchPoster(ctx context.Context, opts *BatchPosterOpts) (*BatchPoster, e
 		if b.dataPoster.Auth() == nil {
 			panic("TransactOpts is nil")
 		}
-		// to support tests, we can give the batch poster a "persistent key" via the config, This variable WILL be nil if the configured tee type is not TESTS
+		batchPosterServiceType := espressotee.BatchPoster
+		if teeType == espressotee.TESTS {
+			batchPosterServiceType = espressotee.Test
+		}
 		submitterOptions = append(
 			submitterOptions,
 			// TODO: pass the persistent private key to the key manager in future
 			submitter.WithKeyManager(
-				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, espressotee.BatchPoster, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
+				espresso_key_manager.NewEspressoKeyManager(verifier, b.dataPoster, opts.DataSigner, teeType, batchPosterServiceType, nil, opts.EspressoConfigFetcher().BatchPoster.AttestationServiceURL, opts.EspressoConfigFetcher().BatchPoster.KeyPairAttestationsPath, opts.ChainID),
 			),
 		)
 
@@ -1402,7 +1405,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 
 	var signature []byte
-	teeType := espresso_key_manager.SGX
+	teeType := espresso_key_manager.NITRO
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignMessage(calldata)
@@ -1540,7 +1543,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 
 	var signature []byte
-	teeType := espresso_key_manager.SGX
+	teeType := espresso_key_manager.NITRO
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignMessage(calldata)
@@ -1635,6 +1638,7 @@ func (b *BatchPoster) encodeAddBatch(
 	case newSequencerBatchPostMethodName:
 		log.Info("Encoding Espresso validated batch via:", "method", methodName)
 		fullCalldata, err = b.getCalldataForEspressoBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
+		log.Info("Calldata for espresso batch generated", "calldataLength", len(fullCalldata))
 		if err != nil {
 			return nil, nil, err
 		}
