@@ -101,7 +101,7 @@ func (e *EspressoTEEVerifier) registerService(
 		return err
 	}
 
-	// Pack the function arguments (attestation, data, teeType, serviceType)
+	// Pack the function arguments (attestation, data, teeType)
 	calldata, err := contractABI.Pack("registerService", attestation, data, teeType)
 	if err != nil {
 		return err
