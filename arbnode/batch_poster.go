@@ -1638,7 +1638,6 @@ func (b *BatchPoster) encodeAddBatch(
 	case newSequencerBatchPostMethodName:
 		log.Info("Encoding Espresso validated batch via:", "method", methodName)
 		fullCalldata, err = b.getCalldataForEspressoBatch(seqNum, prevMsgNum, newMsgNum, l2MessageData, delayedMsg)
-		log.Info("Calldata for espresso batch generated", "calldataLength", len(fullCalldata))
 		if err != nil {
 			return nil, nil, err
 		}
