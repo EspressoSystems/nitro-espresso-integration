@@ -76,7 +76,6 @@ func deployMockTEEContracts(t *testing.T, transactionOpts *bind.TransactOpts, cl
 		return common.Address{}, nil, nil, err
 	}
 
-
 	return espressogen.DeployEspressoTEEVerifierMock(transactionOpts, client, nitro)
 }
 

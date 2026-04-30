@@ -18,7 +18,6 @@ type TEE uint8
 
 const (
 	NITRO TEE = 0 // AWS Nitro
-	SGX   TEE = 1 // Deprecated: SGX support has been removed from contracts
 
 	EMPTY TEE = 254
 	TESTS TEE = 2
@@ -36,8 +35,6 @@ const (
 
 func FromString(s string) (TEE, error) {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "SGX":
-		return SGX, nil
 	case "NITRO":
 		return NITRO, nil
 	case "TESTS":
