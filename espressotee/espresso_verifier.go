@@ -99,6 +99,18 @@ func (e *EspressoTEEVerifier) RegisterService(
 	)
 }
 
+func (e *EspressoTEEVerifier) EspressoTEEAddress() common.Address {
+	return e.address
+}
+
+func (e *EspressoTEEVerifier) ParentChainId() (uint64, error) {
+	chainID, err := e.l1Client.ChainID(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return chainID.Uint64(), nil
+}
+
 func (e *EspressoTEEVerifier) CheckNonceValidation(dataPoster *dataposter.DataPoster) error {
 	err := NonceValidation(context.Background(), e.l1Client, dataPoster)
 	if err != nil {
