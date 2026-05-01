@@ -16,6 +16,18 @@ Example: `v3.9.8-espresso-v0.1.0`
 
 ---
 
+## [1.1.0](https://github.com/EspressoSystems/nitro-espresso-integration/compare/v3.9.8-espresso-v1.0.0...v3.9.8-espresso-v1.1.0) (2026-05-01)
+
+
+### Features
+
+* remove legacy code ([#1041](https://github.com/EspressoSystems/nitro-espresso-integration/issues/1041)) ([0bfe79f](https://github.com/EspressoSystems/nitro-espresso-integration/commit/0bfe79f253801ea9ec43e9a568cec98074ca2d37))
+
+
+### Bug Fixes
+
+* reject TESTS tee type with production service type ([#1040](https://github.com/EspressoSystems/nitro-espresso-integration/issues/1040)) ([c785a71](https://github.com/EspressoSystems/nitro-espresso-integration/commit/c785a7128908a5c93fc836fb9d705dd96de43a98))
+
 ## 1.0.0 (2026-04-16)
 
 
