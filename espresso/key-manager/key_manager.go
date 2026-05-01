@@ -3,11 +3,9 @@ package keymanager
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 
 	"github.com/hf/nsm"
 	"github.com/hf/nsm/request"
@@ -25,7 +23,6 @@ import (
 )
 
 const (
-	SGX   = espressotee.SGX
 	NITRO = espressotee.NITRO
 	TESTS = espressotee.TESTS
 	EMPTY = espressotee.EMPTY
@@ -47,9 +44,6 @@ type state struct {
 	attestation  []byte
 	data         []byte
 }
-
-const quoteFile = "/dev/attestation/quote"
-const userDataAttestationFile = "/dev/attestation/user_report_data"
 
 var TestEspressoPrivateKey *ecdsa.PrivateKey
 
@@ -107,12 +101,7 @@ func NewEspressoKeyManager(
 	// is provided, we use that one. Otherwise, we read the enclave private key from the attestation path.
 	// Note: The current implementation only supports reading the key during key manager construction
 	// for the batch poster. Support for reading the caff node key will be added in a later PR.
-	if teeType == espressotee.SGX {
-		privKey, err = ecdsa.GenerateKey(crypto.S256(), rand.Reader)
-		if err != nil {
-			panic(err)
-		}
-	} else if keyPairAttestationsPath != "" && chainID != 0 {
+	if keyPairAttestationsPath != "" && chainID != 0 {
 		// Read enclave private key
 		privKey, err = espresso_tee_utils.ReadEnclavePrivateKey(keyPairAttestationsPath, chainID)
 		if err != nil {
@@ -167,7 +156,7 @@ func NewEspressoKeyManager(
 	}
 }
 
-// Contract only accepts SGX/NITRO; TESTS → NITRO.
+// Contract only accepts NITRO; TESTS → NITRO.
 func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
 	if k.teeType == TESTS {
 		return NITRO
@@ -203,7 +192,7 @@ func (k *EspressoKeyManager) verifyRegistrationOnChain() (bool, error) {
 		panic("failed to get public key")
 	}
 	signerAddr := crypto.PubkeyToAddress(*pubKey)
-	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.onChainTeeType(), k.onChainServiceType())
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.onChainTeeType())
 	if err != nil {
 		return false, err
 	}
@@ -259,17 +248,6 @@ func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]by
 	pubKey := k.privKey.PublicKey
 	signerAddr := crypto.PubkeyToAddress(pubKey)
 	switch k.teeType {
-	case SGX:
-		addr := signerAddr.Bytes()
-		log.Info("sgx signing address", "addr", signerAddr)
-
-		attestationQuote, err := getAttestationFunc(addr)
-		if err != nil {
-			return nil, nil, fmt.Errorf("sgx signing failed: %w", err)
-		}
-
-		return attestationQuote, addr, nil
-
 	case NITRO:
 		pubKeyBytes := crypto.FromECDSAPub(&pubKey)
 		log.Info("nitro signing address", "addr", signerAddr)
@@ -371,7 +349,7 @@ func (k *EspressoKeyManager) registerService() error {
 	if currentState != PendingRegistration {
 		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
 	}
-	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.onChainTeeType()), k.onChainServiceType())
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.onChainTeeType()))
 	if err != nil {
 		return err
 	}
@@ -413,8 +391,6 @@ func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
 func (k *EspressoKeyManager) init() (*state, error) {
 	// Dispatch on configured tee type, not on-chain: TESTS needs noOpSignerFunc.
 	switch k.teeType {
-	case SGX:
-		return k.initRegistration(k.getAttestationQuote)
 	case NITRO:
 		return k.initRegistration(k.getNitroAttestation)
 	case TESTS:
@@ -422,37 +398,6 @@ func (k *EspressoKeyManager) init() (*state, error) {
 	default:
 		return nil, fmt.Errorf("unsupported tee Type: %d", k.teeType)
 	}
-}
-
-// getAttestationQuote is a method that retrieves the attestation quote for the user data.
-// This function generates the attestation quote for the user data.
-// The user data is hashed using keccak256 and then 32 bytes of padding is added to the hash.
-// The hash is then written to a file specified in the config. (For SGX: /dev/attestation/user_report_data)
-// The quote is then read from the file specified in the config. (For SGX: /dev/attestation/quote)
-func (k *EspressoKeyManager) getAttestationQuote(userData []byte) ([]byte, error) {
-
-	// keccak256 hash of userData
-	userDataHash := crypto.Keccak256(userData)
-
-	// Add 32 bytes of padding to the user data hash
-	// because keccak256 hash is 32 bytes and sgx requires 64 bytes of user data
-	for i := 0; i < 32; i += 1 {
-		userDataHash = append(userDataHash, 0)
-	}
-
-	// Write the message to "/dev/attestation/user_report_data" in SGX
-	err := os.WriteFile(userDataAttestationFile, userDataHash, 0600)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to create user report data file: %w", err)
-	}
-
-	// Read the quote from "/dev/attestation/quote" in SGX
-	attestationQuote, err := os.ReadFile(quoteFile)
-	if err != nil {
-		return []byte{}, fmt.Errorf("failed to read quote file: %w", err)
-	}
-
-	return attestationQuote, nil
 }
 
 // getNitroAttestation is a method that retrieves the attestation document for

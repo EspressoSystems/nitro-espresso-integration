@@ -302,7 +302,7 @@ func ChainsWithEdgeChallengeManager(opts ...Opt) (*ChainSetup, error) {
 		accs[0].TxOpts.Value = big.NewInt(0)
 	}
 	//  Deploy a espressoTEEVerifierMock contract
-	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend, common.HexToAddress("0x1"), common.HexToAddress("0x2"))
+	espressoTEEVerifierAddress, tx, _, err := espressogen.DeployEspressoTEEVerifierMock(accs[0].TxOpts, backend, common.HexToAddress("0x2"))
 	if err != nil {
 		return nil, err
 	}

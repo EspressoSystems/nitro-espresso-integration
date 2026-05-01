@@ -17,8 +17,7 @@ import (
 type TEE uint8
 
 const (
-	SGX   TEE = 0 // SGX
-	NITRO TEE = 1 // AWS Nitro
+	NITRO TEE = 0 // AWS Nitro
 
 	EMPTY TEE = 254
 	TESTS TEE = 2
@@ -36,8 +35,6 @@ const (
 
 func FromString(s string) (TEE, error) {
 	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "SGX":
-		return SGX, nil
 	case "NITRO":
 		return NITRO, nil
 	case "TESTS":

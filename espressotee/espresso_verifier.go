@@ -23,12 +23,10 @@ type EspressoTEEVerifierInterface interface {
 		attestation []byte,
 		data []byte,
 		teeType uint8,
-		serviceType ServiceType,
 	) error
 	RegisteredServices(
 		signer common.Address,
 		teeType TEE,
-		serviceType ServiceType,
 	) (bool, error)
 	EspressoTEEAddress() common.Address
 	ParentChainId() (uint64, error)
@@ -52,7 +50,6 @@ func (e *EspressoTEEVerifier) RegisterService(
 	attestation []byte,
 	data []byte,
 	teeType uint8,
-	serviceType ServiceType,
 ) error {
 	var registrationErr error
 
@@ -62,7 +59,6 @@ func (e *EspressoTEEVerifier) RegisterService(
 			attestation,
 			data,
 			teeType,
-			serviceType,
 		)
 
 		if registrationErr == nil {
@@ -99,15 +95,14 @@ func (e *EspressoTEEVerifier) registerService(
 	attestation []byte,
 	data []byte,
 	teeType uint8,
-	serviceType ServiceType,
 ) error {
 	contractABI, err := espressogen.IEspressoTEEVerifierMetaData.GetAbi()
 	if err != nil {
 		return err
 	}
 
-	// Pack the function arguments (attestation, data, teeType, serviceType)
-	calldata, err := contractABI.Pack("registerService", attestation, data, teeType, serviceType)
+	// Pack the function arguments (attestation, data, teeType)
+	calldata, err := contractABI.Pack("registerService", attestation, data, teeType)
 	if err != nil {
 		return err
 	}
@@ -163,9 +158,8 @@ func (e *EspressoTEEVerifier) registerService(
 func (e *EspressoTEEVerifier) RegisteredServices(
 	signer common.Address,
 	teeType TEE,
-	serviceType ServiceType,
 ) (bool, error) {
-	return e.registeredServices(signer, teeType, serviceType)
+	return e.registeredServices(signer, teeType)
 }
 
 func (e *EspressoTEEVerifier) EspressoTEEAddress() common.Address {
@@ -180,14 +174,14 @@ func (e *EspressoTEEVerifier) ParentChainId() (uint64, error) {
 	return chainID.Uint64(), nil
 }
 
-func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType TEE, serviceType ServiceType) (bool, error) {
+func (e *EspressoTEEVerifier) registeredServices(address common.Address, teeType TEE) (bool, error) {
 	contract, err := espressogen.NewIEspressoTEEVerifier(e.address, e.l1Client)
 	if err != nil {
 		return false, err
 	}
 	ok, err := ContractVerification(
 		func() (bool, error) {
-			return contract.IsSignerValid(&bind.CallOpts{}, address, uint8(teeType), uint8(serviceType))
+			return contract.IsSignerValid(&bind.CallOpts{}, address, uint8(teeType))
 		},
 		"register services - address not yet registered in contract",
 	)

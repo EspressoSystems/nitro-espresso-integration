@@ -107,7 +107,7 @@ func (m *MockEspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
 
 // TeeType implements key_manager.EspressoKeyManagerInterface.
 func (m *MockEspressoKeyManager) TeeType() espressotee.TEE {
-	return espressotee.SGX
+	return espressotee.NITRO
 }
 
 func (m *MockEspressoKeyManager) CheckRegistration() (bool, error) {

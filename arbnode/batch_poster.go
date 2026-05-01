@@ -1405,7 +1405,7 @@ func (b *BatchPoster) getCalldataForEspressoBatch(
 	}
 
 	var signature []byte
-	teeType := espresso_key_manager.SGX
+	teeType := espresso_key_manager.NITRO
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignMessage(calldata)
@@ -1543,7 +1543,7 @@ func (b *BatchPoster) getCalldataForEspressoBlobBatch(
 	}
 
 	var signature []byte
-	teeType := espresso_key_manager.SGX
+	teeType := espresso_key_manager.NITRO
 	if espressoSubmitter := b.streamer.espressoSubmitter; espressoSubmitter != nil {
 		keyManager := espressoSubmitter.GetKeyManager()
 		signature, err = keyManager.SignMessage(calldata)
