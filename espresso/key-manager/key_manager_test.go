@@ -171,11 +171,11 @@ func TestEspressoKeyManager(t *testing.T) {
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
 		mockEspressoTEEVerifierClient.On("RegisteredServices", mock.Anything, mock.Anything, mock.Anything).Return(true, nil).Once()
 		mockEspressoTEEVerifierClient.On("CheckNonceValidation", mock.Anything).Return(nil)
-		
+
 		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, persistentPrivKey, "", "", 0)
 		state := km.GetKeyManagerState()
 		assert.Equal(t, state, espresso_key_manager.Init, "Should start unregistered")
-		km := espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, nil, "", "", 0)
+		km = espresso_key_manager.NewEspressoKeyManager(mockEspressoTEEVerifierClient, dataposter, dataSigner, espresso_key_manager.TESTS, espressotee.Test, nil, "", "", 0)
 		assert.Equal(t, espresso_key_manager.Init, km.GetKeyManagerState(), "Should start unregistered")
 
 		// Init → PendingDataPosterSync
