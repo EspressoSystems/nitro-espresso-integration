@@ -587,14 +587,6 @@ func (s *PollingEspressoSubmitter) shouldResubmitEspressoTransactions(ctx contex
 	return true
 }
 
-func (s *PollingEspressoSubmitter) Init() error {
-	return s.espressoKeyManager.Init()
-}
-
-func (s *PollingEspressoSubmitter) RegisterService() error {
-	return s.espressoKeyManager.RegisterService()
-}
-
 func (s *PollingEspressoSubmitter) Start(sw *stopwaiter.StopWaiter) error {
 	if s.espressoClient != nil {
 		err := stopwaiter.CallIterativelyWith[struct{}](sw, s.pollSubmittedTransactionForFinality, nil)

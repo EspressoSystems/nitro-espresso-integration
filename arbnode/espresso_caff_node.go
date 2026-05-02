@@ -378,7 +378,7 @@ func NewEspressoCaffNode(
 //	This function will either produce a message, or an error. When an error is produced, the messageWithMetadataAndPos will be nil.
 //	If the message is populated, the error will be nil.
 func (n *EspressoCaffNode) peekMessage(ctx context.Context) (*espressostreamer.MessageWithMetadataAndPos, uint64, error) {
-	messageWithMetadataAndPos := n.espressoStreamer.Peek(ctx)
+	messageWithMetadataAndPos := n.espressoStreamer.Peek()
 
 	if messageWithMetadataAndPos == nil {
 		return nil, 0, nil
@@ -449,7 +449,8 @@ func (n *EspressoCaffNode) createBlock(ctx context.Context) (returnValue bool) {
 
 	log.Info("Produced block", "block", block.Hash(), "blockNumber", block.Number(), "receipts", len(receipts))
 
-	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber()
+	// Check for next position hotshot block number since we processed this one
+	hotshotBlockNumber := n.espressoStreamer.GetCurrentEarliestHotShotBlockNumber(messageWithMetadataAndPos.Pos + 1)
 	batch := n.db.NewBatch()
 
 	// Store hotshot block num with auth tag
@@ -507,15 +508,31 @@ func (n *EspressoCaffNode) Start(ctx context.Context) error {
 	}
 
 	if n.keyManager != nil {
-		if err := n.keyManager.Init(); err != nil {
-			return err
-		}
-		if state := n.keyManager.GetKeyManagerState(); state == espresso_key_manager.Registered {
-			log.Info("Caff node address is already registered on chain!")
-		} else {
-			log.Info("caff node completed init, trying to register signer")
-			if err := n.keyManager.RegisterService(); err != nil {
-				return err
+		for {
+			registered, err := n.keyManager.CheckRegistration()
+			state := n.keyManager.GetKeyManagerState()
+			if err != nil {
+				log.Warn("caff node address not registered on chain yet...", "current key manager state", state, "err", err)
+				if errors.Is(err, espresso_key_manager.FatalErrUnableToRegisterSigner) {
+					log.Warn(
+						"Espresso signer registration failed consecutively. Stopping.",
+						"retries", espressotee.EspressoMaxRetries,
+					)
+
+					log.Crit("caff node failed to failed to register signer")
+				}
+			}
+			if registered {
+				log.Info("caff node address is registered on chain")
+				break
+			}
+			if err == nil {
+				log.Info("caff node address not registered", "current key manager state", state)
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(espressotee.EspressoRetryReadContractDelay):
 			}
 		}
 	}

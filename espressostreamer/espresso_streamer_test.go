@@ -28,7 +28,6 @@ import (
 
 func TestEspressoStreamer(t *testing.T) {
 	t.Run("Peek should not change the current position", func(t *testing.T) {
-		ctx := context.Background()
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
@@ -37,30 +36,29 @@ func TestEspressoStreamer(t *testing.T) {
 		streamer.Reset(1, 3)
 
 		before := streamer.currentMessagePos
-		r := streamer.Peek(ctx)
+		r := streamer.Peek()
 		assert.Nil(t, r)
 		assert.Equal(t, before, streamer.currentMessagePos)
 
-		streamer.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{
-			{
+		streamer.messageWithMetadataAndPos = map[uint64]*MessageWithMetadataAndPos{
+			1: {
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             1,
 				HotshotHeight:   3,
 			},
-			{
+			2: {
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             2,
 				HotshotHeight:   4,
 			},
 		}
 
-		r = streamer.Peek(ctx)
-		assert.Equal(t, streamer.messageWithMetadataAndPos[0], r)
+		r = streamer.Peek()
+		assert.Equal(t, streamer.messageWithMetadataAndPos[1], r)
 		assert.Equal(t, before, streamer.currentMessagePos)
 		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 2)
 	})
 	t.Run("Next should consume a message if it is in buffer", func(t *testing.T) {
-		ctx := context.Background()
 		mockEspressoClient := new(mockEspressoClient)
 		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
 
@@ -70,42 +68,42 @@ func TestEspressoStreamer(t *testing.T) {
 
 		// Empty buffer. Should not change anything
 		initialPos := streamer.currentMessagePos
-		r := streamer.Next(ctx)
+		r := streamer.Next()
 		assert.Nil(t, r)
 		assert.Equal(t, initialPos, streamer.currentMessagePos)
 
-		streamer.messageWithMetadataAndPos = []*MessageWithMetadataAndPos{
-			{
+		streamer.messageWithMetadataAndPos = map[uint64]*MessageWithMetadataAndPos{
+			1: {
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             1,
 				HotshotHeight:   3,
 			},
-			{
+			2: {
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             2,
 				HotshotHeight:   4,
 			},
 		}
 
-		r = streamer.Next(ctx)
-		assert.Equal(t, streamer.messageWithMetadataAndPos[0], r)
+		expectedFirst := streamer.messageWithMetadataAndPos[initialPos]
+		r = streamer.Next()
+		assert.Equal(t, expectedFirst, r)
 		assert.Equal(t, initialPos+1, streamer.currentMessagePos)
-		// Buffer should still have 2 messages.
-		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 2)
+		// Next consumes the message, buffer now has 1 message.
+		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
 
 		// Second message
-		// Peek would cleanup the outdated messages as well
-		peekMessage := streamer.Peek(ctx)
+		peekMessage := streamer.Peek()
 		assert.NotNil(t, peekMessage)
 		assert.Equal(t, initialPos+1, streamer.currentMessagePos)
 		assert.Equal(t, len(streamer.messageWithMetadataAndPos), 1)
 
-		newMessage := streamer.Next(ctx)
+		newMessage := streamer.Next()
 		assert.Equal(t, peekMessage, newMessage)
 		assert.Equal(t, initialPos+2, streamer.currentMessagePos)
 
 		// Empty message should not alter the current position
-		third := streamer.Next(ctx)
+		third := streamer.Next()
 		assert.Nil(t, third)
 		assert.Equal(t, initialPos+2, streamer.currentMessagePos)
 	})
@@ -130,7 +128,7 @@ func TestEspressoStreamer(t *testing.T) {
 		err := streamer.QueueMessagesFromHotshot(ctx, streamer.parseEspressoTransaction)
 		require.NoError(t, err)
 
-		msg := streamer.Next(ctx)
+		msg := streamer.Next()
 		// Assert that the streamer believe this message to have originated at hotshot height 1
 		assert.Equal(t, msg.HotshotHeight, uint64(1))
 	})
@@ -152,8 +150,8 @@ func TestEspressoStreamer(t *testing.T) {
 
 		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second)
 
-		testParseFn := func(tx types.Bytes, l1 uint64) ([]*MessageWithMetadataAndPos, error) {
-			return nil, nil
+		testParseFn := func(tx types.Bytes, l1 uint64) error {
+			return nil
 		}
 
 		err := streamer.QueueMessagesFromHotshot(ctx, testParseFn)
@@ -194,18 +192,18 @@ func TestEspressoStreamer(t *testing.T) {
 
 		streamer := NewEspressoStreamer(namespace, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second)
 
-		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
+		testParseFn := func(pos uint64, hotshotheight uint64) func(tx types.Bytes, l1Height uint64) error {
 
-			return func(tx types.Bytes, l1Height uint64) ([]*MessageWithMetadataAndPos, error) {
-				return []*MessageWithMetadataAndPos{
-					{
-						MessageWithMeta: arbostypes.MessageWithMetadata{
-							Message: &arbostypes.L1IncomingMessage{},
-						},
-						Pos:           pos,
-						HotshotHeight: hotshotheight,
+			return func(tx types.Bytes, l1Height uint64) error {
+				msg := &MessageWithMetadataAndPos{
+					MessageWithMeta: arbostypes.MessageWithMetadata{
+						Message: &arbostypes.L1IncomingMessage{},
 					},
-				}, nil
+					Pos:           pos,
+					HotshotHeight: hotshotheight,
+				}
+				streamer.messageWithMetadataAndPos[msg.Pos] = msg
+				return nil
 			}
 		}
 
@@ -239,19 +237,21 @@ func TestEspressoStreamer(t *testing.T) {
 		}, nil).Once()
 
 		parseAttemptCount := 0
-		parseFn := func(tx types.Bytes, _ uint64) ([]*MessageWithMetadataAndPos, error) {
+		messages := []*MessageWithMetadataAndPos{}
+		parseFn := func(tx types.Bytes, _ uint64) error {
 			if assert.ObjectsAreEqual(tx, tx2) {
 				parseAttemptCount++
-				return nil, rpc.ErrNoResult
+				return rpc.ErrNoResult
 			}
-			return []*MessageWithMetadataAndPos{{
+			messages = append(messages, &MessageWithMetadataAndPos{
 				MessageWithMeta: arbostypes.MessageWithMetadata{},
 				Pos:             uint64(tx[0]),
 				HotshotHeight:   blockNum,
-			}}, nil
+			})
+			return nil
 		}
 
-		messages, _, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
+		_, err := fetchNextHotshotBlock(ctx, mockEspressoClient, blockNum, parseFn, namespace)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(messages), "Expected to process two messages")
@@ -291,7 +291,7 @@ func TestEspressoEmptyTransaction(t *testing.T) {
 		return []byte{1}, nil
 	}
 	signedPayload, _ := arbutil.SignHotShotPayload(payload, signerFunc)
-	_, err := streamer.parseEspressoTransaction(signedPayload, 1)
+	err := streamer.parseEspressoTransaction(signedPayload, 1)
 	ExpectErr(t, err, ErrPayloadHadNoMessages)
 }
 
