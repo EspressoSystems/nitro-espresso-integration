@@ -128,7 +128,7 @@ func TestEspressoStreamer(t *testing.T) {
 		err := streamer.QueueMessagesFromHotshot(ctx, streamer.parseEspressoTransaction)
 		require.NoError(t, err)
 
-		msg := streamer.Next(ctx)
+		msg := streamer.Next()
 		// Assert that the streamer believe this message to have originated at hotshot height 1
 		assert.Equal(t, msg.HotshotHeight, uint64(1))
 	})
