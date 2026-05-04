@@ -637,7 +637,7 @@ func createTestNodeOnL1ForBoldProtocol(
 	execConfig := ExecConfigDefaultNonSequencerTest(t, rawdb.HashScheme)
 	Require(t, execConfig.Validate())
 	initMessage := getInitMessage(ctx, t, l1client, addresses)
-	_, l2stack, l2chainDb, l2arbDb, l2blockchain = createNonL1BlockChainWithStackConfig(t, l2info, "", chainConfig, nil, initMessage, nil, execConfig)
+	_, l2stack, l2chainDb, l2arbDb, l2blockchain = createNonL1BlockChainWithStackConfig(t, l2info, "", chainConfig, nil, initMessage, nil, execConfig, nil)
 	var sequencerTxOptsPtr *bind.TransactOpts
 	var dataSigner signature.DataSignerFunc
 	if isSequencer {
@@ -661,10 +661,11 @@ func createTestNodeOnL1ForBoldProtocol(
 	locator, err := server_common.NewMachineLocator("")
 	Require(t, err)
 	currentNode, err = arbnode.CreateNodeFullExecutionClient(
-		ctx, l2stack, execNode, execNode, execNode, execNode, l2arbDb, NewCommonConfigFetcher(nodeConfig), l2blockchain.Config(), l1client,
+		ctx, l2stack, execNode, execNode, execNode, execNode, l2arbDb, nil, NewCommonConfigFetcher(nodeConfig), l2blockchain.Config(), l1client,
 		addresses, sequencerTxOptsPtr, sequencerTxOptsPtr, dataSigner, fatalErrChan, parentChainId,
 		nil, // Blob reader.
 		locator.LatestWasmModuleRoot(),
+		nil,
 	)
 	Require(t, err)
 
@@ -738,6 +739,7 @@ func deployContractsOnly(
 		genesisExecutionState,
 		genesisInboxCount,
 		anyTrustFastConfirmer,
+		common.Address{},
 		challenge_testing.WithLayerZeroHeights(&protocol.LayerZeroHeights{
 			BlockChallengeHeight:     protocol.Height(blockChallengeLeafHeight),
 			BigStepChallengeHeight:   protocol.Height(bigStepChallengeLeafHeight),
@@ -877,7 +879,7 @@ func create2ndNodeWithConfigForBoldProtocol(
 	Require(t, err)
 	locator, err := server_common.NewMachineLocator("")
 	Require(t, err)
-	l2node, err := arbnode.CreateNodeFullExecutionClient(ctx, l2stack, execNode, execNode, execNode, execNode, l2arbDb, NewCommonConfigFetcher(nodeConfig), l2blockchain.Config(), l1client, addresses, &txOpts, &txOpts, dataSigner, fatalErrChan, l1ChainId, nil /* blob reader */, locator.LatestWasmModuleRoot())
+	l2node, err := arbnode.CreateNodeFullExecutionClient(ctx, l2stack, execNode, execNode, execNode, execNode, l2arbDb, nil, NewCommonConfigFetcher(nodeConfig), l2blockchain.Config(), l1client, addresses, &txOpts, &txOpts, dataSigner, fatalErrChan, l1ChainId, nil /* blob reader */, locator.LatestWasmModuleRoot(), nil)
 	Require(t, err)
 
 	l2client := ClientForStack(t, l2stack)
@@ -940,7 +942,7 @@ func makeBoldBatch(
 
 	seqNum := new(big.Int).Lsh(common.Big1, 256)
 	seqNum.Sub(seqNum, common.Big1)
-	tx, err := seqInbox.AddSequencerL2BatchFromOrigin8f111f3c(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0))
+	tx, err := seqInbox.AddSequencerL2BatchFromOrigin37501551(sequencer, seqNum, message, big.NewInt(1), common.Address{}, big.NewInt(0), big.NewInt(0), createDummyEspressoMetadata(t))
 	Require(t, err)
 	receipt, err := EnsureTxSucceeded(ctx, backend, tx)
 	Require(t, err)

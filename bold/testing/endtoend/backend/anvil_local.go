@@ -237,6 +237,7 @@ func (a *AnvilLocal) DeployRollup(ctx context.Context, opts ...challenge_testing
 			genesisExecutionState,
 			genesisInboxCount,
 			anyTrustFastConfirmer,
+			common.Address{},
 			opts...,
 		),
 		setup.RollupStackConfig{

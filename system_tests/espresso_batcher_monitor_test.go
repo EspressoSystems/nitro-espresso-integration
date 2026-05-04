@@ -1,0 +1,86 @@
+package arbtest
+
+import (
+	"context"
+	"math/big"
+	"testing"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/offchainlabs/nitro/arbnode"
+	"github.com/offchainlabs/nitro/espresso/authdb"
+	"github.com/offchainlabs/nitro/solgen/go/bridgegen"
+)
+
+func TestEspressoBatcherMonitor(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	builder, cleanup := createL1AndL2Node(ctx, t, true, false)
+	defer cleanup()
+
+	err := waitForL1Node(ctx)
+	Require(t, err)
+
+	seqInboxAddr := builder.addresses.SequencerInbox
+
+	authDB, err := authdb.NewAuthDB(rawdb.NewMemoryDatabase(), nil, true)
+	Require(t, err)
+
+	monitor := arbnode.NewBatcherAddrMonitor(
+		[]common.Address{},
+		&authDB,
+		builder.L2.ConsensusNode.L1Reader,
+		seqInboxAddr,
+		builder.L2.ConsensusNode.DeployInfo.DeployedAt,
+		builder.L2.ConsensusNode.DeployInfo.DeployedAt,
+		100,
+	)
+	err = monitor.Start(ctx)
+	Require(t, err)
+
+	abi, err := bridgegen.SequencerInboxMetaData.GetAbi()
+	Require(t, err)
+	batchPosterAddr := builder.L2Info.GetAddress("Faucet")
+	data, err := abi.Pack("setIsBatchPoster", batchPosterAddr, true)
+	Require(t, err)
+	tx := builder.L1Info.PrepareTxTo("RollupOwner", &seqInboxAddr, 100000, big.NewInt(0), data)
+	err = builder.L1.Client.SendTransaction(ctx, tx)
+	Require(t, err)
+	receipt, err := EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx, time.Second*10)
+	Require(t, err)
+	log.Info("tx receipt", "receipt", receipt.BlockNumber)
+
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
+	time.Sleep(time.Second * 25)
+
+	l1Height, err := builder.L1.Client.BlockNumber(ctx)
+	Require(t, err)
+	valid, err := monitor.IsValid(ctx, batchPosterAddr, l1Height)
+	Require(t, err)
+	if !valid {
+		t.Fatal("expect valid")
+	}
+
+	newAddr := common.Address{}
+	data2, err := abi.Pack("setIsBatchPoster", newAddr, false)
+	Require(t, err)
+	tx2 := builder.L1Info.PrepareTxTo("RollupOwner", &seqInboxAddr, 100000, big.NewInt(0), data2)
+	err = builder.L1.Client.SendTransaction(ctx, tx2)
+	Require(t, err)
+	_, err = EnsureTxSucceededWithTimeout(ctx, builder.L1.Client, tx2, time.Second*10)
+	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 100)
+	time.Sleep(time.Second * 5)
+
+	l1Height, err = builder.L1.Client.BlockNumber(ctx)
+	Require(t, err)
+	valid, err = monitor.IsValid(ctx, newAddr, l1Height)
+	Require(t, err)
+	if valid {
+		t.Fatal("expect invalid")
+	}
+}

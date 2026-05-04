@@ -6,7 +6,7 @@ on:
 jobs:
   lint-and-build:
     name: Lint and Build
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -17,10 +17,10 @@ jobs:
         uses: ./.github/actions/ci-setup
 
       - name: Build
-        run: make -j8 build test-go-deps
+        run: make -j4 build test-go-deps
 
       - name: Build all lint dependencies
-        run: make -j8 build-node-deps
+        run: make -j build-node-deps
 
       - name: GolangCI Lint
         uses: golangci/golangci-lint-action@v9
