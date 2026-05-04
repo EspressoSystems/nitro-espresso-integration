@@ -189,6 +189,8 @@ func TestFeeAndTipCaps_EnoughBalance_NoBacklog_NoUnconfirmed_BlobTx(t *testing.T
 			ElapsedTimeBase:       10 * time.Minute,
 			ElapsedTimeImportance: 10,
 			TargetPriceGwei:       60.,
+
+			MaxBaseFee: 1000000000 * 5,
 		}
 	}
 	expression, err := govaluate.NewEvaluableExpression(DefaultDataPosterConfig.MaxFeeCapFormula)
@@ -325,6 +327,8 @@ func TestFeeAndTipCaps_RBF_RisingBlobFee_FallingBaseFee(t *testing.T) {
 			ElapsedTimeBase:       10 * time.Minute,
 			ElapsedTimeImportance: 10,
 			TargetPriceGwei:       60.,
+
+			MaxBaseFee: 1000000000 * 5,
 		}
 	}
 	expression, err := govaluate.NewEvaluableExpression(DefaultDataPosterConfig.MaxFeeCapFormula)

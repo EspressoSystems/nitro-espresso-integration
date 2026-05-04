@@ -24,7 +24,7 @@ on:
 jobs:
   report_summary:
     name: Aggregate test results
-    runs-on: ubuntu-4
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write

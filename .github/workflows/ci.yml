@@ -55,7 +55,7 @@ jobs:
 
   can_proceed:
     name: can_proceed
-    runs-on: ubuntu-4
+    runs-on: ubuntu-latest
     needs: [fast]
     steps:
       - name: OK
@@ -65,6 +65,6 @@ jobs:
     # This job is just to make sure that the "can_proceed" job's status is visible
     # on the pull request page, even if it is skipped due to all its dependencies being
     # skipped. It does not depend on any other jobs, so it always runs.
-    runs-on: ubuntu-4
+    runs-on: ubuntu-latest
     steps:
       - run: true

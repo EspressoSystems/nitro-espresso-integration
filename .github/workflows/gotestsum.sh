@@ -96,6 +96,11 @@ fi
 # Append the separator and go test arguments
 cmd="$cmd --"
 
+### Espresso
+
+espresso_skip_tests=$(grep -vE '^\s*#|^\s*$' ci_skip_tests | tr '\n' '|' | sed 's/|$//')
+###
+
 if [ "$timeout" != "" ]; then
   cmd="$cmd -timeout $timeout"
 fi
@@ -107,6 +112,8 @@ fi
 if [ "$run" != "" ]; then
   cmd="$cmd -run=\"$run\""
 fi
+
+skip="$skip|$espresso_skip_tests"
 
 if [ "$skip" != "" ] && [ "$flaky" == false ]; then
   cmd="$cmd -skip=\"$skip|Flaky\""
@@ -121,7 +128,9 @@ if [ "$race" == true ]; then
 fi
 
 if [ "$cover" == true ]; then
-  cmd="$cmd -coverprofile=coverage.txt -covermode=atomic -coverpkg=./...,./go-ethereum/..."
+  # Espresso: we don't run coverage for now
+  # cmd="$cmd -coverprofile=coverage.txt -covermode=atomic -coverpkg=./...,./go-ethereum/..."
+  cmd="$cmd"
 fi
 
 if [ "$test_state_scheme" != "" ]; then
