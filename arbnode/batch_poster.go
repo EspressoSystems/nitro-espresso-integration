@@ -1855,13 +1855,6 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			if uint64(batchPosition.MessageCount) < b.espressoStreamer.GetCurrentMessagePos() {
-				// Batch position moved backwards probably due to l1 reorg, try and resync the blocks from hotshot
-				log.Warn("resetting espresso streamer to parent chain (L1 reorg?)", "messageCount", batchPosition.MessageCount)
-				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
-			} else {
-				b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
-			}
 			if b.espressoRestarting {
 				// Reset on startup
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
@@ -1884,6 +1877,14 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 					log.Info("submitted pending transactions after restart", "from", batchPosition.MessageCount, "count", len(queue))
 				}
 				b.espressoRestarting = false
+			} else {
+				if uint64(batchPosition.MessageCount) < b.espressoStreamer.GetCurrentMessagePos() {
+					// Batch position moved backwards probably due to l1 reorg, try and resync the blocks from hotshot
+					log.Warn("resetting espresso streamer to parent chain (L1 reorg?)", "messageCount", batchPosition.MessageCount)
+					b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+				} else {
+					b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+				}
 			}
 		}
 		latestHeader, err := b.l1Reader.LastHeader(ctx)

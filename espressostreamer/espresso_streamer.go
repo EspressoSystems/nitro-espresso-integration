@@ -378,11 +378,8 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 	for i, message := range messages {
-		var messageWithMetadata arbostypes.MessageWithMetadata
-		err = rlp.DecodeBytes(message, &messageWithMetadata)
-		if err != nil {
-			log.Warn("failed to decode message", "err", err)
-			// Instead of returnning an error, we should just skip this message
+		if _, exists := s.messageWithMetadataAndPos[indices[i]]; exists {
+			log.Warn("duplicate message position, discarding", "pos", indices[i])
 			continue
 		}
 
@@ -391,8 +388,11 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 			continue
 		}
 
-		if _, exists := s.messageWithMetadataAndPos[indices[i]]; exists {
-			log.Warn("duplicate message position, discarding", "pos", indices[i])
+		var messageWithMetadata arbostypes.MessageWithMetadata
+		err = rlp.DecodeBytes(message, &messageWithMetadata)
+		if err != nil {
+			log.Warn("failed to decode message", "err", err)
+			// Instead of returnning an error, we should just skip this message
 			continue
 		}
 
