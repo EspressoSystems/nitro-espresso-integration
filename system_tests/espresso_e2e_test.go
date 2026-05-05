@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
@@ -497,4 +498,71 @@ func checkTransferTxOnL2(
 func UnusedSubmitter() submitter.EspressoSubmitter {
 	var a submitter.EspressoSubmitter
 	return a
+}
+
+func TestEspressoBatchPosterReorgRecovery(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	valNodeCleanup := createValidationNode(ctx, t, true)
+	defer valNodeCleanup()
+
+	builder, cleanup := createL1AndL2Node(ctx, t, false, false)
+	defer cleanup()
+
+	err := waitForL1Node(ctx)
+	Require(t, err)
+
+	shutdown := runEspresso()
+	defer shutdown()
+
+	err = waitForEspressoNode(ctx)
+	Require(t, err)
+
+	// Wait for the batch poster to naturally post at least one batch to L1.
+	err = waitForWith(ctx, 8*time.Minute, 5*time.Second, func() bool {
+		count, err := builder.L2.ConsensusNode.InboxTracker.GetBatchCount()
+		Require(t, err)
+		return count > 1
+	})
+	Require(t, err)
+
+	// Record which L1 block the latest batch landed in.
+	batchCount, err := builder.L2.ConsensusNode.InboxTracker.GetBatchCount()
+	Require(t, err)
+	metadata, err := builder.L2.ConsensusNode.InboxTracker.GetBatchMetadata(batchCount - 1)
+	Require(t, err)
+	originalBatchBlock := metadata.ParentChainBlock
+	log.Info("Batch posted", "batchIndex", batchCount-1, "l1Block", originalBatchBlock)
+
+	compareAllMsgResultsFromConsensusAndExecution(t, ctx, builder.L2, "before reorg")
+
+	// Reorg to the block just before the batch was posted, removing it from L1.
+	parentBlock := builder.L1.L1Backend.BlockChain().GetBlockByNumber(originalBatchBlock - 5)
+	err = builder.L1.L1Backend.BlockChain().ReorgToOldBlock(parentBlock)
+	Require(t, err)
+	AdvanceL1(t, ctx, builder.L1.Client, builder.L1Info, 10)
+
+	// Produce a new L1 block so the chain advances past the reorg point.
+	builder.L1.TransferBalance(t, "Faucet", "Faucet", common.Big1, builder.L1Info)
+
+	// Wait for the inbox tracker to detect the reorg — batch count should drop.
+	err = waitForWith(ctx, 2*time.Minute, time.Second, func() bool {
+		count, err := builder.L2.ConsensusNode.InboxTracker.GetBatchCount()
+		Require(t, err)
+		return count < batchCount
+	})
+	Require(t, err, "inbox tracker did not detect the reorg")
+	log.Info("Reorg detected by inbox tracker", "batchIndex", batchCount-1, "originalL1Block", originalBatchBlock)
+
+	// Wait for the batch poster to re-post the batch.
+	err = waitForWith(ctx, 8*time.Minute, 5*time.Second, func() bool {
+		count, err := builder.L2.ConsensusNode.InboxTracker.GetBatchCount()
+		Require(t, err)
+		return count >= batchCount
+	})
+	Require(t, err, "batch was not re-posted after reorg")
+	log.Info("Batch re-posted after reorg", "batchIndex", batchCount-1)
+
+	compareAllMsgResultsFromConsensusAndExecution(t, ctx, builder.L2, "after reorg")
 }
