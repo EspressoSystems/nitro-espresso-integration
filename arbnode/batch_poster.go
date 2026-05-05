@@ -1855,9 +1855,15 @@ func (b *BatchPoster) MaybePostSequencerBatch(ctx context.Context) (bool, error)
 	}
 	if b.building == nil || b.building.startMsgCount != batchPosition.MessageCount {
 		if b.espressoStreamer != nil {
-			b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+			if uint64(batchPosition.MessageCount) < b.espressoStreamer.GetCurrentMessagePos() {
+				// Batch position moved backwards probably due to l1 reorg, try and resync the blocks from hotshot
+				log.Warn("resetting espresso streamer to parent chain (L1 reorg?)", "messageCount", batchPosition.MessageCount)
+				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
+			} else {
+				b.espressoStreamer.AdvanceTo(uint64(batchPosition.MessageCount))
+			}
 			if b.espressoRestarting {
-				// Reset only once
+				// Reset on startup
 				log.Info("resetting streamer to parent chain", "messageCount", batchPosition.MessageCount)
 				// Fallback. For existing queued batches, we don't have the hotshot block number, so we reset to the parent chain.
 				b.resetStreamerToParentChainOrConfigHotshotBlock(batchPosition.MessageCount, ctx)
