@@ -44,6 +44,8 @@ type EspressoStreamerInterface interface {
 	Advance()
 	// Reset sets the current message position and the next hotshot block number.
 	Reset(currentMessagePos uint64, currentHostshotBlock uint64)
+	// GetCurrentMessagePos returns the current message position of the streamer.
+	GetCurrentMessagePos() uint64
 	// RecordTimeDurationBetweenHotshotAndCurrentBlock records the time duration between
 	// the next hotshot block and the current block.
 	RecordTimeDurationBetweenHotshotAndCurrentBlock(nextHotshotBlock uint64, blockProductionTime time.Time)
@@ -225,6 +227,12 @@ func (s *EspressoStreamer) Advance() {
 	s.currentMessagePos += 1
 }
 
+func (s *EspressoStreamer) GetCurrentMessagePos() uint64 {
+	s.messageLock.RLock()
+	defer s.messageLock.RUnlock()
+	return s.currentMessagePos
+}
+
 func (s *EspressoStreamer) AdvanceTo(toPos uint64) {
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
@@ -370,16 +378,21 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 	for i, message := range messages {
-		var messageWithMetadata arbostypes.MessageWithMetadata
-		err = rlp.DecodeBytes(message, &messageWithMetadata)
-		if err != nil {
-			log.Warn("failed to decode message", "err", err)
-			// Instead of returnning an error, we should just skip this message
+		if _, exists := s.messageWithMetadataAndPos[indices[i]]; exists {
+			log.Warn("duplicate message position, discarding", "pos", indices[i])
 			continue
 		}
 
 		if indices[i] < s.currentMessagePos {
 			log.Warn("message index is less than current message pos, skipping", "msgPos", indices[i], "currentMessagePos", s.currentMessagePos)
+			continue
+		}
+
+		var messageWithMetadata arbostypes.MessageWithMetadata
+		err = rlp.DecodeBytes(message, &messageWithMetadata)
+		if err != nil {
+			log.Warn("failed to decode message", "err", err)
+			// Instead of returnning an error, we should just skip this message
 			continue
 		}
 

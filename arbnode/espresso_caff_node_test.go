@@ -50,6 +50,10 @@ func (m *MockEspressoStreamer) GetCurrentEarliestHotShotBlockNumber(pos uint64) 
 	return m.currHotShot
 }
 
+func (m *MockEspressoStreamer) GetCurrentMessagePos() uint64 {
+	return m.currPos
+}
+
 func (m *MockEspressoStreamer) Start(ctx context.Context) error {
 	return nil
 }
