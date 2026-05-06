@@ -628,7 +628,6 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 	yarn --cwd contracts build:forge:yul
 	yarn --cwd contracts-legacy build
 	yarn --cwd contracts-legacy build:forge:yul
-	cd espresso-tee-contracts && forge build && cd ../
 	+make -C contracts-local build
 	@touch $@
 
