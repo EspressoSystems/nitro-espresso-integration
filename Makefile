@@ -619,7 +619,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
 
 .make/espresso-gen: $(DEP_PREDICATE) espresso-tee-contracts/bindings/gen.go .make/solidity $(ORDER_ONLY_PREDICATE) .make
 	mkdir -p espresso-tee-contracts/espressogen/
-	go run -modfile ./espresso-tee-contracts/bindings/go.mod ./espresso-tee-contracts/bindings/gen.go
+	cd espresso-tee-contracts && go run -modfile ./bindings/go.mod ./bindings/gen.go && cd ..
 	@touch $@
 
 .make/solidity: $(DEP_PREDICATE) safe-smart-account/contracts/*/*.sol safe-smart-account/contracts/*.sol contracts/src/*/*.sol contracts-legacy/src/*/*.sol contracts-local/src/*/*.sol contracts-local/gas-dimensions/src/*.sol .make/yarndeps $(ORDER_ONLY_PREDICATE) .make
@@ -650,6 +650,7 @@ contracts/test/prover/proofs/%.json: $(arbitrator_cases)/%.wasm $(prover_bin)
   		"@nomicfoundation/ignition-core@^0.15.14"
 	yarn --cwd contracts install
 	yarn --cwd contracts-legacy install
+	cd espresso-tee-contracts && forge build --no-metadata && cd ../
 	+make -C contracts-local install
 	@touch $@
 
