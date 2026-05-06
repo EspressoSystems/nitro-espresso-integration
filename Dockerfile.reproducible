@@ -141,6 +141,13 @@ RUN curl -L -o /tmp/foundry.tar.gz \
 
 ENV PATH="/workspace/.foundry:${PATH}"
 
+# Pre-download solc 0.8.25 for forge (svm stores it at ~/.svm/{version}/solc-{version})
+RUN mkdir -p /root/.svm/0.8.25 && \
+    curl -L -o /root/.svm/0.8.25/solc-0.8.25 \
+    https://binaries.soliditylang.org/linux-amd64/solc-linux-amd64-v0.8.25+commit.b61c2a91 && \
+    echo "c42aada7a52057ddbed93ec011235e256c564c440b68dbaac5ae482babbb3d6d  /root/.svm/0.8.25/solc-0.8.25" | sha256sum -c && \
+    chmod +x /root/.svm/0.8.25/solc-0.8.25
+
 # Pre-download Solidity compilers with SHA256 verification
 RUN mkdir -p /home/user/.cache/hardhat-nodejs/compilers/linux-amd64 && \
     curl -L -o /home/user/.cache/hardhat-nodejs/compilers/linux-amd64/solc-linux-amd64-v0.7.6+commit.7338295f \
