@@ -193,6 +193,7 @@ ENV npm_config_package_lock=false
 ENV npm_config_save=false
 ENV NODE_OPTIONS="--max-http-header-size=32768"
 ENV HARDHAT_COMPILE_DOWNLOAD_TIMEOUT=600000
+ENV FOUNDRY_BYTECODE_HASH=none
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 # Remove non-reproducible build artifacts
