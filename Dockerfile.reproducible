@@ -338,6 +338,8 @@ FROM scratch AS wasm-libs-export
 COPY --from=wasm-libs-builder /workspace/ /
 
 FROM wasm-base AS wasm-bin-builder
+COPY --from=stagex-gcc . /
+COPY --from=stagex-binutils . /
 COPY --from=stagex-go . /
 COPY ./Makefile ./go.mod ./go.sum ./
 COPY ./arbcompress ./arbcompress
@@ -375,6 +377,8 @@ COPY --from=contracts-builder-repro-export /contracts-local/out/precompiles/ con
 COPY --from=contracts-builder-repro-export /contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
 COPY --from=contracts-builder-repro-export /contracts-legacy/build/contracts/src/precompiles/ contracts-legacy/build/contracts/src/precompiles/
 COPY --from=contracts-builder-repro-export /.make/ .make/
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN cd espresso-tee-contracts && go mod download -modfile ./bindings/go.mod
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
 # ============================================================================
