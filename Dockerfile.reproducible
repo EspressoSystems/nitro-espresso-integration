@@ -376,6 +376,11 @@ COPY --from=contracts-builder-repro-export /contracts-legacy/build/contracts/src
 COPY --from=contracts-builder-repro-export /.make/ .make/
 ENV GOPROXY=https://proxy.golang.org,direct
 RUN cd espresso-tee-contracts && go mod download -modfile ./bindings/go.mod
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make .make/espresso-gen .make/solgen
+RUN if [ -d "/workspace/go" ] && [ "$(ls -A /workspace/go 2>/dev/null)" ]; then \
+        cp -r /workspace/go/* /workspace/solgen/go/ 2>/dev/null || true; \
+        rm -rf /workspace/go; \
+    fi
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
 # ============================================================================
