@@ -634,8 +634,12 @@ COPY --from=stagex-musl /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 # Copy CA certificates for TLS/HTTPS
 COPY --from=stagex-ca-certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
-# Copy curl for healthchecks
+# Copy curl for healthchecks (binary + libcurl + OpenSSL deps)
 COPY --from=stagex-curl /usr/bin/curl /usr/local/bin/curl
+COPY --from=stagex-curl /usr/lib/libcurl.so.4.8.0 /usr/lib/libcurl.so.4.8.0
+COPY --from=stagex-curl /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.4
+COPY --from=stagex-openssl-plain /usr/lib/libssl.so.3 /usr/lib/libssl.so.3
+COPY --from=stagex-openssl-plain /usr/lib/libcrypto.so.3 /usr/lib/libcrypto.so.3
 
 # Copy binaries
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
