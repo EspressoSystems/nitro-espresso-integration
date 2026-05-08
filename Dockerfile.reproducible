@@ -486,11 +486,14 @@ COPY --from=prover-builder-musl /workspace/target/ /
 # ============================================================================
 # Stage 5: Module Root Calculator
 # ============================================================================
-FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS module-root-calc
+FROM stagex-busybox AS module-root-calc
+COPY --from=stagex-musl . /
+COPY --from=stagex-make . /
+COPY --from=stagex-bash . /
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
+ENV PATH="/usr/bin:/bin:${PATH}"
 WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y wabt make
 COPY --from=prover-export-musl / target/
 COPY --from=wasm-bin-builder /workspace/target/ target/
 COPY --from=wasm-bin-builder /workspace/.make/ .make/
@@ -626,7 +629,7 @@ COPY --from=stagex-musl /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 COPY --from=stagex-ca-certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 # Copy curl for healthchecks
-COPY --from=stagex-curl . /
+COPY --from=stagex-curl /usr/bin/curl /usr/local/bin/curl
 
 # Copy binaries
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
