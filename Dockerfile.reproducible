@@ -1,67 +1,5 @@
 # ============================================================================
-# Stage 1: Brotli builders (needed for WASM)
-# ============================================================================
-FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS brotli-wasm-builder
-
-COPY --from=stagex/make       . /
-COPY --from=stagex/cmake      . /
-COPY --from=stagex/gcc        . /
-COPY --from=stagex/binutils   . /
-COPY --from=stagex/xz         . /
-COPY --from=stagex/bzip2      . /
-COPY --from=stagex/zlib       . /
-COPY --from=stagex/curl       . /
-COPY --from=stagex/ca-certificates . /
-COPY --from=stagex/openssl     . /
-COPY --from=stagex/git        . /
-COPY --from=stagex/libffi     . /
-COPY --from=stagex/python     . /
-COPY --from=stagex/core-filesystem . /
-COPY --from=stagex/bash       . /
-COPY --from=stagex/musl       . /
-COPY --from=stagex/clang       . /
-COPY --from=stagex/glibc       . /
-
-ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
-ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
-
-ENV PATH="/usr/bin:/bin:/sbin:$PATH"
-USER root
-WORKDIR /workspace
-RUN git clone https://github.com/emscripten-core/emsdk.git && \
-    cd emsdk && \
-    ./emsdk install 3.1.7 && \
-    ./emsdk activate 3.1.7
-COPY scripts/build-brotli.sh scripts/
-COPY brotli brotli
-RUN cd emsdk && . ./emsdk_env.sh && cd .. && ./scripts/build-brotli.sh -w -t /workspace/install/
-
-FROM scratch AS brotli-wasm-export
-COPY --from=brotli-wasm-builder /workspace/install/ /
-
-FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS brotli-library-builder
-COPY --from=stagex/make       . /
-COPY --from=stagex/cmake      . /
-COPY --from=stagex/gcc        . /
-COPY --from=stagex/binutils   . /
-COPY --from=stagex/git        . /
-COPY --from=stagex/core-filesystem . /
-COPY --from=stagex/bash . /
-COPY --from=stagex/musl . /
-COPY --from=stagex/openssl . /
-
-ENV PATH="/usr/bin:/bin:/sbin:$PATH"
-USER root
-WORKDIR /workspace
-COPY scripts/build-brotli.sh scripts/
-COPY brotli brotli
-RUN ./scripts/build-brotli.sh -l -t /workspace/install/
-
-FROM scratch AS brotli-library-export
-COPY --from=brotli-library-builder /workspace/install/ /
-
-# ============================================================================
-# Stage 2: Reproducible Contracts Builder (using StageX)
+# StageX base image declarations
 # ============================================================================
 FROM stagex/core-nodejs@sha256:18cc8e3b961e987e7fb3c44e1b9b0faef4edd66c43afc032dad906b4e7607e01 AS stagex-nodejs
 FROM stagex/yarn:latest@sha256:45be69eb569060abc48078facca7ec8c6602950644d1b2b8300dfae148a74a8a AS stagex-yarn
@@ -86,7 +24,85 @@ FROM stagex/core-libcxx:latest@sha256:c37566fc25788e232d71f03728da960455d5ec1218
 FROM stagex/core-libcxxabi:latest@sha256:63cfbd7e7ddf505dc8f59babfc2ae25d397c2e02ebe2db5a27c3267d2f485362 AS stagex-libcxxabi
 FROM stagex/libunwind:latest@sha256:290b8d183a467edc55e338471632f2e40859aef92a4eecf12415ca29b9c16e9f AS stagex-libunwind
 FROM stagex/llvm:latest@sha256:27da8a38ec621317dbafbf1dbdefb07a5b007d1d28ae86393480209652ed3770 AS stagex-llvm
+FROM stagex/cmake:latest@sha256:b6ab70f24d5b4118f3c120e17c78dee57939e94cccbdca849e0994cf644da8f8 AS stagex-cmake
+FROM stagex/binutils:latest@sha256:eff721a796fdfba8c34e21a487b0e376fb55ca2633524926998f1660fbb810de AS stagex-binutils
+FROM stagex/clang:latest@sha256:c26069d378f36c06b5d91e3aba907521ec79eb0864d65a4c28a2db17947ec25f AS stagex-clang
+FROM stagex/lld:latest@sha256:d9692fc159997b34c30878703b780e3ab6dac921bfc9d44510319888e9054668 AS stagex-lld
+FROM stagex/xz:latest@sha256:e595375b3cc934abf492a6977c6c1b327f7ca1275062480d3e7c5c2a2f93b9ec AS stagex-xz
+FROM stagex/bzip2:latest@sha256:797441c2978a4b1e69f1581088405f44239a0828823f567e5f2f2cbda26fe436 AS stagex-bzip2
+FROM stagex/libffi:latest@sha256:8cde18fd24e3ad925ae928e75fc2ad8c65d41971ce4702c1b9375b4f2d5ba2fd AS stagex-libffi
+FROM stagex/core-filesystem:latest@sha256:da28831927652291b0fa573092fd41c8c96ca181ea224df7bff40e1833c3db13 AS stagex-core-filesystem
+FROM stagex/git:latest@sha256:09a08e14293b5fac653439e46e5c2091136fbfa3b7a3e035964ee39892888c47 AS stagex-git-base
+FROM stagex/openssl:latest@sha256:8e3eb24b4d21639f7ea204b89211d8bc03a2e1b729fb1123f8d0b3752b4beaa1 AS stagex-openssl-plain
+FROM stagex/python:latest@sha256:7dd2c77c254477abf6c1a46beef3e9784e5ee5ba0722253469947152a7150402 AS stagex-python-plain
+FROM stagex/core-go@sha256:c00d5f25a6fd34e8e94975b42b0bc222f6fe707749ac6283c0940dc116a49883 AS stagex-go
 
+# ============================================================================
+# Stage 1: Brotli builders (needed for WASM)
+# ============================================================================
+FROM stagex-busybox AS brotli-wasm-builder
+
+COPY --from=stagex-make             . /
+COPY --from=stagex-cmake            . /
+COPY --from=stagex-gcc              . /
+COPY --from=stagex-binutils         . /
+COPY --from=stagex-xz               . /
+COPY --from=stagex-bzip2            . /
+COPY --from=stagex-zlib             . /
+COPY --from=stagex-curl             . /
+COPY --from=stagex-ca-certs         . /
+COPY --from=stagex-openssl-plain    . /
+COPY --from=stagex-git-base         . /
+COPY --from=stagex-libffi           . /
+COPY --from=stagex-python-plain     . /
+COPY --from=stagex-core-filesystem  . /
+COPY --from=stagex-bash             . /
+COPY --from=stagex-musl             . /
+COPY --from=stagex-clang            . /
+COPY --from=stagex-glibc            . /
+
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
+ENV PATH="/usr/bin:/bin:/sbin:$PATH"
+USER root
+WORKDIR /workspace
+RUN git clone https://github.com/emscripten-core/emsdk.git && \
+    cd emsdk && \
+    git checkout 1b8cb739e0296395c9e0b6b9d16c7b6d676f6940 && \
+    ./emsdk install 3.1.7 && \
+    ./emsdk activate 3.1.7
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN cd emsdk && . ./emsdk_env.sh && cd .. && ./scripts/build-brotli.sh -w -t /workspace/install/
+
+FROM scratch AS brotli-wasm-export
+COPY --from=brotli-wasm-builder /workspace/install/ /
+
+FROM stagex-busybox AS brotli-library-builder
+COPY --from=stagex-make             . /
+COPY --from=stagex-cmake            . /
+COPY --from=stagex-gcc              . /
+COPY --from=stagex-binutils         . /
+COPY --from=stagex-git-base         . /
+COPY --from=stagex-core-filesystem  . /
+COPY --from=stagex-bash             . /
+COPY --from=stagex-musl             . /
+COPY --from=stagex-openssl-plain    . /
+
+ENV PATH="/usr/bin:/bin:/sbin:$PATH"
+USER root
+WORKDIR /workspace
+COPY scripts/build-brotli.sh scripts/
+COPY brotli brotli
+RUN ./scripts/build-brotli.sh -l -t /workspace/install/
+
+FROM scratch AS brotli-library-export
+COPY --from=brotli-library-builder /workspace/install/ /
+
+# ============================================================================
+# Stage 2: Reproducible Contracts Builder (using StageX)
+# ============================================================================
 FROM stagex-busybox AS stagex-nodejs-base
 COPY --from=stagex-musl . /
 COPY --from=stagex-glibc . /
@@ -224,14 +240,81 @@ COPY --from=contracts-builder-repro /workspace/.make/ /.make/
 # ============================================================================
 # Stage 3: WASM Builders
 # ============================================================================
-FROM debian:bookworm-20231218 AS wasm-base
-WORKDIR /workspace
-RUN apt-get update && apt-get install -y curl build-essential=12.9 wabt
+FROM stagex-busybox AS wabt-builder
+COPY --from=stagex-musl . /
+COPY --from=stagex-gcc . /
+COPY --from=stagex-binutils . /
+COPY --from=stagex-cmake . /
+COPY --from=stagex-make . /
+COPY --from=stagex-bash . /
+COPY --from=stagex-git . /
+COPY --from=stagex-ca-certs . /
+COPY --from=stagex-curl . /
+COPY --from=stagex-openssl . /
+COPY --from=stagex-zlib . /
+USER root
+ENV PATH="/usr/bin:/bin:/sbin:${PATH}"
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+RUN git clone https://github.com/WebAssembly/wabt.git /wabt && \
+    cd /wabt && git checkout 03a00a1334e6121fb0cce4fccbd6bb109b68acaa && \
+    git submodule update --init --recursive && \
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF \
+          -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++ && \
+    cmake --build build --target wat2wasm --target wasm2wat -j$(nproc)
 
-FROM wasm-base AS wasm-libs-builder
-RUN apt-get update && \
-    apt-get install -y clang=1:14.0-55.7~deb12u1 lld=1:14.0-55.7~deb12u1
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.88.0 --target x86_64-unknown-linux-gnu,wasm32-unknown-unknown,wasm32-wasip1
+FROM stagex-busybox AS wasm-base
+COPY --from=stagex-musl . /
+COPY --from=stagex-glibc . /
+COPY --from=stagex-openssl . /
+COPY --from=stagex-make . /
+COPY --from=stagex-curl . /
+COPY --from=stagex-ca-certs . /
+COPY --from=stagex-bash . /
+USER root
+WORKDIR /workspace
+
+# Shared Rust 1.88.0 installation stage.
+# Uses official musl-linked binaries so rustc's fingerprint matches the
+# pre-built wasm32/musl stds from the same release (stagex-rebuilt rustc has
+# a different fingerprint and is ABI-incompatible with them).
+FROM wasm-base AS rust-base
+COPY --from=stagex-gcc . /
+COPY --from=stagex-binutils . /
+COPY --from=stagex-zlib . /
+RUN curl -L -sSf -o /tmp/rustc.tar.gz \
+        https://static.rust-lang.org/dist/rustc-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+    echo "ca89916b2d0a462aaada957d3e5ac563e608eee224182cc3fe4172f9e43b1769  /tmp/rustc.tar.gz" | sha256sum -c && \
+    tar -C /tmp -xf /tmp/rustc.tar.gz && \
+    /tmp/rustc-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/cargo.tar.gz \
+        https://static.rust-lang.org/dist/cargo-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+    echo "06dfe0618469fb31f1b21155557156167c6f6f562b5970e0cc966616702117c3  /tmp/cargo.tar.gz" | sha256sum -c && \
+    tar -C /tmp -xf /tmp/cargo.tar.gz && \
+    /tmp/cargo-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-musl.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+    echo "6fe8b3106b14ea92eb33b3dc3cbe3cd367489e12b5c015f851d9713733438354  /tmp/rust-std-musl.tar.gz" | sha256sum -c && \
+    tar -C /tmp -xf /tmp/rust-std-musl.tar.gz && \
+    /tmp/rust-std-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-wasm32-unknown-unknown.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-unknown-unknown.tar.gz && \
+    echo "67d5d0c4dc978fa2fbb7e14c2e9b71ee1a16f5616e05464cda6abad1daa67b57  /tmp/rust-std-wasm32-unknown-unknown.tar.gz" | sha256sum -c && \
+    tar -C /tmp -xf /tmp/rust-std-wasm32-unknown-unknown.tar.gz && \
+    /tmp/rust-std-1.88.0-wasm32-unknown-unknown/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-wasm32-wasip1.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-wasip1.tar.gz && \
+    echo "a56e8fd3449976c8ef13b1e34807400715e1d92cbac220309c967af77546e9f9  /tmp/rust-std-wasm32-wasip1.tar.gz" | sha256sum -c && \
+    tar -C /tmp -xf /tmp/rust-std-wasm32-wasip1.tar.gz && \
+    /tmp/rust-std-1.88.0-wasm32-wasip1/install.sh --prefix=/usr/local && \
+    rm -rf /tmp/rust* /tmp/cargo*
+ENV PATH="/usr/local/bin:${PATH}"
+
+FROM rust-base AS wasm-libs-builder
+COPY --from=stagex-clang . /
+COPY --from=stagex-llvm . /
+COPY --from=stagex-lld . /
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
 COPY ./Makefile ./
 COPY arbitrator/Cargo.* arbitrator/
 COPY arbitrator/arbutil arbitrator/arbutil
@@ -243,15 +326,18 @@ COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY brotli brotli
 COPY scripts/build-brotli.sh scripts/
 COPY scripts/remove_reference_types.sh scripts/
-COPY --from=brotli-wasm-export / target/  
-RUN apt-get update && apt-get install -y cmake
-RUN . ~/.cargo/env && NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
+COPY --from=brotli-library-export / target/
+COPY --from=brotli-wasm-export / target/
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 RUSTFLAGS='-C symbol-mangling-version=v0' make build-wasm-libs
 
 FROM scratch AS wasm-libs-export
 COPY --from=wasm-libs-builder /workspace/ /
 
 FROM wasm-base AS wasm-bin-builder
-RUN curl -L https://golang.org/dl/go1.25.1.linux-`dpkg --print-architecture`.tar.gz | tar -C /usr/local -xzf -
+COPY --from=stagex-gcc . /
+COPY --from=stagex-binutils . /
+COPY --from=stagex-go . /
+ENV GOFLAGS="-buildvcs=false -trimpath"
 COPY ./Makefile ./go.mod ./go.sum ./
 COPY ./arbcompress ./arbcompress
 COPY ./arbos ./arbos
@@ -281,22 +367,43 @@ COPY ./espresso-tee-contracts ./espresso-tee-contracts
 COPY ./solgen/gen.go ./solgen/
 COPY ./go-ethereum ./go-ethereum
 COPY scripts/remove_reference_types.sh scripts/
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
 COPY --from=brotli-wasm-export / target/
 COPY --from=contracts-builder-repro-export /contracts-local/out/precompiles/ contracts-local/out/precompiles/
 COPY --from=contracts-builder-repro-export /contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/UpgradeExecutor.json contracts/node_modules/@offchainlabs/upgrade-executor/build/contracts/src/UpgradeExecutor.sol/
 COPY --from=contracts-builder-repro-export /contracts-legacy/build/contracts/src/precompiles/ contracts-legacy/build/contracts/src/precompiles/
 COPY --from=contracts-builder-repro-export /.make/ .make/
-RUN PATH="$PATH:/usr/local/go/bin" NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
+ENV GOPROXY=https://proxy.golang.org,direct
+RUN cd espresso-tee-contracts && go mod download -modfile ./bindings/go.mod
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make .make/espresso-gen .make/solgen
+RUN if [ -d "/workspace/go" ] && [ "$(ls -A /workspace/go 2>/dev/null)" ]; then \
+        cp -r /workspace/go/* /workspace/solgen/go/ 2>/dev/null || true; \
+        rm -rf /workspace/go; \
+    fi
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-wasm-bin
 
 # ============================================================================
 # Stage 4: Prover Builders
 # ============================================================================
-FROM rust:1.88.0-slim-bookworm AS prover-header-builder
-WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y make clang wabt && \
-    cargo install --force cbindgen --version 0.24.3
+
+# Build cbindgen from its pinned commit using its own Cargo.lock (--locked),
+# so transitive deps are fully determined by the upstream lockfile.
+FROM rust-base AS cbindgen-builder
+COPY --from=stagex-git-base . /
+RUN git clone https://github.com/mozilla/cbindgen.git /cbindgen && \
+    cd /cbindgen && \
+    git checkout 137c8e8d40c6c3bcac9d3c8edfb90cd0533b17d0 && \
+    cargo build --release --locked && \
+    cp target/release/cbindgen /usr/local/bin/cbindgen
+
+FROM rust-base AS prover-header-builder
+COPY --from=stagex-clang . /
+COPY --from=stagex-lld . /
+COPY --from=stagex-cmake . /
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
+COPY --from=cbindgen-builder /usr/local/bin/cbindgen /usr/local/bin/cbindgen
 COPY arbitrator/Cargo.* arbitrator/
 COPY ./Makefile ./
 COPY arbitrator/arbutil arbitrator/arbutil
@@ -311,23 +418,20 @@ COPY arbitrator/tools/wasmer arbitrator/tools/wasmer
 COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
-RUN apt-get update && apt-get install -y cmake
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-prover-header
 
 FROM scratch AS prover-header-export
 COPY --from=prover-header-builder /workspace/target/ /
 
 # Musl-based prover builder for static linking
-FROM rust:1.88.0-slim-bookworm AS prover-builder-musl
-WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y make wget gpg software-properties-common zlib1g-dev libstdc++-12-dev wabt musl-tools musl-dev
-RUN wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
-    add-apt-repository 'deb http://apt.llvm.org/bookworm/ llvm-toolchain-bookworm-15 main' && \
-    apt-get update && \
-    apt-get install -y llvm-15-dev libclang-common-15-dev
-RUN rustup target add x86_64-unknown-linux-musl
+FROM rust-base AS prover-builder-musl
+COPY --from=stagex-clang . /
+COPY --from=stagex-lld . /
+COPY --from=stagex-llvm . /
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
+# stagex-gcc is musl-linked by default; use it as the C compiler for the musl target
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER=gcc
 COPY --from=brotli-library-export / target/
 COPY arbitrator/Cargo.* arbitrator/
 COPY arbitrator/arbutil arbitrator/arbutil
@@ -362,11 +466,9 @@ COPY --from=brotli-wasm-export / target/
 COPY scripts/build-brotli.sh scripts/
 COPY brotli brotli
 RUN touch -a -m arbitrator/prover/src/lib.rs
-# Create machines directory and generate forward_stub.wasm
 RUN mkdir -p target/machines/latest && \
     cargo run --manifest-path arbitrator/wasm-libraries/forward/Cargo.toml -- --path arbitrator/wasm-libraries/forward/forward_stub.wat --stub && \
     wat2wasm arbitrator/wasm-libraries/forward/forward_stub.wat -o target/machines/latest/forward_stub.wasm
-# Build with musl target
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --lib -p stylus --target x86_64-unknown-linux-musl && \
     mkdir -p arbitrator/target/release && \
     cp arbitrator/target/x86_64-unknown-linux-musl/release/libstylus.a arbitrator/target/release/
@@ -374,12 +476,10 @@ RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo
     cp arbitrator/target/x86_64-unknown-linux-musl/release/prover arbitrator/target/release/
 RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 cargo build --manifest-path arbitrator/Cargo.toml --release --bin jit --target x86_64-unknown-linux-musl && \
     cp arbitrator/target/x86_64-unknown-linux-musl/release/jit arbitrator/target/release/
-# Create stub library for glibc symbols
 RUN mkdir -p target/lib && \
     printf 'const char* gnu_get_libc_version(void) {\n    return "stub";\n}\n\nint __res_init(void) {\n    return 0;\n}' > /tmp/glibc_stubs.c && \
-    musl-gcc -c -O2 /tmp/glibc_stubs.c -o target/lib/glibc_stubs.o && \
+    gcc -c -O2 /tmp/glibc_stubs.c -o target/lib/glibc_stubs.o && \
     ar rcs target/lib/libglibc_stubs.a target/lib/glibc_stubs.o
-
 RUN mkdir -p target/bin target/lib && \
     cp arbitrator/target/release/libstylus.a target/lib/ && \
     cp arbitrator/target/release/prover target/bin/ && \
@@ -391,11 +491,15 @@ COPY --from=prover-builder-musl /workspace/target/ /
 # ============================================================================
 # Stage 5: Module Root Calculator
 # ============================================================================
-FROM debian:bookworm-slim@sha256:f9c6a2fd2ddbc23e336b6257a5245e31f996953ef06cd13a59fa0a1df2d5c252 AS module-root-calc
+FROM stagex-busybox AS module-root-calc
+COPY --from=stagex-musl . /
+COPY --from=stagex-make . /
+COPY --from=stagex-bash . /
+COPY --from=wabt-builder /wabt/build/wat2wasm /usr/local/bin/wat2wasm
+COPY --from=wabt-builder /wabt/build/wasm2wat /usr/local/bin/wasm2wat
+ENV PATH="/usr/bin:/bin:${PATH}"
+USER root
 WORKDIR /workspace
-RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update && \
-    apt-get install -y wabt make
 COPY --from=prover-export-musl / target/
 COPY --from=wasm-bin-builder /workspace/target/ target/
 COPY --from=wasm-bin-builder /workspace/.make/ .make/
@@ -420,18 +524,18 @@ RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-replay-env
 # ============================================================================
 # Stage 6: Machine Versions
 # ============================================================================
-FROM stagex/busybox@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS machine-versions
-COPY --from=stagex/make       . /
-COPY --from=stagex/cmake      . /
-COPY --from=stagex/gcc        . /
-COPY --from=stagex/binutils   . /
-COPY --from=stagex/git        . /
-COPY --from=stagex/core-filesystem . /
-COPY --from=stagex/bash . /
-COPY --from=stagex/musl . /
-COPY --from=stagex/openssl . /
-COPY --from=stagex/ca-certificates . /
-COPY --from=stagex/curl       . /
+FROM stagex-busybox AS machine-versions
+COPY --from=stagex-make             . /
+COPY --from=stagex-cmake            . /
+COPY --from=stagex-gcc              . /
+COPY --from=stagex-binutils         . /
+COPY --from=stagex-git-base         . /
+COPY --from=stagex-core-filesystem  . /
+COPY --from=stagex-bash             . /
+COPY --from=stagex-musl             . /
+COPY --from=stagex-openssl-plain    . /
+COPY --from=stagex-ca-certs         . /
+COPY --from=stagex-curl             . /
 
 ENV PATH="/usr/bin:/bin:${PATH}"
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
@@ -441,33 +545,23 @@ WORKDIR /workspace/machines
 
 COPY --chmod=755 ./scripts/download-machine.sh .
 
-RUN  ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2
+RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2 && \
+    ./download-machine.sh consensus-v51 0x8a7513bf7bb3e3db04b0d982d0e973bcf57bf8b88aef7c6d03dba3a81a56a499 && \
+    ./download-machine.sh consensus-v51.1 0xc2c02df561d4afaf9a1d6785f70098ec3874765c638e3cb6dbe8d3c83333e14c
 
 # ============================================================================
 # Stage 7: Reproducible Node Builder (using StageX + musl)
 # ============================================================================
-FROM stagex/core-go@sha256:c00d5f25a6fd34e8e94975b42b0bc222f6fe707749ac6283c0940dc116a49883 AS stagex-go
-FROM stagex/ca-certificates:latest@sha256:a84695f983a448a82acfe78af11f33c6a66b27124266e1fdc3ecfb8dc5852573 AS stagex-ca-certs-go
-FROM stagex/make:latest@sha256:ad81793d21d9778421925085c52734fdcca443957ade4f9bb80e4032b88252db AS stagex-make-go
-FROM stagex/bash:latest@sha256:fa9dab36a8a18bd3dc31528648063bea5491508bd6d090961b02a510c2a3dc0e AS stagex-bash-go
-FROM stagex/cmake:latest@sha256:b6ab70f24d5b4118f3c120e17c78dee57939e94cccbdca849e0994cf644da8f8 AS stagex-cmake
-FROM stagex/gcc:latest@sha256:49ea63c81c65f8be25c242b7e64f2758b23effdaafb458b5862d0f23ec803075 AS stagex-gcc-go
-FROM stagex/openssl:latest@sha256:8e3eb24b4d21639f7ea204b89211d8bc03a2e1b729fb1123f8d0b3752b4beaa1 AS stagex-openssl-go
-FROM stagex/binutils:latest@sha256:eff721a796fdfba8c34e21a487b0e376fb55ca2633524926998f1660fbb810de AS stagex-binutils
-FROM stagex/busybox:latest@sha256:3d128909dbc8e7b6c4b8c3c31f4583f01a307907ea179934bb42c4ef056c7efd AS stagex-busybox-go
-FROM stagex/musl:latest@sha256:d7f6c365f5724c65cadb2b96d9f594e46132ceb366174c89dbf7554897f2bc53 AS stagex-musl-go
-FROM stagex/glibc:latest@sha256:5e4f3c0b0b811dac9bfa96c43215856de4a7ec4a7866bc019608b0889f78633a AS stagex-glibc-go
-
-FROM stagex-busybox-go AS stagex-go-base
-COPY --from=stagex-musl-go . /
-COPY --from=stagex-glibc-go . /
+FROM stagex-busybox AS stagex-go-base
+COPY --from=stagex-musl . /
+COPY --from=stagex-glibc . /
 COPY --from=stagex-binutils . /
-COPY --from=stagex-gcc-go . /
-COPY --from=stagex-openssl-go . /
+COPY --from=stagex-gcc . /
+COPY --from=stagex-openssl-plain . /
 COPY --from=stagex-go . /
-COPY --from=stagex-ca-certs-go . /
-COPY --from=stagex-make-go . /
-COPY --from=stagex-bash-go . /
+COPY --from=stagex-ca-certs . /
+COPY --from=stagex-make . /
+COPY --from=stagex-bash . /
 COPY --from=stagex-cmake . /
 USER root
 
@@ -534,11 +628,18 @@ COPY --from=node-builder-repro /workspace/target/bin/ /bin/
 FROM scratch AS nitro-node-repro
 
 # Copy musl dynamic linker and libraries needed for the binaries
-COPY --from=stagex-musl-go /lib/ld-musl-x86_64.so.1 /lib/
-COPY --from=stagex-musl-go /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
+COPY --from=stagex-musl /lib/ld-musl-x86_64.so.1 /lib/
+COPY --from=stagex-musl /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 
 # Copy CA certificates for TLS/HTTPS
-COPY --from=stagex-ca-certs-go /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=stagex-ca-certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy curl for healthchecks (binary + libcurl + OpenSSL deps)
+COPY --from=stagex-curl /usr/bin/curl /usr/local/bin/curl
+COPY --from=stagex-curl /usr/lib/libcurl.so.4.8.0 /usr/lib/libcurl.so.4.8.0
+COPY --from=stagex-curl /usr/lib/libcurl.so.4 /usr/lib/libcurl.so.4
+COPY --from=stagex-openssl-plain /usr/lib/libssl.so.3 /usr/lib/libssl.so.3
+COPY --from=stagex-openssl-plain /usr/lib/libcrypto.so.3 /usr/lib/libcrypto.so.3
 
 # Copy binaries
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
@@ -560,7 +661,7 @@ COPY --from=module-root-calc /workspace/target/machines/latest/module-root.txt /
 COPY --from=module-root-calc /workspace/target/machines/latest/replay.wasm /home/user/target/machines/latest/
 
 # Create necessary directories
-COPY --from=stagex-busybox-go /bin/mkdir /bin/mkdir
+COPY --from=stagex-busybox /bin/mkdir /bin/mkdir
 RUN ["/bin/mkdir", "-p", "/home/user/l1keystore", "/home/user/.arbitrum/local/nitro", "/tmp"]
 
 WORKDIR /home/user/
