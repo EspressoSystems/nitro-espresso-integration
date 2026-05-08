@@ -281,36 +281,32 @@ FROM wasm-base AS rust-base
 COPY --from=stagex-gcc . /
 COPY --from=stagex-binutils . /
 COPY --from=stagex-zlib . /
-RUN curl -L -o /tmp/rustc.tar.gz \
-    https://static.rust-lang.org/dist/rustc-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+RUN curl -L -sSf -o /tmp/rustc.tar.gz \
+        https://static.rust-lang.org/dist/rustc-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
     echo "ca89916b2d0a462aaada957d3e5ac563e608eee224182cc3fe4172f9e43b1769  /tmp/rustc.tar.gz" | sha256sum -c && \
-    cd /tmp && tar xf rustc.tar.gz && \
-    ./rustc-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
-    rm -rf /tmp/rustc.tar.gz /tmp/rustc-1.88.0-x86_64-unknown-linux-musl
-RUN curl -L -o /tmp/cargo.tar.gz \
-    https://static.rust-lang.org/dist/cargo-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -C /tmp -xf /tmp/rustc.tar.gz && \
+    /tmp/rustc-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/cargo.tar.gz \
+        https://static.rust-lang.org/dist/cargo-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
     echo "06dfe0618469fb31f1b21155557156167c6f6f562b5970e0cc966616702117c3  /tmp/cargo.tar.gz" | sha256sum -c && \
-    cd /tmp && tar xf cargo.tar.gz && \
-    ./cargo-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
-    rm -rf /tmp/cargo.tar.gz /tmp/cargo-1.88.0-x86_64-unknown-linux-musl
-RUN curl -L -o /tmp/rust-std-musl.tar.gz \
-    https://static.rust-lang.org/dist/rust-std-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
+    tar -C /tmp -xf /tmp/cargo.tar.gz && \
+    /tmp/cargo-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-musl.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-x86_64-unknown-linux-musl.tar.gz && \
     echo "6fe8b3106b14ea92eb33b3dc3cbe3cd367489e12b5c015f851d9713733438354  /tmp/rust-std-musl.tar.gz" | sha256sum -c && \
-    cd /tmp && tar xf rust-std-musl.tar.gz && \
-    ./rust-std-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
-    rm -rf /tmp/rust-std-musl.tar.gz /tmp/rust-std-1.88.0-x86_64-unknown-linux-musl
-RUN curl -L -o /tmp/rust-std-wasm32-unknown-unknown.tar.gz \
-    https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-unknown-unknown.tar.gz && \
+    tar -C /tmp -xf /tmp/rust-std-musl.tar.gz && \
+    /tmp/rust-std-1.88.0-x86_64-unknown-linux-musl/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-wasm32-unknown-unknown.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-unknown-unknown.tar.gz && \
     echo "67d5d0c4dc978fa2fbb7e14c2e9b71ee1a16f5616e05464cda6abad1daa67b57  /tmp/rust-std-wasm32-unknown-unknown.tar.gz" | sha256sum -c && \
-    cd /tmp && tar xf rust-std-wasm32-unknown-unknown.tar.gz && \
-    ./rust-std-1.88.0-wasm32-unknown-unknown/install.sh --prefix=/usr/local && \
-    rm -rf /tmp/rust-std-wasm32-unknown-unknown.tar.gz /tmp/rust-std-1.88.0-wasm32-unknown-unknown
-RUN curl -L -o /tmp/rust-std-wasm32-wasip1.tar.gz \
-    https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-wasip1.tar.gz && \
+    tar -C /tmp -xf /tmp/rust-std-wasm32-unknown-unknown.tar.gz && \
+    /tmp/rust-std-1.88.0-wasm32-unknown-unknown/install.sh --prefix=/usr/local && \
+    curl -L -sSf -o /tmp/rust-std-wasm32-wasip1.tar.gz \
+        https://static.rust-lang.org/dist/rust-std-1.88.0-wasm32-wasip1.tar.gz && \
     echo "a56e8fd3449976c8ef13b1e34807400715e1d92cbac220309c967af77546e9f9  /tmp/rust-std-wasm32-wasip1.tar.gz" | sha256sum -c && \
-    cd /tmp && tar xf rust-std-wasm32-wasip1.tar.gz && \
-    ./rust-std-1.88.0-wasm32-wasip1/install.sh --prefix=/usr/local && \
-    rm -rf /tmp/rust-std-wasm32-wasip1.tar.gz /tmp/rust-std-1.88.0-wasm32-wasip1
+    tar -C /tmp -xf /tmp/rust-std-wasm32-wasip1.tar.gz && \
+    /tmp/rust-std-1.88.0-wasm32-wasip1/install.sh --prefix=/usr/local && \
+    rm -rf /tmp/rust* /tmp/cargo*
 ENV PATH="/usr/local/bin:${PATH}"
 
 FROM rust-base AS wasm-libs-builder
@@ -341,6 +337,7 @@ FROM wasm-base AS wasm-bin-builder
 COPY --from=stagex-gcc . /
 COPY --from=stagex-binutils . /
 COPY --from=stagex-go . /
+ENV GOFLAGS="-buildvcs=false -trimpath"
 COPY ./Makefile ./go.mod ./go.sum ./
 COPY ./arbcompress ./arbcompress
 COPY ./arbos ./arbos
@@ -539,9 +536,9 @@ WORKDIR /workspace/machines
 
 COPY --chmod=755 ./scripts/download-machine.sh .
 
-RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2
-RUN ./download-machine.sh consensus-v51 0x8a7513bf7bb3e3db04b0d982d0e973bcf57bf8b88aef7c6d03dba3a81a56a499
-RUN ./download-machine.sh consensus-v51.1 0xc2c02df561d4afaf9a1d6785f70098ec3874765c638e3cb6dbe8d3c83333e14c
+RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1437e4f1c40b1a915d3066c04f2 && \
+    ./download-machine.sh consensus-v51 0x8a7513bf7bb3e3db04b0d982d0e973bcf57bf8b88aef7c6d03dba3a81a56a499 && \
+    ./download-machine.sh consensus-v51.1 0xc2c02df561d4afaf9a1d6785f70098ec3874765c638e3cb6dbe8d3c83333e14c
 
 # ============================================================================
 # Stage 7: Reproducible Node Builder (using StageX + musl)
@@ -627,6 +624,9 @@ COPY --from=stagex-musl /usr/lib/libc.musl-x86_64.so.1 /usr/lib/
 
 # Copy CA certificates for TLS/HTTPS
 COPY --from=stagex-ca-certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+
+# Copy curl for healthchecks
+COPY --from=stagex-curl . /
 
 # Copy binaries
 COPY --from=node-builder-repro /workspace/target/bin/nitro /usr/local/bin/
