@@ -1,0 +1,484 @@
+package keymanager
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"errors"
+	"fmt"
+	"math/big"
+
+	"github.com/hf/nsm"
+	"github.com/hf/nsm/request"
+
+	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/signer/core/apitypes"
+
+	"github.com/offchainlabs/nitro/arbnode/dataposter"
+	espresso_tee_utils "github.com/offchainlabs/nitro/cmd/util/espresso-tee-utils"
+	attestationverifierclient "github.com/offchainlabs/nitro/espresso/attestation_verifier_client"
+	"github.com/offchainlabs/nitro/espressotee"
+	"github.com/offchainlabs/nitro/util/signature"
+)
+
+const (
+	NITRO = espressotee.NITRO
+	TESTS = espressotee.TESTS
+	EMPTY = espressotee.EMPTY
+)
+
+var FatalErrUnableToRegisterSigner = errors.New("unable to register signer")
+
+type KeyManagerState int
+
+const (
+	Init KeyManagerState = iota
+	PendingDataPosterSync
+	PendingRegistration
+	Registered
+)
+
+type state struct {
+	currentState KeyManagerState
+	attestation  []byte
+	data         []byte
+}
+
+var TestEspressoPrivateKey *ecdsa.PrivateKey
+
+func init() {
+	// Hardcoded test private key (DO NOT use in production)
+	// This is a private key derived from the test test test ... test junk BIP-39 mnemonic. It is a well known private key, so it should be fine to hardcode for tests.
+	// I found it here: https://ethereum.stackexchange.com/questions/147078/hardhat-which-file-is-initial-state-in-such-as-the-mnemonic-and-20-accounts
+	key, err := crypto.HexToECDSA("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+	if err != nil {
+		panic(err)
+	}
+	TestEspressoPrivateKey = key
+}
+
+type EspressoKeyManagerInterface interface {
+	GetCurrentKey() *ecdsa.PublicKey
+	SignPayload(message []byte) ([]byte, error)
+	SignMessage(message []byte) ([]byte, error)
+	TeeType() espressotee.TEE
+	GetKeyManagerState() KeyManagerState
+	CheckRegistration() (bool, error)
+}
+
+var _ EspressoKeyManagerInterface = &EspressoKeyManager{}
+
+type EspressoKeyManager struct {
+	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface
+	privKey                   *ecdsa.PrivateKey
+
+	signer      signature.DataSignerFunc
+	dataPoster  *dataposter.DataPoster
+	teeType     espressotee.TEE
+	serviceType espressotee.ServiceType
+
+	espressoNitroAttestationVerifierClient *attestationverifierclient.EspressoAttestationVerifierClient
+	parentChainId                          uint64
+	state                                  state
+}
+
+func NewEspressoKeyManager(
+	espressoTEEVerifierCaller espressotee.EspressoTEEVerifierInterface,
+	dataPoster *dataposter.DataPoster,
+	signerFunc signature.DataSignerFunc,
+	teeType espressotee.TEE,
+	serviceType espressotee.ServiceType,
+	servicePersistentPrivateKey *ecdsa.PrivateKey,
+	zkAttestationServiceURL string,
+	keyPairAttestationsPath string,
+	chainID uint64,
+) *EspressoKeyManager {
+	var err error
+	var privKey *ecdsa.PrivateKey
+
+	// Both the caff node and batch poster support persistent private keys. If an existing private key
+	// is provided, we use that one. Otherwise, we read the enclave private key from the attestation path.
+	// Note: The current implementation only supports reading the key during key manager construction
+	// for the batch poster. Support for reading the caff node key will be added in a later PR.
+	if keyPairAttestationsPath != "" && chainID != 0 {
+		// Read enclave private key
+		privKey, err = espresso_tee_utils.ReadEnclavePrivateKey(keyPairAttestationsPath, chainID)
+		if err != nil {
+			log.Crit("error reading enclave private key for Espresso Key Manager", "path", keyPairAttestationsPath, "err", err)
+		}
+
+	} else if servicePersistentPrivateKey != nil {
+		privKey = servicePersistentPrivateKey
+	} else if teeType == espressotee.TESTS {
+		privKey = TestEspressoPrivateKey
+	} else {
+		panic("either keyPairAttestationsPath and chainID must be provided, or servicePersistentPrivateKey must be non-nil")
+	}
+
+	// Production guard: TESTS with a non-Test serviceType would register the test key unattested.
+	if teeType == TESTS && serviceType != espressotee.Test {
+		panic(fmt.Sprintf("fatal misconfiguration: TeeType=TESTS requires serviceType=Test, got serviceType=%v", serviceType))
+	}
+
+	if signerFunc == nil && serviceType != espressotee.CaffNode && serviceType != espressotee.Test {
+		panic("DataSigner is nil")
+	}
+
+	if teeType == NITRO && zkAttestationServiceURL == "" {
+		if serviceType != espressotee.Test {
+			panic("zk attestation service URL must be provided for nitro TEE type")
+		} else {
+			log.Info("Allowing nitro key manager creation without zkAttestationServiceURL for tests")
+		}
+	}
+
+	espressoNitroAttestationVerifierClient := attestationverifierclient.NewEspressoAttestationVerifierClient(zkAttestationServiceURL)
+	parentChainId, err := espressoTEEVerifierCaller.ParentChainId()
+	if err != nil {
+		log.Crit("failed to get parent chain ID", "err", err)
+	}
+
+	return &EspressoKeyManager{
+		privKey:                                privKey,
+		signer:                                 signerFunc,
+		espressoTEEVerifierCaller:              espressoTEEVerifierCaller,
+		dataPoster:                             dataPoster,
+		teeType:                                teeType,
+		serviceType:                            serviceType,
+		espressoNitroAttestationVerifierClient: espressoNitroAttestationVerifierClient,
+		parentChainId:                          parentChainId,
+		state: state{
+			currentState: Init,
+			attestation:  []byte{},
+			data:         []byte{},
+		},
+	}
+}
+
+// Contract only accepts NITRO; TESTS → NITRO.
+func (k *EspressoKeyManager) onChainTeeType() espressotee.TEE {
+	if k.teeType == TESTS {
+		return NITRO
+	}
+	return k.teeType
+}
+
+// Contract only accepts BatchPoster/CaffNode; infer from signer presence when in TESTS.
+func (k *EspressoKeyManager) onChainServiceType() espressotee.ServiceType {
+	if k.teeType == TESTS {
+		if k.signer != nil {
+			return espressotee.BatchPoster
+		}
+		return espressotee.CaffNode
+	}
+	return k.serviceType
+}
+
+func (k *EspressoKeyManager) hasRegistered() bool {
+	return k.state.currentState == Registered
+}
+
+func (k *EspressoKeyManager) GetKeyManagerState() KeyManagerState {
+	return k.state.currentState
+}
+
+func (k *EspressoKeyManager) verifyRegistrationOnChain() (bool, error) {
+	if k.hasRegistered() {
+		return true, nil
+	}
+	pubKey, ok := k.privKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		panic("failed to get public key")
+	}
+	signerAddr := crypto.PubkeyToAddress(*pubKey)
+	ok, err := k.espressoTEEVerifierCaller.RegisteredServices(signerAddr, k.onChainTeeType())
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
+func (k *EspressoKeyManager) CheckRegistration() (bool, error) {
+	state := k.state.currentState
+	switch state {
+	case Init:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Init phase. Waiting for Zk proof to be generated")
+		newState, err := k.init()
+		if err != nil {
+			return false, fmt.Errorf("unable to init keymanager: %w", err)
+		}
+		k.state = *newState
+		if k.hasRegistered() {
+			signerAddr := crypto.PubkeyToAddress(k.privKey.PublicKey)
+			log.Info("Signer already registered on-chain", "signer address", signerAddr.Hex())
+			return true, nil
+		}
+		return false, nil
+	case PendingDataPosterSync:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Data Poster sync phase")
+		err := k.pendingDataPosterSync()
+		if err != nil {
+			return false, fmt.Errorf("data poster nonce and l1 nonce still mismatch: %w", err)
+		}
+		k.state.currentState = PendingRegistration
+		return false, nil
+	case PendingRegistration:
+		log.Warn("ephemeral keys are not yet registered in Espresso TEE Contract, KeyManager in Registration phase")
+		err := k.registerService()
+		if err != nil {
+			return false, fmt.Errorf("%w: %w", FatalErrUnableToRegisterSigner, err)
+		}
+		// We are registered free up the memory
+		k.state.currentState = Registered
+		k.state.attestation = []byte{}
+		k.state.data = []byte{}
+		return true, nil
+	case Registered:
+		return true, nil
+	default:
+		return false, fmt.Errorf("key manager in an unknown state: %v", state)
+	}
+}
+
+/*
+ * This function will get the attestation in order to properly register the signing address on chain for a given TEE type
+ */
+func (k *EspressoKeyManager) prepareRegisterService(getAttestationFunc func([]byte) ([]byte, error)) ([]byte, []byte, error) {
+	pubKey := k.privKey.PublicKey
+	signerAddr := crypto.PubkeyToAddress(pubKey)
+	switch k.teeType {
+	case NITRO:
+		pubKeyBytes := crypto.FromECDSAPub(&pubKey)
+		log.Info("nitro signing address", "addr", signerAddr)
+
+		attestationBytes, err := getAttestationFunc(pubKeyBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("nitro signing failed: %w", err)
+		}
+		if k.espressoNitroAttestationVerifierClient == nil {
+			return nil, nil, errors.New("attestation verifier client is not initialized")
+		}
+		// this condition is only possible in tests where we want to skip attestation verification.
+		if len(attestationBytes) == 0 {
+			return nil, nil, nil
+		}
+		journalBytes, onchainProofBytes, err := k.espressoNitroAttestationVerifierClient.GenerateZKProof(context.Background(), attestationBytes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to generate zk proof from nitro attestation: %w", err)
+		}
+
+		log.Info("successfully generated zk proof from nitro attestation")
+		return journalBytes, onchainProofBytes, nil
+	case TESTS:
+		pubKey := crypto.FromECDSAPub(&k.privKey.PublicKey)
+		log.Info("TESTS signing address", "addr", signerAddr)
+
+		attestationQuote, err := getAttestationFunc(pubKey)
+		if err != nil {
+			return nil, nil, fmt.Errorf("TESTS signing failed: %w", err)
+		}
+		// TESTS maps to NITRO on-chain; Nitro mock expects `output` to be an
+		// ABI-encoded VerifierJournal containing the signer public key.
+		journalBytes, err := k.encodeNitroMockJournalByService(attestationQuote)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to encode Nitro mock VerifierJournal for TESTS registration: %w", err)
+		}
+		// Proof bytes are ignored by the Nitro mock.
+		return journalBytes, []byte{}, nil
+	default:
+		return nil, nil, fmt.Errorf("unsupported TEE type: %v", k.teeType)
+	}
+}
+
+func (k *EspressoKeyManager) encodeNitroMockJournalByService(publicKey []byte) ([]byte, error) {
+	if k.onChainServiceType() == espressotee.BatchPoster {
+		return encodeNitroMockBatchPosterVerifierJournalPublicKey(publicKey)
+	}
+	return encodeNitroMockCaffNodeVerifierJournalPublicKey(publicKey)
+}
+
+func encodeNitroMockBatchPosterVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
+}
+
+func encodeNitroMockCaffNodeVerifierJournalPublicKey(publicKey []byte) ([]byte, error) {
+	return espressotee.EncodeNitroMockVerifierJournalPublicKey(publicKey)
+}
+
+func (k *EspressoKeyManager) initRegistration(getAttestationFunc func([]byte) ([]byte, error)) (*state, error) {
+	hasRegistered, err := k.verifyRegistrationOnChain()
+	if err != nil {
+		return nil, err
+	}
+	if hasRegistered {
+		return &state{
+			currentState: Registered,
+			attestation:  []byte{},
+			data:         []byte{},
+		}, nil
+	}
+
+	// Get the attestation and data needed to register the signer
+	attestation, data, err := k.prepareRegisterService(getAttestationFunc)
+	if err != nil {
+		return nil, err
+	}
+
+	return &state{
+		data:         data,
+		attestation:  attestation,
+		currentState: PendingDataPosterSync,
+	}, nil
+}
+
+func (k *EspressoKeyManager) pendingDataPosterSync() error {
+	currentState := k.GetKeyManagerState()
+	if currentState != PendingDataPosterSync {
+		return fmt.Errorf("invalid state to check data poster sync: got %v, want PendingDataPosterSync", currentState)
+	}
+	err := k.espressoTEEVerifierCaller.CheckNonceValidation(k.dataPoster)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (k *EspressoKeyManager) registerService() error {
+	currentState := k.GetKeyManagerState()
+	if currentState != PendingRegistration {
+		return fmt.Errorf("invalid state to register signer: got %v, want PendingRegistration", currentState)
+	}
+	err := k.espressoTEEVerifierCaller.RegisterService(k.dataPoster, k.state.attestation, k.state.data, uint8(k.onChainTeeType()))
+	if err != nil {
+		return err
+	}
+
+	signerAddr := crypto.PubkeyToAddress(k.privKey.PublicKey)
+	log.Info("Register signer transaction sent", "signer address", signerAddr.Hex())
+
+	// Verify our address is actually registered in contract
+	hasRegistered, err := k.verifyRegistrationOnChain()
+	if err != nil {
+		return err
+	}
+	if !hasRegistered {
+		return errors.New("address is not registered in contract even after successful transaction and retries")
+	}
+
+	log.Info("Signer registration confirmed on-chain")
+	return nil
+}
+
+func (k *EspressoKeyManager) GetCurrentKey() *ecdsa.PublicKey {
+	return &k.privKey.PublicKey
+}
+
+// Returns the on-chain tee type (callers building payloads need to match the contract).
+func (k *EspressoKeyManager) TeeType() espressotee.TEE {
+	return k.onChainTeeType()
+}
+
+func (k *EspressoKeyManager) SignPayload(message []byte) ([]byte, error) {
+	return k.signer(crypto.Keccak256Hash(message).Bytes())
+}
+
+// SignMessage uses the ephemeral/persistent private key which is generated inside the TEE to sign the EIP-712 message
+func (k *EspressoKeyManager) SignMessage(message []byte) ([]byte, error) {
+	return SignTypedMessage(message, k.privKey, k.parentChainId, k.espressoTEEVerifierCaller.EspressoTEEAddress().Hex())
+}
+
+func (k *EspressoKeyManager) init() (*state, error) {
+	// Dispatch on configured tee type, not on-chain: TESTS needs noOpSignerFunc.
+	switch k.teeType {
+	case NITRO:
+		return k.initRegistration(k.getNitroAttestation)
+	case TESTS:
+		return k.initRegistration(k.noOpSignerFunc)
+	default:
+		return nil, fmt.Errorf("unsupported tee Type: %d", k.teeType)
+	}
+}
+
+// getNitroAttestation is a method that retrieves the attestation document for
+// AWS Nitro Enclaves.
+// This function gets the attestation document for AWS Nitro Enclaves
+// We retrieve the Attestation using our epheremal public key we created in EspressoKeyManager
+// After we retrieve, we verify the attestation, where we retrieve the result
+// Which will contain the complete attestation which we serialize for further processing
+func (k *EspressoKeyManager) getNitroAttestation(pubKey []byte) ([]byte, error) {
+
+	sess, err := nsm.OpenDefaultSession()
+	if err != nil {
+		return nil, fmt.Errorf("failed to open nsm session: %w", err)
+	}
+	defer sess.Close()
+
+	res, err := sess.Send(&request.Attestation{
+		PublicKey: pubKey,
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to send attestation request: %w", err)
+	}
+
+	if res.Error != "" {
+		return nil, fmt.Errorf("nsm returned error: %s", res.Error)
+	}
+
+	if res.Attestation == nil || res.Attestation.Document == nil {
+		return nil, fmt.Errorf("no attestation document returned")
+	}
+
+	return res.Attestation.Document, nil
+}
+
+// No-Op Signauture
+// This is a function designed to replace a signing function for functionality that depends on operating in a TEE
+func (k *EspressoKeyManager) noOpSignerFunc(addr []byte) ([]byte, error) {
+	return addr, nil
+}
+
+func SignTypedMessage(message []byte, privKey *ecdsa.PrivateKey, parentChainId uint64, contract string) ([]byte, error) {
+	messageHash := crypto.Keccak256(message)
+	typedData := apitypes.TypedData{
+		Types: apitypes.Types{
+			"EIP712Domain": []apitypes.Type{
+				{Name: "name", Type: "string"},
+				{Name: "version", Type: "string"},
+				{Name: "chainId", Type: "uint256"},
+				{Name: "verifyingContract", Type: "address"},
+			},
+			"EspressoTEEVerifier": []apitypes.Type{
+				{Name: "commitment", Type: "bytes32"},
+			},
+		},
+		PrimaryType: "EspressoTEEVerifier",
+		Domain: apitypes.TypedDataDomain{
+			Name:              "EspressoTEEVerifier",
+			Version:           "1",
+			ChainId:           (*math.HexOrDecimal256)(new(big.Int).SetUint64(parentChainId)),
+			VerifyingContract: contract,
+		},
+		Message: map[string]interface{}{
+			"commitment": messageHash[:32],
+		},
+	}
+	// Calculate the hash using go-ethereum's EIP-712 implementation
+	hash, _, err := apitypes.TypedDataAndHash(typedData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to calculate EIP-712 hash: %w", err)
+	}
+
+	signature, err := crypto.Sign(hash, privKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign EIP-712 hash: %w", err)
+	}
+
+	// Normalize the recovery ID (v) from 0/1 to 27/28 for Solidity's ECDSA.recover
+	// See: https://github.com/ethereum/go-ethereum/issues/19751#issuecomment-504900739
+	if signature[64] < 27 {
+		signature[64] += 27
+	}
+	return signature, nil
+}
