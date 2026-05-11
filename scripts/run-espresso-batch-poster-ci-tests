@@ -12,4 +12,4 @@ gotestsum \
     -p 1 \
     -parallel 1 \
     -run 'TestEspresso' \
-    -skip 'TestEspressoCaffNode|TestAuthDB|TestEspressoRegressionTransactionStreamerToEspressoThroughput|TestEspressoWithBlobs'
+    -skip 'TestEspressoCaffNode|TestAuthDB|TestEspressoRegressionTransactionStreamerToEspressoThroughput'
