@@ -17,6 +17,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/offchainlabs/nitro/arbos/arbostypes"
@@ -280,6 +281,49 @@ func TestEspressoStreamer(t *testing.T) {
 		require.Equal(t, 1, parseAttemptCount, "Expected the failing transaction to be attempted only once")
 
 		mockEspressoClient.AssertExpectations(t)
+	})
+	t.Run("Duplicate message position should be discarded", func(t *testing.T) {
+		mockEspressoClient := new(mockEspressoClient)
+		mockEspressoTEEVerifierClient := new(mockEspressoTEEVerifier)
+
+		streamer := NewEspressoStreamer(1, 3, mockEspressoTEEVerifierClient, mockEspressoClient, false, func(l1Height uint64, addr common.Address) (bool, error) { return false, nil }, 1*time.Second)
+		streamer.Reset(1, 3)
+
+		buildPayload := func(msg arbostypes.MessageWithMetadata) []byte {
+			msgBytes, err := rlp.EncodeToBytes(msg)
+			require.NoError(t, err)
+			raw, cnt := arbutil.BuildRawHotShotPayload(
+				[]arbutil.MessageIndex{5},
+				func(arbutil.MessageIndex) ([]byte, error) { return msgBytes, nil },
+				100000,
+			)
+			require.Equal(t, 1, cnt)
+			signed, err := arbutil.SignHotShotPayload(raw, func([]byte) ([]byte, error) { return []byte{1}, nil })
+			require.NoError(t, err)
+			return signed
+		}
+
+		firstPayload := buildPayload(arbostypes.MessageWithMetadata{
+			Message:             &arbostypes.EmptyTestIncomingMessage,
+			DelayedMessagesRead: 1,
+		})
+		secondPayload := buildPayload(arbostypes.MessageWithMetadata{
+			Message:             &arbostypes.EmptyTestIncomingMessage,
+			DelayedMessagesRead: 2,
+		})
+
+		err := streamer.parseEspressoTransaction(firstPayload, 1)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(streamer.messageWithMetadataAndPos))
+		firstMsg := streamer.messageWithMetadataAndPos[5]
+		require.NotNil(t, firstMsg)
+		assert.Equal(t, uint64(1), firstMsg.MessageWithMeta.DelayedMessagesRead)
+
+		err = streamer.parseEspressoTransaction(secondPayload, 1)
+		require.NoError(t, err)
+
+		require.Equal(t, 1, len(streamer.messageWithMetadataAndPos))
+		assert.Equal(t, firstMsg, streamer.messageWithMetadataAndPos[5], "second message at same position should be discarded")
 	})
 }
 

@@ -370,14 +370,15 @@ func (s *EspressoStreamer) parseEspressoTransaction(tx espressoTypes.Bytes, l1He
 	s.messageLock.Lock()
 	defer s.messageLock.Unlock()
 	for i, message := range messages {
-		if _, exists := s.messageWithMetadataAndPos[indices[i]]; exists {
-			log.Warn("duplicate message position, skipping", "msgPos", indices[i])
-			continue
-		}
 		if indices[i] < s.currentMessagePos {
 			log.Warn("message index is less than current message pos, skipping", "msgPos", indices[i], "currentMessagePos", s.currentMessagePos)
 			continue
 		}
+		if _, exists := s.messageWithMetadataAndPos[indices[i]]; exists {
+			log.Warn("duplicate message position, skipping", "msgPos", indices[i])
+			continue
+		}
+
 		var messageWithMetadata arbostypes.MessageWithMetadata
 		err = rlp.DecodeBytes(message, &messageWithMetadata)
 		if err != nil {
