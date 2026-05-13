@@ -23,6 +23,7 @@ Example: `v3.9.8-espresso-v0.1.0`
 
 * Filter out duplicates ([#1049](https://github.com/EspressoSystems/nitro-espresso-integration/issues/1049)) ([17dca0a](https://github.com/EspressoSystems/nitro-espresso-integration/commit/17dca0ab9758c6c63d8908f3f32d9d8e50e14f86))
 
+* We need to take the first valid message sent to Espresso which we were not doing with latest streamer changes. This ensures any later message is removed. 
 ## [1.1.0](https://github.com/EspressoSystems/nitro-espresso-integration/compare/v3.9.8-espresso-v1.0.0...v3.9.8-espresso-v1.1.0) (2026-05-01)
 
 
