@@ -37,16 +37,16 @@ jobs:
       - name: Parse version from tag
         id: version
         run: |
-          # Tag format: v3.9.8-espresso-v0.1.0
+          # Tag format: v3.9.9-espresso-v0.1.0
           TAG=${GITHUB_REF#refs/tags/}
 
-          # Extract upstream version (3.9.8)
+          # Extract upstream version (3.9.9)
           UPSTREAM=$(echo "$TAG" | sed 's/^v\(.*\)-espresso-v.*/\1/')
 
           # Extract espresso version (0.1.0)
           ESPRESSO=$(echo "$TAG" | sed 's/.*-espresso-v//')
 
-          # Full version without leading 'v' (3.9.8-espresso-0.1.0)
+          # Full version without leading 'v' (3.9.9-espresso-0.1.0)
           FULL_VERSION="${UPSTREAM}-espresso-${ESPRESSO}"
 
           echo "tag=$TAG" >> $GITHUB_OUTPUT
