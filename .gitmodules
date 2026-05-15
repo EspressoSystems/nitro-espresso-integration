@@ -1,3 +1,7 @@
+[submodule "go-ethereum"]
+	path = go-ethereum
+	url = https://github.com/EspressoSystems/go-ethereum
+	branch = integration-v3.9.2
 [submodule "arbitrator/wasm-libraries/soft-float/SoftFloat"]
 	path = arbitrator/wasm-libraries/soft-float/SoftFloat
 	url = https://github.com/OffchainLabs/SoftFloat.git
@@ -6,14 +10,15 @@
 	url = https://github.com/google/brotli.git
 [submodule "contracts"]
 	path = contracts
-	url = https://github.com/OffchainLabs/nitro-contracts.git
-	branch = develop
+	url = https://github.com/EspressoSystems/nitro-contracts.git
+	branch = v3.1.1
 [submodule "arbitrator/wasm-testsuite/testsuite"]
 	path = arbitrator/wasm-testsuite/testsuite
 	url = https://github.com/WebAssembly/testsuite.git
 [submodule "nitro-testnode"]
 	path = nitro-testnode
-	url = https://github.com/OffchainLabs/nitro-testnode.git
+	url = https://github.com/EspressoSystems/nitro-testnode
+	branch = integration
 [submodule "arbitrator/langs/rust"]
 	path = arbitrator/langs/rust
 	url = https://github.com/OffchainLabs/stylus-sdk-rs.git
@@ -28,7 +33,8 @@
 	url = https://github.com/safe-global/safe-smart-account.git
 [submodule "contracts-legacy"]
 	path = contracts-legacy
-	url = https://github.com/OffchainLabs/nitro-contracts.git
+	url = https://github.com/EspressoSystems/nitro-contracts.git
+	branch = 2.1.3-legacy
 [submodule "contracts-local/lib/openzeppelin-contracts"]
 	path = contracts-local/lib/openzeppelin-contracts
 	url = https://github.com/OpenZeppelin/openzeppelin-contracts
@@ -38,6 +44,6 @@
 [submodule "arbitrator/tools/wasmer"]
 	path = arbitrator/tools/wasmer
 	url = https://github.com/OffchainLabs/wasmer.git
-[submodule "go-ethereum"]
-	path = go-ethereum
-	url = https://github.com/OffchainLabs/go-ethereum.git
+[submodule "espresso-tee-contracts"]
+	path = espresso-tee-contracts
+	url = https://github.com/EspressoSystems/espresso-tee-contracts

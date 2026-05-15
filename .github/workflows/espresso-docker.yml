@@ -1,0 +1,78 @@
+# Build the nitro-node images on  AMD64 hosts.
+# After building, the images are merged together to make a multiplatform image.
+name: Espresso Docker build CI
+run-name: Docker build CI triggered from @${{ github.actor }} of ${{ github.head_ref }}
+
+on:
+  workflow_dispatch:
+  merge_group:
+  pull_request:
+  push:
+    tags:
+      - "v*"
+    branches:
+      - integration
+      - celestia-integration
+      - integration-v3.9.2
+      - celestia-v3.9.2
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker_build:
+    strategy:
+      matrix:
+        platform: [linux/amd64]
+
+    runs-on: ubuntu-24.04-8core
+
+    steps:
+      - uses: cargo-bins/cargo-binstall@main
+
+      - name: Fix submodule permissions check
+        run: |
+          git config --global --add safe.directory '*'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Github Container Repo
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner  }}
+          password: ${{ secrets.GITHUB_TOKEN  }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/espressosystems/nitro-espresso-integration/nitro-node
+          tags: |
+            type=ref,event=pr
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: nitro-node
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Check available space after CI run
+        if: "!cancelled()"
+        run: |
+          sudo df -h

@@ -9,7 +9,7 @@ permissions:
 jobs:
   bold-legacy:
     name: Run Bold Legacy challenge tests
-    runs-on: arbitrator-ci
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6

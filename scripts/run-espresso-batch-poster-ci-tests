@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# This script runs the Espresso tests in ./system_tests only.
+set -euo pipefail
+
+gotestsum \
+    --format short-verbose \
+    --packages="./..." \
+    --rerun-fails=1 \
+    -- \
+    -v \
+    -timeout 45m \
+    -p 1 \
+    -parallel 1 \
+    -run 'TestEspresso' \
+    -skip 'TestEspressoCaffNode|TestAuthDB|TestEspressoRegressionTransactionStreamerToEspressoThroughput'
