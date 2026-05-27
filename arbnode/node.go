@@ -571,9 +571,9 @@ func getDAS(
 	l1client *ethclient.Client,
 	stack *node.Node,
 ) (daprovider.Writer, func(), *daprovider.ReaderRegistry, error) {
-	if config.DAProvider.Enable && config.DataAvailability.Enable {
-		return nil, nil, nil, errors.New("da-provider and data-availability cannot be enabled together")
-	}
+	// if config.DAProvider.Enable && config.DataAvailability.Enable {
+	// 	return nil, nil, nil, errors.New("da-provider and data-availability cannot be enabled together")
+	// }
 
 	var err error
 	var daClient *daclient.Client
