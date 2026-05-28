@@ -17,7 +17,7 @@ permissions:
 jobs:
   changes:
     name: Detect file changes
-    runs-on: ubuntu-4
+    runs-on: ubuntu-latest
     outputs:
       arbitrator_changed: ${{ steps.changed.outputs.arbitrator_any_changed }}
       bold_legacy_changed: ${{ steps.changed.outputs.bold_legacy_any_changed }}
@@ -34,16 +34,16 @@ jobs:
         with:
           private-token: ${{ secrets.PRIVATE_REPO_PAT }}
 
-      - name: Determine if Arbitrator or Bold Legacy changed
-        id: changed
-        uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c  # v46.0.5
-        with:
-          files_yaml: |
-            arbitrator:
-              - 'arbitrator/**'
-              - 'contracts/**'
-              - 'Makefile'
-              - '.github/workflows/_arbitrator.yml'
-            bold_legacy:
-              - 'bold/legacy/**'
-              - '.github/workflows/_bold-legacy.yml'
+      # - name: Determine if Arbitrator or Bold Legacy changed
+      #   id: changed
+      #   uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c  # v46.0.5
+      #   with:
+      #     files_yaml: |
+      #       arbitrator:
+      #         - 'arbitrator/**'
+      #         - 'contracts/**'
+      #         - 'Makefile'
+      #         - '.github/workflows/_arbitrator.yml'
+      #       bold_legacy:
+      #         - 'bold/legacy/**'
+      #         - '.github/workflows/_bold-legacy.yml'
