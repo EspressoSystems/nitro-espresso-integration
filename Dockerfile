@@ -27,7 +27,8 @@ COPY --from=brotli-library-builder /workspace/install/ /
 FROM node:24.4.1-bookworm-slim AS contracts-builder
 RUN apt-get update && \
     apt-get install -y git python3 make g++ curl
-RUN curl -L https://foundry.paradigm.xyz | bash && . ~/.bashrc && ~/.foundry/bin/foundryup -i 1.2.3
+ENV PATH="/root/.foundry/bin:${PATH}"
+RUN curl -fsSL https://foundry.paradigm.xyz | bash && foundryup -i 1.2.3 && forge --version
 WORKDIR /workspace
 COPY contracts-legacy/package.json contracts-legacy/yarn.lock contracts-legacy/
 RUN cd contracts-legacy && yarn install
@@ -40,7 +41,7 @@ COPY safe-smart-account safe-smart-account/
 COPY espresso-tee-contracts espresso-tee-contracts/
 RUN cd safe-smart-account && npm install
 COPY Makefile .
-RUN . ~/.bashrc && NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
+RUN NITRO_BUILD_IGNORE_TIMESTAMPS=1 make build-solidity
 
 FROM debian:bookworm-20231218 AS wasm-base
 WORKDIR /workspace
@@ -253,7 +254,7 @@ RUN ./download-machine.sh consensus-v50 0x2c54f6e9e378ba320ed9c713a1d9f067a572b1
 RUN ./download-machine.sh consensus-v51 0x8a7513bf7bb3e3db04b0d982d0e973bcf57bf8b88aef7c6d03dba3a81a56a499
 RUN ./download-machine.sh consensus-v51.1 0xc2c02df561d4afaf9a1d6785f70098ec3874765c638e3cb6dbe8d3c83333e14c
 
-FROM golang:1.25-bookworm AS node-builder
+FROM golang:1.26.10-bookworm AS node-builder
 WORKDIR /workspace
 ARG version=""
 ARG datetime=""
