@@ -16,6 +16,13 @@ Example: `v3.9.8-espresso-v0.1.0`
 
 ---
 
+## [1.1.2](https://github.com/EspressoSystems/nitro-espresso-integration/compare/v3.9.8-espresso-v1.1.1...v3.9.8-espresso-v1.1.2) (2026-10-20)
+
+
+### Bug Fixes
+
+* upgrade Go toolchain to 1.26.10 and fix Foundry setup ([#1054](https://github.com/EspressoSystems/nitro-espresso-integration/issues/1054)) ([0d248d7](https://github.com/EspressoSystems/nitro-espresso-integration/commit/0d248d7ef8ca27d3728f6e53ef7cad39f5835080))
+
 ## [1.1.1](https://github.com/EspressoSystems/nitro-espresso-integration/compare/v3.9.8-espresso-v1.1.0...v3.9.8-espresso-v1.1.1) (2026-05-13)
 
 
