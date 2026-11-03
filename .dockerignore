@@ -9,7 +9,22 @@ go-ethereum/tests
 **/*.yml
 contracts/build
 contracts/cache/
+contracts/forge-cache/
+contracts/out/
+contracts-legacy/build/
+contracts-legacy/cache/
+contracts-legacy/forge-cache/
+contracts-legacy/out/
+contracts-local/out/
+contracts-local/cache/
+contracts-local/forge-cache/
 safe-smart-account/build/
+safe-smart-account/artifacts/
+safe-smart-account/cache/
+espresso-tee-contracts/out/
+espresso-tee-contracts/cache/
+espresso-tee-contracts-legacy/out/
+espresso-tee-contracts-legacy/cache/
 solgen/go
 **/node_modules
 
